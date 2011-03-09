@@ -1,0 +1,316 @@
+2011.066:
+	- Update libmseed to 2.6 final.
+
+2011.049:
+	- Update libmseed to 2.6 release candidate.
+	- Update pcre to 8.12.
+	- Accept '-' characters in SeedLink selectors which are translated
+	to space/blank location IDs, this allows explicit selection of blank
+	or space-space location IDs by specifying the location as '--'.
+	- MSeedScan: Remove file modification time check from update check,
+	files will be processed if they have increased in size. Avoids
+	skipping data being written very quickly, thanks to Doug Neuhauser.
+
+2010.103:
+	- Fix small bug in dsarchive.c, related to globbing detection
+	for non-defining flags.
+
+2010.075:
+	- Update pcre to 8.01.
+	- Add SeedLink BATCH command support to suppress acknowledgment
+	(OK and ERROR) for all recognized commands, unrecognized commands
+	return ERROR.
+	- Bump SeedLink protocol version identifier to 3.1.
+	- Move _REENTRANT compiler declaration into CFLAGS in src/Makefile.
+
+2010.072:
+	- Update to libmseed 2.5.1.
+	- Add LimitIP parameter to configuration file to set limits on access
+	to specific streams from specific IP addresses, a dynamic parameter.
+
+2010.025:
+	- Calculate scan time for MSeedScan server threads and include in
+	STATUS info request results.
+
+2010:020:
+	- Update to libmseed 2.4.
+	- Parse optional file names from stream IDs for Mini-SEED writing,
+	if file names are present they will be appended to the DataStream
+	archive definition (i.e. the DataStream defines a base directory).
+
+2010.018:
+	- Track count of ClientInfo.streams in ClientInfo.streamscount and
+	include as StreamCount attribute in XML return for CONNECTIONS.
+	- Add byte and packet rate calculations to Mini-SEED scanning thread.
+
+2010.016:
+	- Add ServerThreads element to XML return for STATUS info with thread
+	specific details.
+
+2010.013:
+	- Fix parsing of MSeedScan suboptions from config file.
+	- Add InitCurrentState suboption for MSeedScan that controls behavior
+	on initial startup, allowing the scanning to skip old data and start
+	reading only newly added data.
+	- Change initialization error return flagging in MS_ScanThread() to 
+	TDF_CLOSED.
+
+2009.326:
+	- Convert printing of int64_t and uint64_t quantities to use the PRId64
+	and PRIu64 macros in place of %lld and %llu.
+
+2009.324:
+	- Update libmseed to 2.3.
+	- Update pcre to 8.0.
+
+2009.322:
+	- Add -MSSCAN command line option to add a Mini-SEED scanning thread,
+	this is the same as the MSeedScan configuration file option.
+
+2009.314:
+	- Add Mini-SEED scanning server threads, controlled with MSeedScan
+	config file option.
+
+2009.304:
+	- Fix crash for corner case of joined client thread and client timeout
+	trigger occuring simultaneously.
+	- Add CLOSE status printing for client thread list.
+
+2009.302:
+	- Reorganize server threads into a list similar to the client threads,
+	this allows multiple SeedLink and DataLink ports as well as improved
+	architecture for future server threads.
+
+2009.292
+	- Add DataLatency element to DataLink STREAMS info return.
+
+2009.170:
+	- Update libmseed to 2.2.
+	- Update pcre to 7.9.
+	- Update libmxml to 2.6.
+	- Revert workarounds for bugs in libmxml 2.5 which fixes a SeedLink
+	XML INFO creation bug reported by Andres Heinloo.
+	- Make all XML INFO records big-endian for consistency.
+	- Fix resume bug for SeedLink when multiple stations are selected.
+
+2009.070:
+	- Fix off-by-one for day of year of new 'D' archive flag expansion.
+
+2009.069:
+	- Add ClientTimeout option/parameter and close client connections
+	that have exchanged no packets with the server within a specified
+	number of seconds, default is 3600 seconds.
+	- Add 'D' flag to archiving format options that expands to a current
+	local year-day time stamp in the form of 'YYYYDDD'.
+
+2008.338:
+	- Update pcre from 7.4 to 7.8.
+	- Write man page and fill out usage message.
+
+2008.325:
+	- Turn on TCP_NODELAY option (turning off Nagle alorgithm) for all
+	client connections.
+
+2008.290:
+	- Rework parsing of config file options to use more tranditional
+	types for systems that do not fully support C99 integer types.
+	- Remove includes for stdint.h, correct definitions are picked
+	up through other includes.
+
+2008.282:
+	- Change mutex lock positions to avoid race condition with
+	client stream trees.
+	- Rearrange diagnostic messages to differentiate incoming
+	connections from accepted new client connections.
+
+2008.281:
+	- Move IP->hostname resolution into client-specific threads so
+	the listening threads are not waiting an unknown amount of time
+	for DNS results.
+	- Rework socket handling to use protocol-independent interfaces,
+	paving the wave for potential IPv6 support in the future.
+	- Change the deadlock timeout from 5 to 10 seconds when shutting
+	down all client threads.
+
+2008.279:
+	- Change IP-to-host resolution for SeedLink listener to be the
+	same as DataLink listener, neither use the NI_NOFQDN option.
+
+2008.277:
+	- Add %h => hostname translation to MSWRITE capability.
+	- Add HSDAY (host-station-day) predefined layout.
+	- Improve readability of diagnostic message when send() failed
+	for DataLink protocol by replacing non-printable characters.
+
+2008.260:
+	- Return value from RingWrite() of -2 now indicates that ring
+	corruption was detected, this will now trigger a shutdown as
+	continuing to run with an out-of-sync/corrupt ring is no good.
+	- Fix race condition bug causing crash in CalcStats where
+	the ClientInfo member reader was not yet allocated.
+	- Fix regression in SeedLink selector handling.
+
+2008.256:
+	- Add packet end time information to the ring packet header and
+	modify the DataLink WRITE command and PACKET response to include
+	both the packet start and end times.
+	- Change RingAfter and RingAfterRev to test reference time against
+	the packet data end time instead of start time.
+	- Include volatile ring status in DataLink STATUS info responses.
+	- Include packet and stream end times in DataLink info responses.
+	- Properly handle case of clients connecting to an empty ring and
+	receiving all data when it arrives.
+
+2008.255:
+	- Improve robustness of reading data from the network sockets by
+	implementing timeouts for network reads and use select() to avoid
+	repeated reads for non-blocking sockets.
+
+2008.251:
+	- Listen for DataLink connections by default, previously no DataLink
+	listening thread was started unless specifically configured.
+	- Allow listening ports to be disabled by setting the port number to 0.
+	- Remove the -SLp and -DLp command line options and change the -SL and -DL
+	command line options to take a port number.
+	- Add MseedWrite mode where all received /MSEED packets are optionally
+	written to a user specified disk archive.  In general, ringserver is
+	data format agnostic, this format-specific feature is unique.
+	- Add volatile ring mode where ring contents are not written to disk
+	files during operation or shutdown.  In this mode the ring is not
+	stateful between restarts of ringserver.
+
+2008.250:
+	- Add MatchIP configuration parameter to limit connections to
+	specific IPs or networks.
+
+2008.247:
+	- Further improve corner case handling for SeedLink protocol
+	negated selectors.
+
+2008.246:
+	- Fix SeedLink protocol handling of negated selectors by matching
+	all channels from a station in addition to rejecting the selection.
+
+2008.232:
+	- Update libmseed to 2.1.6.
+
+2008.231:
+	- Allow DataLink CONNECTIONS requests to match client hostnames in
+	addition to IP addresses and client IDs.
+	- Optionally resolve and store hostnames upon client connection and 
+	indepedently store IP and port strings.
+	- Add config file parameter ResolveHostnames to control resolution
+	of hostnames.
+	- Config file parameter NoMemMap -> MemoryMapRing, change sense.
+	- Config file parameter NoAutoRec -> AutoRecovery, change sense.
+	- Add client specific send buffers to ClientInfo structure, using
+	these buffers avoids allocating memory for each DataLink packet send.
+	- Change meaning of -Rp command line argument and MaxPacketSize
+	config file parameter to refer to max packet data size not including
+	ring packet header, i.e. 512-byte packets need a 512 byte setting.
+	- Add txbytes and rxbytes elements to StreamNode and use to track
+	the total transmitted and received bytes per client and stream.
+	- Re-work transfer log system to write both transmitted (TX) packet
+	and byte counts and received (RX) packet and byte counts, adding
+	TransferLogTX and TransferLogRX config file parameters to control
+	the writing of these logs.
+
+2008.196:
+	- Add more ringserver details to Status element of INFO packets.
+	- Include size of packet data when reporting initialization.
+
+2008.193:
+	- Add a "PACKETSIZE" flag to the DataLink capabilities string
+	- Sync capabilities returned in ID and INFO commands.
+
+2008.172:
+	- Add a "WRITE" flag to the DataLink capabilities string when
+	a client has write permission, in this way the server communicates
+	this information to the client before a WRITE command is sent.
+
+2008.124:
+	- Look up stream entries for earliest and latest packets during
+	ring initialization as a ring corruption sanity check.
+
+2008.084:
+	- For SeedLink if no packets were found for time-windowing start
+	times position reading at the next packet instead of returning
+	an error.
+
+2008.080:
+	- Make the clientcount variable from ringserver.c global and use
+	it in DataLink INFO responses instead of doing a separate count.
+	- Add the Status element to all DataLink INFO responses.
+
+2008.074:
+	- Add auto recovery from ring corruption, when initialization of
+	the ring fails move the ring packet buffer and stream index files
+	to .corrupt versions and re-initialize the ring.
+	- Add NoAutoRecovery option to parsing of ring configuration file
+	to turn off the auto recovery.
+	- Add a fluxflag byte to RingParams and use it in RingWrite to
+	indicate when the ring is in flux (changes occuring).  This flag
+	is checked on initialization and corruption is assumed if the flag
+	is set.
+
+2008.070:
+	- Accept match expresion with DataLink INFO CONNECTIONS request and
+	apply to client address string and client ID.  Allows limiting the
+	returned client list to specific clients.
+	- Include separate counts of selected and total connections and
+	streams in the DataLink INFO request results.
+	- Close potential memory leak triggered by resubmitting match and
+	reject expressions.
+
+2008.069:
+	- Sort Stack of streams returned by GetStreamsStack() by their
+	stream ID.  Results in sorted streams for INFO requests.
+
+2008.066:
+	- Change SeedLink INFO CONNECTONS to set the current_seq element to
+	"unset" for clients that have no read position (pktid == 0).
+
+2008.065:
+	- Add client ID to DataLink INFO CONNECTIONS XML.
+
+2008.064:
+	- Fix SeedLink INFO CONNECTIONS XML.
+	
+2008.063:
+	- Convert XML creation to Mini-XML library.
+	- Add Mini-XML library sources.
+	- Remove EzXML library sources.
+
+2008.060:
+	- Include both packet and byte rates in DataLink INFO STATUS output.
+	- Change verbose ring initialization output for readability.
+
+2008.059:
+	- Add percentlag and lastxchange elements to ClientInfo structure.
+	- Update the lastxchange time stamp in slclient.c and dlclient.c
+	whenever packets are transmitted or received.
+	- Rename CalcRates() to CalcStats() in ringserver.c and add calculation
+	of percent lag.
+
+2008.058:
+	- Allocate wire packet buffer in SendPacket() and SendRingPacket() to
+	allow for arbitrary packet lengths.
+	- Restructure thread closing procedure, splitting TDF_CLOSING into two
+	separate states: TDF_CLOSING and TDF_CLOSED to avoid race with other
+	threads looping over the client thread list.
+	- Add PercentLag and Latency calculations to INFO results for DataLink.
+	- Add packet data time stamp to RingReader struct as element datatime.
+	- Add packet data time stamp to RingParams struct for earliest and latest
+	packets as elements earliestdtime and latestdtime.
+	- More error testing during creation of INFO XML for SeedLink clients.
+
+2008.057:
+	- Implement DataLink INFO requests.
+
+2008.053:
+	- Implement most DataLink protocol commands, everything except INFO requets.
+
+2008.011:
+	- Initial testing version, fundamental ring functions are all in place,
+	the SeedLink protocol support is complete and the DataLink protocol support
+	structure in place.

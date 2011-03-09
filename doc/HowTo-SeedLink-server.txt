@@ -1,0 +1,185 @@
+
+How to configure ringserver as a simple SeedLink streaming server
+  version 2010/03/13
+
+Overview: The IRIS DMC 'ringserver' software is capable of
+continuously scanning one or more directories for Mini-SEED data
+records and serving them as near real-time data streams using the
+SeedLink protocol.  This software allows a data collection center that
+can create Mini-SEED data to redistribute their data in near
+real-time.
+
+Requirements:
+ 1) Linux, Solaris or Mac OSX operating system
+ 2) C compiler to build the ringserver software
+      (testing is done with gcc and the Sun compiler)
+ 3) Process to create 512-byte Mini-SEED data records
+
+## Quick start ########################################################
+
+1) Get ringserver source code from the IRIS website:
+  http://www.iris.edu/pub/programs/ringserver/
+
+2) Compile ringserver and copy binary to a dedicated directory.
+   Note: for SunOS/Solaris the 'src/Makefile' needs to be edited.
+
+3) Create configuration file (see below) in the dedicated directory.
+
+4) Create required directories like "ring" and optionally "tlog" in
+   the dedicated directory.
+
+5) Run ringserver, for example:
+   "$ ringserver ring.conf > ring.log 2>&1".
+
+6) Use dalitool or slinktool to verify that data is flowing as
+   expected.
+
+Any network firewall between the server and the clients must be
+configured to allow connections from the clients on the SeedLink port
+(default is TCP port 18000).
+
+## The ringserver concept #############################################
+
+The ringserver program reads Mini-SEED records from files and inserts
+them into an internal ring buffer.  The ring buffer operates as a FIFO
+(first-in-first-out) queue, newer data inserted into the buffer pushes
+the oldest data out.  Remote clients can access data in the buffer
+using the SeedLink protocol.  The size of the buffer is fixed at
+program startup and is directly related to how much old data will be
+available to clients.  By default ringserver will create a 1 gigabyte
+ring; buffer sizes over 2 gigabytes will require a 64-bit executable.
+Ringserver maintains a stateful ring buffer, memory mapping the buffer
+by default, which allows the server to be stopped and re-started
+without any data loss to clients.
+
+## Compiling ringserver ###############################################
+
+The program should operate on any relatively modern releases of Linux,
+Solaris and Mac OSX operating systems.
+
+Untar the ringserver source code, in the created 'ringserver'
+directory typing "make" should compile the program.
+
+Compiler options can be tuned by setting the CFLAGS environment
+variable.  For example, building a 32-bit or 64-bit executable can be
+done by setting the appropriate compiler options in CFLAGS.
+
+Under SunOS/Solaris the 'src/Makefile' needs to be edited to include
+system networking libraries.  Uncomment the LDLIBS line indicated for
+these systems.
+
+## Configuring ringserver #############################################
+
+The program can be configured using either command line arguments or a
+configuration file.  In general more options are settable in the
+configuration file versus the command line but a simple SeedLink
+server can be configured either way.  All configuration file options
+are documented in the example configuration file that comes with the
+source code ('doc/ring.conf') and in the man page ('doc/ringserver.1').
+
+A minimal configuration file for a simple SeedLink server might be:
+
+-----------------------
+RingDirectory ring
+DataLinkPort 16000
+SeedLinkPort 18000
+ServerID "XX Seismic Network"
+TransferLogDirectory tlog
+TransferLogRX 0
+MSeedScan /data/miniseed/ StateFile=scan.state InitCurrentState=y
+-----------------------
+
+What these options do:
+
+RingDirectory - This is a directory where ringserver will store the
+  internal ring buffer contents.  Required, directory must be created.
+
+DataLinkPort - Listen for DataLink connections on TCP port 16000
+  (default), useful for querying and monitoring the server (see
+  dalitool described below).
+
+SeedLinkPort - Listen for SeedLink connections on TCP port 18000
+  (default).
+
+ServerID - Server identification sent to clients, set appropriately. 
+
+TransferLogDirectory - Specify directory where transfer logs are to be
+  written.  By default they are written daily and both transmission
+  and reception logs are written.  This is optional, but if used the
+  directory must be created.
+
+TransferLogRX - Turn off reception logging to TransferLogDirectory;
+  for a simple SeedLink server there will be no data arriving from
+  clients so there is no need to write reception logs.
+
+MseedScan - Configure scanning of the /data/miniseed/ directory and
+  sub-directories for Mini-SEED data.  Use 'scan.state' as the
+  statefile (created if necessary), allowing the server to be
+  restarted without scanning duplicate data.  Turn on the
+  InitCurrentState option to avoid scanning current data when no
+  StateFile is present.
+
+
+A nearly equivalent ringserver configuration can be achieved using only
+command line options:
+
+> ringserver -Rd ring -DL 16000 -SL 18000 -I 'XX Seismic Network' -T tlog \
+  -MSSCAN '/data/miniseed/ StateFile=scan.state InitCurrentState=y'
+
+The only difference is that reception logging cannot be turned off on
+the command line.
+
+It is recommended to use a configuration file for production operation
+of a server.  The advantages of using a configuration file are: more
+options available, use of dynamic options (options which can change
+during run time) and room for notes regarding the options.
+
+Other configuration options to consider:
+
+RingSize - Specifies the size of the ring buffer, to retain more data
+  in the buffer and hence make more past data available to clients
+  increase the size of the ring.  RingSize should not be bigger than
+  the total system memory.
+
+LimitIP - Limit client connections to subsets of streams, for example
+  an client IP address can only collect data for specific stations.
+
+MatchIP - Limit connections to specific Internet addresses or range of
+  addresses.
+
+RejectIP - Explicitly reject connections from specified Internet
+  addresses or range of addresses.
+
+## Executing the server ###############################################
+
+Ringserver is a single binary that prints log messages to standard out
+and critical errors to standard error.  It can be started from any
+environment that can start a process.  When ringserver receives a TERM
+or INT signal (i.e. Control-C) it will shut down cleanly, saving it's
+current ring buffer and scanning state.
+
+Many seismic network data collection centers already have systems that
+manage continuously running processes, ringserver can usually be
+incorporated into such systems.
+
+## Monitoring the server ##############################################
+
+If the server is configured to listen for DataLink connections the
+DataLink Tool (dalitool) can be used to query the server.  Source code
+for dalitool is available from the IRIS website:
+http://www.iris.edu/pub/programs/ringserver/
+
+Developed in conjunction with ringserver the dalitool program can be
+used to monitor data flow from a server, query for data availability
+in the buffer, query for connected clients and query for server stats.
+
+Alternatively the SeedLink Tool (slinktool) can be used for very
+similar queries to the server, slinktool uses the same SeedLink
+interface as client data users.  Source code for slinktool is
+available from the IRIS website:
+http://www.iris.edu/pub/programs/SeedLink/
+
+If configured to write transfer logs ringserver will write packet
+transfer logs to a specified directory at a specified interval
+(default is daily).  Both transmission (data sent from the server to a
+client) and reception (data received from a client) can be logged.
