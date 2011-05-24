@@ -20,7 +20,7 @@
  * the most recent packet ID requested by the client and setting the
  * ring to that position.
  *
- * Copyright 2009 Chad Trabant, IRIS Data Management Center
+ * Copyright 2011 Chad Trabant, IRIS Data Management Center
  *
  * This file is part of ringserver.
  *
@@ -37,7 +37,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2011.049
+ * Modified: 2011.142
  **************************************************************************/
 
 /* Unsupported protocol features:
@@ -593,7 +593,8 @@ SL_ClientThread (void *arg)
 		  /* Send Mini-SEED record to client */
 		  if ( SendRecord (&packet, packetdata, SLRECSIZE, cinfo) )
 		    {
-		      lprintf (0, "[%s] Error sending record to client", cinfo->hostname);
+		      if ( cinfo->socketerr != 2 )
+			lprintf (0, "[%s] Error sending record to client", cinfo->hostname);
 		      break;
 		    }
 		  
@@ -1780,7 +1781,7 @@ HandleInfo (char *recvbuffer, ClientInfo *cinfo, char state)
 	      else
 		slinfo->terminfo = 0;
 	      
-	      /* Send INFO record to client */
+	      /* Send INFO record to client, blind toss */
 	      SendInfoRecord (record, SLRECSIZE, cinfo);
 	    }
 	}
@@ -2008,14 +2009,25 @@ SendData (ClientInfo *cinfo, void *buffer, size_t buflen)
     {
       lprintf (0, "[%s] SendData(): Error clearing non-blocking flag: %s",
 	       cinfo->hostname, strerror(errno));
+      cinfo->socketerr = 1;
       return -1;
     }
   
   if ( send (cinfo->socket, buffer, buflen, 0) < 0 )
     {
-      lprintf (0, "[%s] Error sending '%.*s': %s", cinfo->hostname,
-	       strcspn ((char *) buffer, "\r\n"), (char *) buffer, 
-	       strerror(errno));
+      /* EPIPE indicates a client disconnect, everything else is an error */
+      if ( errno == EPIPE )
+	{
+	  cinfo->socketerr = 2;  /* Indicate an orderly shutdown */
+	}
+      else
+	{
+	  lprintf (0, "[%s] Error sending '%.*s': %s", cinfo->hostname,
+		   strcspn ((char *) buffer, "\r\n"), (char *) buffer, 
+		   strerror(errno));
+	  cinfo->socketerr = 1;
+	}
+      
       return -1;
     }
   
@@ -2027,6 +2039,7 @@ SendData (ClientInfo *cinfo, void *buffer, size_t buflen)
     {
       lprintf (0, "[%s] SendData(): Error setting non-blocking flag: %s",
 	       cinfo->hostname, strerror(errno));
+      cinfo->socketerr = 1;
       return -1;
     }
   
@@ -2084,7 +2097,7 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
   blockflags &= ~O_NONBLOCK;
   if ( fcntl(cinfo->socket, F_SETFL, blockflags) == -1 )
     {
-      lprintf (0, "[%s] SendData(): Error clearing non-blocking flag: %s",
+      lprintf (0, "[%s] SendRecord(): Error clearing non-blocking flag: %s",
 	       cinfo->hostname, strerror(errno));
       cinfo->socketerr = 1;
       return -1;
@@ -2093,9 +2106,18 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
   /* Send SeedLink packet */
   if ( send (cinfo->socket, buffer, sendsize, 0) < 0 )
     {
-      lprintf (0, "[%s] Error sending record: %s",
-	       cinfo->hostname, strerror(errno));
-      cinfo->socketerr = 1;
+      /* EPIPE indicates a client disconnect, everything else is an error */
+      if ( errno == EPIPE )
+	{
+	  cinfo->socketerr = 2;  /* Indicate an orderly shutdown */
+	}
+      else
+	{
+	  lprintf (0, "[%s] Error sending record: %s",
+		   cinfo->hostname, strerror(errno));
+	  cinfo->socketerr = 1;
+	}
+      
       return -1;
     }
   
@@ -2105,7 +2127,7 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
   /* Restore original socket flags */
   if ( fcntl(cinfo->socket, F_SETFL, sockflags) == -1 )
     {
-      lprintf (0, "[%s] SendData(): Error setting non-blocking flag: %s",
+      lprintf (0, "[%s] SendRecord(): Error setting non-blocking flag: %s",
 	       cinfo->hostname, strerror(errno));
       cinfo->socketerr = 1;
       return -1;
@@ -2157,7 +2179,7 @@ SendInfoRecord (char *record, int reclen, void *vcinfo)
   blockflags &= ~O_NONBLOCK;
   if ( fcntl(cinfo->socket, F_SETFL, blockflags) == -1 )
     {
-      lprintf (0, "[%s] SendData(): Error clearing non-blocking flag: %s",
+      lprintf (0, "[%s] SendInfoRecord(): Error clearing non-blocking flag: %s",
 	       cinfo->hostname, strerror(errno));
       cinfo->socketerr = 1;
       return;
@@ -2166,9 +2188,18 @@ SendInfoRecord (char *record, int reclen, void *vcinfo)
   /* Send SeedLink INFO packet */
   if ( send (cinfo->socket, buffer, SLRECSIZE+SLHEADSIZE, 0) < 0 )
     {
-      lprintf (0, "[%s] Error sending INFO record: %s",
-	       cinfo->hostname, strerror(errno));
-      cinfo->socketerr = 1;
+      /* EPIPE indicates a client disconnect, everything else is an error */
+      if ( errno == EPIPE )
+	{
+	  cinfo->socketerr = 2;  /* Indicate an orderly shutdown */
+	}
+      else
+	{
+	  lprintf (0, "[%s] Error sending INFO record: %s",
+		   cinfo->hostname, strerror(errno));
+	  cinfo->socketerr = 1;
+	}
+      
       return;
     }
   
@@ -2178,7 +2209,7 @@ SendInfoRecord (char *record, int reclen, void *vcinfo)
   /* Restore original socket flags */
   if ( fcntl(cinfo->socket, F_SETFL, sockflags) == -1 )
     {
-      lprintf (0, "[%s] SendData(): Error setting non-blocking flag: %s",
+      lprintf (0, "[%s] SendInfoRecord(): Error setting non-blocking flag: %s",
 	       cinfo->hostname, strerror(errno));
       cinfo->socketerr = 1;
       return;

@@ -3,7 +3,7 @@
  *
  * General client related utility functions
  *
- * Copyright 2009 Chad Trabant, IRIS Data Managment Center
+ * Copyright 2011 Chad Trabant, IRIS Data Managment Center
  *
  * This file is part of ringserver.
  *

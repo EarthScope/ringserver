@@ -36,7 +36,7 @@
  * If the signal SIGUSR1 is recieved the program will print the
  * current file list to standard error.
  *
- * Copyright 2009 Chad Trabant, IRIS Data Management Center
+ * Copyright 2011 Chad Trabant, IRIS Data Management Center
  *
  * This file is part of ringserver.
  *

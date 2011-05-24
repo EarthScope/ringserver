@@ -3,7 +3,7 @@
  *
  * Generic logging routines.
  *
- * Copyright 2009 Chad Trabant, IRIS Data Management Center
+ * Copyright 2011 Chad Trabant, IRIS Data Management Center
  *
  * This file is part of ringserver.
  *

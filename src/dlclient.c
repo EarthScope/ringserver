@@ -3,7 +3,7 @@
  *
  * DataLink client thread specific routines.
  *
- * Copyright 2009 Chad Trabant, IRIS Data Management Center
+ * Copyright 2011 Chad Trabant, IRIS Data Management Center
  *
  * This file is part of ringserver.
  *
@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2010.072
+ * Modified: 2011.143
  **************************************************************************/
 
 #include <fcntl.h>
@@ -344,7 +344,8 @@ DL_ClientThread (void *arg)
 	      /* Send packet to client */
 	      if ( SendRingPacket (cinfo, &packet, packetdata) )
 		{
-		  lprintf (1, "[%s] Error sending packet to client", cinfo->hostname);
+		  if ( cinfo->socketerr != 2 )
+		    lprintf (1, "[%s] Error sending packet to client", cinfo->hostname);
 		}
 	      
 	      /* Socket errors are fatal */
@@ -838,7 +839,7 @@ HandleNegotiation (ClientInfo *cinfo)
  * The flags are single character indicators and interpreted the
  * following way:
  *
- * flag:
+ * flags:
  * 'N' = no acknowledgement is requested
  * 'A' = acknowledgement is requested, server will send a reply
  *
@@ -1037,7 +1038,8 @@ HandleRead (ClientInfo *cinfo, RingPacket *packet, void *packetdata)
   /* Send packet to client */
   else if ( SendRingPacket (cinfo, packet, packetdata) )
     {
-      lprintf (1, "[%s] Error sending packet to client", cinfo->hostname);
+      if ( cinfo->socketerr != 2 )
+	lprintf (1, "[%s] Error sending packet to client", cinfo->hostname);
     }
   
   return (cinfo->socketerr) ? -1 : 0;
@@ -1476,7 +1478,9 @@ HandleInfo (ClientInfo *cinfo, int socket, char state)
       /* Send XML to client */
       if ( SendPacket (cinfo, type, xmlstr, 0, 0, 1) )
 	{
-	  lprintf (0, "[%s] Error sending INFO XML", cinfo->hostname);
+	  if ( cinfo->socketerr != 2 )
+	    lprintf (0, "[%s] Error sending INFO XML", cinfo->hostname);
+	  
 	  if ( xmldoc )
 	    mxmlRelease (xmldoc);
 	  if ( xmlstr )
@@ -1595,6 +1599,7 @@ RecvCmd (ClientInfo *cinfo)
       /* Peer completed an orderly shutdown */
       if ( nrecv == 0 )
 	{
+	  cinfo->socketerr = 2;  /* Indicate an orderly shutdown */
 	  return -1;
 	}
       
@@ -1725,8 +1730,9 @@ SendPacket (ClientInfo *cinfo, char *header, char *data,
   /* Send complete wire packet */
   if ( SendData (cinfo, wirepacket, (3 + headerlen + datalen)) )
     {
-      lprintf (0, "[%s] SendPacket(): Error sending packet: %s",
-	       cinfo->hostname, strerror(errno));
+      if ( cinfo->socketerr != 2 )
+	lprintf (0, "[%s] SendPacket(): Error sending packet: %s",
+		 cinfo->hostname, strerror(errno));
       return -1;
     }
   
@@ -1777,7 +1783,7 @@ SendRingPacket (ClientInfo *cinfo, RingPacket *packet, void *packetdata)
   /* Make sure send buffer is large enough for wire packet */
   if ( cinfo->sendbuflen < (3 + headerlen + packet->datasize) )
     {
-      lprintf (0, "[%s] SendPacket(): Send buffer not large enough (%d bytes), need %d bytes",
+      lprintf (0, "[%s] SendRingPacket(): Send buffer not large enough (%d bytes), need %d bytes",
 	       cinfo->hostname, cinfo->sendbuflen, 3 + headerlen + packet->datasize);
       return -1;
     }
@@ -1795,8 +1801,9 @@ SendRingPacket (ClientInfo *cinfo, RingPacket *packet, void *packetdata)
   /* Send complete wire packet */
   if ( SendData (cinfo, cinfo->sendbuf, (3 + headerlen + packet->datasize)) )
     {
-      lprintf (0, "[%s] SendRingPacket(): Error sending packet: %s",
-	       cinfo->hostname, strerror(errno));
+      if ( cinfo->socketerr != 2 )
+	lprintf (0, "[%s] SendRingPacket(): Error sending packet: %s",
+		 cinfo->hostname, strerror(errno));
       return -1;
     }
   
@@ -1864,28 +1871,37 @@ SendData (ClientInfo *cinfo, void *buffer, size_t buflen)
   
   if ( send (cinfo->socket, buffer, buflen, 0) < 0 )
     {
-      /* Create a limited printable buffer for the diagnostic message */
-      char *cp;
-      char pbuffer[100];
-      int maxtoprint;
-      
-      maxtoprint = strcspn ((char *) buffer, "\r\n");
-      if ( maxtoprint > sizeof(pbuffer) )
-	maxtoprint = sizeof(pbuffer);
-      
-      strncpy (pbuffer, (char *) buffer, maxtoprint-1);
-      pbuffer[maxtoprint-1] = '\0';
-      
-      /* Replace unprintable characters with '?', */
-      for ( cp=pbuffer; *cp != '\0'; cp++ )
+      /* EPIPE indicates a client disconnect, everything else is an error */
+      if ( errno == EPIPE )
 	{
-	  if ( *cp < 32 || *cp > 126 )
-	    *cp = '?';
+	  cinfo->socketerr = 2;  /* Indicate an orderly shutdown */
+	}
+      else
+	{
+	  /* Create a limited printable buffer for the diagnostic message */
+	  char *cp;
+	  char pbuffer[100];
+	  int maxtoprint;
+	  
+	  maxtoprint = strcspn ((char *) buffer, "\r\n");
+	  if ( maxtoprint > sizeof(pbuffer) )
+	    maxtoprint = sizeof(pbuffer);
+	  
+	  strncpy (pbuffer, (char *) buffer, maxtoprint-1);
+	  pbuffer[maxtoprint-1] = '\0';
+	  
+	  /* Replace unprintable characters with '?', */
+	  for ( cp=pbuffer; *cp != '\0'; cp++ )
+	    {
+	      if ( *cp < 32 || *cp > 126 )
+		*cp = '?';
+	    }
+	  
+	  lprintf (0, "[%s] SendData(): Error sending '%s': %s", cinfo->hostname,
+		   pbuffer, strerror(errno));
+	  cinfo->socketerr = 1;
 	}
       
-      lprintf (0, "[%s] SendData(): Error sending '%s': %s", cinfo->hostname,
-	       pbuffer, strerror(errno));
-      cinfo->socketerr = 1;
       return -1;
     }
   

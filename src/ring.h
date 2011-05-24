@@ -3,7 +3,7 @@
  *
  * Declarations for fundamental ring routines and data structures.
  *
- * Modified: 2010.070
+ * Modified: 2011.141
  **************************************************************************/
 
 #ifndef RING_H
@@ -37,37 +37,37 @@ extern "C" {
 /* Ring parameters, stored at the beginning of the packet buffer file */
 typedef struct RingParams_s
 {
-  char      signature[4];    /* RING_SIGNATURE */
-  uint16_t  version;         /* RING_VERSION */
-  uint64_t  ringsize;        /* Ring size in bytes */
-  uint32_t  pktsize;         /* Packet size in bytes */
-  int64_t   maxpktid;        /* Maximum packet ID */
-  int64_t   maxpackets;      /* Maximum number of packets */
-  int64_t   maxoffset;       /* Maximum packet offset */
-  uint32_t  headersize;      /* Size of ring header */
-  uint8_t   fluxflag;        /* Flag indicating the ring is in flux */
-  uint8_t   mmapflag;        /* Memory mapped flag */
-  uint8_t   volatileflag;    /* Volatile ring flag */
-  pthread_mutex_t writelock; /* Mutex lock for ring modifications */
-  RBTree   *streamidx;       /* Binary tree of streams */
-  pthread_mutex_t streamlock;/* Mutex lock for stream index */
-  int32_t   streamcount;     /* Count of streams in index */
-  int64_t   earliestid;      /* Earliest packet ID */
-  hptime_t  earliestptime;   /* Earliest packet creation time */
-  hptime_t  earliestdstime;  /* Earliest packet data start time */
-  hptime_t  earliestdetime;  /* Earliest packet data end time */
-  int64_t   earliestoffset;  /* Earliest packet offset in bytes */
-  int64_t   latestid;        /* Latest packet ID */
-  hptime_t  latestptime;     /* Latest packet creation time */
-  hptime_t  latestdstime;    /* Latest packet data start time */
-  hptime_t  latestdetime;    /* Latest packet data end time */
-  int64_t   latestoffset;    /* Latest packet offset in bytes */
-  hptime_t  ringstart;       /* Ring initialization time */
-  double    txpacketrate;    /* Transmission packet rate in Hz */
-  double    txbyterate;      /* Transmission byte rate in Hz */
-  double    rxpacketrate;    /* Reception packet rate in Hz */
-  double    rxbyterate;      /* Reception byte rate in Hz */
-  char     *data;            /* Pointer to start of data buffer */
+  char      signature[4];     /* RING_SIGNATURE */
+  uint16_t  version;          /* RING_VERSION */
+  uint64_t  ringsize;         /* Ring size in bytes */
+  uint32_t  pktsize;          /* Packet size in bytes */
+  int64_t   maxpktid;         /* Maximum packet ID */
+  int64_t   maxpackets;       /* Maximum number of packets */
+  int64_t   maxoffset;        /* Maximum packet offset */
+  uint32_t  headersize;       /* Size of ring header */
+  uint8_t   fluxflag;         /* Flag indicating the ring is in flux */
+  uint8_t   mmapflag;         /* Memory mapped flag */
+  uint8_t   volatileflag;     /* Volatile ring flag */
+  pthread_mutex_t *ringlock;  /* Lock for ring access */
+  RBTree   *streamidx;        /* Binary tree of streams */
+  pthread_mutex_t *streamlock;/* Mutex lock for stream index */
+  int32_t   streamcount;      /* Count of streams in index */
+  int64_t   earliestid;       /* Earliest packet ID */
+  hptime_t  earliestptime;    /* Earliest packet creation time */
+  hptime_t  earliestdstime;   /* Earliest packet data start time */
+  hptime_t  earliestdetime;   /* Earliest packet data end time */
+  int64_t   earliestoffset;   /* Earliest packet offset in bytes */
+  int64_t   latestid;         /* Latest packet ID */
+  hptime_t  latestptime;      /* Latest packet creation time */
+  hptime_t  latestdstime;     /* Latest packet data start time */
+  hptime_t  latestdetime;     /* Latest packet data end time */
+  int64_t   latestoffset;     /* Latest packet offset in bytes */
+  hptime_t  ringstart;        /* Ring initialization time */
+  double    txpacketrate;     /* Transmission packet rate in Hz */
+  double    txbyterate;       /* Transmission byte rate in Hz */
+  double    rxpacketrate;     /* Reception packet rate in Hz */
+  double    rxbyterate;       /* Reception byte rate in Hz */
+  char     *data;             /* Pointer to start of data buffer */
 } RingParams;
 
 /* Ring packet header structure, data follows header in the ring */

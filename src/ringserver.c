@@ -4,7 +4,7 @@
  * Multi-threaded TCP generic ring buffer data server with interfaces
  * for SeedLink and DataLink protocols.
  *
- * Copyright 2009 Chad Trabant, IRIS Data Management Center
+ * Copyright 2011 Chad Trabant, IRIS Data Management Center
  *
  * This file is part of ringserver.
  *
@@ -21,7 +21,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2011.049
+ * Modified: 2011.143
  **************************************************************************/
 
 #include <fcntl.h>
@@ -89,7 +89,7 @@ static uint64_t CalcSize (char *sizestr);
 static int      CalcStats (ClientInfo *cinfo);
 static int      AddIPNet (IPNet **pplist, char *network, char *limitstr);
 static IPNet   *MatchIP (IPNet *list, struct sockaddr *addr);
-static void     TermHandler();
+static void    *SignalThread (void *arg);
 static void     PrintHandler();
 static void     Usage (int level);
 
@@ -107,6 +107,7 @@ static uint8_t  autorecovery  = 1;          /* Flag to control auto recovery fro
 static float    timewinlimit  = 1.0;        /* Time window search limit in percent */
 static char    *mseedarchive  = 0;          /* Mini-SEED archive definition */
 static int      mseedidleto   = 300;        /* Mini-SEED idle file timeout */
+static sigset_t globalsigset;               /* Signal set for signal handling */
 
 static int tcpprotonumber = -1;
 
@@ -128,6 +129,7 @@ main (int argc, char* argv[])
   time_t chktime;
   struct timespec timereq;
   pthread_t stid;
+  pthread_t sigtid;
   struct sthread *stp;
   struct sthread *loopstp;
   struct cthread *ctp;
@@ -150,29 +152,35 @@ main (int argc, char* argv[])
   /* Ring descriptor */
   int ringfd = -1;
   
-  /* Signal handling using POSIX routines */
-  struct sigaction sa;
-  
-  sa.sa_flags = SA_RESTART;
-  sigemptyset(&sa.sa_mask);
-  
-  sa.sa_handler = PrintHandler;
-  sigaction(SIGUSR1, &sa, NULL);
-  
-  sa.sa_handler = TermHandler;
-  sigaction(SIGINT, &sa, NULL);
-  sigaction(SIGTERM, &sa, NULL);
-  
-  sa.sa_handler = SIG_IGN;
-  sigaction(SIGHUP, &sa, NULL);
-  sigaction(SIGPIPE, &sa, NULL);
-  
   /* Process command line parameters */
-  if (ProcessParam (argc, argv) < 0)
+  if ( ProcessParam (argc, argv) < 0 )
     return 1;
   
   /* Redirect libmseed logging facility to lprintf() via the lprint() shim */
   ms_loginit (lprint, 0, lprint, 0);
+  
+  /* Signal handling using POSIX routines, create set of all signals */
+  if ( sigfillset (&globalsigset) )
+    {
+      lprintf (0, "Error: sigfillset() failed, cannot initialize signal set");
+      return 1;
+    }
+  
+  /* Block signals in set, mask is inherited by all child threads */
+  if ( pthread_sigmask (SIG_BLOCK, &globalsigset, NULL) )
+    {
+      lprintf (0, "Error: pthread_sigmask() failed, cannot set thread signal mask");
+      return 1;
+    }
+
+  /* Start signal handling thread */
+  lprintf (2, "Starting signal handling thread");
+  
+  if ( (errno=pthread_create (&sigtid, NULL, SignalThread, NULL)) )
+    {
+      lprintf (0, "Error creating signal handling thread: %s", strerror(errno));
+      return 1;
+    }
   
   /* Look up store the system TCP protocol entry */
   if ( ! (pe_tcp = getprotobyname("tcp")) )
@@ -227,13 +235,13 @@ main (int argc, char* argv[])
 	  /* Rename original ring and stream files to the corrupt names */
 	  if ( rename (ringfilename, ringfilecorr) && errno != ENOENT )
 	    {
-	      lprintf (0, "Error renaming %s to %s: %s\n", ringfilename, ringfilecorr,
+	      lprintf (0, "Error renaming %s to %s: %s", ringfilename, ringfilecorr,
 		       strerror (errno));
 	      return 1;
 	    }
 	  if ( rename (streamfilename, streamfilecorr) && errno != ENOENT )
 	    {
-	      lprintf (0, "Error renaming %s to %s: %s\n", streamfilename, streamfilecorr,
+	      lprintf (0, "Error renaming %s to %s: %s", streamfilename, streamfilecorr,
 		       strerror (errno));
 	      return 1;
 	    }
@@ -643,7 +651,7 @@ main (int argc, char* argv[])
 	}
       
       configreset = 0;
-      chktime = curtime;	      
+      chktime = curtime;
     }  /* End of main watchdog loop */
   
   /* Shutdown ring buffer */
@@ -655,7 +663,7 @@ main (int argc, char* argv[])
 	  return 1;
 	}
     }
-    
+  
   return 0;
 }  /* End of main() */
 
@@ -2498,16 +2506,56 @@ MatchIP (IPNet *list, struct sockaddr *addr)
 }  /* End of MatchIP() */
 
 
-/***************************************************************************
- * TermHandler and PrintHandler (USR1 signal):
- * Signal handler routines.
- ***************************************************************************/
-static void
-TermHandler (int sig)
+/***********************************************************************
+ * SignalThread:
+ *
+ * Thread to handle signals.
+ *
+ * Return NULL.
+ ***********************************************************************/
+void *
+SignalThread (void *arg)
 {
-  shutdownsig = 1;
-}
+  int sig;
+  int rc;
+  
+  /* Remove SIGPIPE from complete set, it will remain blocked */
+  if ( sigdelset (&globalsigset, SIGPIPE) )
+    {
+      lprintf (0, "Error: sigdelset() failed, cannot remove SIGPIPE");
+    }
+  
+  for (;;)
+    {
+      if ( (rc = sigwait (&globalsigset, &sig)) )
+	{
+	  lprintf (0, "Error: sigwait() failed with %d", rc);
+	  continue;
+	}
+      
+      switch (sig)
+	{
+	case SIGINT:
+	case SIGTERM:
+	  lprintf (1, "Received termination signal");
+	  shutdownsig = 1;  /* Set global termination flag */
+	  break;
+	case SIGUSR1:
+	  PrintHandler();   /* Print global ring details */
+	  break;
+	default:
+	  lprintf (0, "Summarily ignoring %s (%d) signal", strsignal(sig), sig);
+	  break;
+	}
+    }
+  
+  return NULL;
+} /* End of SignalThread() */
 
+
+/***************************************************************************
+ * PrintHandler (USR1 signal):
+ ***************************************************************************/
 static void
 PrintHandler (int sig)
 {
