@@ -1,3 +1,15 @@
+2011.143:
+	- Use ClientInfo.socketerr to indicate clean shutdown of connection
+	to avoid logging ugly error messages when client has disconnected.
+	
+2011.141:
+	- Create a dedicated signal handling thread and block signals from
+	all other threads to avoid any signal handling by child threads. 
+	- Rework storage and initialization of ring and stream locks.
+	- Add mutex locking to all ring read operations, all ring access
+	including both reading and writing is mutually exclusive.  This is a
+	conservative and safe design, hopefully not too slow.
+
 2011.066:
 	- Update libmseed to 2.6 final.
 
