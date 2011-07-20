@@ -1,6 +1,6 @@
 
 # Standard compiler parameters
-CFLAGS += -D_REENTRANT -I../libmseed -I../mxml -I../pcre 
+CFLAGS += -D_REENTRANT -D_POSIX_PTHREAD_SEMANTICS -I../libmseed -I../mxml -I../pcre 
 
 LDLIBS  = ../pcre/.libs/libpcre.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread
 
