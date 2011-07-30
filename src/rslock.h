@@ -17,13 +17,13 @@ extern "C" {
 #define RSLOCK_USE_SPINLOCK 1
 
 /* Map spinlock type for Apple Mac OSX */
-#if defined(__APPLE__)
+#ifdef __APPLE__
 #include <libkern/OSAtomic.h>
 typedef OSSpinLock pthread_spinlock_t;
 #endif /* __APPLE__ */
 
 /* Define rslock_t as needed for lock type */
-#if defined(RSLOCK_USE_SPINLOCK)
+#ifdef RSLOCK_USE_SPINLOCK
 typedef pthread_spinlock_t rslock_t;
 #else
 typedef pthread_mutex_t rslock_t;
