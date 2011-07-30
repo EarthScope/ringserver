@@ -1,3 +1,8 @@
+2011.211:
+	- Add rslock.c and rslock.h with generalized lock routines that can
+	be switched between spinlocks and mutex locks.
+	- Use the rslock mechanism to lock the ring for all access.
+
 2011.143:
 	- Use ClientInfo.socketerr to indicate clean shutdown of connection
 	to avoid logging ugly error messages when client has disconnected.
