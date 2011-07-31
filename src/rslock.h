@@ -29,10 +29,10 @@ typedef pthread_spinlock_t rslock_t;
 typedef pthread_mutex_t rslock_t;
 #endif /* RSLOCK_USE_SPINLOCK */
 
-extern inline int rslock_init (rslock_t *lock);
-extern inline int rslock_destroy (rslock_t *lock);
-extern inline int rslock_lock (rslock_t *lock);
-extern inline int rslock_unlock (rslock_t *lock);
+extern int rslock_init (rslock_t *lock);
+extern int rslock_destroy (rslock_t *lock);
+extern int rslock_lock (rslock_t *lock);
+extern int rslock_unlock (rslock_t *lock);
 
 #ifdef __cplusplus
 }
