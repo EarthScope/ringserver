@@ -1,3 +1,22 @@
+2011.144: 2.6.1
+	- Update dynamic library version.
+	- Add notes to the users guide and intro about functions useful for
+	detecting and parsing records in a memory buffer.
+
+2011.129:
+	- Correctly determine record lengths implied by presence of pack header
+	by avoiding record header searches in buffer beyond pack header.
+	- Fix ms_parse to return correct hint of how many more bytes are needed
+	when record length has not been determined.
+	- Change the samplecnt and numsamples elements of the MSRecord, MSTrace
+	and MSTraceSeg structures to 64-bit integers to avoid overflow.
+
+2011.124:
+	- Allow lowercase 't' in ISO time string parsing.
+
+2011.090:
+	- Add check for invalid blockette offset in ms_detect().
+
 2011.056: 2.6
 	- Fix handling of sample data in internal MSTraceList routines.
 	- Cleanup WIN32 defines, make MSVC and Open Watcom play nicely.
@@ -82,7 +101,7 @@
 	- Add check for log parameters in ms_log_main().
 
 2010.129:
-	- Fix small priting bug in diagnostic ms_printselections().
+	- Fix small printing bug in diagnostic ms_printselections().
 
 2010.068: 2.5.1
 	- Allow file name for ms_readselectionfile() to be "-" and read

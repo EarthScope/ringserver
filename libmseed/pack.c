@@ -7,7 +7,7 @@
  * Written by Chad Trabant,
  *   IRIS Data Management Center
  *
- * modified: 2009.365
+ * modified: 2011.129
  ***************************************************************************/
 
 #include <stdio.h>
@@ -71,7 +71,7 @@ char *PACK_SRCNAME = NULL;
  ***************************************************************************/
 int
 msr_pack ( MSRecord * msr, void (*record_handler) (char *, int, void *),
-	   void *handlerdata, int *packedsamples, flag flush, flag verbose )
+	   void *handlerdata, int64_t *packedsamples, flag flush, flag verbose )
 {
   uint16_t *HPnumsamples;
   uint16_t *HPdataoffset;
@@ -91,8 +91,8 @@ msr_pack ( MSRecord * msr, void (*record_handler) (char *, int, void *),
   int maxdatabytes;
   int maxsamples;
   int recordcnt = 0;
-  int totalpackedsamples;
   int packsamples, packoffset;
+  int64_t totalpackedsamples;
   hptime_t segstarttime;
   
   if ( ! msr )

@@ -9,7 +9,7 @@
  *
  * Written by Chad Trabant, ORFEUS/EC-Project MEREDIAN
  *
- * modified 2007.118
+ * modified 2011.129
  ***************************************************************************/
 
 #include <stdio.h>
@@ -54,7 +54,7 @@ main (int argc, char **argv)
 
   int totalrecs  = 0;
   int totalsamps = 0;
-  int packedsamples;
+  int64_t packedsamples;
   int packedrecords;
   int lastrecord;
   int iseqnum = 1;

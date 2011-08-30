@@ -7,7 +7,7 @@
  *   ORFEUS/EC-Project MEREDIAN
  *   IRIS Data Management Center
  *
- * modified: 2009.175
+ * modified: 2011.129
  ***************************************************************************/
 
 #include <stdio.h>
@@ -729,9 +729,9 @@ msr_print (MSRecord *msr, flag details)
     }
   else
     {
-      ms_log (0, "%s, %06d, %c, %d, %d samples, %-.10g Hz, %s\n",
+      ms_log (0, "%s, %06d, %c, %d, %lld samples, %-.10g Hz, %s\n",
 	      srcname, msr->sequence_number, msr->dataquality,
-	      msr->reclen, msr->samplecnt, msr->samprate, time);
+	      msr->reclen, (long long int) msr->samplecnt, msr->samprate, time);
     }
 
   /* Report information in the blockette chain */

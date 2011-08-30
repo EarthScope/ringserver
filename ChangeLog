@@ -1,3 +1,8 @@
+2011.242:
+	- Update libmseed to 2.6.1.
+	- Patch minixml library for correct handling of va_list structures on
+	amd64 architectures.
+
 2011.211:
 	- Add rslock.c and rslock.h with generalized lock routines that can
 	be switched between spinlocks and mutex locks.

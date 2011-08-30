@@ -7,7 +7,7 @@
  * ORFEUS/EC-Project MEREDIAN
  * IRIS Data Management Center
  *
- * modified: 2010.364
+ * modified: 2011.124
  ***************************************************************************/
 
 #include <stdio.h>
@@ -972,8 +972,8 @@ ms_timestr2hptime (char *timestr)
   int sec  = 0;
   float fusec = 0.0;
   int usec = 0;
-    
-  fields = sscanf (timestr, "%d%*[-/:.]%d%*[-/:.]%d%*[-/:.T ]%d%*[-/:.]%d%*[- /:.]%d%f",
+  
+  fields = sscanf (timestr, "%d%*[-/:.]%d%*[-/:.]%d%*[-/:.Tt ]%d%*[-/:.]%d%*[- /:.]%d%f",
 		   &year, &mon, &mday, &hour, &min, &sec, &fusec);
   
   /* Convert fractional seconds to microseconds */

@@ -5,7 +5,7 @@
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified: 2011.006
+ * modified: 2011.129
  ***************************************************************************/
 
 #include <stdio.h>
@@ -553,7 +553,7 @@ mst_addmsr ( MSTrace *mst, MSRecord *msr, flag whence )
  ***************************************************************************/
 int
 mst_addspan ( MSTrace *mst, hptime_t starttime, hptime_t endtime,
-	      void *datasamples, int numsamples, char sampletype,
+	      void *datasamples, int64_t numsamples, char sampletype,
 	      flag whence )
 {
   int samplesize = 0;
@@ -1256,12 +1256,12 @@ mst_printtracelist ( MSTraceGroup *mstg, flag timeformat,
 	    ms_log (0, "%-17s %-24s %-24s %-4s\n",
 		    srcname, stime, etime, gapstr);
 	  else
-	    ms_log (0, "%-17s %-24s %-24s %-s %-3.3g %-d\n",
-		    srcname, stime, etime, gapstr, mst->samprate, mst->samplecnt);
+	    ms_log (0, "%-17s %-24s %-24s %-s %-3.3g %-lld\n",
+		    srcname, stime, etime, gapstr, mst->samprate, (long long int)mst->samplecnt);
 	}
       else if ( details > 0 && gaps <= 0 )
-	ms_log (0, "%-17s %-24s %-24s %-3.3g %-d\n",
-		srcname, stime, etime, mst->samprate, mst->samplecnt);
+	ms_log (0, "%-17s %-24s %-24s %-3.3g %-lld\n",
+		srcname, stime, etime, mst->samprate, (long long int)mst->samplecnt);
       else
 	ms_log (0, "%-17s %-24s %-24s\n", srcname, stime, etime);
       
@@ -1329,9 +1329,9 @@ mst_printsynclist ( MSTraceGroup *mstg, char *dccid, flag subsecond )
       ms_hptime2seedtimestr (mst->endtime, etime, subsecond);
       
       /* Print SYNC line */
-      ms_log (0, "%s|%s|%s|%s|%s|%s||%.2g|%d|||||||%s\n",
+      ms_log (0, "%s|%s|%s|%s|%s|%s||%.2g|%lld|||||||%s\n",
 	      mst->network, mst->station, mst->location, mst->channel,
-	      stime, etime, mst->samprate, mst->samplecnt,
+	      stime, etime, mst->samprate, (long long int)mst->samplecnt,
 	      yearday);
       
       mst = mst->next;
@@ -1513,20 +1513,20 @@ mst_printgaplist (MSTraceGroup *mstg, flag timeformat,
 int
 mst_pack ( MSTrace *mst, void (*record_handler) (char *, int, void *),
 	   void *handlerdata, int reclen, flag encoding, flag byteorder,
-	   int *packedsamples, flag flush, flag verbose,
+	   int64_t *packedsamples, flag flush, flag verbose,
 	   MSRecord *mstemplate )
 {
   MSRecord *msr;
   char srcname[50];
   int trpackedrecords;
-  int trpackedsamples;
+  int64_t trpackedsamples;
   int samplesize;
-  int bufsize;
+  int64_t bufsize;
   
   hptime_t preservestarttime = 0;
   double preservesamprate = 0.0;
   void *preservedatasamples = 0;
-  int32_t preservenumsamples = 0;
+  int64_t preservenumsamples = 0;
   char preservesampletype = 0;
   StreamState *preserveststate = 0;
   
@@ -1669,12 +1669,12 @@ mst_pack ( MSTrace *mst, void (*record_handler) (char *, int, void *),
 int
 mst_packgroup ( MSTraceGroup *mstg, void (*record_handler) (char *, int, void *),
 		void *handlerdata, int reclen, flag encoding, flag byteorder,
-		int *packedsamples, flag flush, flag verbose,
+		int64_t *packedsamples, flag flush, flag verbose,
 		MSRecord *mstemplate )
 {
   MSTrace *mst;
   int trpackedrecords = 0;
-  int trpackedsamples = 0;
+  int64_t trpackedsamples = 0;
   char srcname[50];
 
   if ( ! mstg )

@@ -5,7 +5,7 @@
  *
  * Written by Chad Trabant, IRIS Data Management Center
  *
- * modified: 2011.055
+ * modified: 2011.129
  ***************************************************************************/
 
 #include <stdio.h>
@@ -911,12 +911,12 @@ mstl_printtracelist ( MSTraceList *mstl, flag timeformat,
 		ms_log (0, "%-17s %-24s %-24s %-4s\n",
 			id->srcname, stime, etime, gapstr);
 	      else
-		ms_log (0, "%-17s %-24s %-24s %-s %-3.3g %-d\n",
-			id->srcname, stime, etime, gapstr, seg->samprate, seg->samplecnt);
+		ms_log (0, "%-17s %-24s %-24s %-s %-3.3g %-lld\n",
+			id->srcname, stime, etime, gapstr, seg->samprate, (long long int)seg->samplecnt);
 	    }
 	  else if ( details > 0 && gaps <= 0 )
-	    ms_log (0, "%-17s %-24s %-24s %-3.3g %-d\n",
-		    id->srcname, stime, etime, seg->samprate, seg->samplecnt);
+	    ms_log (0, "%-17s %-24s %-24s %-3.3g %-lld\n",
+		    id->srcname, stime, etime, seg->samprate, (long long int)seg->samplecnt);
 	  else
 	    ms_log (0, "%-17s %-24s %-24s\n", id->srcname, stime, etime);
 	  
@@ -987,9 +987,9 @@ mstl_printsynclist ( MSTraceList *mstl, char *dccid, flag subsecond )
 	  ms_hptime2seedtimestr (seg->endtime, endtime, subsecond);
 	  
 	  /* Print SYNC line */
-	  ms_log (0, "%s|%s|%s|%s|%s|%s||%.2g|%d|||||||%s\n",
+	  ms_log (0, "%s|%s|%s|%s|%s|%s||%.2g|%lld|||||||%s\n",
 		  id->network, id->station, id->location, id->channel,
-		  starttime, endtime, seg->samprate, seg->samplecnt,
+		  starttime, endtime, seg->samprate, (long long int)seg->samplecnt,
 		  yearday);
 	  
 	  seg = seg->next;

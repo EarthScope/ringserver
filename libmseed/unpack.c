@@ -13,7 +13,7 @@
  *   ORFEUS/EC-Project MEREDIAN
  *   IRIS Data Management Center
  *
- * modified: 2011.056
+ * modified: 2011.129
  ***************************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
@@ -800,8 +800,8 @@ msr_unpack_data ( MSRecord *msr, int swapflag, int verbose )
   dbuf = msr->record + msr->fsdh->data_offset;
   
   if ( verbose > 2 )
-    ms_log (1, "%s: Unpacking %d samples\n",
-	    UNPACK_SRCNAME, msr->samplecnt);
+    ms_log (1, "%s: Unpacking %lld samples\n",
+	    UNPACK_SRCNAME, (long long int)msr->samplecnt);
   
   /* Decide if this is a encoding that we can decode */
   switch (msr->encoding)
@@ -811,7 +811,7 @@ msr_unpack_data ( MSRecord *msr, int swapflag, int verbose )
       if ( verbose > 1 )
 	ms_log (1, "%s: Found ASCII data\n", UNPACK_SRCNAME);
       
-      nsamples = msr->samplecnt;
+      nsamples = (int)msr->samplecnt;
       memcpy (msr->datasamples, dbuf, nsamples);
       msr->sampletype = 'a';      
       break;
@@ -820,8 +820,8 @@ msr_unpack_data ( MSRecord *msr, int swapflag, int verbose )
       if ( verbose > 1 )
 	ms_log (1, "%s: Unpacking INT-16 data samples\n", UNPACK_SRCNAME);
       
-      nsamples = msr_unpack_int_16 ((int16_t *)dbuf, msr->samplecnt,
-				    msr->samplecnt, msr->datasamples,
+      nsamples = msr_unpack_int_16 ((int16_t *)dbuf, (int)msr->samplecnt,
+				    (int)msr->samplecnt, msr->datasamples,
 				    swapflag);
       msr->sampletype = 'i';
       break;
@@ -830,8 +830,8 @@ msr_unpack_data ( MSRecord *msr, int swapflag, int verbose )
       if ( verbose > 1 )
 	ms_log (1, "%s: Unpacking INT-32 data samples\n", UNPACK_SRCNAME);
       
-      nsamples = msr_unpack_int_32 ((int32_t *)dbuf, msr->samplecnt,
-				    msr->samplecnt, msr->datasamples,
+      nsamples = msr_unpack_int_32 ((int32_t *)dbuf, (int)msr->samplecnt,
+				    (int)msr->samplecnt, msr->datasamples,
 				    swapflag);
       msr->sampletype = 'i';
       break;
@@ -840,8 +840,8 @@ msr_unpack_data ( MSRecord *msr, int swapflag, int verbose )
       if ( verbose > 1 )
 	ms_log (1, "%s: Unpacking FLOAT-32 data samples\n", UNPACK_SRCNAME);
       
-      nsamples = msr_unpack_float_32 ((float *)dbuf, msr->samplecnt,
-				      msr->samplecnt, msr->datasamples,
+      nsamples = msr_unpack_float_32 ((float *)dbuf, (int)msr->samplecnt,
+				      (int)msr->samplecnt, msr->datasamples,
 				      swapflag);
       msr->sampletype = 'f';
       break;
@@ -850,8 +850,8 @@ msr_unpack_data ( MSRecord *msr, int swapflag, int verbose )
       if ( verbose > 1 )
 	ms_log (1, "%s: Unpacking FLOAT-64 data samples\n", UNPACK_SRCNAME);
       
-      nsamples = msr_unpack_float_64 ((double *)dbuf, msr->samplecnt,
-				      msr->samplecnt, msr->datasamples,
+      nsamples = msr_unpack_float_64 ((double *)dbuf, (int)msr->samplecnt,
+				      (int)msr->samplecnt, msr->datasamples,
 				      swapflag);
       msr->sampletype = 'd';
       break;
@@ -868,8 +868,8 @@ msr_unpack_data ( MSRecord *msr, int swapflag, int verbose )
       if ( verbose > 1 )
 	ms_log (1, "%s: Unpacking Steim-1 data frames\n", UNPACK_SRCNAME);
       
-      nsamples = msr_unpack_steim1 ((FRAME *)dbuf, datasize, msr->samplecnt,
-				    msr->samplecnt, msr->datasamples, diffbuff, 
+      nsamples = msr_unpack_steim1 ((FRAME *)dbuf, datasize, (int)msr->samplecnt,
+				    (int)msr->samplecnt, msr->datasamples, diffbuff, 
 				    &x0, &xn, swapflag, verbose);
       msr->sampletype = 'i';
       free (diffbuff);
@@ -887,8 +887,8 @@ msr_unpack_data ( MSRecord *msr, int swapflag, int verbose )
       if ( verbose > 1 )
 	ms_log (1, "%s: Unpacking Steim-2 data frames\n", UNPACK_SRCNAME);
       
-      nsamples = msr_unpack_steim2 ((FRAME *)dbuf, datasize, msr->samplecnt,
-				    msr->samplecnt, msr->datasamples, diffbuff,
+      nsamples = msr_unpack_steim2 ((FRAME *)dbuf, datasize, (int)msr->samplecnt,
+				    (int)msr->samplecnt, msr->datasamples, diffbuff,
 				    &x0, &xn, swapflag, verbose);
       msr->sampletype = 'i';
       free (diffbuff);
@@ -910,7 +910,7 @@ msr_unpack_data ( MSRecord *msr, int swapflag, int verbose )
 		    UNPACK_SRCNAME);
 	}
       
-      nsamples = msr_unpack_geoscope (dbuf, msr->samplecnt, msr->samplecnt,
+      nsamples = msr_unpack_geoscope (dbuf, (int)msr->samplecnt, (int)msr->samplecnt,
 				      msr->datasamples, msr->encoding, swapflag);
       msr->sampletype = 'f';
       break;
@@ -919,7 +919,7 @@ msr_unpack_data ( MSRecord *msr, int swapflag, int verbose )
       if ( verbose > 1 )
 	ms_log (1, "%s: Unpacking CDSN encoded data samples\n", UNPACK_SRCNAME);
       
-      nsamples = msr_unpack_cdsn ((int16_t *)dbuf, msr->samplecnt, msr->samplecnt,
+      nsamples = msr_unpack_cdsn ((int16_t *)dbuf, (int)msr->samplecnt, (int)msr->samplecnt,
 				  msr->datasamples, swapflag);
       msr->sampletype = 'i';
       break;
@@ -928,7 +928,7 @@ msr_unpack_data ( MSRecord *msr, int swapflag, int verbose )
       if ( verbose > 1 )
 	ms_log (1, "%s: Unpacking SRO encoded data samples\n", UNPACK_SRCNAME);
       
-      nsamples = msr_unpack_sro ((int16_t *)dbuf, msr->samplecnt, msr->samplecnt,
+      nsamples = msr_unpack_sro ((int16_t *)dbuf, (int)msr->samplecnt, (int)msr->samplecnt,
 				 msr->datasamples, swapflag);
       msr->sampletype = 'i';
       break;
@@ -937,7 +937,7 @@ msr_unpack_data ( MSRecord *msr, int swapflag, int verbose )
       if ( verbose > 1 )
 	ms_log (1, "%s: Unpacking DWWSSN encoded data samples\n", UNPACK_SRCNAME);
       
-      nsamples = msr_unpack_dwwssn ((int16_t *)dbuf, msr->samplecnt, msr->samplecnt,
+      nsamples = msr_unpack_dwwssn ((int16_t *)dbuf, (int)msr->samplecnt, (int)msr->samplecnt,
 				    msr->datasamples, swapflag);
       msr->sampletype = 'i';
       break;

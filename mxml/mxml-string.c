@@ -1,5 +1,5 @@
 /*
- * "$Id: mxml-string.c,v 1.1.1.1 2011-03-09 00:47:27 chad Exp $"
+ * "$Id: mxml-string.c,v 1.2 2011-08-30 21:16:22 chad Exp $"
  *
  * String functions for Mini-XML, a small XML-like file parsing library.
  *
@@ -423,7 +423,10 @@ _mxml_vstrdupf(const char *format,	/* I - Printf-style format string */
   int	bytes;				/* Number of bytes required */
   char	*buffer,			/* String buffer */
 	temp[256];			/* Small buffer for first vsnprintf */
+  va_list ap2;                          /* Copy of va_list for 2nd use */
 
+
+  va_copy(ap2, ap);
 
  /*
   * First format with a tiny buffer; this will tell us how many bytes are
@@ -447,7 +450,7 @@ _mxml_vstrdupf(const char *format,	/* I - Printf-style format string */
   */
 
   if ((buffer = calloc(1, bytes + 1)) != NULL)
-    vsnprintf(buffer, bytes + 1, format, ap);
+    vsnprintf(buffer, bytes + 1, format, ap2);
 
  /*
   * Return the new string...
@@ -458,5 +461,5 @@ _mxml_vstrdupf(const char *format,	/* I - Printf-style format string */
 
 
 /*
- * End of "$Id: mxml-string.c,v 1.1.1.1 2011-03-09 00:47:27 chad Exp $".
+ * End of "$Id: mxml-string.c,v 1.2 2011-08-30 21:16:22 chad Exp $".
  */

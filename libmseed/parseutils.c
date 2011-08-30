@@ -5,7 +5,7 @@
  * Written by Chad Trabant
  *   IRIS Data Management Center
  *
- * modified: 2011.036
+ * modified: 2011.129
  ***************************************************************************/
 
 #include <stdio.h>
@@ -75,7 +75,7 @@ msr_parse ( char *record, int recbuflen, MSRecord **ppmsr, int reclen,
       /* Found record but could not determine length */
       if ( detlen == 0 )
 	{
-	  return recbuflen + 256;
+	  return 256;
 	}
       
       if ( verbose > 2 )
@@ -198,6 +198,14 @@ ms_detect ( const char *record, int recbuflen )
 	  break;
         }
       
+      /* Saftey check for invalid offset */
+      if ( next_blkt != 0 && next_blkt < blkt_offset )
+	{
+	  ms_log (2, "Invalid blockette offset (%d) less than current offset (%d)\n",
+		  next_blkt, blkt_offset);
+	  return -1;
+	}
+      
       blkt_offset = next_blkt;
     }
   
@@ -261,7 +269,7 @@ ms_detect ( const char *record, int recbuflen )
  * errors detected.
  ***************************************************************************/
 int
-ms_parse_raw (char *record, int maxreclen, flag details, flag swapflag)
+ms_parse_raw ( char *record, int maxreclen, flag details, flag swapflag )
 {
   struct fsdh_s *fsdh;
   double nomsamprate;
