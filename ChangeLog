@@ -1,3 +1,6 @@
+2011.262:
+	- Fix crash bug when SeedLink INFO command is received with no level.
+
 2011.242:
 	- Update libmseed to 2.6.1.
 	- Patch minixml library for correct handling of va_list structures on

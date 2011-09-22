@@ -37,7 +37,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2011.142
+ * Modified: 2011.264
  **************************************************************************/
 
 /* Unsupported protocol features:
@@ -1208,11 +1208,16 @@ HandleInfo (char *recvbuffer, ClientInfo *cinfo, char state)
       while ( *level == ' ' )
 	level++;
     }
+  else if ( *level == '\0' || *level == '\r' || *level == '\n' )
+    {
+      lprintf (0, "[%s] HandleInfo: INFO specified without a level", cinfo->hostname);
+      return -1;
+    }
   else
     {
       lprintf (0, "[%s] HandleInfo cannot detect INFO", cinfo->hostname);
       return -1;
-    }  
+    }
   
   /* Initialize the XML response structure */
   if ( ! (xmldoc = mxmlNewXML ("1.0")) )
@@ -1292,7 +1297,7 @@ HandleInfo (char *recvbuffer, ClientInfo *cinfo, char state)
   /* Unrecognized INFO request */
   else
     {
-      lprintf (0, "[%s] Unrecognized INFO level: %s", level);
+      lprintf (0, "[%s] Unrecognized INFO level: %s", cinfo->hostname, level);
       errflag = 1;
     }
   
