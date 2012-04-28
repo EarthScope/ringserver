@@ -1,3 +1,11 @@
+2012.120:
+	- Update libmseed to 2.6.2.
+	- Revert the previous locking scheme that equated readers and writers,
+	which technically correct the server could not scale to DMC needs.
+	Instead, a new scheme with a mutex for writers and a spin lock to control
+	access to ring header parameters that change during operation has been
+	implemented.
+
 2011.262:
 	- Fix crash bug when SeedLink INFO command is received with no level.
 

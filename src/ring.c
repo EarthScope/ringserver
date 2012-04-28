@@ -14,14 +14,15 @@
  * read on startup and written on shutdown existing only in memory
  * during operation.
  *
- * Ring access (reading and writing both) is controlled with a mutex,
- * only one reader or writer may read from or add packets to the ring
- * at a time.
+ * Ring writing is governed by a mutex to avoid writers colliding,
+ * only one writer may modify the ring at a time.  Access to the ring
+ * parameters that change during operation (e.g. latest packet ID) is
+ * governed by a spin lock for performance.
  *
  * In general, non-existent packets are represented with a packet ID
  * of 0 and an offset of -1.
  *
- * Copyright 2011 Chad Trabant, IRIS Data Management Center
+ * Copyright 2012 Chad Trabant, IRIS Data Management Center
  *
  * This file is part of ringserver.
  *
@@ -38,7 +39,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2011.211
+ * Modified: 2012.120
  **************************************************************************/
 
 #include <errno.h>
@@ -90,7 +91,8 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
 		uint32_t pktsize, int64_t maxpktid, uint8_t mmapflag,
 		uint8_t volatileflag, int *ringfd, RingParams **ringparams)
 {
-  static rslock_t ringlock;
+  static pthread_spinlock_t readlock;
+  static pthread_mutex_t writelock;
   static pthread_mutex_t streamlock;
   
   struct stat ringfilestat;
@@ -268,10 +270,15 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
       return -1;
     }
   
-  /* Initialize locks */
-  if ( (rc = rslock_init (&ringlock)) )
+   /* Initialize locks */
+  if ( (rc = pthread_spin_init (&readlock, 0)) )
     {
-      lprintf (0, "RingInitialize(): error initializing ring lock: %s", strerror(rc));
+      lprintf (0, "RingInitialize(): error initializing ring read lock: %s", strerror(rc));
+      return -2;
+    }
+  if ( (rc = pthread_mutex_init (&writelock, NULL)) )
+    {
+      lprintf (0, "RingInitialize(): error initializing ring write lock: %s", strerror(rc));
       return -2;
     }
   if ( (rc = pthread_mutex_init (&streamlock, NULL)) )
@@ -281,7 +288,8 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     }
   
   /* Initialize volatile ring packet buffer parameters */
-  (*ringparams)->ringlock = &ringlock;
+  (*ringparams)->readlock = &readlock;
+  (*ringparams)->writelock = &writelock;
   (*ringparams)->streamlock = &streamlock;
   (*ringparams)->mmapflag = mmapflag;
   (*ringparams)->volatileflag = volatileflag;
@@ -536,6 +544,9 @@ RingShutdown (int ringfd, char *streamfilename, RingParams *ringparams)
       rv = -1;
     }
   
+  /* Lock ring against writes, never give this up, destroyed later */
+  pthread_mutex_lock (ringparams->writelock);
+  
   /* Set ring flux flag */
   ringparams->fluxflag = 1;
   
@@ -581,13 +592,21 @@ RingShutdown (int ringfd, char *streamfilename, RingParams *ringparams)
       /* Clear ring flux flag */
       ringparams->fluxflag = 0;
       
-      /* Destroy ring lock */
-      if ( (rc = rslock_destroy (ringparams->ringlock)) )
+      /* Destroy ring locks */
+      pthread_spin_lock (ringparams->readlock);
+      if ( (rc = pthread_spin_destroy (ringparams->readlock)) )
 	{
-	  lprintf (0, "RingShutdown(): error destroying ring lock: %s", strerror(rc));
+	  lprintf (0, "RingShutdown(): error destroying ring read lock: %s", strerror(rc));
 	  rv = -1;
 	}
-      ringparams->ringlock = NULL;
+      pthread_mutex_unlock (ringparams->writelock);
+      if ( (rc = pthread_mutex_destroy (ringparams->writelock)) )
+	{
+	  lprintf (0, "RingShutdown(): error destroying ring write lock: %s", strerror(rc));
+	  rv = -1;
+	}
+      ringparams->readlock = NULL;
+      ringparams->writelock = NULL;
       
       /* Unmap the ring buffer file */
       lprintf (1, "Unmapping and closing ring buffer file");
@@ -611,13 +630,19 @@ RingShutdown (int ringfd, char *streamfilename, RingParams *ringparams)
       /* Clear ring flux flag */
       ringparams->fluxflag = 0;
       
-      /* Destroy ring lock */
-      if ( (rc = rslock_destroy (ringparams->ringlock)) )
+      /* Destroy ring locks */
+      if ( (rc = pthread_spin_destroy (ringparams->readlock)) )
 	{
-	  lprintf (0, "RingShutdown(): error destroying ring ringlock: %s", strerror(rc));
+	  lprintf (0, "RingShutdown(): error destroying ring read lock: %s", strerror(rc));
 	  rv = -1;
 	}
-      ringparams->ringlock = NULL;
+      if ( (rc = pthread_mutex_destroy (ringparams->writelock)) )
+	{
+	  lprintf (0, "RingShutdown(): error destroying ring write lock: %s", strerror(rc));
+	  rv = -1;
+	}
+      ringparams->readlock = NULL;
+      ringparams->writelock = NULL;
       
       if ( write (ringfd, ringparams, ringparams->ringsize) != ringparams->ringsize )
 	{
@@ -682,7 +707,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
     }
   
   /* Lock ring and streams index */
-  rslock_lock (ringparams->ringlock);
+  pthread_mutex_lock (ringparams->writelock);
   pthread_mutex_lock (ringparams->streamlock);
   
   /* Set ring flux flag */
@@ -693,7 +718,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
     if ( ! (earliest = GetPacket (ringparams, ringparams->earliestid, 0)) )
       {
 	lprintf (0, "RingWrite(): Error getting earliest packet index");
-	rslock_unlock (ringparams->ringlock);
+	pthread_mutex_unlock (ringparams->writelock);
 	pthread_mutex_unlock (ringparams->streamlock);
 	ringparams->fluxflag = 0;
 	return -2;
@@ -702,7 +727,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
     if ( ! (latest = GetPacket (ringparams, ringparams->latestid, 0)) )
       {
 	lprintf (0, "RingWrite(): Error getting latest packet index");
-	rslock_unlock (ringparams->ringlock);
+	pthread_mutex_unlock (ringparams->writelock);
 	pthread_mutex_unlock (ringparams->streamlock);
 	ringparams->fluxflag = 0;
 	return -2;
@@ -745,7 +770,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
 	    {
 	      lprintf (0, "RingWrite(): Error getting next earliest ID: %lld, current earliest: %lld",
 		       nextid, earliest->pktid);
-	      rslock_unlock (ringparams->ringlock);
+	      pthread_mutex_unlock (ringparams->writelock);
 	      pthread_mutex_unlock (ringparams->streamlock);
 	      ringparams->fluxflag = 0;
 	      return -2;
@@ -754,7 +779,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
 	    if ( ! (nextInStream = GetPacket (ringparams, earliest->nextinstream, 0)) )
 	      {
 		lprintf (0, "RingWrite(): Error getting new earliest stream packet index");
-		rslock_unlock (ringparams->ringlock);
+		pthread_mutex_unlock (ringparams->writelock);
 		pthread_mutex_unlock (ringparams->streamlock);
 		ringparams->fluxflag = 0;
 		return -2;
@@ -762,7 +787,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
 	  if ( ! (streamOfEarliest = GetStreamIdx (ringparams->streamidx, earliest->streamid)) )
 	    {
 	      lprintf (0, "RingWrite(): Error getting earliest packet stream");
-	      rslock_unlock (ringparams->ringlock);
+	      pthread_mutex_unlock (ringparams->writelock);
 	      pthread_mutex_unlock (ringparams->streamlock);
 	      ringparams->fluxflag = 0;
 	      return -2;
@@ -772,11 +797,13 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
 		   earliest->streamid, earliest->pktid);
 	  
 	  /* Update RingParams with new earliest entry */
+	  pthread_spin_lock (ringparams->readlock);
 	  ringparams->earliestid = nextInRing->pktid;
 	  ringparams->earliestptime = nextInRing->pkttime;
 	  ringparams->earliestdstime = nextInRing->datastart;
 	  ringparams->earliestdetime = nextInRing->dataend;
 	  ringparams->earliestoffset = nextInRing->offset;
+	  pthread_spin_unlock (ringparams->readlock);
 	  
 	  /* Delete stream entry if this is the only packet */
 	  if ( earliest->pktid == streamOfEarliest->earliestid &&
@@ -817,7 +844,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
 	{
 	  lprintf (0, "RingWrite(): Error adding new stream index");
 	  if ( node ) { free (node->key); free (node->data); free (node); }
-	  rslock_unlock (ringparams->ringlock);
+	  pthread_mutex_unlock (ringparams->writelock);
 	  pthread_mutex_unlock (ringparams->streamlock);
 	  ringparams->fluxflag = 0;
 	  return -2;
@@ -837,20 +864,24 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
   memcpy ((ringparams->data+offset+sizeof(RingPacket)), packetdata, datasize);
   
   /* Update RingParams with new latest packet */
+  pthread_spin_lock (ringparams->readlock);
   ringparams->latestid = packet->pktid;
   ringparams->latestptime = packet->pkttime;
   ringparams->latestdstime = packet->datastart;
   ringparams->latestdetime = packet->dataend;
   ringparams->latestoffset = packet->offset;
+  pthread_spin_unlock (ringparams->readlock);
   
   /* Update RingParams with new earliest packet (for initial packet) */
   if ( ! earliest )
     {
+      pthread_spin_lock (ringparams->readlock);
       ringparams->earliestid = packet->pktid;
       ringparams->earliestptime = packet->pkttime;
       ringparams->earliestdstime = packet->datastart;
       ringparams->earliestdetime = packet->dataend;
       ringparams->earliestoffset = packet->offset;
+      pthread_spin_unlock (ringparams->readlock);
     }
   
   /* Update entry for previous packet in stream */
@@ -859,7 +890,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
       if ( ! (prevlatest = GetPacket (ringparams, stream->latestid, 0)) )
 	{
 	  lprintf (0, "RingWrite(): Error getting next packet in stream (id: %lld)", stream->latestid);
-	  rslock_unlock (ringparams->ringlock);
+	  pthread_mutex_unlock (ringparams->writelock);
 	  pthread_mutex_unlock (ringparams->streamlock);
 	  ringparams->fluxflag = 0;
 	  return -2;
@@ -878,7 +909,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
   ringparams->fluxflag = 0;
   
   /* Unlock ring and stream index */
-  rslock_unlock (ringparams->ringlock);
+  pthread_mutex_unlock (ringparams->writelock);
   pthread_mutex_unlock (ringparams->streamlock);
   
   lprintf (3, "Added packet for stream %s, pktid: %lld, offset: %lld",
@@ -909,6 +940,9 @@ RingRead (RingReader *reader, int64_t reqid,
   hptime_t pkttime;
   int64_t pktid = 0;
   
+  int64_t earliestid;
+  int64_t latestid;
+  
   if ( ! reader || ! packet )
     return -1;
   
@@ -916,17 +950,20 @@ RingRead (RingReader *reader, int64_t reqid,
   if ( ! ringparams )
     return -1;
   
-  /* Lock ring */
-  rslock_lock (ringparams->ringlock);
+  /* Copy volatile ring parameters within a lock */
+  pthread_spin_lock (ringparams->readlock);
+  latestid = ringparams->latestid;
+  earliestid = ringparams->earliestid;
+  pthread_spin_unlock (ringparams->readlock);
   
   /* Determine packet ID to request */
   if ( reqid == RINGEARLIEST )
     {
-      pktid = ringparams->earliestid;
+      pktid = earliestid;
     }
   else if ( reqid == RINGLATEST )
     {
-      pktid = ringparams->latestid;
+      pktid = latestid;
     }
   else if ( reqid == RINGCURRENT )
     {
@@ -935,7 +972,6 @@ RingRead (RingReader *reader, int64_t reqid,
   else if ( reqid < 0 )
     {
       lprintf (0, "RingRead(): unsupported position value: %lld", reqid);
-      rslock_unlock (ringparams->ringlock);
       return -1;
     }
   else
@@ -946,14 +982,12 @@ RingRead (RingReader *reader, int64_t reqid,
   /* If requested ID is 0 we already know it's not available */
   if ( pktid == 0 )
     {
-      rslock_unlock (ringparams->ringlock);
       return 0;
     }
   
   /* Get RingPacket from Index */
   if ( ! (pkt = GetPacket(ringparams, pktid, &pkttime)) )
     {
-      rslock_unlock (ringparams->ringlock);
       return 0;
     }
   
@@ -964,14 +998,17 @@ RingRead (RingReader *reader, int64_t reqid,
   if ( packetdata )
     memcpy (packetdata, (char*)pkt + sizeof(RingPacket), pkt->datasize);
   
-  /* Update reader position value */
-  reader->pktid = pkt->pktid;
-  reader->pkttime = pkt->pkttime;
-  reader->datastart = pkt->datastart;
-  reader->dataend = pkt->dataend;
+  /* Sanity check that the data was not overwritten during the copy */
+  if ( pktid != pkt->pktid )
+    {
+      return 0;
+    }
   
-  /* Unlock ring */
-  rslock_unlock (ringparams->ringlock);
+  /* Update reader position value */
+  reader->pktid = packet->pktid;
+  reader->pkttime = packet->pkttime;
+  reader->datastart = packet->datastart;
+  reader->dataend = packet->dataend;
   
   return pktid;
 }  /* End of RingRead() */
@@ -996,6 +1033,9 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
   hptime_t pkttime;
   int64_t pktid = 0;
   uint8_t skip;
+
+  int64_t latestid, earliestid;
+  hptime_t latestptime, latestdstime, latestdetime;
   
   if ( ! reader || ! packet )
     return -1;
@@ -1004,8 +1044,14 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
   if ( ! ringparams )
     return -1;
   
-  /* Lock ring */
-  rslock_lock (ringparams->ringlock);
+  /* Copy volatile ring parameters within a lock */
+  pthread_spin_lock (ringparams->readlock);
+  latestid = ringparams->latestid;
+  earliestid = ringparams->earliestid;
+  latestptime = ringparams->latestptime;
+  latestdstime = ringparams->latestdstime;
+  latestdetime = ringparams->latestdetime;
+  pthread_spin_unlock (ringparams->readlock);
   
   /* Determine packet ID for relative positions */
   if ( reader->pktid < 0 )
@@ -1013,43 +1059,40 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
       if ( reader->pktid == RINGNEXT )
 	{
 	  /* If ring is empty (no latest ID) set to earliest */
-	  if ( ringparams->latestid == 0 )
+	  if ( latestid == 0 )
 	    {
 	      reader->pktid = RINGEARLIEST;
 	    }
 	  /* Otherwise set to latest packet */
-	  else if ( ringparams->latestid > 0 )
+	  else if ( latestid > 0 )
 	    {
-	      reader->pktid = ringparams->latestid;
-	      reader->pkttime = ringparams->latestptime;
-	      reader->datastart = ringparams->latestdstime;
-	      reader->dataend = ringparams->latestdetime;
+	      reader->pktid = latestid;
+	      reader->pkttime = latestptime;
+	      reader->datastart = latestdstime;
+	      reader->dataend = latestdetime;
 	    }
 	  
-	  rslock_unlock (ringparams->ringlock);
 	  return 0;
 	}
       else if ( reader->pktid == RINGEARLIEST )
 	{
-	  if ( ringparams->earliestid > 0 )
+	  if ( earliestid > 0 )
 	    {
-	      pktid = ringparams->earliestid;
+	      pktid = earliestid;
 	    }
 	  else
 	    {
-	      rslock_unlock (ringparams->ringlock);
 	      return 0;
 	    }
 	}
       else if ( reader->pktid == RINGLATEST )
 	{
-	  if ( ringparams->latestid > 0 )
+	  if ( latestid > 0 )
 	    {
-	      pktid = ringparams->latestid;
+	      pktid = latestid;
 	    }
 	  else
 	    {
-	      rslock_unlock (ringparams->ringlock);
 	      return 0;
 	    }
 	}
@@ -1057,7 +1100,6 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
 	{
 	  lprintf (0, "RingReadNext(): unsupported position value: %lld",
 		   reader->pktid);
-	  rslock_unlock (ringparams->ringlock);
 	  return -1;
 	}
     }
@@ -1068,21 +1110,19 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
       if ( reader->pktid == 0 )
 	{
 	  /* Revert to latest packet */
-	  if ( ringparams->latestid > 0 )
+	  if ( latestid > 0 )
 	    {
-	      reader->pktid = ringparams->latestid;
-	      reader->pkttime = ringparams->latestptime;
-	      reader->datastart = ringparams->latestdstime;
-	      reader->dataend = ringparams->latestdetime;
+	      reader->pktid = latestid;
+	      reader->pkttime = latestptime;
+	      reader->datastart = latestdstime;
+	      reader->dataend = latestdetime;
 	    }
-	  rslock_unlock (ringparams->ringlock);
 	  return 0;
 	}
       /* If current packet is the latest in the ring return immediately */
-      else if ( reader->pktid == ringparams->latestid && 
-		reader->pkttime == ringparams->latestptime )
+      else if ( reader->pktid == latestid && 
+		reader->pkttime == latestptime )
 	{
-	  rslock_unlock (ringparams->ringlock);
 	  return 0;
 	}
       
@@ -1093,7 +1133,6 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
   /* If requested ID is 0 we already know it's not available */
   if ( pktid == 0 )
     {
-      rslock_unlock (ringparams->ringlock);
       return 0;
     }
   
@@ -1106,7 +1145,6 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
       /* Get packet header from index */
       if ( ! (pkt = GetPacket(ringparams, pktid, &pkttime)) )
 	{
-	  rslock_unlock (ringparams->ringlock);
 	  return 0;
 	}
       
@@ -1139,9 +1177,8 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
       if ( skip )
 	{
 	  /* If there is no next packet return immediately */
-	  if ( pktid == ringparams->latestid )
+	  if ( pktid == latestid )
 	    {
-	      rslock_unlock (ringparams->ringlock);
 	      return 0;
 	    }
 	  /* Otherwise continue with the next packet */
@@ -1159,8 +1196,11 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
   if ( packetdata )
     memcpy (packetdata, (char*)pkt + sizeof(RingPacket), pkt->datasize);
   
-  /* Unlock ring */
-  rslock_unlock (ringparams->ringlock);
+  /* Sanity check that the data was not overwritten during the copy */
+  if ( pktid != pkt->pktid )
+    {
+      return 0;
+    }
   
   return pktid;
 }  /* End of RingReadNext() */
@@ -1188,6 +1228,9 @@ RingPosition (RingReader *reader, int64_t pktid, hptime_t pkttime)
   RingPacket *pkt;
   hptime_t ptime;
   
+  int64_t earliestid;
+  int64_t latestid;
+  
   if ( ! reader )
     return -1;
   
@@ -1195,29 +1238,30 @@ RingPosition (RingReader *reader, int64_t pktid, hptime_t pkttime)
   if ( ! ringparams )
     return -1;
   
-  /* Lock ring */
-  rslock_lock (ringparams->ringlock);
+  /* Copy volatile ring parameters within a lock */
+  pthread_spin_lock (ringparams->readlock);
+  latestid = ringparams->latestid;
+  earliestid = ringparams->earliestid;
+  pthread_spin_unlock (ringparams->readlock);
   
   /* Determine packet ID for relative positions */
   if ( pktid == RINGEARLIEST )
     {
-      pktid = ringparams->earliestid;
+      pktid = earliestid;
     }
   else if ( pktid == RINGLATEST )
     {
-      pktid = ringparams->latestid;
+      pktid = latestid;
     }
   else if ( pktid < 0 )
     {
       lprintf (0, "RingPosition(): unsupported position value: %lld", pktid);
-      rslock_unlock (ringparams->ringlock);
       return -1;
     }
   
   /* Get RingPacket from Index */
   if ( ! (pkt = GetPacket (ringparams, pktid, &ptime)) )
     {
-      rslock_unlock (ringparams->ringlock);
       return 0;
     }
   
@@ -1226,7 +1270,6 @@ RingPosition (RingReader *reader, int64_t pktid, hptime_t pkttime)
     {
       if ( pkttime != pkt->pkttime )
 	{
-	  rslock_unlock (ringparams->ringlock);
 	  return 0;
 	}
     }
@@ -1236,9 +1279,6 @@ RingPosition (RingReader *reader, int64_t pktid, hptime_t pkttime)
   reader->pkttime = ptime;
   reader->datastart = pkt->datastart;
   reader->dataend = pkt->dataend;
-  
-  /* Unlock ring */
-  rslock_unlock (ringparams->ringlock);
   
   return pktid;
 }  /* End of RingPosition() */
@@ -1282,6 +1322,9 @@ RingAfter (RingReader *reader, hptime_t reftime, int whence)
   int64_t pktid0, pktid1;
   int64_t skipped = 0;
   uint8_t skip;
+
+  int64_t earliestid;
+  int64_t latestid;
   
   if ( ! reader )
     return -1;
@@ -1290,11 +1333,14 @@ RingAfter (RingReader *reader, hptime_t reftime, int whence)
   if ( ! ringparams )
     return -1;
   
-  /* Lock ring */
-  rslock_lock (ringparams->ringlock);
+  /* Copy volatile ring parameters within a lock */
+  pthread_spin_lock (ringparams->readlock);
+  latestid = ringparams->latestid;
+  earliestid = ringparams->earliestid;
+  pthread_spin_unlock (ringparams->readlock);
   
   /* Start searching with the earliest packet in the ring */
-  pktid1 = ringparams->earliestid;
+  pktid1 = earliestid;
   pktid0 = pktid1;
   
   /* Loop through packets in forward order */
@@ -1314,7 +1360,6 @@ RingAfter (RingReader *reader, hptime_t reftime, int whence)
 	  /* Otherwise this is an unrecognized problem */
 	  else
 	    {
-	      rslock_unlock (ringparams->ringlock);
 	      return 0;
 	    }
 	}
@@ -1349,7 +1394,7 @@ RingAfter (RingReader *reader, hptime_t reftime, int whence)
       pkt0 = pkt1;
       
       /* Done if we reach the latest packet */
-      if ( pktid1 == ringparams->latestid )
+      if ( pktid1 == latestid )
 	{
 	  break;
 	}
@@ -1361,7 +1406,6 @@ RingAfter (RingReader *reader, hptime_t reftime, int whence)
   /* Safety valve, if no packets were ever seen */
   if ( ! pkt1 )
     {
-      rslock_unlock (ringparams->ringlock);
       return 0;
     }
   
@@ -1378,9 +1422,6 @@ RingAfter (RingReader *reader, hptime_t reftime, int whence)
   reader->pkttime = pkttime1;
   reader->datastart = pkt1->datastart;
   reader->dataend = pkt1->dataend;
-  
-  /* Unlock ring */
-  rslock_unlock (ringparams->ringlock);
   
   return pktid1;
 }  /* End of RingAfter() */
@@ -1427,6 +1468,9 @@ RingAfterRev (RingReader *reader, hptime_t reftime, int64_t pktlimit,
   int64_t count = 0;
   uint8_t skip;
   
+  int64_t earliestid;
+  int64_t latestid;
+
   if ( ! reader )
     return -1;
   
@@ -1434,11 +1478,14 @@ RingAfterRev (RingReader *reader, hptime_t reftime, int64_t pktlimit,
   if ( ! ringparams )
     return -1;
   
-  /* Lock ring */
-  rslock_lock (ringparams->ringlock);
+  /* Copy volatile ring parameters within a lock */
+  pthread_spin_lock (ringparams->readlock);
+  latestid = ringparams->latestid;
+  earliestid = ringparams->earliestid;
+  pthread_spin_unlock (ringparams->readlock);
   
   /* Start searching with the latest packet in the ring */
-  pktid = ringparams->latestid;
+  pktid = latestid;
   spktid = pktid;
   
   /* Loop through packets in forward order */
@@ -1449,7 +1496,6 @@ RingAfterRev (RingReader *reader, hptime_t reftime, int64_t pktlimit,
       /* Get pointer RingPacket */
       if ( ! (spkt = GetPacket (ringparams, spktid, &spkttime)) )
 	{
-	  rslock_unlock (ringparams->ringlock);
 	  return 0;
 	}
       
@@ -1480,7 +1526,7 @@ RingAfterRev (RingReader *reader, hptime_t reftime, int64_t pktlimit,
 	}
       
       /* Done if we reach the earliest packet */
-      if ( spktid == ringparams->earliestid )
+      if ( spktid == earliestid )
 	{
 	  break;
 	}
@@ -1489,10 +1535,9 @@ RingAfterRev (RingReader *reader, hptime_t reftime, int64_t pktlimit,
       count++;
     }
   
-  /* Safety value, if no packets were ever seen */
+  /* Safety valve, if no packets were ever seen */
   if ( ! pkt )
     {
-      rslock_unlock (ringparams->ringlock);
       return 0;
     }
   
@@ -1516,9 +1561,6 @@ RingAfterRev (RingReader *reader, hptime_t reftime, int64_t pktlimit,
   reader->pkttime = pkttime;
   reader->datastart = pkt->datastart;
   reader->dataend = pkt->dataend;
-  
-  /* Unlock ring */
-  rslock_unlock (ringparams->ringlock);
   
   return pktid;
 }  /* End of RingAfterRev() */
@@ -1862,14 +1904,17 @@ GetPacket (RingParams *ringparams, int64_t pktid, hptime_t *pkttime)
   if ( pktid <= 0 || pktid > ringparams->maxpktid )
     return 0;
   
-  /* Sanity check that ring packets exist */
-  if ( ringparams->latestoffset < 0 ||
-       ringparams->earliestid <= 0 )
-    return 0;
-  
-  /* Save current values of latest offset and earliest ID in case they change */
+  /* Copy volatile ring parameters within a lock */
+  pthread_spin_lock (ringparams->readlock);
   latestoffset = ringparams->latestoffset;
   earliestid = ringparams->earliestid;
+  pthread_spin_unlock (ringparams->readlock);
+  
+  /* Sanity check that ring packets exist */
+  if ( latestoffset < 0 || earliestid <= 0 )
+    {
+      return 0;
+    }
   
   /* Determine latest ID directly from packet to avoid race */
   latestid = ((RingPacket*) (ringparams->data + latestoffset))->pktid;

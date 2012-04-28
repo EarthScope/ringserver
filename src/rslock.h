@@ -1,7 +1,7 @@
 /**************************************************************************
  * rslock.h
  *
- * Modified: 2011.211
+ * Modified: 2012.120
  **************************************************************************/
 
 #ifndef RSLOCK_H
@@ -13,26 +13,18 @@ extern "C" {
 
 #include <pthread.h>
 
-/* Control the use of spinlocks for rslocks, otherwise mutexes are used */
-#define RSLOCK_USE_SPINLOCK 1
-
 /* Map spinlock type for Apple Mac OSX */
 #ifdef __APPLE__
+
 #include <libkern/OSAtomic.h>
 typedef OSSpinLock pthread_spinlock_t;
+
+int pthread_spin_init(pthread_spinlock_t* lock, int pshared);
+int pthread_spin_destroy(pthread_spinlock_t* lock);
+int pthread_spin_lock(pthread_spinlock_t* lock);
+int pthread_spin_unlock(pthread_spinlock_t* lock);
+
 #endif /* __APPLE__ */
-
-/* Define rslock_t as needed for lock type */
-#ifdef RSLOCK_USE_SPINLOCK
-typedef pthread_spinlock_t rslock_t;
-#else
-typedef pthread_mutex_t rslock_t;
-#endif /* RSLOCK_USE_SPINLOCK */
-
-extern int rslock_init (rslock_t *lock);
-extern int rslock_destroy (rslock_t *lock);
-extern int rslock_lock (rslock_t *lock);
-extern int rslock_unlock (rslock_t *lock);
 
 #ifdef __cplusplus
 }

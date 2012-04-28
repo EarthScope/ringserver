@@ -3,7 +3,7 @@
  *
  * Declarations for fundamental ring routines and data structures.
  *
- * Modified: 2011.211
+ * Modified: 2012.120
  **************************************************************************/
 
 #ifndef RING_H
@@ -49,7 +49,8 @@ typedef struct RingParams_s
   uint8_t   fluxflag;         /* Flag indicating the ring is in flux */
   uint8_t   mmapflag;         /* Memory mapped flag */
   uint8_t   volatileflag;     /* Volatile ring flag */
-  rslock_t *ringlock;         /* Lock for ring access */
+  pthread_spinlock_t *readlock;/* Spin lock for ring read access */
+  pthread_mutex_t *writelock; /* Mutex lock for ring write access */
   RBTree   *streamidx;        /* Binary tree of streams */
   pthread_mutex_t *streamlock;/* Mutex lock for stream index */
   int32_t   streamcount;      /* Count of streams in index */
