@@ -1,19 +1,17 @@
 /*
- * "$Id: testmxml.c,v 1.1.1.1 2011-03-09 00:47:27 chad Exp $"
+ * "$Id: testmxml.c 439 2011-04-13 15:43:32Z mike $"
  *
  * Test program for Mini-XML, a small XML-like file parsing library.
  *
- * Copyright 2003-2007 by Michael Sweet.
+ * Copyright 2003-2011 by Michael R Sweet.
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Library General Public
- * License as published by the Free Software Foundation; either
- * version 2, or (at your option) any later version.
+ * These coded instructions, statements, and computer programs are the
+ * property of Michael R Sweet and are protected by Federal copyright
+ * law.  Distribution and use rights are outlined in the file "COPYING"
+ * which should have been included with this file.  If this file is
+ * missing or damaged, see the license at:
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *     http://www.minixml.org/
  *
  * Contents:
  *
@@ -132,6 +130,8 @@ main(int  argc,				/* I - Number of command-line args */
                  MXML_REAL_CALLBACK);
   mxmlLoadString(tree, "<group>opaque opaque opaque</group>",
                  MXML_OPAQUE_CALLBACK);
+  mxmlLoadString(tree, "<foo><bar><one><two>value<two>value2</two></two></one>"
+                       "</bar></foo>", MXML_OPAQUE_CALLBACK);
 
   node = tree->child;
 
@@ -261,6 +261,52 @@ main(int  argc,				/* I - Number of command-line args */
   }
 
  /*
+  * Test mxmlFindPath...
+  */
+
+  node = mxmlFindPath(tree, "*/two");
+  if (!node)
+  {
+    fputs("ERROR: Unable to find value for \"*/two\".\n", stderr);
+    mxmlDelete(tree);
+    return (1);
+  }
+  else if (node->type != MXML_OPAQUE || strcmp(node->value.opaque, "value"))
+  {
+    fputs("ERROR: Bad value for \"*/two\".\n", stderr);
+    mxmlDelete(tree);
+    return (1);
+  }
+
+  node = mxmlFindPath(tree, "foo/*/two");
+  if (!node)
+  {
+    fputs("ERROR: Unable to find value for \"foo/*/two\".\n", stderr);
+    mxmlDelete(tree);
+    return (1);
+  }
+  else if (node->type != MXML_OPAQUE || strcmp(node->value.opaque, "value"))
+  {
+    fputs("ERROR: Bad value for \"foo/*/two\".\n", stderr);
+    mxmlDelete(tree);
+    return (1);
+  }
+
+  node = mxmlFindPath(tree, "foo/bar/one/two");
+  if (!node)
+  {
+    fputs("ERROR: Unable to find value for \"foo/bar/one/two\".\n", stderr);
+    mxmlDelete(tree);
+    return (1);
+  }
+  else if (node->type != MXML_OPAQUE || strcmp(node->value.opaque, "value"))
+  {
+    fputs("ERROR: Bad value for \"foo/bar/one/two\".\n", stderr);
+    mxmlDelete(tree);
+    return (1);
+  }
+
+ /*
   * Test indices...
   */
 
@@ -272,10 +318,10 @@ main(int  argc,				/* I - Number of command-line args */
     return (1);
   }
 
-  if (ind->num_nodes != 5)
+  if (ind->num_nodes != 10)
   {
     fprintf(stderr, "ERROR: Index of all nodes contains %d "
-                    "nodes; expected 5!\n", ind->num_nodes);
+                    "nodes; expected 10!\n", ind->num_nodes);
     mxmlIndexDelete(ind);
     mxmlDelete(tree);
     return (1);
@@ -380,7 +426,7 @@ main(int  argc,				/* I - Number of command-line args */
   * Check the mxmlDelete() works properly...
   */
 
-  for (i = 0; i < 8; i ++)
+  for (i = 0; i < 9; i ++)
   {
     if (tree->child)
       mxmlDelete(tree->child);
@@ -569,9 +615,9 @@ main(int  argc,				/* I - Number of command-line args */
       return (1);
     }
 
-    if (event_counts[MXML_SAX_DATA] != 61)
+    if (event_counts[MXML_SAX_DATA] != 60)
     {
-      fprintf(stderr, "MXML_SAX_DATA seen %d times, expected 61 times!\n",
+      fprintf(stderr, "MXML_SAX_DATA seen %d times, expected 60 times!\n",
               event_counts[MXML_SAX_DATA]);
       return (1);
     }
@@ -744,5 +790,5 @@ whitespace_cb(mxml_node_t *node,	/* I - Element node */
 
 
 /*
- * End of "$Id: testmxml.c,v 1.1.1.1 2011-03-09 00:47:27 chad Exp $".
+ * End of "$Id: testmxml.c 439 2011-04-13 15:43:32Z mike $".
  */

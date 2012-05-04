@@ -1,21 +1,19 @@
 /*#define DEBUG 1*/
 /*
- * "$Id: mxmldoc.c,v 1.1.1.1 2011-03-09 00:47:27 chad Exp $"
+ * "$Id: mxmldoc.c 440 2011-08-11 18:51:26Z mike $"
  *
  * Documentation generator using Mini-XML, a small XML-like file parsing
  * library.
  *
- * Copyright 2003-2009 by Michael Sweet.
+ * Copyright 2003-2011 by Michael R Sweet.
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Library General Public
- * License as published by the Free Software Foundation; either
- * version 2, or (at your option) any later version.
+ * These coded instructions, statements, and computer programs are the
+ * property of Michael R Sweet and are protected by Federal copyright
+ * law.  Distribution and use rights are outlined in the file "COPYING"
+ * which should have been included with this file.  If this file is
+ * missing or damaged, see the license at:
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *     http://www.minixml.org/
  *
  * Contents:
  *
@@ -57,10 +55,12 @@
 #ifndef WIN32
 #  include <dirent.h>
 #  include <unistd.h>
+#endif /* !WIN32 */
+#ifdef __APPLE__
 #  include <spawn.h>
 #  include <sys/wait.h>
 extern char **environ;
-#endif /* !WIN32 */
+#endif /* __APPLE__ */
 
 
 /*
@@ -84,17 +84,17 @@ extern char **environ;
  *     <constant name="">
  *       <description>descriptive text</description>
  *     </constant>
- *  
+ *
  *     <enumeration name="">
  *       <description>descriptive text</description>
  *       <constant name="">...</constant>
  *     </enumeration>
- *  
+ *
  *     <typedef name="">
  *       <description>descriptive text</description>
  *       <type>type string</type>
  *     </typedef>
- *  
+ *
  *     <function name="" scope="">
  *       <description>descriptive text</description>
  *       <argument name="" direction="I|O|IO" default="">
@@ -107,23 +107,23 @@ extern char **environ;
  *       </returnvalue>
  *       <seealso>function names separated by spaces</seealso>
  *     </function>
- *  
+ *
  *     <variable name="" scope="">
  *       <description>descriptive text</description>
  *       <type>type string</type>
  *     </variable>
- *  
+ *
  *     <struct name="">
  *       <description>descriptive text</description>
  *       <variable name="">...</variable>
  *       <function name="">...</function>
  *     </struct>
- *  
+ *
  *     <union name="">
  *       <description>descriptive text</description>
  *       <variable name="">...</variable>
  *     </union>
- *  
+ *
  *     <class name="" parent="">
  *       <description>descriptive text</description>
  *       <class name="">...</class>
@@ -135,7 +135,7 @@ extern char **environ;
  *   </namespace>
  * </mxmldoc>
  */
- 
+
 
 /*
  * Basic states for file parser...
@@ -275,6 +275,15 @@ main(int  argc,				/* I - Number of command-line args */
       */
 
       usage(NULL);
+    }
+    else if (!strcmp(argv[i], "--version"))
+    {
+     /*
+      * Show version...
+      */
+
+      puts(MXML_VERSION + 10);
+      return (0);
     }
     else if (!strcmp(argv[i], "--css") && !cssfile)
     {
@@ -1198,7 +1207,7 @@ scan_file(const char  *filename,	/* I - Filename */
 		  }
 		  else
 		    typedefnode = NULL;
-	
+
 		  structclass = mxmlNewElement(MXML_NO_PARENT,
 		                               type->child->value.text.string);
 
@@ -1315,7 +1324,7 @@ scan_file(const char  *filename,	/* I - Filename */
 		  }
 		  else
 		    typedefnode = NULL;
-	
+
 		  enumeration = mxmlNewElement(MXML_NO_PARENT, "enumeration");
 
 #ifdef DEBUG
@@ -1549,7 +1558,7 @@ scan_file(const char  *filename,	/* I - Filename */
 		    type = NULL;
 		    break;
 		  }
-		  
+
 		  mxmlDelete(type);
 		  type = NULL;
 		}
@@ -2629,7 +2638,16 @@ update_comment(mxml_node_t *parent,	/* I - Parent node */
 
   if (!parent || !comment)
     return;
- 
+
+ /*
+  * Convert "\/" to "/"...
+  */
+
+  for (ptr = strstr(comment->value.text.string, "\\/");
+       ptr;
+       ptr = strstr(ptr, "\\/"))
+    safe_strcpy(ptr, ptr + 1);
+
  /*
   * Update the comment...
   */
@@ -2664,7 +2682,7 @@ update_comment(mxml_node_t *parent,	/* I - Parent node */
   {
    /*
     * 'Convert "I - description", "IO - description", or "O - description"
-    * to description + directory attribute.
+    * to description + direction attribute.
     */
 
     ptr = strchr(ptr, ' ');
@@ -2733,6 +2751,7 @@ usage(const char *option)		/* I - Unknown option */
   puts("    --section section          Set section name");
   puts("    --title title              Set documentation title");
   puts("    --tokens path              Generate Xcode docset Tokens.xml file");
+  puts("    --version                  Show mxmldoc/Mini-XML version");
 
   exit(1);
 }
@@ -3173,15 +3192,19 @@ write_html(const char  *section,	/* I - Section */
           "\"http://www.w3.org/TR/html4/frameset.dtd\">\n"
 	  "<html>\n"
 	  "<head>\n"
-	  "<title>", out);
+	  "\t<title>", out);
     write_string(out, title, OUTPUT_HTML);
     fputs("</title>\n", out);
 
     if (section)
-      fprintf(out, "<meta name=\"keywords\" content=\"%s\">\n", section);
+      fprintf(out, "\t<meta name=\"keywords\" content=\"%s\">\n", section);
 
-    fputs("<meta name=\"creator\" content=\"" MXML_VERSION "\">\n"
-          "<frameset cols=\"250,*\">\n", out);
+    fputs("\t<meta http-equiv=\"Content-Type\" "
+          "content=\"text/html;charset=utf-8\">\n"
+	  "\t<meta name=\"creator\" content=\"" MXML_VERSION "\">\n"
+          "</head>\n", out);
+
+    fputs("<frameset cols=\"250,*\">\n", out);
     fprintf(out, "<frame src=\"%s-toc.html\">\n", basename);
     fprintf(out, "<frame name=\"body\" src=\"%s-body.html\">\n", basename);
     fputs("</frameset>\n"
@@ -3321,6 +3344,10 @@ write_html(const char  *section,	/* I - Section */
     write_string(out, title, OUTPUT_HTML);
     fputs("</string>\n"
           "\t<key>CFBundleVersion</key>\n"
+	  "\t<string>", out);
+    write_string(out, docversion ? docversion : "0.0", OUTPUT_HTML);
+    fputs("</string>\n"
+          "\t<key>CFBundleShortVersionString</key>\n"
 	  "\t<string>", out);
     write_string(out, docversion ? docversion : "0.0", OUTPUT_HTML);
     fputs("</string>\n", out);
@@ -3817,14 +3844,16 @@ write_html_head(FILE       *out,	/* I - Output file */
     fprintf(out, "<!-- SECTION: %s -->\n", section);
 
   fputs("<head>\n"
-        "<title>", out);
+        "\t<title>", out);
   write_string(out, title, OUTPUT_HTML);
-  fputs("</title>\n", out);
+  fputs("\t</title>\n", out);
 
   if (section)
-    fprintf(out, "<meta name=\"keywords\" content=\"%s\">\n", section);
+    fprintf(out, "\t<meta name=\"keywords\" content=\"%s\">\n", section);
 
-  fputs("<meta name=\"creator\" content=\"" MXML_VERSION "\">\n"
+  fputs("\t<meta http-equiv=\"Content-Type\" "
+	"content=\"text/html;charset=utf-8\">\n"
+	"\t<meta name=\"creator\" content=\"" MXML_VERSION "\">\n"
         "<style type=\"text/css\"><!--\n", out);
 
   if (cssfile)
@@ -3842,7 +3871,8 @@ write_html_head(FILE       *out,	/* I - Output file */
     */
 
     fputs("body, p, h1, h2, h3, h4 {\n"
-	  "  font-family: lucida grande, geneva, helvetica, arial, sans-serif;\n"
+	  "  font-family: \"lucida grande\", geneva, helvetica, arial, "
+	  "sans-serif;\n"
 	  "}\n"
 	  "div.body h1 {\n"
 	  "  font-size: 250%;\n"
@@ -4795,7 +4825,7 @@ write_toc(FILE        *out,		/* I - Output file */
 		*end,			/* End of line */
 		*anchor,		/* Anchor name */
 		quote,			/* Quote character for value */
-		level = '1',		/* Current heading level */
+		level = '2',		/* Current heading level */
 		newlevel;		/* New heading level */
     int		inelement;		/* In an element? */
 
@@ -4949,8 +4979,8 @@ write_toc(FILE        *out,		/* I - Output file */
 	level = newlevel;
 	xmlid ++;
 
-	fprintf(out, "<li><a href=\"%s#%s\"%s>", target ? target : "", anchor,
-		targetattr);
+	fprintf(out, "%s<li><a href=\"%s#%s\"%s>", level > '2' ? "\t" : "",
+	        target ? target : "", anchor, targetattr);
 
 	quote = 0;
 
@@ -4999,7 +5029,7 @@ write_toc(FILE        *out,		/* I - Output file */
 	  fputs("</ul></li>\n", out);
       }
     }
-  
+
     fclose(fp);
   }
 
@@ -5036,7 +5066,7 @@ write_toc(FILE        *out,		/* I - Output file */
       }
       else
       {
-	fprintf(out, "<li><a href=\"%s#%s\"%s title=\"",
+	fprintf(out, "\t<li><a href=\"%s#%s\"%s title=\"",
 		target ? target : "", name, targetattr);
 	write_description(out, description, "", 1);
 	fprintf(out, "\">%s</a></li>\n", name);
@@ -5083,7 +5113,7 @@ write_toc(FILE        *out,		/* I - Output file */
       }
       else
       {
-	fprintf(out, "<li><a href=\"%s#%s\"%s title=\"",
+	fprintf(out, "\t<li><a href=\"%s#%s\"%s title=\"",
 		target ? target : "", name, targetattr);
 	write_description(out, description, "", 1);
 	fprintf(out, "\">%s</a></li>\n", name);
@@ -5333,6 +5363,13 @@ write_toc(FILE        *out,		/* I - Output file */
     else
       fputs("</ul></li>\n", out);
   }
+
+ /*
+  * Close out the HTML table-of-contents list as needed...
+  */
+
+  if (!xml)
+    fputs("</ul>\n", out);
 }
 
 
@@ -5768,5 +5805,5 @@ ws_cb(mxml_node_t *node,		/* I - Element node */
 
 
 /*
- * End of "$Id: mxmldoc.c,v 1.1.1.1 2011-03-09 00:47:27 chad Exp $".
+ * End of "$Id: mxmldoc.c 440 2011-08-11 18:51:26Z mike $".
  */

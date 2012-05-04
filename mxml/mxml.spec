@@ -1,5 +1,5 @@
 #
-# "$Id: mxml.spec,v 1.1.1.1 2011-03-09 00:47:27 chad Exp $"
+# "$Id: mxml.spec 399 2009-05-17 17:20:51Z mike $"
 #
 # RPM "spec" file for Mini-XML, a small XML library.
 #
@@ -91,5 +91,5 @@ rm -rf $RPM_BUILD_ROOT
 /usr/share/man/man3/*
 
 #
-# End of "$Id: mxml.spec,v 1.1.1.1 2011-03-09 00:47:27 chad Exp $".
+# End of "$Id: mxml.spec 399 2009-05-17 17:20:51Z mike $".
 #

@@ -1,5 +1,27 @@
-CHANGES - 2009-05-17
+CHANGES - 2011-12-20
 --------------------
+
+CHANGES IN Mini-XML 2.7
+
+	- Added 64-bit configurations to the VC++ project files (STR #129)
+	- Fixed conformance of mxmldoc's HTML and CSS output.
+	- Added data accessor ("get") functions and made the mxml_node_t and
+	  mxml_index_t structures private but still available in the Mini-XML
+	  header to preserve source compatibility (STR #118)
+	- Updated the source headers to reference the Mini-XML license and its
+	  exceptions to the LGPL2 (STR #108)
+	- Fixed a memory leak when loading a badly-formed XML file (STR #121)
+      	- Added a new mxmlFindPath() function to find the value node of a
+	  named element (STR #110)
+	- Building a static version of the library did not work on Windows
+	  (STR #112)
+	- The shared library did not include a destructor for the thread-
+	  specific data key on UNIX-based operating systems (STR #103)
+	- mxmlLoad* did not error out on XML with multiple root nodes (STR #101)
+	- Fixed an issue with the _mxml_vstrdupf function (STR #107)
+	- mxmlSave* no longer write all siblings of the passed node, just that
+	  node and its children (STR #109)
+
 
 CHANGES IN Mini-XML 2.6
 

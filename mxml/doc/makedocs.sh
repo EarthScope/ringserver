@@ -1,20 +1,18 @@
 #!/bin/sh
 #
-# "$Id: makedocs.sh,v 1.1.1.1 2011-03-09 00:47:27 chad Exp $"
+# "$Id: makedocs.sh 408 2010-09-19 05:26:46Z mike $"
 #
 # Script to make documentation...
 #
-# Copyright 2003-2007 by Michael Sweet.
+# Copyright 2003-2010 by Michael R Sweet.
 #
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU Library General Public
-# License as published by the Free Software Foundation; either
-# version 2, or (at your option) any later version.
+# These coded instructions, statements, and computer programs are the
+# property of Michael R Sweet and are protected by Federal copyright
+# law.  Distribution and use rights are outlined in the file "COPYING"
+# which should have been included with this file.  If this file is
+# missing or damaged, see the license at:
 #
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
+#     http://www.minixml.org/
 #
 
 htmldoc --verbose --path "hires;." --batch mxml.book -f mxml.pdf
@@ -26,5 +24,5 @@ mkdir mxml.d
 htmldoc --verbose --batch mxml.book --no-title -t html -d mxml.d
 
 #
-# End of "$Id: makedocs.sh,v 1.1.1.1 2011-03-09 00:47:27 chad Exp $".
+# End of "$Id: makedocs.sh 408 2010-09-19 05:26:46Z mike $".
 #
