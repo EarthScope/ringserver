@@ -38,9 +38,9 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-TESTS = $(am__EXEEXT_2) RunTest RunGrepTest
-bin_PROGRAMS = pcretest$(EXEEXT) pcregrep$(EXEEXT)
-noinst_PROGRAMS = $(am__EXEEXT_1) $(am__EXEEXT_2)
+TESTS = $(am__EXEEXT_3) $(am__EXEEXT_4) RunTest $(am__append_18)
+bin_PROGRAMS = pcretest$(EXEEXT) $(am__EXEEXT_1)
+noinst_PROGRAMS = $(am__EXEEXT_2) $(am__EXEEXT_3) $(am__EXEEXT_4)
 
 # These additional headers will be be installed if C++ support is enabled. We
 # do not distribute pcrecpparg.h or pcre_stringpiece.h, as these are generated
@@ -54,20 +54,40 @@ noinst_PROGRAMS = $(am__EXEEXT_1) $(am__EXEEXT_2)
 @WITH_PCRE_CPP_TRUE@  pcre_scanner.h
 
 @WITH_REBUILD_CHARTABLES_TRUE@am__append_3 = dftables
-@WITH_PCRE_CPP_TRUE@am__append_4 = libpcrecpp.la
-@WITH_PCRE_CPP_TRUE@am__append_5 = pcrecpp_unittest \
+
+# Build the 8 bit library if it is enabled.
+@WITH_PCRE8_TRUE@am__append_4 = libpcre.la
+
+# Build the 16 bit library if it is enabled.
+@WITH_PCRE16_TRUE@am__append_5 = libpcre16.la
+@WITH_JIT_TRUE@am__append_6 = pcre_jit_test
+@WITH_JIT_TRUE@am__append_7 = pcre_jit_test
+@WITH_JIT_TRUE@@WITH_PCRE8_TRUE@am__append_8 = libpcre.la
+@WITH_JIT_TRUE@@WITH_PCRE16_TRUE@am__append_9 = libpcre16.la
+@WITH_PCRE8_TRUE@am__append_10 = libpcreposix.la
+@WITH_PCRE_CPP_TRUE@am__append_11 = libpcrecpp.la
+@WITH_PCRE_CPP_TRUE@am__append_12 = pcrecpp_unittest \
 @WITH_PCRE_CPP_TRUE@	pcre_scanner_unittest \
 @WITH_PCRE_CPP_TRUE@	pcre_stringpiece_unittest
-@WITH_PCRE_CPP_TRUE@am__append_6 = pcrecpp_unittest \
+@WITH_PCRE_CPP_TRUE@am__append_13 = pcrecpp_unittest \
 @WITH_PCRE_CPP_TRUE@	pcre_scanner_unittest \
 @WITH_PCRE_CPP_TRUE@	pcre_stringpiece_unittest
-@WITH_PCRE_CPP_TRUE@am__append_7 = libpcrecpp.pc
+@WITH_PCRE8_TRUE@am__append_14 = pcre_printint.c
+@WITH_PCRE8_TRUE@am__append_15 = libpcreposix.la
+@WITH_PCRE16_TRUE@am__append_16 = pcre16_printint.c
+@WITH_PCRE16_TRUE@am__append_17 = libpcre16.la
+@WITH_PCRE8_TRUE@am__append_18 = RunGrepTest
+@WITH_PCRE8_TRUE@am__append_19 = RunGrepTest
+@WITH_PCRE8_TRUE@am__append_20 = pcregrep
+@WITH_PCRE16_TRUE@am__append_21 = libpcre16.pc
+@WITH_PCRE_CPP_TRUE@am__append_22 = libpcrecpp.pc
 subdir = .
-DIST_COMMON = README $(am__configure_deps) $(am__include_HEADERS_DIST) \
+DIST_COMMON = README $(am__configure_deps) \
+	$(am__dist_noinst_SCRIPTS_DIST) $(am__include_HEADERS_DIST) \
 	$(dist_doc_DATA) $(dist_html_DATA) $(dist_man_MANS) \
-	$(dist_noinst_DATA) $(dist_noinst_SCRIPTS) \
-	$(srcdir)/Makefile.am $(srcdir)/Makefile.in \
-	$(srcdir)/config.h.in $(srcdir)/libpcre.pc.in \
+	$(dist_noinst_DATA) $(srcdir)/Makefile.am \
+	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
+	$(srcdir)/libpcre.pc.in $(srcdir)/libpcre16.pc.in \
 	$(srcdir)/libpcrecpp.pc.in $(srcdir)/libpcreposix.pc.in \
 	$(srcdir)/pcre-config.in $(srcdir)/pcre.h.in \
 	$(srcdir)/pcre_stringpiece.h.in $(srcdir)/pcrecpparg.h.in \
@@ -81,8 +101,9 @@ am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
  configure.lineno config.status.lineno
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = config.h
-CONFIG_CLEAN_FILES = libpcre.pc libpcreposix.pc libpcrecpp.pc \
-	pcre-config pcre.h pcre_stringpiece.h pcrecpparg.h
+CONFIG_CLEAN_FILES = libpcre.pc libpcre16.pc libpcreposix.pc \
+	libpcrecpp.pc pcre-config pcre.h pcre_stringpiece.h \
+	pcrecpparg.h
 CONFIG_CLEAN_VPATH_FILES =
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
@@ -113,36 +134,85 @@ am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(bindir)" \
 	"$(DESTDIR)$(includedir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
 libpcre_la_LIBADD =
-am_libpcre_la_OBJECTS = pcre_compile.lo pcre_config.lo \
-	pcre_dfa_exec.lo pcre_exec.lo pcre_fullinfo.lo pcre_get.lo \
-	pcre_globals.lo pcre_info.lo pcre_maketables.lo \
-	pcre_newline.lo pcre_ord2utf8.lo pcre_refcount.lo \
-	pcre_study.lo pcre_tables.lo pcre_try_flipped.lo pcre_ucd.lo \
-	pcre_valid_utf8.lo pcre_version.lo pcre_xclass.lo
-nodist_libpcre_la_OBJECTS = pcre_chartables.lo
+am__libpcre_la_SOURCES_DIST = pcre_byte_order.c pcre_compile.c \
+	pcre_config.c pcre_dfa_exec.c pcre_exec.c pcre_fullinfo.c \
+	pcre_get.c pcre_globals.c pcre_internal.h pcre_jit_compile.c \
+	pcre_maketables.c pcre_newline.c pcre_ord2utf8.c \
+	pcre_refcount.c pcre_string_utils.c pcre_study.c pcre_tables.c \
+	pcre_ucd.c pcre_valid_utf8.c pcre_version.c pcre_xclass.c \
+	ucp.h
+@WITH_PCRE8_TRUE@am_libpcre_la_OBJECTS = pcre_byte_order.lo \
+@WITH_PCRE8_TRUE@	pcre_compile.lo pcre_config.lo \
+@WITH_PCRE8_TRUE@	pcre_dfa_exec.lo pcre_exec.lo \
+@WITH_PCRE8_TRUE@	pcre_fullinfo.lo pcre_get.lo pcre_globals.lo \
+@WITH_PCRE8_TRUE@	pcre_jit_compile.lo pcre_maketables.lo \
+@WITH_PCRE8_TRUE@	pcre_newline.lo pcre_ord2utf8.lo \
+@WITH_PCRE8_TRUE@	pcre_refcount.lo pcre_string_utils.lo \
+@WITH_PCRE8_TRUE@	pcre_study.lo pcre_tables.lo pcre_ucd.lo \
+@WITH_PCRE8_TRUE@	pcre_valid_utf8.lo pcre_version.lo \
+@WITH_PCRE8_TRUE@	pcre_xclass.lo
+@WITH_PCRE8_TRUE@nodist_libpcre_la_OBJECTS = pcre_chartables.lo
 libpcre_la_OBJECTS = $(am_libpcre_la_OBJECTS) \
 	$(nodist_libpcre_la_OBJECTS)
-libpcre_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
+AM_V_lt = $(am__v_lt_$(V))
+am__v_lt_ = $(am__v_lt_$(AM_DEFAULT_VERBOSITY))
+am__v_lt_0 = --silent
+libpcre_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(libpcre_la_LDFLAGS) $(LDFLAGS) -o $@
+@WITH_PCRE8_TRUE@am_libpcre_la_rpath = -rpath $(libdir)
+libpcre16_la_LIBADD =
+am__libpcre16_la_SOURCES_DIST = pcre16_byte_order.c \
+	pcre16_chartables.c pcre16_compile.c pcre16_config.c \
+	pcre16_dfa_exec.c pcre16_exec.c pcre16_fullinfo.c pcre16_get.c \
+	pcre16_globals.c pcre16_jit_compile.c pcre16_maketables.c \
+	pcre16_newline.c pcre16_ord2utf16.c pcre16_refcount.c \
+	pcre16_string_utils.c pcre16_study.c pcre16_tables.c \
+	pcre16_ucd.c pcre16_utf16_utils.c pcre16_valid_utf16.c \
+	pcre16_version.c pcre16_xclass.c
+@WITH_PCRE16_TRUE@am_libpcre16_la_OBJECTS = pcre16_byte_order.lo \
+@WITH_PCRE16_TRUE@	pcre16_chartables.lo pcre16_compile.lo \
+@WITH_PCRE16_TRUE@	pcre16_config.lo pcre16_dfa_exec.lo \
+@WITH_PCRE16_TRUE@	pcre16_exec.lo pcre16_fullinfo.lo \
+@WITH_PCRE16_TRUE@	pcre16_get.lo pcre16_globals.lo \
+@WITH_PCRE16_TRUE@	pcre16_jit_compile.lo pcre16_maketables.lo \
+@WITH_PCRE16_TRUE@	pcre16_newline.lo pcre16_ord2utf16.lo \
+@WITH_PCRE16_TRUE@	pcre16_refcount.lo pcre16_string_utils.lo \
+@WITH_PCRE16_TRUE@	pcre16_study.lo pcre16_tables.lo \
+@WITH_PCRE16_TRUE@	pcre16_ucd.lo pcre16_utf16_utils.lo \
+@WITH_PCRE16_TRUE@	pcre16_valid_utf16.lo pcre16_version.lo \
+@WITH_PCRE16_TRUE@	pcre16_xclass.lo
+@WITH_PCRE16_TRUE@nodist_libpcre16_la_OBJECTS = pcre_chartables.lo
+libpcre16_la_OBJECTS = $(am_libpcre16_la_OBJECTS) \
+	$(nodist_libpcre16_la_OBJECTS)
+libpcre16_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+	$(libpcre16_la_LDFLAGS) $(LDFLAGS) -o $@
+@WITH_PCRE16_TRUE@am_libpcre16_la_rpath = -rpath $(libdir)
 @WITH_PCRE_CPP_TRUE@libpcrecpp_la_DEPENDENCIES = libpcre.la
 am__libpcrecpp_la_SOURCES_DIST = pcrecpp_internal.h pcrecpp.cc \
 	pcre_scanner.cc pcre_stringpiece.cc
 @WITH_PCRE_CPP_TRUE@am_libpcrecpp_la_OBJECTS = pcrecpp.lo \
 @WITH_PCRE_CPP_TRUE@	pcre_scanner.lo pcre_stringpiece.lo
 libpcrecpp_la_OBJECTS = $(am_libpcrecpp_la_OBJECTS)
-libpcrecpp_la_LINK = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) \
-	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
-	$(CXXFLAGS) $(libpcrecpp_la_LDFLAGS) $(LDFLAGS) -o $@
+libpcrecpp_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
+	$(AM_CXXFLAGS) $(CXXFLAGS) $(libpcrecpp_la_LDFLAGS) $(LDFLAGS) \
+	-o $@
 @WITH_PCRE_CPP_TRUE@am_libpcrecpp_la_rpath = -rpath $(libdir)
-libpcreposix_la_DEPENDENCIES = libpcre.la
-am_libpcreposix_la_OBJECTS = pcreposix.lo
+@WITH_PCRE8_TRUE@libpcreposix_la_DEPENDENCIES = libpcre.la
+am__libpcreposix_la_SOURCES_DIST = pcreposix.c
+@WITH_PCRE8_TRUE@am_libpcreposix_la_OBJECTS = pcreposix.lo
 libpcreposix_la_OBJECTS = $(am_libpcreposix_la_OBJECTS)
-libpcreposix_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
-	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
-	$(libpcreposix_la_LDFLAGS) $(LDFLAGS) -o $@
-@WITH_REBUILD_CHARTABLES_TRUE@am__EXEEXT_1 = dftables$(EXEEXT)
-@WITH_PCRE_CPP_TRUE@am__EXEEXT_2 = pcrecpp_unittest$(EXEEXT) \
+libpcreposix_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(AM_CFLAGS) $(CFLAGS) $(libpcreposix_la_LDFLAGS) $(LDFLAGS) \
+	-o $@
+@WITH_PCRE8_TRUE@am_libpcreposix_la_rpath = -rpath $(libdir)
+@WITH_PCRE8_TRUE@am__EXEEXT_1 = pcregrep$(EXEEXT)
+@WITH_REBUILD_CHARTABLES_TRUE@am__EXEEXT_2 = dftables$(EXEEXT)
+@WITH_JIT_TRUE@am__EXEEXT_3 = pcre_jit_test$(EXEEXT)
+@WITH_PCRE_CPP_TRUE@am__EXEEXT_4 = pcrecpp_unittest$(EXEEXT) \
 @WITH_PCRE_CPP_TRUE@	pcre_scanner_unittest$(EXEEXT) \
 @WITH_PCRE_CPP_TRUE@	pcre_stringpiece_unittest$(EXEEXT)
 PROGRAMS = $(bin_PROGRAMS) $(noinst_PROGRAMS)
@@ -151,6 +221,11 @@ am__dftables_SOURCES_DIST = dftables.c
 @WITH_REBUILD_CHARTABLES_TRUE@	dftables.$(OBJEXT)
 dftables_OBJECTS = $(am_dftables_OBJECTS)
 dftables_LDADD = $(LDADD)
+am__pcre_jit_test_SOURCES_DIST = pcre_jit_test.c
+@WITH_JIT_TRUE@am_pcre_jit_test_OBJECTS = pcre_jit_test.$(OBJEXT)
+pcre_jit_test_OBJECTS = $(am_pcre_jit_test_OBJECTS)
+@WITH_JIT_TRUE@pcre_jit_test_DEPENDENCIES = $(am__append_8) \
+@WITH_JIT_TRUE@	$(am__append_9)
 am__pcre_scanner_unittest_SOURCES_DIST = pcre_scanner_unittest.cc
 @WITH_PCRE_CPP_TRUE@am_pcre_scanner_unittest_OBJECTS =  \
 @WITH_PCRE_CPP_TRUE@	pcre_scanner_unittest.$(OBJEXT)
@@ -170,14 +245,22 @@ am__pcrecpp_unittest_SOURCES_DIST = pcrecpp_unittest.cc
 @WITH_PCRE_CPP_TRUE@	pcrecpp_unittest.$(OBJEXT)
 pcrecpp_unittest_OBJECTS = $(am_pcrecpp_unittest_OBJECTS)
 @WITH_PCRE_CPP_TRUE@pcrecpp_unittest_DEPENDENCIES = libpcrecpp.la
-am_pcregrep_OBJECTS = pcregrep.$(OBJEXT)
+am__pcregrep_SOURCES_DIST = pcregrep.c
+@WITH_PCRE8_TRUE@am_pcregrep_OBJECTS = pcregrep.$(OBJEXT)
 pcregrep_OBJECTS = $(am_pcregrep_OBJECTS)
 am__DEPENDENCIES_1 =
-pcregrep_DEPENDENCIES = libpcreposix.la $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1)
-am_pcretest_OBJECTS = pcretest.$(OBJEXT)
+@WITH_PCRE8_TRUE@pcregrep_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+@WITH_PCRE8_TRUE@	$(am__DEPENDENCIES_1) libpcreposix.la
+am__pcretest_SOURCES_DIST = pcretest.c pcre_printint.c \
+	pcre16_printint.c
+@WITH_PCRE8_TRUE@am__objects_1 = pcre_printint.$(OBJEXT)
+@WITH_PCRE16_TRUE@am__objects_2 = pcre16_printint.$(OBJEXT)
+am_pcretest_OBJECTS = pcretest.$(OBJEXT) $(am__objects_1) \
+	$(am__objects_2)
 pcretest_OBJECTS = $(am_pcretest_OBJECTS)
-pcretest_DEPENDENCIES = libpcreposix.la $(am__DEPENDENCIES_1)
+pcretest_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__append_15) \
+	$(am__append_17)
+am__dist_noinst_SCRIPTS_DIST = RunTest RunGrepTest
 SCRIPTS = $(bin_SCRIPTS) $(dist_noinst_SCRIPTS)
 DEFAULT_INCLUDES = -I.@am__isrc@
 depcomp = $(SHELL) $(top_srcdir)/depcomp
@@ -185,34 +268,59 @@ am__depfiles_maybe = depfiles
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
-LTCOMPILE = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
-	--mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
-	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
+LTCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) \
+	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
+	$(AM_CFLAGS) $(CFLAGS)
+AM_V_CC = $(am__v_CC_$(V))
+am__v_CC_ = $(am__v_CC_$(AM_DEFAULT_VERBOSITY))
+am__v_CC_0 = @echo "  CC    " $@;
+AM_V_at = $(am__v_at_$(V))
+am__v_at_ = $(am__v_at_$(AM_DEFAULT_VERBOSITY))
+am__v_at_0 = @
 CCLD = $(CC)
-LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
-	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
-	$(LDFLAGS) -o $@
+LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+	$(AM_LDFLAGS) $(LDFLAGS) -o $@
+AM_V_CCLD = $(am__v_CCLD_$(V))
+am__v_CCLD_ = $(am__v_CCLD_$(AM_DEFAULT_VERBOSITY))
+am__v_CCLD_0 = @echo "  CCLD  " $@;
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
-LTCXXCOMPILE = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
-	--mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
-	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
+LTCXXCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) \
+	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
+	$(AM_CXXFLAGS) $(CXXFLAGS)
+AM_V_CXX = $(am__v_CXX_$(V))
+am__v_CXX_ = $(am__v_CXX_$(AM_DEFAULT_VERBOSITY))
+am__v_CXX_0 = @echo "  CXX   " $@;
 CXXLD = $(CXX)
-CXXLINK = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
-	--mode=link $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) \
-	$(LDFLAGS) -o $@
+CXXLINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
+	$(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
+AM_V_CXXLD = $(am__v_CXXLD_$(V))
+am__v_CXXLD_ = $(am__v_CXXLD_$(AM_DEFAULT_VERBOSITY))
+am__v_CXXLD_0 = @echo "  CXXLD " $@;
+AM_V_GEN = $(am__v_GEN_$(V))
+am__v_GEN_ = $(am__v_GEN_$(AM_DEFAULT_VERBOSITY))
+am__v_GEN_0 = @echo "  GEN   " $@;
 SOURCES = $(libpcre_la_SOURCES) $(nodist_libpcre_la_SOURCES) \
+	$(libpcre16_la_SOURCES) $(nodist_libpcre16_la_SOURCES) \
 	$(libpcrecpp_la_SOURCES) $(libpcreposix_la_SOURCES) \
-	$(dftables_SOURCES) $(pcre_scanner_unittest_SOURCES) \
+	$(dftables_SOURCES) $(pcre_jit_test_SOURCES) \
+	$(pcre_scanner_unittest_SOURCES) \
 	$(pcre_stringpiece_unittest_SOURCES) \
 	$(pcrecpp_unittest_SOURCES) $(pcregrep_SOURCES) \
 	$(pcretest_SOURCES)
-DIST_SOURCES = $(libpcre_la_SOURCES) $(am__libpcrecpp_la_SOURCES_DIST) \
-	$(libpcreposix_la_SOURCES) $(am__dftables_SOURCES_DIST) \
+DIST_SOURCES = $(am__libpcre_la_SOURCES_DIST) \
+	$(am__libpcre16_la_SOURCES_DIST) \
+	$(am__libpcrecpp_la_SOURCES_DIST) \
+	$(am__libpcreposix_la_SOURCES_DIST) \
+	$(am__dftables_SOURCES_DIST) $(am__pcre_jit_test_SOURCES_DIST) \
 	$(am__pcre_scanner_unittest_SOURCES_DIST) \
 	$(am__pcre_stringpiece_unittest_SOURCES_DIST) \
-	$(am__pcrecpp_unittest_SOURCES_DIST) $(pcregrep_SOURCES) \
-	$(pcretest_SOURCES)
+	$(am__pcrecpp_unittest_SOURCES_DIST) \
+	$(am__pcregrep_SOURCES_DIST) $(am__pcretest_SOURCES_DIST)
 man1dir = $(mandir)/man1
 man3dir = $(mandir)/man3
 NROFF = nroff
@@ -238,6 +346,7 @@ distuninstallcheck_listfiles = find . -type f -print
 distcleancheck_listfiles = find . -type f -print
 ACLOCAL = @ACLOCAL@
 AMTAR = @AMTAR@
+AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
 AR = @AR@
 AS = @AS@
 AUTOCONF = @AUTOCONF@
@@ -265,6 +374,7 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
+EXTRA_LIBPCRE16_LDFLAGS = @EXTRA_LIBPCRE16_LDFLAGS@
 EXTRA_LIBPCRECPP_LDFLAGS = @EXTRA_LIBPCRECPP_LDFLAGS@
 EXTRA_LIBPCREPOSIX_LDFLAGS = @EXTRA_LIBPCREPOSIX_LDFLAGS@
 EXTRA_LIBPCRE_LDFLAGS = @EXTRA_LIBPCRE_LDFLAGS@
@@ -287,6 +397,7 @@ LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
 MAKEINFO = @MAKEINFO@
+MANIFEST_TOOL = @MANIFEST_TOOL@
 MKDIR_P = @MKDIR_P@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -317,6 +428,7 @@ abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@
 abs_top_srcdir = @abs_top_srcdir@
+ac_ct_AR = @ac_ct_AR@
 ac_ct_CC = @ac_ct_CC@
 ac_ct_CXX = @ac_ct_CXX@
 ac_ct_DUMPBIN = @ac_ct_DUMPBIN@
@@ -337,6 +449,8 @@ datarootdir = @datarootdir@
 docdir = @docdir@
 dvidir = @dvidir@
 enable_cpp = @enable_cpp@
+enable_pcre16 = @enable_pcre16@
+enable_pcre8 = @enable_pcre8@
 exec_prefix = @exec_prefix@
 host = @host@
 host_alias = @host_alias@
@@ -386,7 +500,9 @@ dist_doc_DATA = \
 dist_html_DATA = \
   doc/html/index.html \
   doc/html/pcre.html \
+  doc/html/pcre16.html \
   doc/html/pcre-config.html \
+  doc/html/pcre_assign_jit_stack.html \
   doc/html/pcre_compile.html \
   doc/html/pcre_compile2.html \
   doc/html/pcre_config.html \
@@ -394,6 +510,7 @@ dist_html_DATA = \
   doc/html/pcre_copy_substring.html \
   doc/html/pcre_dfa_exec.html \
   doc/html/pcre_exec.html \
+  doc/html/pcre_free_study.html \
   doc/html/pcre_free_substring.html \
   doc/html/pcre_free_substring_list.html \
   doc/html/pcre_fullinfo.html \
@@ -402,10 +519,13 @@ dist_html_DATA = \
   doc/html/pcre_get_stringtable_entries.html \
   doc/html/pcre_get_substring.html \
   doc/html/pcre_get_substring_list.html \
-  doc/html/pcre_info.html \
+  doc/html/pcre_jit_stack_alloc.html \
+  doc/html/pcre_jit_stack_free.html \
   doc/html/pcre_maketables.html \
+  doc/html/pcre_pattern_to_host_byte_order.html \
   doc/html/pcre_refcount.html \
   doc/html/pcre_study.html \
+  doc/html/pcre_utf16_to_host_byte_order.html \
   doc/html/pcre_version.html \
   doc/html/pcreapi.html \
   doc/html/pcrebuild.html \
@@ -413,6 +533,8 @@ dist_html_DATA = \
   doc/html/pcrecompat.html \
   doc/html/pcredemo.html \
   doc/html/pcregrep.html \
+  doc/html/pcrejit.html \
+  doc/html/pcrelimits.html \
   doc/html/pcrematching.html \
   doc/html/pcrepartial.html \
   doc/html/pcrepattern.html \
@@ -422,16 +544,18 @@ dist_html_DATA = \
   doc/html/pcresample.html \
   doc/html/pcrestack.html \
   doc/html/pcresyntax.html \
-  doc/html/pcretest.html
+  doc/html/pcretest.html \
+  doc/html/pcreunicode.html
 
 pcrecpp_html = doc/html/pcrecpp.html
 dist_noinst_DATA = $(pcrecpp_html)
 @WITH_PCRE_CPP_TRUE@html_DATA = $(pcrecpp_html)
 
 # The Libtool libraries to install.  We'll add to this later.
-lib_LTLIBRARIES = libpcre.la libpcreposix.la $(am__append_4)
+lib_LTLIBRARIES = $(am__append_4) $(am__append_5) $(am__append_10) \
+	$(am__append_11)
 check_SCRIPTS =
-dist_noinst_SCRIPTS = RunTest RunGrepTest
+dist_noinst_SCRIPTS = RunTest $(am__append_19)
 
 # Additional files to delete on 'make clean' and 'make maintainer-clean'.
 CLEANFILES = pcre_chartables.c testsavedregex teststderr testtry \
@@ -451,9 +575,11 @@ MAINTAINERCLEANFILES = pcre.h.generic
 # for the benefit of people who are building PCRE manually, without the
 # Autotools support.
 
-# The pcre_printint.src file is #included by some source files, so it must be
-# distributed. The pcre_chartables.c.dist file is the default version of
-# pcre_chartables.c, used unless --enable-rebuild-chartables is specified.
+# The pcre_chartables.c.dist file is the default version of pcre_chartables.c,
+# used unless --enable-rebuild-chartables is specified.
+
+# The JIT compiler lives in a separate directory, but its files are #included
+# when pcre_jit_compile.c is processed, so they must be distributed.
 
 # PCRE demonstration program. No longer built automatcally. The point is that
 # the users should build it themselves. So just distribute the source.
@@ -461,23 +587,42 @@ MAINTAINERCLEANFILES = pcre.h.generic
 # pcredemo_SOURCES = pcredemo.c
 # pcredemo_LDADD = libpcre.la
 EXTRA_DIST = doc/perltest.txt NON-UNIX-USE HACKING PrepareRelease \
-	CleanTxt Detrail 132html doc/index.html.src makevp.bat \
-	makevp_c.txt makevp_l.txt pcregexp.pas pcre.h.generic \
-	config.h.generic pcre_printint.src pcre_chartables.c.dist \
-	RunTest.bat testdata/grepinput testdata/grepinput3 \
-	testdata/grepinput8 testdata/grepinputv testdata/grepinputx \
-	testdata/greplist testdata/grepoutput testdata/grepoutput8 \
-	testdata/grepoutputN testdata/testinput1 testdata/testinput2 \
-	testdata/testinput3 testdata/testinput4 testdata/testinput5 \
-	testdata/testinput6 testdata/testinput7 testdata/testinput8 \
-	testdata/testinput9 testdata/testinput10 testdata/testinput11 \
-	testdata/testinput12 testdata/testoutput1 testdata/testoutput2 \
+	CheckMan CleanTxt Detrail 132html doc/index.html.src \
+	makevp.bat makevp_c.txt makevp_l.txt pcregexp.pas \
+	pcre.h.generic config.h.generic pcre_chartables.c.dist \
+	sljit/sljitConfig.h sljit/sljitConfigInternal.h \
+	sljit/sljitExecAllocator.c sljit/sljitLir.c sljit/sljitLir.h \
+	sljit/sljitNativeARM_Thumb2.c sljit/sljitNativeARM_v5.c \
+	sljit/sljitNativeMIPS_32.c sljit/sljitNativeMIPS_common.c \
+	sljit/sljitNativePPC_32.c sljit/sljitNativePPC_64.c \
+	sljit/sljitNativePPC_common.c sljit/sljitNativeX86_32.c \
+	sljit/sljitNativeX86_64.c sljit/sljitNativeX86_common.c \
+	sljit/sljitUtils.c RunTest.bat testdata/grepinput \
+	testdata/grepinput3 testdata/grepinput8 testdata/grepinputv \
+	testdata/grepinputx testdata/greplist testdata/grepoutput \
+	testdata/grepoutput8 testdata/grepoutputN testdata/greppatN4 \
+	testdata/saved16 testdata/saved16BE-1 testdata/saved16BE-2 \
+	testdata/saved16LE-1 testdata/saved16LE-2 testdata/saved8 \
+	testdata/testinput1 testdata/testinput2 testdata/testinput3 \
+	testdata/testinput4 testdata/testinput5 testdata/testinput6 \
+	testdata/testinput7 testdata/testinput8 testdata/testinput9 \
+	testdata/testinput10 testdata/testinput11 testdata/testinput12 \
+	testdata/testinput13 testdata/testinput14 testdata/testinput15 \
+	testdata/testinput16 testdata/testinput17 testdata/testinput18 \
+	testdata/testinput19 testdata/testinput20 testdata/testinput21 \
+	testdata/testinput22 testdata/testoutput1 testdata/testoutput2 \
 	testdata/testoutput3 testdata/testoutput4 testdata/testoutput5 \
 	testdata/testoutput6 testdata/testoutput7 testdata/testoutput8 \
 	testdata/testoutput9 testdata/testoutput10 \
-	testdata/testoutput11 testdata/testoutput12 \
-	testdata/wintestinput3 testdata/wintestoutput3 perltest.pl \
-	pcredemo.c $(pcrecpp_man) cmake/COPYING-CMAKE-SCRIPTS \
+	testdata/testoutput11-16 testdata/testoutput11-8 \
+	testdata/testoutput12 testdata/testoutput13 \
+	testdata/testoutput14 testdata/testoutput15 \
+	testdata/testoutput16 testdata/testoutput17 \
+	testdata/testoutput18 testdata/testoutput19 \
+	testdata/testoutput20 testdata/testoutput21 \
+	testdata/testoutput22 testdata/wintestinput3 \
+	testdata/wintestoutput3 perltest.pl pcredemo.c $(pcrecpp_man) \
+	cmake/COPYING-CMAKE-SCRIPTS \
 	cmake/FindPackageHandleStandardArgs.cmake \
 	cmake/FindReadline.cmake CMakeLists.txt config-cmake.h.in
 
@@ -487,38 +632,70 @@ nodist_include_HEADERS = pcre.h $(am__append_1)
 include_HEADERS = pcreposix.h $(am__append_2)
 bin_SCRIPTS = pcre-config
 @WITH_REBUILD_CHARTABLES_TRUE@dftables_SOURCES = dftables.c
-libpcre_la_SOURCES = \
-  pcre_compile.c \
-  pcre_config.c \
-  pcre_dfa_exec.c \
-  pcre_exec.c \
-  pcre_fullinfo.c \
-  pcre_get.c \
-  pcre_globals.c \
-  pcre_info.c \
-  pcre_internal.h \
-  pcre_maketables.c \
-  pcre_newline.c \
-  pcre_ord2utf8.c \
-  pcre_refcount.c \
-  pcre_study.c \
-  pcre_tables.c \
-  pcre_try_flipped.c \
-  pcre_ucd.c \
-  pcre_valid_utf8.c \
-  pcre_version.c \
-  pcre_xclass.c \
-  ucp.h
+BUILT_SOURCES = pcre_chartables.c
+@WITH_PCRE8_TRUE@libpcre_la_SOURCES = \
+@WITH_PCRE8_TRUE@  pcre_byte_order.c \
+@WITH_PCRE8_TRUE@  pcre_compile.c \
+@WITH_PCRE8_TRUE@  pcre_config.c \
+@WITH_PCRE8_TRUE@  pcre_dfa_exec.c \
+@WITH_PCRE8_TRUE@  pcre_exec.c \
+@WITH_PCRE8_TRUE@  pcre_fullinfo.c \
+@WITH_PCRE8_TRUE@  pcre_get.c \
+@WITH_PCRE8_TRUE@  pcre_globals.c \
+@WITH_PCRE8_TRUE@  pcre_internal.h \
+@WITH_PCRE8_TRUE@  pcre_jit_compile.c \
+@WITH_PCRE8_TRUE@  pcre_maketables.c \
+@WITH_PCRE8_TRUE@  pcre_newline.c \
+@WITH_PCRE8_TRUE@  pcre_ord2utf8.c \
+@WITH_PCRE8_TRUE@  pcre_refcount.c \
+@WITH_PCRE8_TRUE@  pcre_string_utils.c \
+@WITH_PCRE8_TRUE@  pcre_study.c \
+@WITH_PCRE8_TRUE@  pcre_tables.c \
+@WITH_PCRE8_TRUE@  pcre_ucd.c \
+@WITH_PCRE8_TRUE@  pcre_valid_utf8.c \
+@WITH_PCRE8_TRUE@  pcre_version.c \
+@WITH_PCRE8_TRUE@  pcre_xclass.c \
+@WITH_PCRE8_TRUE@  ucp.h
 
-nodist_libpcre_la_SOURCES = \
-  pcre_chartables.c
+@WITH_PCRE8_TRUE@nodist_libpcre_la_SOURCES = \
+@WITH_PCRE8_TRUE@  pcre_chartables.c
 
-libpcre_la_LDFLAGS = $(EXTRA_LIBPCRE_LDFLAGS)
-libpcreposix_la_SOURCES = \
-  pcreposix.c
+@WITH_PCRE16_TRUE@libpcre16_la_SOURCES = \
+@WITH_PCRE16_TRUE@  pcre16_byte_order.c \
+@WITH_PCRE16_TRUE@  pcre16_chartables.c \
+@WITH_PCRE16_TRUE@  pcre16_compile.c \
+@WITH_PCRE16_TRUE@  pcre16_config.c \
+@WITH_PCRE16_TRUE@  pcre16_dfa_exec.c \
+@WITH_PCRE16_TRUE@  pcre16_exec.c \
+@WITH_PCRE16_TRUE@  pcre16_fullinfo.c \
+@WITH_PCRE16_TRUE@  pcre16_get.c \
+@WITH_PCRE16_TRUE@  pcre16_globals.c \
+@WITH_PCRE16_TRUE@  pcre16_jit_compile.c \
+@WITH_PCRE16_TRUE@  pcre16_maketables.c \
+@WITH_PCRE16_TRUE@  pcre16_newline.c \
+@WITH_PCRE16_TRUE@  pcre16_ord2utf16.c \
+@WITH_PCRE16_TRUE@  pcre16_refcount.c \
+@WITH_PCRE16_TRUE@  pcre16_string_utils.c \
+@WITH_PCRE16_TRUE@  pcre16_study.c \
+@WITH_PCRE16_TRUE@  pcre16_tables.c \
+@WITH_PCRE16_TRUE@  pcre16_ucd.c \
+@WITH_PCRE16_TRUE@  pcre16_utf16_utils.c \
+@WITH_PCRE16_TRUE@  pcre16_valid_utf16.c \
+@WITH_PCRE16_TRUE@  pcre16_version.c \
+@WITH_PCRE16_TRUE@  pcre16_xclass.c
 
-libpcreposix_la_LDFLAGS = $(EXTRA_LIBPCREPOSIX_LDFLAGS)
-libpcreposix_la_LIBADD = libpcre.la
+@WITH_PCRE16_TRUE@nodist_libpcre16_la_SOURCES = \
+@WITH_PCRE16_TRUE@  pcre_chartables.c
+
+@WITH_PCRE8_TRUE@libpcre_la_LDFLAGS = $(EXTRA_LIBPCRE_LDFLAGS)
+@WITH_PCRE16_TRUE@libpcre16_la_LDFLAGS = $(EXTRA_LIBPCRE16_LDFLAGS)
+@WITH_JIT_TRUE@pcre_jit_test_SOURCES = pcre_jit_test.c
+@WITH_JIT_TRUE@pcre_jit_test_LDADD = $(am__append_8) $(am__append_9)
+@WITH_PCRE8_TRUE@libpcreposix_la_SOURCES = \
+@WITH_PCRE8_TRUE@  pcreposix.c
+
+@WITH_PCRE8_TRUE@libpcreposix_la_LDFLAGS = $(EXTRA_LIBPCREPOSIX_LDFLAGS)
+@WITH_PCRE8_TRUE@libpcreposix_la_LIBADD = libpcre.la
 @WITH_PCRE_CPP_TRUE@libpcrecpp_la_SOURCES = \
 @WITH_PCRE_CPP_TRUE@  pcrecpp_internal.h \
 @WITH_PCRE_CPP_TRUE@  pcrecpp.cc \
@@ -533,30 +710,32 @@ libpcreposix_la_LIBADD = libpcre.la
 @WITH_PCRE_CPP_TRUE@pcre_scanner_unittest_LDADD = libpcrecpp.la
 @WITH_PCRE_CPP_TRUE@pcre_stringpiece_unittest_SOURCES = pcre_stringpiece_unittest.cc
 @WITH_PCRE_CPP_TRUE@pcre_stringpiece_unittest_LDADD = libpcrecpp.la
-pcretest_SOURCES = pcretest.c
-pcretest_LDADD = libpcreposix.la $(LIBREADLINE)
-pcregrep_SOURCES = pcregrep.c
-pcregrep_LDADD = libpcreposix.la $(LIBZ) $(LIBBZ2)
+pcretest_SOURCES = pcretest.c $(am__append_14) $(am__append_16)
+pcretest_LDADD = $(LIBREADLINE) $(am__append_15) $(am__append_17)
+@WITH_PCRE8_TRUE@pcregrep_SOURCES = pcregrep.c
+@WITH_PCRE8_TRUE@pcregrep_LDADD = $(LIBZ) $(LIBBZ2) libpcreposix.la
 
 # A PCRE user submitted the following addition, saying that it "will allow
 # anyone using the 'mingw32' compiler to simply type 'make pcre.dll' and get a
 # nice DLL for Windows use". (It is used by the pcre.dll target.)
-DLL_OBJS = pcre_compile.o pcre_config.o \
+DLL_OBJS = pcre_byte_order.o pcre_compile.o pcre_config.o \
 	pcre_dfa_exec.o pcre_exec.o pcre_fullinfo.o pcre_get.o \
-	pcre_globals.o pcre_info.o pcre_maketables.o \
+	pcre_globals.o pcre_jit_compile.o pcre_maketables.o \
 	pcre_newline.o pcre_ord2utf8.o pcre_refcount.o \
-	pcre_study.o pcre_tables.o pcre_try_flipped.o \
-	pcre_ucd.o pcre_valid_utf8.o pcre_version.o \
-	pcre_chartables.o \
+	pcre_study.o pcre_tables.o pcre_ucd.o \
+	pcre_valid_utf8.o pcre_version.o pcre_chartables.o \
 	pcre_xclass.o
 
 
 # We have .pc files for pkg-config users.
 pkgconfigdir = $(libdir)/pkgconfig
-pkgconfig_DATA = libpcre.pc libpcreposix.pc $(am__append_7)
+pkgconfig_DATA = libpcre.pc libpcreposix.pc $(am__append_21) \
+	$(am__append_22)
 dist_man_MANS = \
   doc/pcre.3 \
+  doc/pcre16.3 \
   doc/pcre-config.1 \
+  doc/pcre_assign_jit_stack.3 \
   doc/pcre_compile.3 \
   doc/pcre_compile2.3 \
   doc/pcre_config.3 \
@@ -564,6 +743,7 @@ dist_man_MANS = \
   doc/pcre_copy_substring.3 \
   doc/pcre_dfa_exec.3 \
   doc/pcre_exec.3 \
+  doc/pcre_free_study.3 \
   doc/pcre_free_substring.3 \
   doc/pcre_free_substring_list.3 \
   doc/pcre_fullinfo.3 \
@@ -572,16 +752,21 @@ dist_man_MANS = \
   doc/pcre_get_stringtable_entries.3 \
   doc/pcre_get_substring.3 \
   doc/pcre_get_substring_list.3 \
-  doc/pcre_info.3 \
+  doc/pcre_jit_stack_alloc.3 \
+  doc/pcre_jit_stack_free.3 \
   doc/pcre_maketables.3 \
+  doc/pcre_pattern_to_host_byte_order.3 \
   doc/pcre_refcount.3 \
   doc/pcre_study.3 \
+  doc/pcre_utf16_to_host_byte_order.3 \
   doc/pcre_version.3 \
   doc/pcreapi.3 \
   doc/pcrebuild.3 \
   doc/pcrecallout.3 \
   doc/pcrecompat.3 \
   doc/pcregrep.1 \
+  doc/pcrejit.3 \
+  doc/pcrelimits.3 \
   doc/pcrematching.3 \
   doc/pcrepartial.3 \
   doc/pcrepattern.3 \
@@ -591,11 +776,12 @@ dist_man_MANS = \
   doc/pcresample.3 \
   doc/pcrestack.3 \
   doc/pcresyntax.3 \
-  doc/pcretest.1
+  doc/pcretest.1 \
+  doc/pcreunicode.3
 
 pcrecpp_man = doc/pcrecpp.3
 @WITH_PCRE_CPP_TRUE@man_MANS = $(pcrecpp_man)
-all: config.h
+all: $(BUILT_SOURCES) config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
 .SUFFIXES:
@@ -653,6 +839,8 @@ distclean-hdr:
 	-rm -f config.h stamp-h1
 libpcre.pc: $(top_builddir)/config.status $(srcdir)/libpcre.pc.in
 	cd $(top_builddir) && $(SHELL) ./config.status $@
+libpcre16.pc: $(top_builddir)/config.status $(srcdir)/libpcre16.pc.in
+	cd $(top_builddir) && $(SHELL) ./config.status $@
 libpcreposix.pc: $(top_builddir)/config.status $(srcdir)/libpcreposix.pc.in
 	cd $(top_builddir) && $(SHELL) ./config.status $@
 libpcrecpp.pc: $(top_builddir)/config.status $(srcdir)/libpcrecpp.pc.in
@@ -697,11 +885,13 @@ clean-libLTLIBRARIES:
 	  rm -f "$${dir}/so_locations"; \
 	done
 libpcre.la: $(libpcre_la_OBJECTS) $(libpcre_la_DEPENDENCIES)
-	$(libpcre_la_LINK) -rpath $(libdir) $(libpcre_la_OBJECTS) $(libpcre_la_LIBADD) $(LIBS)
+	$(AM_V_CCLD)$(libpcre_la_LINK) $(am_libpcre_la_rpath) $(libpcre_la_OBJECTS) $(libpcre_la_LIBADD) $(LIBS)
+libpcre16.la: $(libpcre16_la_OBJECTS) $(libpcre16_la_DEPENDENCIES)
+	$(AM_V_CCLD)$(libpcre16_la_LINK) $(am_libpcre16_la_rpath) $(libpcre16_la_OBJECTS) $(libpcre16_la_LIBADD) $(LIBS)
 libpcrecpp.la: $(libpcrecpp_la_OBJECTS) $(libpcrecpp_la_DEPENDENCIES)
-	$(libpcrecpp_la_LINK) $(am_libpcrecpp_la_rpath) $(libpcrecpp_la_OBJECTS) $(libpcrecpp_la_LIBADD) $(LIBS)
+	$(AM_V_CXXLD)$(libpcrecpp_la_LINK) $(am_libpcrecpp_la_rpath) $(libpcrecpp_la_OBJECTS) $(libpcrecpp_la_LIBADD) $(LIBS)
 libpcreposix.la: $(libpcreposix_la_OBJECTS) $(libpcreposix_la_DEPENDENCIES)
-	$(libpcreposix_la_LINK) -rpath $(libdir) $(libpcreposix_la_OBJECTS) $(libpcreposix_la_LIBADD) $(LIBS)
+	$(AM_V_CCLD)$(libpcreposix_la_LINK) $(am_libpcreposix_la_rpath) $(libpcreposix_la_OBJECTS) $(libpcreposix_la_LIBADD) $(LIBS)
 install-binPROGRAMS: $(bin_PROGRAMS)
 	@$(NORMAL_INSTALL)
 	test -z "$(bindir)" || $(MKDIR_P) "$(DESTDIR)$(bindir)"
@@ -756,22 +946,25 @@ clean-noinstPROGRAMS:
 	rm -f $$list
 dftables$(EXEEXT): $(dftables_OBJECTS) $(dftables_DEPENDENCIES)
 	@rm -f dftables$(EXEEXT)
-	$(LINK) $(dftables_OBJECTS) $(dftables_LDADD) $(LIBS)
+	$(AM_V_CCLD)$(LINK) $(dftables_OBJECTS) $(dftables_LDADD) $(LIBS)
+pcre_jit_test$(EXEEXT): $(pcre_jit_test_OBJECTS) $(pcre_jit_test_DEPENDENCIES)
+	@rm -f pcre_jit_test$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(pcre_jit_test_OBJECTS) $(pcre_jit_test_LDADD) $(LIBS)
 pcre_scanner_unittest$(EXEEXT): $(pcre_scanner_unittest_OBJECTS) $(pcre_scanner_unittest_DEPENDENCIES)
 	@rm -f pcre_scanner_unittest$(EXEEXT)
-	$(CXXLINK) $(pcre_scanner_unittest_OBJECTS) $(pcre_scanner_unittest_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK) $(pcre_scanner_unittest_OBJECTS) $(pcre_scanner_unittest_LDADD) $(LIBS)
 pcre_stringpiece_unittest$(EXEEXT): $(pcre_stringpiece_unittest_OBJECTS) $(pcre_stringpiece_unittest_DEPENDENCIES)
 	@rm -f pcre_stringpiece_unittest$(EXEEXT)
-	$(CXXLINK) $(pcre_stringpiece_unittest_OBJECTS) $(pcre_stringpiece_unittest_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK) $(pcre_stringpiece_unittest_OBJECTS) $(pcre_stringpiece_unittest_LDADD) $(LIBS)
 pcrecpp_unittest$(EXEEXT): $(pcrecpp_unittest_OBJECTS) $(pcrecpp_unittest_DEPENDENCIES)
 	@rm -f pcrecpp_unittest$(EXEEXT)
-	$(CXXLINK) $(pcrecpp_unittest_OBJECTS) $(pcrecpp_unittest_LDADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK) $(pcrecpp_unittest_OBJECTS) $(pcrecpp_unittest_LDADD) $(LIBS)
 pcregrep$(EXEEXT): $(pcregrep_OBJECTS) $(pcregrep_DEPENDENCIES)
 	@rm -f pcregrep$(EXEEXT)
-	$(LINK) $(pcregrep_OBJECTS) $(pcregrep_LDADD) $(LIBS)
+	$(AM_V_CCLD)$(LINK) $(pcregrep_OBJECTS) $(pcregrep_LDADD) $(LIBS)
 pcretest$(EXEEXT): $(pcretest_OBJECTS) $(pcretest_DEPENDENCIES)
 	@rm -f pcretest$(EXEEXT)
-	$(LINK) $(pcretest_OBJECTS) $(pcretest_LDADD) $(LIBS)
+	$(AM_V_CCLD)$(LINK) $(pcretest_OBJECTS) $(pcretest_LDADD) $(LIBS)
 install-binSCRIPTS: $(bin_SCRIPTS)
 	@$(NORMAL_INSTALL)
 	test -z "$(bindir)" || $(MKDIR_P) "$(DESTDIR)$(bindir)"
@@ -814,6 +1007,30 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dftables.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_byte_order.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_chartables.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_compile.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_config.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_dfa_exec.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_exec.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_fullinfo.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_get.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_globals.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_jit_compile.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_maketables.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_newline.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_ord2utf16.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_printint.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_refcount.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_string_utils.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_study.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_tables.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_ucd.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_utf16_utils.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_valid_utf16.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_version.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre16_xclass.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_byte_order.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_chartables.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_compile.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_config.Plo@am__quote@
@@ -822,18 +1039,20 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_fullinfo.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_get.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_globals.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_info.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_jit_compile.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_jit_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_maketables.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_newline.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_ord2utf8.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_printint.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_refcount.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_scanner.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_scanner_unittest.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_string_utils.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_stringpiece.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_stringpiece_unittest.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_study.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_tables.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_try_flipped.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_ucd.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_valid_utf8.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcre_version.Plo@am__quote@
@@ -845,43 +1064,49 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pcretest.Po@am__quote@
 
 .c.o:
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@am__fastdepCC_FALSE@	$(AM_V_CC) @AM_BACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(COMPILE) -c $<
 
 .c.obj:
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@am__fastdepCC_FALSE@	$(AM_V_CC) @AM_BACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(COMPILE) -c `$(CYGPATH_W) '$<'`
 
 .c.lo:
-@am__fastdepCC_TRUE@	$(LTCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LTCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
+@am__fastdepCC_FALSE@	$(AM_V_CC) @AM_BACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(LTCOMPILE) -c -o $@ $<
 
 .cc.o:
-@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-@am__fastdepCXX_TRUE@	$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@am__fastdepCXX_FALSE@	$(AM_V_CXX) @AM_BACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(CXXCOMPILE) -c -o $@ $<
 
 .cc.obj:
-@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
-@am__fastdepCXX_TRUE@	$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@am__fastdepCXX_FALSE@	$(AM_V_CXX) @AM_BACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 .cc.lo:
-@am__fastdepCXX_TRUE@	$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-@am__fastdepCXX_TRUE@	$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
+@am__fastdepCXX_FALSE@	$(AM_V_CXX) @AM_BACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(LTCXXCOMPILE) -c -o $@ $<
@@ -1399,7 +1624,8 @@ distcleancheck: distclean
 check-am: all-am
 	$(MAKE) $(AM_MAKEFLAGS) $(check_SCRIPTS)
 	$(MAKE) $(AM_MAKEFLAGS) check-TESTS
-check: check-am
+check: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) check-am
 all-am: Makefile $(LTLIBRARIES) $(PROGRAMS) $(SCRIPTS) $(MANS) $(DATA) \
 		$(HEADERS) config.h
 install-binPROGRAMS: install-libLTLIBRARIES
@@ -1408,7 +1634,8 @@ installdirs:
 	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(man1dir)" "$(DESTDIR)$(man3dir)" "$(DESTDIR)$(docdir)" "$(DESTDIR)$(htmldir)" "$(DESTDIR)$(htmldir)" "$(DESTDIR)$(pkgconfigdir)" "$(DESTDIR)$(includedir)" "$(DESTDIR)$(includedir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
-install: install-am
+install: $(BUILT_SOURCES)
+	$(MAKE) $(AM_MAKEFLAGS) install-am
 install-exec: install-exec-am
 install-data: install-data-am
 uninstall: uninstall-am
@@ -1434,6 +1661,7 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
+	-test -z "$(BUILT_SOURCES)" || rm -f $(BUILT_SOURCES)
 	-test -z "$(MAINTAINERCLEANFILES)" || rm -f $(MAINTAINERCLEANFILES)
 clean: clean-am
 
@@ -1462,7 +1690,8 @@ info-am:
 install-data-am: install-dist_docDATA install-dist_htmlDATA \
 	install-htmlDATA install-includeHEADERS install-man \
 	install-nodist_includeHEADERS install-pkgconfigDATA
-
+	@$(NORMAL_INSTALL)
+	$(MAKE) $(AM_MAKEFLAGS) install-data-hook
 install-dvi: install-dvi-am
 
 install-dvi-am:
@@ -1518,7 +1747,8 @@ uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
 
 uninstall-man: uninstall-man1 uninstall-man3
 
-.MAKE: all check-am install-am install-strip
+.MAKE: all check check-am install install-am install-data-am \
+	install-strip
 
 .PHONY: CTAGS GTAGS all all-am am--refresh check check-TESTS check-am \
 	clean clean-binPROGRAMS clean-generic clean-libLTLIBRARIES \
@@ -1529,9 +1759,9 @@ uninstall-man: uninstall-man1 uninstall-man3
 	distclean-tags distcleancheck distdir distuninstallcheck dvi \
 	dvi-am html html-am info info-am install install-am \
 	install-binPROGRAMS install-binSCRIPTS install-data \
-	install-data-am install-dist_docDATA install-dist_htmlDATA \
-	install-dvi install-dvi-am install-exec install-exec-am \
-	install-html install-html-am install-htmlDATA \
+	install-data-am install-data-hook install-dist_docDATA \
+	install-dist_htmlDATA install-dvi install-dvi-am install-exec \
+	install-exec-am install-html install-html-am install-htmlDATA \
 	install-includeHEADERS install-info install-info-am \
 	install-libLTLIBRARIES install-man install-man1 install-man3 \
 	install-nodist_includeHEADERS install-pdf install-pdf-am \
@@ -1566,6 +1796,34 @@ test: check ;
 # nice DLL for Windows use".
 pcre.dll: $(DLL_OBJS)
 	$(CC) -shared -o pcre.dll -Wl,"--strip-all" -Wl,"--export-all-symbols" $(DLL_OBJS)
+
+# Arrange for the per-function man pages to have 16-bit names as well.
+install-data-hook:
+	ln -s pcre_assign_jit_stack.3		$(DESTDIR)$(man3dir)/pcre16_assign_jit_stack.3
+	ln -s pcre_compile.3			$(DESTDIR)$(man3dir)/pcre16_compile.3
+	ln -s pcre_compile2.3			$(DESTDIR)$(man3dir)/pcre16_compile2.3
+	ln -s pcre_config.3			$(DESTDIR)$(man3dir)/pcre16_config.3
+	ln -s pcre_copy_named_substring.3	$(DESTDIR)$(man3dir)/pcre16_copy_named_substring.3
+	ln -s pcre_copy_substring.3		$(DESTDIR)$(man3dir)/pcre16_copy_substring.3
+	ln -s pcre_dfa_exec.3			$(DESTDIR)$(man3dir)/pcre16_dfa_exec.3
+	ln -s pcre_exec.3			$(DESTDIR)$(man3dir)/pcre16_exec.3
+	ln -s pcre_free_study.3			$(DESTDIR)$(man3dir)/pcre16_free_study.3
+	ln -s pcre_free_substring.3		$(DESTDIR)$(man3dir)/pcre16_free_substring.3
+	ln -s pcre_free_substring_list.3	$(DESTDIR)$(man3dir)/pcre16_free_substring_list.3
+	ln -s pcre_fullinfo.3			$(DESTDIR)$(man3dir)/pcre16_fullinfo.3
+	ln -s pcre_get_named_substring.3	$(DESTDIR)$(man3dir)/pcre16_get_named_substring.3
+	ln -s pcre_get_stringnumber.3		$(DESTDIR)$(man3dir)/pcre16_get_stringnumber.3
+	ln -s pcre_get_stringtable_entries.3	$(DESTDIR)$(man3dir)/pcre16_get_stringtable_entries.3
+	ln -s pcre_get_substring.3		$(DESTDIR)$(man3dir)/pcre16_get_substring.3
+	ln -s pcre_get_substring_list.3		$(DESTDIR)$(man3dir)/pcre16_get_substring_list.3
+	ln -s pcre_jit_stack_alloc.3		$(DESTDIR)$(man3dir)/pcre16_jit_stack_alloc.3
+	ln -s pcre_jit_stack_free.3		$(DESTDIR)$(man3dir)/pcre16_jit_stack_free.3
+	ln -s pcre_maketables.3			$(DESTDIR)$(man3dir)/pcre16_maketables.3
+	ln -s pcre_pattern_to_host_byte_order.3 $(DESTDIR)$(man3dir)/pcre16_pattern_to_host_byte_order.3
+	ln -s pcre_refcount.3			$(DESTDIR)$(man3dir)/pcre16_refcount.3
+	ln -s pcre_study.3			$(DESTDIR)$(man3dir)/pcre16_study.3
+	ln -s pcre_utf16_to_host_byte_order.3	$(DESTDIR)$(man3dir)/pcre16_utf16_to_host_byte_order.3
+	ln -s pcre_version.3			$(DESTDIR)$(man3dir)/pcre16_version.3
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

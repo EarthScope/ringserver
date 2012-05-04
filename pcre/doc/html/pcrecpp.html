@@ -35,7 +35,8 @@ man page, in case the conversion went wrong.
 The C++ wrapper for PCRE was provided by Google Inc. Some additional
 functionality was added by Giuseppe Maxia. This brief man page was constructed
 from the notes in the <i>pcrecpp.h</i> file, which should be consulted for
-further details.
+further details. Note that the C++ wrapper supports only the original 8-bit
+PCRE library. There is no 16-bit support at present.
 </P>
 <br><a name="SEC3" href="#TOC1">MATCHING INTERFACE</a><br>
 <P>
@@ -232,7 +233,7 @@ Normally, to pass one or more modifiers to a RE class, you declare
 a <i>RE_Options</i> object, set the appropriate options, and pass this
 object to a RE constructor. Example:
 <pre>
-   RE_options opt;
+   RE_Options opt;
    opt.set_caseless(true);
    if (RE("HELLO", opt).PartialMatch("hello world")) ...
 </pre>
@@ -360,7 +361,7 @@ Copyright &copy; 2007 Google Inc.
 </P>
 <br><a name="SEC12" href="#TOC1">REVISION</a><br>
 <P>
-Last updated: 17 March 2009
+Last updated: 08 January 2012
 <br>
 <p>
 Return to the <a href="index.html">PCRE index page</a>.

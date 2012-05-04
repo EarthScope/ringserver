@@ -46,8 +46,7 @@ man page, in case the conversion went wrong.
 The full syntax and semantics of the regular expressions that are supported by
 PCRE are described in the
 <a href="pcrepattern.html"><b>pcrepattern</b></a>
-documentation. This document contains just a quick-reference summary of the
-syntax.
+documentation. This document contains a quick-reference summary of the syntax.
 </P>
 <br><a name="SEC2" href="#TOC1">QUOTING</a><br>
 <P>
@@ -76,7 +75,7 @@ syntax.
 <pre>
   .          any character except newline;
                in dotall mode, any character whatsoever
-  \C         one byte, even in UTF-8 mode (best avoided)
+  \C         one data unit, even in UTF mode (best avoided)
   \d         a decimal digit
   \D         a character that is not a decimal digit
   \h         a horizontal whitespace character
@@ -94,7 +93,7 @@ syntax.
   \X         an extended Unicode sequence
 </pre>
 In PCRE, by default, \d, \D, \s, \S, \w, and \W recognize only ASCII
-characters, even in UTF-8 mode. However, this can be changed by setting the
+characters, even in a UTF mode. However, this can be changed by setting the
 PCRE_UCP option.
 </P>
 <br><a name="SEC5" href="#TOC1">GENERAL CATEGORY PROPERTIES FOR \p and \P</a><br>
@@ -367,7 +366,8 @@ The following are recognized only at the start of a pattern or after one of the
 newline-setting options with similar syntax:
 <pre>
   (*NO_START_OPT) no start-match optimization (PCRE_NO_START_OPTIMIZE)
-  (*UTF8)         set UTF-8 mode (PCRE_UTF8)
+  (*UTF8)         set UTF-8 mode: 8-bit library (PCRE_UTF8)
+  (*UTF16)        set UTF-16 mode: 16-bit library (PCRE_UTF16)
   (*UCP)          set PCRE_UCP (use Unicode properties for \d etc)
 </PRE>
 </P>
@@ -439,6 +439,7 @@ The following act immediately they are reached:
 <pre>
   (*ACCEPT)       force successful match
   (*FAIL)         force backtrack; synonym (*F)
+  (*MARK:NAME)    set name to be passed back; synonym (*:NAME)
 </pre>
 The following act only when a subsequent match failure causes a backtrack to
 reach them. They all force a match failure, but they differ in what happens
@@ -447,14 +448,18 @@ pattern is not anchored.
 <pre>
   (*COMMIT)       overall failure, no advance of starting point
   (*PRUNE)        advance to next starting character
-  (*SKIP)         advance start to current matching position
+  (*PRUNE:NAME)   equivalent to (*MARK:NAME)(*PRUNE)
+  (*SKIP)         advance to current matching position
+  (*SKIP:NAME)    advance to position corresponding to an earlier
+                  (*MARK:NAME); if not found, the (*SKIP) is ignored
   (*THEN)         local failure, backtrack to next alternation
+  (*THEN:NAME)    equivalent to (*MARK:NAME)(*THEN)
 </PRE>
 </P>
 <br><a name="SEC22" href="#TOC1">NEWLINE CONVENTIONS</a><br>
 <P>
 These are recognized only at the very start of the pattern or after a
-(*BSR_...) or (*UTF8) or (*UCP) option.
+(*BSR_...), (*UTF8), (*UTF16) or (*UCP) option.
 <pre>
   (*CR)           carriage return only
   (*LF)           linefeed only
@@ -466,7 +471,7 @@ These are recognized only at the very start of the pattern or after a
 <br><a name="SEC23" href="#TOC1">WHAT \R MATCHES</a><br>
 <P>
 These are recognized only at the very start of the pattern or after a
-(*...) option that sets the newline convention or UTF-8 or UCP mode.
+(*...) option that sets the newline convention or a UTF or UCP mode.
 <pre>
   (*BSR_ANYCRLF)  CR, LF, or CRLF
   (*BSR_UNICODE)  any Unicode newline sequence
@@ -495,9 +500,9 @@ Cambridge CB2 3QH, England.
 </P>
 <br><a name="SEC27" href="#TOC1">REVISION</a><br>
 <P>
-Last updated: 21 November 2010
+Last updated: 10 January 2012
 <br>
-Copyright &copy; 1997-2010 University of Cambridge.
+Copyright &copy; 1997-2012 University of Cambridge.
 <br>
 <p>
 Return to the <a href="index.html">PCRE index page</a>.

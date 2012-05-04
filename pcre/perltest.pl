@@ -1,16 +1,18 @@
 #! /usr/bin/env perl
 
 # Program for testing regular expressions with perl to check that PCRE handles
-# them the same. This is the version that supports /8 for UTF-8 testing. As it
-# stands, it requires at least Perl 5.8 for UTF-8 support. However, it needs to
-# have "use utf8" at the start for running the UTF-8 tests, but *not* for the
-# other tests. The only way I've found for doing this is to cat this line in
-# explicitly in the RunPerlTest script.
+# them the same. This version supports /8 for UTF-8 testing. However, it needs
+# to have "use utf8" at the start for running the UTF-8 tests, but *not* for
+# the other tests. The only way I've found for doing this is to cat this line
+# in explicitly in the RunPerlTest script. I've also used this method to supply
+# "require Encode" for the UTF-8 tests, so that the main test will still run
+# where Encode is not installed.
 
 # use locale;  # With this included, \x0b matches \s!
 
-# Function for turning a string into a string of printing chars. There are
-# currently problems with UTF-8 strings; this fudges round them.
+# Function for turning a string into a string of printing chars.
+
+#require Encode;
 
 sub pchars {
 my($t) = "";
@@ -21,10 +23,10 @@ if ($utf8)
   foreach $c (@p)
     {
     if ($c >= 32 && $c < 127) { $t .= chr $c; }
-      else { $t .= sprintf("\\x{%02x}", $c); }
+      else { $t .= sprintf("\\x{%02x}", $c);
+      }
     }
   }
-
 else
   {
   foreach $c (split(//, $_[0]))
@@ -87,6 +89,10 @@ for (;;)
 
   $showrest = ($pattern =~ s/\+(?=[a-zA-Z]*$)//);
 
+  # A doubled version is used by pcretest to print remainders after captures
+
+  $pattern =~ s/\+(?=[a-zA-Z]*$)//;
+
   # Remove /8 from a UTF-8 pattern.
 
   $utf8 = $pattern =~ s/8(?=[a-zA-Z]*$)//;
@@ -102,6 +108,14 @@ for (;;)
   # Remove /W from a pattern (asks pcretest to set PCRE_UCP)
 
   $pattern =~ s/W(?=[a-zA-Z]*$)//;
+
+  # Remove /S or /SS from a pattern (asks pcretest to study or not to study)
+
+  $pattern =~ s/S(?=[a-zA-Z]*$)//g;
+
+  # Remove /Y from a pattern (asks pcretest to disable PCRE optimization)
+
+  $pattern =~ s/Y(?=[a-zA-Z]*$)//;
 
   # Check that the pattern is valid
 
@@ -180,7 +194,7 @@ for (;;)
       {
       printf $outfile "No match";
       if (defined $REGERROR && $REGERROR != 1)
-        { print $outfile (", mark = $REGERROR"); }
+        { printf $outfile (", mark = %s", &pchars($REGERROR)); }
       printf $outfile "\n";
       }
     else
@@ -202,8 +216,17 @@ for (;;)
           }
         splice(@subs, 0, 18);
         }
+
+      # It seems that $REGMARK is not marked as UTF-8 even when use utf8 is
+      # set and the input pattern was a UTF-8 string. We can, however, force
+      # it to be so marked.
+
       if (defined $REGMARK && $REGMARK != 1)
-        { print $outfile ("MK: $REGMARK\n"); }
+        {
+        $xx = $REGMARK;
+        $xx = Encode::decode_utf8($xx) if $utf8;
+        printf $outfile ("MK: %s\n", &pchars($xx));
+        }
       }
     }
   }

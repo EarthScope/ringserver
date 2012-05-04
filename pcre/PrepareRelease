@@ -37,7 +37,7 @@ echo Processing documentation
 
 # Check the remaining man pages
 
-../CheckMan *.1 *.3
+perl ../CheckMan *.1 *.3
 if [ $? != 0 ] ; then exit 1; fi
 
 # Make Text form of the documentation. It needs some mangling to make it
@@ -49,7 +49,7 @@ cat <<End >pcre.txt
 This file contains a concatenation of the PCRE man pages, converted to plain
 text format for ease of searching with a text editor, or for use on systems
 that do not have a man page processor. The small individual files that give
-synopses of each function in the library have not been included. Neither has 
+synopses of each function in the library have not been included. Neither has
 the pcredemo program. There are separate text files for the pcregrep and
 pcretest commands.
 -----------------------------------------------------------------------------
@@ -58,12 +58,13 @@ pcretest commands.
 End
 
 echo "Making pcre.txt"
-for file in pcre pcrebuild pcrematching pcreapi pcrecallout pcrecompat \
-            pcrepattern pcresyntax pcrepartial pcreprecompile \
-            pcreperform pcreposix pcrecpp pcresample pcrestack ; do
+for file in pcre pcre16 pcrebuild pcrematching pcreapi pcrecallout pcrecompat \
+            pcrepattern pcresyntax pcreunicode pcrejit pcrepartial \
+            pcreprecompile pcreperform pcreposix pcrecpp pcresample \
+            pcrelimits pcrestack ; do
   echo "  Processing $file.3"
   nroff -c -man $file.3 >$file.rawtxt
-  ../CleanTxt <$file.rawtxt >>pcre.txt
+  perl ../CleanTxt <$file.rawtxt >>pcre.txt
   /bin/rm $file.rawtxt
   echo "------------------------------------------------------------------------------" >>pcre.txt
   if [ "$file" != "pcresample" ] ; then
@@ -76,7 +77,7 @@ done
 for file in pcretest pcregrep pcre-config ; do
   echo Making $file.txt
   nroff -c -man $file.1 >$file.rawtxt
-  ../CleanTxt <$file.rawtxt >$file.txt
+  perl ../CleanTxt <$file.rawtxt >$file.txt
   /bin/rm $file.rawtxt
 done
 
@@ -103,7 +104,7 @@ perl <<"END" >pcredemo.3
             ".  hy \\\\n(HY\n" .
             "..\n" .
             ".\n" .
-            ".EX\n" ; 
+            ".EX\n" ;
   while (<IN>)
     {
     s/\\/\\e/g;
@@ -111,7 +112,7 @@ perl <<"END" >pcredemo.3
     }
   print OUT ".EE\n";
   close(IN);
-  close(OUT);    
+  close(OUT);
 END
 if [ $? != 0 ] ; then exit 1; fi
 
@@ -125,7 +126,7 @@ cp index.html.src html/index.html
 for file in *.1 ; do
   base=`basename $file .1`
   echo "  Making $base.html"
-  ../132html -toc $base <$file >html/$base.html
+  perl ../132html -toc $base <$file >html/$base.html
 done
 
 # Exclude table of contents for function summaries. It seems that expr
@@ -136,14 +137,16 @@ for file in *.3 ; do
   base=`basename $file .3`
   toc=-toc
   if [ `expr $base : '.*_'` -ne 0 ] ; then toc="" ; fi
-  if [ "$base" = "pcresample" ] || \
-     [ "$base" = "pcrestack" ]  || \
-     [ "$base" = "pcrecompat" ] || \
-     [ "$base" = "pcreperform" ] ; then
+  if [ "$base" = "pcresample" ]  || \
+     [ "$base" = "pcrestack" ]   || \
+     [ "$base" = "pcrecompat" ]  || \
+     [ "$base" = "pcrelimits" ]  || \
+     [ "$base" = "pcreperform" ] || \
+     [ "$base" = "pcreunicode" ] ; then
     toc=""
   fi
   echo "  Making $base.html"
-  ../132html $toc $base <$file >html/$base.html
+  perl ../132html $toc $base <$file >html/$base.html
   if [ $? != 0 ] ; then exit 1; fi
 done
 
@@ -154,8 +157,11 @@ echo Documentation done
 if [ "$1" = "doc" ] ; then exit; fi
 
 # These files are detrailed; do not detrail the test data because there may be
-# significant trailing spaces. The configure files are also omitted from the
-# detrailing.
+# significant trailing spaces. Do not detrail RunTest.bat, because it has CRLF
+# line endings and the detrail script removes all trailing white space. The
+# configure files are also omitted from the detrailing. We don't bother with
+# those pcre16_xx files that just define COMPILE_PCRE16 and then #include the
+# common file, because they aren't going to change.
 
 files="\
   Makefile.am \
@@ -175,13 +181,12 @@ files="\
   CMakeLists.txt \
   RunGrepTest \
   RunTest \
-  RunTest.bat \
   pcre-config.in \
   libpcre.pc.in \
+  libpcre16.pc.in \
   libpcreposix.pc.in \
   libpcrecpp.pc.in \
   config.h.in \
-  pcre_printint.src \
   pcre_chartables.c.dist \
   pcredemo.c \
   pcregrep.c \
@@ -191,6 +196,7 @@ files="\
   pcreposix.h \
   pcre.h.in \
   pcre_internal.h
+  pcre_byte_order.c \
   pcre_compile.c \
   pcre_config.c \
   pcre_dfa_exec.c \
@@ -198,18 +204,23 @@ files="\
   pcre_fullinfo.c \
   pcre_get.c \
   pcre_globals.c \
-  pcre_info.c \
+  pcre_jit_compile.c \
+  pcre_jit_test.c \
   pcre_maketables.c \
   pcre_newline.c \
   pcre_ord2utf8.c \
+  pcre16_ord2utf16.c \
+  pcre_printint.c \
   pcre_refcount.c \
+  pcre_string_utils.c \
   pcre_study.c \
   pcre_tables.c \
-  pcre_try_flipped.c \
   pcre_ucp_searchfuncs.c \
   pcre_valid_utf8.c \
   pcre_version.c \
   pcre_xclass.c \
+  pcre16_utf16_utils.c \
+  pcre16_valid_utf16.c \
   pcre_scanner.cc \
   pcre_scanner.h \
   pcre_scanner_unittest.cc \
@@ -230,7 +241,7 @@ files="\
   libpcreposix.def"
 
 echo Detrailing
-./Detrail $files doc/p* doc/html/*
+perl ./Detrail $files doc/p* doc/html/*
 
 echo Doing basic configure to get default pcre.h and config.h
 # This is in case the caller has set aliases (as I do - PH)

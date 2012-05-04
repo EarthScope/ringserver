@@ -1144,7 +1144,7 @@ No match
  0: \x{6fa}
     ** Failers
 No match
-    \x{600}
+    \x{604}
 No match
     \x{650}
 No match
@@ -1352,5 +1352,27 @@ No match
 No match
     a\xFCb   
 No match
+
+/ⱥ/8i
+    ⱥ
+ 0: \x{2c65}
+    Ⱥx 
+ 0: \x{23a}
+    Ⱥ 
+ 0: \x{23a}
+
+/[ⱥ]/8i
+    ⱥ
+ 0: \x{2c65}
+    Ⱥx 
+ 0: \x{23a}
+    Ⱥ 
+ 0: \x{23a}
+
+/Ⱥ/8i
+    Ⱥ
+ 0: \x{23a}
+    ⱥ
+ 0: \x{2c65}
 
 /-- End of testinput6 --/

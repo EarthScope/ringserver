@@ -9,12 +9,16 @@ dnl The PCRE_PRERELEASE feature is for identifying release candidates. It might
 dnl be defined as -RC2, for example. For real releases, it should be empty.
 
 m4_define(pcre_major, [8])
-m4_define(pcre_minor, [12])
+m4_define(pcre_minor, [30])
 m4_define(pcre_prerelease, [])
-m4_define(pcre_date, [2011-01-15])
+m4_define(pcre_date, [2012-02-04])
+
+# NOTE: The CMakeLists.txt file searches for the above variables in the first
+# 50 lines of this file. Please update that if the variables above are moved.
 
 # Libtool shared library interface versions (current:revision:age)
-m4_define(libpcre_version, [0:1:0])
+m4_define(libpcre_version, [1:0:0])
+m4_define(libpcre16_version, [0:0:0])
 m4_define(libpcreposix_version, [0:0:0])
 m4_define(libpcrecpp_version, [0:0:0])
 
@@ -22,6 +26,7 @@ AC_PREREQ(2.57)
 AC_INIT(PCRE, pcre_major.pcre_minor[]pcre_prerelease, , pcre)
 AC_CONFIG_SRCDIR([pcre.h.in])
 AM_INIT_AUTOMAKE([dist-bzip2 dist-zip])
+m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AC_CONFIG_HEADERS(config.h)
 
 # This was added at the suggestion of libtoolize (03-Jan-10)
@@ -68,7 +73,7 @@ fi
 # AC_PROG_CXX will return "g++" even if no c++ compiler is installed.
 # Check for that case, and just disable c++ code if g++ doesn't run.
 AC_LANG_PUSH(C++)
-AC_COMPILE_IFELSE(AC_LANG_PROGRAM([],[]),, CXX=""; CXXCP=""; CXXFLAGS="")
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([],[])],, CXX=""; CXXCP=""; CXXFLAGS="")
 AC_LANG_POP
 
 # Check for a 64-bit integer type
@@ -76,7 +81,7 @@ AC_TYPE_INT64_T
 
 AC_PROG_INSTALL
 AC_LIBTOOL_WIN32_DLL
-AC_PROG_LIBTOOL
+LT_INIT
 AC_PROG_LN_S
 
 PCRE_MAJOR="pcre_major"
@@ -104,13 +109,39 @@ then
   htmldir='${docdir}/html'
 fi
 
+# Handle --disable-pcre8 (enabled by default)
+AC_ARG_ENABLE(pcre8,
+              AS_HELP_STRING([--disable-pcre8],
+                             [disable 8 bit character support]),
+              , enable_pcre8=unset)
+AC_SUBST(enable_pcre8)
+
+# Handle --enable-pcre16 (disabled by default)
+AC_ARG_ENABLE(pcre16,
+              AS_HELP_STRING([--enable-pcre16],
+                             [enable 16 bit character support]),
+              , enable_pcre16=unset)
+AC_SUBST(enable_pcre16)
+
 # Handle --disable-cpp. The substitution of enable_cpp is needed for use in
 # pcre-config.
 AC_ARG_ENABLE(cpp,
               AS_HELP_STRING([--disable-cpp],
                              [disable C++ support]),
-              , enable_cpp=yes)
+              , enable_cpp=unset)
 AC_SUBST(enable_cpp)
+
+# Handle --enable-jit (disabled by default)
+AC_ARG_ENABLE(jit,
+              AS_HELP_STRING([--enable-jit],
+                             [enable Just-In-Time compiling support]),
+              , enable_jit=no)
+
+# Handle --disable-pcregrep-jit (enabled by default)
+AC_ARG_ENABLE(pcregrep-jit,
+              AS_HELP_STRING([--disable-pcregrep-jit],
+                             [disable JIT support in pcregrep]),
+              , enable_pcregrep_jit=yes)
 
 # Handle --enable-rebuild-chartables
 AC_ARG_ENABLE(rebuild-chartables,
@@ -121,13 +152,19 @@ AC_ARG_ENABLE(rebuild-chartables,
 # Handle --enable-utf8 (disabled by default)
 AC_ARG_ENABLE(utf8,
               AS_HELP_STRING([--enable-utf8],
-                             [enable UTF-8 support (incompatible with --enable-ebcdic)]),
+                             [another name for --enable-utf. Kept only for compatibility reasons]),
               , enable_utf8=unset)
+
+# Handle --enable-utf (disabled by default)
+AC_ARG_ENABLE(utf,
+              AS_HELP_STRING([--enable-utf],
+                             [enable UTF-8/16 support (incompatible with --enable-ebcdic)]),
+              , enable_utf=unset)
 
 # Handle --enable-unicode-properties
 AC_ARG_ENABLE(unicode-properties,
               AS_HELP_STRING([--enable-unicode-properties],
-                             [enable Unicode properties support (implies --enable-utf8)]),
+                             [enable Unicode properties support (implies --enable-utf)]),
               , enable_unicode_properties=no)
 
 # Handle --enable-newline=NL
@@ -169,7 +206,7 @@ AC_ARG_ENABLE(bsr-anycrlf,
 # Handle --enable-ebcdic
 AC_ARG_ENABLE(ebcdic,
               AS_HELP_STRING([--enable-ebcdic],
-                             [assume EBCDIC coding rather than ASCII; incompatible with --enable-utf8; use only in (uncommon) EBCDIC environments; it implies --enable-rebuild-chartables]),
+                             [assume EBCDIC coding rather than ASCII; incompatible with --enable-utf; use only in (uncommon) EBCDIC environments; it implies --enable-rebuild-chartables]),
               , enable_ebcdic=no)
 
 # Handle --disable-stack-for-recursion
@@ -189,6 +226,12 @@ AC_ARG_ENABLE(pcregrep-libbz2,
               AS_HELP_STRING([--enable-pcregrep-libbz2],
                              [link pcregrep with libbz2 to handle .bz2 files]),
               , enable_pcregrep_libbz2=no)
+
+# Handle --with-pcregrep-bufsize=N
+AC_ARG_WITH(pcregrep-bufsize,
+              AS_HELP_STRING([--with-pcregrep-bufsize=N],
+                             [pcregrep buffer size (default=20480)]),
+              , with_pcregrep_bufsize=20480)
 
 # Handle --enable-pcretest-libreadline
 AC_ARG_ENABLE(pcretest-libreadline,
@@ -227,34 +270,76 @@ AC_ARG_WITH(match-limit-recursion,
                            [default limit on internal recursion (default=MATCH_LIMIT)]),
             , with_match_limit_recursion=MATCH_LIMIT)
 
-# Make sure that if enable_unicode_properties was set, that UTF-8 support
-# is enabled.
-#
-if test "x$enable_unicode_properties" = "xyes"
+# Copy enable_utf8 value to enable_utf for compatibility reasons
+if test "x$enable_utf8" != "xunset"
 then
-  if test "x$enable_utf8" = "xno"
+  if test "x$enable_utf" != "xunset"
   then
-    AC_MSG_ERROR([support for Unicode properties requires UTF-8 support])
+    AC_MSG_ERROR([--enable/disable-utf8 is kept only for compatibility reasons and its value is copied to --enable/disable-utf. Newer code must use --enable/disable-utf alone.])
   fi
-  enable_utf8=yes
+  enable_utf=$enable_utf8
 fi
 
-if test "x$enable_utf8" = "xunset"
+# Set the default value for pcre8
+if test "x$enable_pcre8" = "xunset"
 then
-  enable_utf8=no
+  enable_pcre8=yes
+fi
+
+# Set the default value for pcre16
+if test "x$enable_pcre16" = "xunset"
+then
+  enable_pcre16=no
+fi
+
+# Make sure enable_pcre8 or enable_pcre16 was set
+if test "x$enable_pcre8$enable_pcre16" = "xnono"
+then
+  AC_MSG_ERROR([Either 8 or 16 bit (or both) pcre library must be enabled])
+fi
+
+# Make sure that if enable_unicode_properties was set, that UTF support is enabled.
+if test "x$enable_unicode_properties" = "xyes"
+then
+  if test "x$enable_utf" = "xno"
+  then
+    AC_MSG_ERROR([support for Unicode properties requires UTF-8/16 support])
+  fi
+  enable_utf=yes
+fi
+
+# enable_utf is disabled by default.
+if test "x$enable_utf" = "xunset"
+then
+  enable_utf=no
+fi
+
+# enable_cpp copies the value of enable_pcre8 by default
+if test "x$enable_cpp" = "xunset"
+then
+  enable_cpp=$enable_pcre8
+fi
+
+# Make sure that if enable_cpp was set, that enable_pcre8 support is enabled
+if test "x$enable_cpp" = "xyes"
+then
+  if test "x$enable_pcre8" = "xno"
+  then
+    AC_MSG_ERROR([C++ library requires pcre library with 8 bit characters])
+  fi
 fi
 
 # Make sure that if enable_ebcdic is set, rebuild_chartables is also enabled.
-# Also check that UTF-8 support is not requested, because PCRE cannot handle
-# EBCDIC and UTF-8 in the same build. To do so it would need to use different
+# Also check that UTF support is not requested, because PCRE cannot handle
+# EBCDIC and UTF in the same build. To do so it would need to use different
 # character constants depending on the mode.
 #
 if test "x$enable_ebcdic" = "xyes"
 then
   enable_rebuild_chartables=yes
-  if test "x$enable_utf8" = "xyes"
+  if test "x$enable_utf" = "xyes"
   then
-    AC_MSG_ERROR([support for EBCDIC and UTF-8 cannot be enabled at the same time])
+    AC_MSG_ERROR([support for EBCDIC and UTF-8/16 cannot be enabled at the same time])
   fi
 fi
 
@@ -320,11 +405,11 @@ for flag in "-alias,__ZN7pcrecpp2RE6no_argE,__ZN7pcrecpp6no_argE" \
   LDFLAGS="$OLD_LDFLAGS -Wl,$flag"
   # We try to run the linker with this new ld flag.  If the link fails,
   # we give up and remove the new flag from LDFLAGS.
-  AC_LINK_IFELSE(AC_LANG_PROGRAM([namespace pcrecpp {
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([namespace pcrecpp {
                                     class RE { static int no_arg; };
                                     int RE::no_arg;
                                   }],
-                                 []),
+                                 [])],
                  [AC_MSG_RESULT([yes]);
                   EXTRA_LIBPCRECPP_LDFLAGS="$EXTRA_LIBPCRECPP_LDFLAGS -Wl,$flag";
                   break;],
@@ -361,8 +446,8 @@ for fn in strtoq strtoll _strtoi64 strtoimax; do
   else
     include=stdlib.h
   fi
-  AC_COMPILE_IFELSE(AC_LANG_PROGRAM([#include <$include>],
-                                    [char* e; return $fn("100", &e, 10)]),
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([#include <$include>],
+                                    [char* e; return $fn("100", &e, 10)])],
                     [AC_MSG_RESULT(yes)
                      AC_DEFINE_UNQUOTED(HAVE_`echo $fn | tr abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ`, 1,
                                         [Define to 1 if you have `$fn'.])
@@ -392,8 +477,12 @@ AC_SUBST(pcre_have_type_traits)
 AC_SUBST(pcre_have_bits_type_traits)
 
 # Conditional compilation
+AM_CONDITIONAL(WITH_PCRE8, test "x$enable_pcre8" = "xyes")
+AM_CONDITIONAL(WITH_PCRE16, test "x$enable_pcre16" = "xyes")
 AM_CONDITIONAL(WITH_PCRE_CPP, test "x$enable_cpp" = "xyes")
 AM_CONDITIONAL(WITH_REBUILD_CHARTABLES, test "x$enable_rebuild_chartables" = "xyes")
+AM_CONDITIONAL(WITH_JIT, test "x$enable_jit" = "xyes")
+AM_CONDITIONAL(WITH_UTF, test "x$enable_utf" = "xyes")
 
 # Checks for typedefs, structures, and compiler characteristics.
 
@@ -434,11 +523,11 @@ AC_CHECK_HEADERS([bzlib.h], [HAVE_BZLIB_H=1])
 AC_MSG_CHECKING([for libbz2])
 OLD_LIBS="$LIBS"
 LIBS="$LIBS -lbz2"
-AC_LINK_IFELSE( AC_LANG_PROGRAM([[
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #ifdef HAVE_BZLIB_H
 #include <bzlib.h>
 #endif]],
-[[return (int)BZ2_bzopen("conftest", "rb");]]),
+[[return (int)BZ2_bzopen("conftest", "rb");]])],
 [AC_MSG_RESULT([yes]);HAVE_LIBBZ2=1; break;],
 AC_MSG_RESULT([no]))
 LIBS="$OLD_LIBS"
@@ -447,7 +536,30 @@ LIBS="$OLD_LIBS"
 
 AC_CHECK_HEADERS([readline/readline.h], [HAVE_READLINE_H=1])
 AC_CHECK_HEADERS([readline/history.h], [HAVE_HISTORY_H=1])
-AC_CHECK_LIB([readline], [readline], [HAVE_LIB_READLINE=1])
+AC_CHECK_LIB([readline], [readline], [LIBREADLINE="-lreadline"],
+  [unset ac_cv_lib_readline_readline;
+   AC_CHECK_LIB([readline], [readline], [LIBREADLINE="-ltinfo"],
+    [unset ac_cv_lib_readline_readline;
+     AC_CHECK_LIB([readline], [readline], [LIBREADLINE="-lcurses"],
+      [unset ac_cv_lib_readline_readline;
+       AC_CHECK_LIB([readline], [readline], [LIBREADLINE="-lncurses"],
+        [unset ac_cv_lib_readline_readline;
+	 AC_CHECK_LIB([readline], [readline], [LIBREADLINE="-lncursesw"],
+          [unset ac_cv_lib_readline_readline;
+	   AC_CHECK_LIB([readline], [readline], [LIBREADLINE="-ltermcap"],
+            [LIBREADLINE=""],
+            [-ltermcap])],
+          [-lncursesw])],
+        [-lncurses])],
+      [-lcurses])],
+    [-ltinfo])])
+AC_SUBST(LIBREADLINE)
+if test -n "$LIBREADLINE"; then
+  if test "$LIBREADLINE" != "-lreadline"; then
+    echo "-lreadline needs $LIBREADLINE"
+    LIBREADLINE="-lreadline $LIBREADLINE"
+  fi
+fi
 
 # This facilitates -ansi builds under Linux
 dnl AC_DEFINE([_GNU_SOURCE], [], [Enable GNU extensions in glibc])
@@ -462,17 +574,39 @@ AC_SUBST(PCRE_STATIC_CFLAG)
 
 # Here is where pcre specific defines are handled
 
-if test "$enable_utf8" = "yes"; then
-  AC_DEFINE([SUPPORT_UTF8], [], [
-    Define to enable support for the UTF-8 Unicode encoding. This will
-    work even in an EBCDIC environment, but it is incompatible with
-    the EBCDIC macro. That is, PCRE can support *either* EBCDIC code
-    *or* ASCII/UTF-8, but not both at once.])
+if test "$enable_pcre8" = "yes"; then
+  AC_DEFINE([SUPPORT_PCRE8], [], [
+    Define to enable the 8 bit PCRE library.])
+fi
+
+if test "$enable_pcre16" = "yes"; then
+  AC_DEFINE([SUPPORT_PCRE16], [], [
+    Define to enable the 16 bit PCRE library.])
+fi
+
+if test "$enable_jit" = "yes"; then
+  AC_DEFINE([SUPPORT_JIT], [], [
+    Define to enable support for Just-In-Time compiling.])
+else
+  enable_pcregrep_jit="no"
+fi
+
+if test "$enable_pcregrep_jit" = "yes"; then
+  AC_DEFINE([SUPPORT_PCREGREP_JIT], [], [
+    Define to enable JIT support in pcregrep.])
+fi
+
+if test "$enable_utf" = "yes"; then
+  AC_DEFINE([SUPPORT_UTF], [], [
+    Define to enable support for the UTF-8/16 Unicode encoding. This
+    will work even in an EBCDIC environment, but it is incompatible
+    with the EBCDIC macro. That is, PCRE can support *either* EBCDIC
+    code *or* ASCII/UTF-8/16, but not both at once.])
 fi
 
 if test "$enable_unicode_properties" = "yes"; then
   AC_DEFINE([SUPPORT_UCP], [], [
-    Define to enable support for Unicode properties])
+    Define to enable support for Unicode properties.])
 fi
 
 if test "$enable_stack_for_recursion" = "no"; then
@@ -499,6 +633,18 @@ if test "$enable_pcregrep_libbz2" = "yes"; then
     Define to allow pcregrep to be linked with libbz2, so that it is
     able to handle .bz2 files.])
 fi
+
+if test $with_pcregrep_bufsize -lt 8192 ; then
+  with_pcregrep_bufsize="8192"
+fi
+
+AC_DEFINE_UNQUOTED([PCREGREP_BUFSIZE], [$with_pcregrep_bufsize], [
+  The value of PCREGREP_BUFSIZE determines the size of buffer used by
+  pcregrep to hold parts of the file it is searching. On systems that
+  support it, "configure" can be used to override the default, which is
+  8192. This is also the minimum value. The actual amount of memory used by
+  pcregrep is three times this number, because it allows for the buffering of
+  "before" and "after" lines.])
 
 if test "$enable_pcretest_libreadline" = "yes"; then
   AC_DEFINE([SUPPORT_LIBREADLINE], [], [
@@ -590,9 +736,9 @@ if test "$enable_ebcdic" = "yes"; then
     character codes, define this macro as 1. On systems that can use
     "configure", this can be done via --enable-ebcdic. PCRE will then
     assume that all input strings are in EBCDIC. If you do not define
-    this macro, PCRE will assume input strings are ASCII or UTF-8 Unicode.
-    It is not possible to build a version of PCRE that supports both
-    EBCDIC and UTF-8.])
+    this macro, PCRE will assume input strings are ASCII or UTF-8/16
+    Unicode. It is not possible to build a version of PCRE that
+    supports both EBCDIC and UTF-8/16.])
 fi
 
 # Platform specific issues
@@ -613,6 +759,9 @@ esac
 EXTRA_LIBPCRE_LDFLAGS="$EXTRA_LIBPCRE_LDFLAGS \
                        $NO_UNDEFINED -version-info libpcre_version"
 
+EXTRA_LIBPCRE16_LDFLAGS="$EXTRA_LIBPCRE16_LDFLAGS \
+                       $NO_UNDEFINED -version-info libpcre16_version"
+
 EXTRA_LIBPCREPOSIX_LDFLAGS="$EXTRA_LIBPCREPOSIX_LDFLAGS \
                             $NO_UNDEFINED -version-info libpcreposix_version"
 
@@ -621,11 +770,13 @@ EXTRA_LIBPCRECPP_LDFLAGS="$EXTRA_LIBPCRECPP_LDFLAGS \
                           $EXPORT_ALL_SYMBOLS"
 
 AC_SUBST(EXTRA_LIBPCRE_LDFLAGS)
+AC_SUBST(EXTRA_LIBPCRE16_LDFLAGS)
 AC_SUBST(EXTRA_LIBPCREPOSIX_LDFLAGS)
 AC_SUBST(EXTRA_LIBPCRECPP_LDFLAGS)
 
-# When we run 'make distcheck', use these arguments.
-DISTCHECK_CONFIGURE_FLAGS="--enable-cpp --enable-unicode-properties"
+# When we run 'make distcheck', use these arguments. Turning off compiler
+# optimization makes it run faster.
+DISTCHECK_CONFIGURE_FLAGS="CFLAGS='' CXXFLAGS='' --enable-pcre16 --enable-jit --enable-cpp --enable-unicode-properties"
 AC_SUBST(DISTCHECK_CONFIGURE_FLAGS)
 
 # Check that, if --enable-pcregrep-libz or --enable-pcregrep-libbz2 is
@@ -668,15 +819,18 @@ if test "$enable_pcretest_libreadline" = "yes"; then
     echo "** Cannot --enable-pcretest-readline because readline/history.h was not found."
     exit 1
   fi
-  LIBREADLINE="-lreadline"
+  if test -z "$LIBREADLINE"; then
+    echo "** Cannot --enable-pcretest-readline because readline library was not found."
+    exit 1
+  fi
 fi
-AC_SUBST(LIBREADLINE)
 
 # Produce these files, in addition to config.h.
 AC_CONFIG_FILES(
 	Makefile
 	libpcre.pc
-        libpcreposix.pc
+	libpcre16.pc
+	libpcreposix.pc
 	libpcrecpp.pc
 	pcre-config
 	pcre.h
@@ -712,8 +866,11 @@ $PACKAGE-$VERSION configuration summary:
     Linker flags .................... : ${LDFLAGS}
     Extra libraries ................. : ${LIBS}
 
+    Build 8 bit pcre library ........ : ${enable_pcre8}
+    Build 16 bit pcre library ....... : ${enable_pcre16}
     Build C++ library ............... : ${enable_cpp}
-    Enable UTF-8 support ............ : ${enable_utf8}
+    Enable JIT compiling support .... : ${enable_jit}
+    Enable UTF-8/16 support ......... : ${enable_utf}
     Unicode properties .............. : ${enable_unicode_properties}
     Newline char/sequence ........... : ${enable_newline}
     \R matches only ANYCRLF ......... : ${enable_bsr_anycrlf}
@@ -726,6 +883,8 @@ $PACKAGE-$VERSION configuration summary:
     Match limit recursion ........... : ${with_match_limit_recursion}
     Build shared libs ............... : ${enable_shared}
     Build static libs ............... : ${enable_static}
+    Use JIT in pcregrep ............. : ${enable_pcregrep_jit}
+    Buffer size for pcregrep ........ : ${with_pcregrep_bufsize}
     Link pcregrep with libz ......... : ${enable_pcregrep_libz}
     Link pcregrep with libbz2 ....... : ${enable_pcregrep_libbz2}
     Link pcretest with libreadline .. : ${enable_pcretest_libreadline}

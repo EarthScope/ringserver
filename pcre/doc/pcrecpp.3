@@ -12,7 +12,8 @@ PCRE - Perl-compatible regular expressions.
 The C++ wrapper for PCRE was provided by Google Inc. Some additional
 functionality was added by Giuseppe Maxia. This brief man page was constructed
 from the notes in the \fIpcrecpp.h\fP file, which should be consulted for
-further details.
+further details. Note that the C++ wrapper supports only the original 8-bit
+PCRE library. There is no 16-bit support at present.
 .
 .
 .SH "MATCHING INTERFACE"
@@ -210,7 +211,7 @@ Normally, to pass one or more modifiers to a RE class, you declare
 a \fIRE_Options\fP object, set the appropriate options, and pass this
 object to a RE constructor. Example:
 .sp
-   RE_options opt;
+   RE_Options opt;
    opt.set_caseless(true);
    if (RE("HELLO", opt).PartialMatch("hello world")) ...
 .sp
@@ -343,5 +344,5 @@ Copyright (c) 2007 Google Inc.
 .rs
 .sp
 .nf
-Last updated: 17 March 2009
+Last updated: 08 January 2012
 .fi

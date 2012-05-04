@@ -13,11 +13,12 @@ this program is given in the
 documentation. If you do not have a copy of the PCRE distribution, you can save
 this listing to re-create \fIpcredemo.c\fP.
 .P
-The program compiles the regular expression that is its first argument, and
-matches it against the subject string in its second argument. No PCRE options
-are set, and default character tables are used. If matching succeeds, the
-program outputs the portion of the subject that matched, together with the
-contents of any captured substrings.
+The demonstration program, which uses the original PCRE 8-bit library, compiles
+the regular expression that is its first argument, and matches it against the
+subject string in its second argument. No PCRE options are set, and default
+character tables are used. If matching succeeds, the program outputs the
+portion of the subject that matched, together with the contents of any captured
+substrings.
 .P
 If the -g option is given on the command line, the program then goes on to
 check for further matches of the same regular expression in the same subject
@@ -55,8 +56,8 @@ Note that there is a much more comprehensive test program, called
 .\" HREF
 \fBpcretest\fP,
 .\"
-which supports many more facilities for testing regular expressions and the
-PCRE library. The
+which supports many more facilities for testing regular expressions and both
+PCRE libraries. The
 .\" HREF
 \fBpcredemo\fP
 .\"
@@ -93,6 +94,6 @@ Cambridge CB2 3QH, England.
 .rs
 .sp
 .nf
-Last updated: 17 November 2010
-Copyright (c) 1997-2010 University of Cambridge.
+Last updated: 10 January 2012
+Copyright (c) 1997-2012 University of Cambridge.
 .fi

@@ -37,6 +37,7 @@
 #endif
 
 #include <stdio.h>
+#include <string.h>      /* for strchr */
 #include <string>
 #include <vector>
 

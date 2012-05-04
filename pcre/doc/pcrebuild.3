@@ -32,49 +32,92 @@ The following sections include descriptions of options whose names begin with
 exists as well, but as it specifies the default, it is not described.
 .
 .
+.SH "BUILDING 8-BIT and 16-BIT LIBRARIES"
+.rs
+.sp
+By default, a library called \fBlibpcre\fP is built, containing functions that
+take string arguments contained in vectors of bytes, either as single-byte
+characters, or interpreted as UTF-8 strings. You can also build a separate
+library, called \fBlibpcre16\fP, in which strings are contained in vectors of
+16-bit data units and interpreted either as single-unit characters or UTF-16
+strings, by adding
+.sp
+  --enable-pcre16
+.sp
+to the \fBconfigure\fP command. If you do not want the 8-bit library, add
+.sp
+  --disable-pcre8
+.sp
+as well. At least one of the two libraries must be built. Note that the C++ and
+POSIX wrappers are for the 8-bit library only, and that \fBpcregrep\fP is an
+8-bit program. None of these are built if you select only the 16-bit library.
+.
+.
+.SH "BUILDING SHARED AND STATIC LIBRARIES"
+.rs
+.sp
+The PCRE building process uses \fBlibtool\fP to build both shared and static
+Unix libraries by default. You can suppress one of these by adding one of
+.sp
+  --disable-shared
+  --disable-static
+.sp
+to the \fBconfigure\fP command, as required.
+.
+.
 .SH "C++ SUPPORT"
 .rs
 .sp
-By default, the \fBconfigure\fP script will search for a C++ compiler and C++
-header files. If it finds them, it automatically builds the C++ wrapper library
-for PCRE. You can disable this by adding
+By default, if the 8-bit library is being built, the \fBconfigure\fP script
+will search for a C++ compiler and C++ header files. If it finds them, it
+automatically builds the C++ wrapper library (which supports only 8-bit
+strings). You can disable this by adding
 .sp
   --disable-cpp
 .sp
 to the \fBconfigure\fP command.
 .
 .
-.SH "UTF-8 SUPPORT"
+.SH "UTF-8 and UTF-16 SUPPORT"
 .rs
 .sp
-To build PCRE with support for UTF-8 Unicode character strings, add
+To build PCRE with support for UTF Unicode character strings, add
 .sp
-  --enable-utf8
+  --enable-utf
 .sp
-to the \fBconfigure\fP command. Of itself, this does not make PCRE treat
-strings as UTF-8. As well as compiling PCRE with this option, you also have
-have to set the PCRE_UTF8 option when you call the \fBpcre_compile()\fP
-or \fBpcre_compile2()\fP functions.
+to the \fBconfigure\fP command. This setting applies to both libraries, adding
+support for UTF-8 to the 8-bit library and support for UTF-16 to the 16-bit
+library. There are no separate options for enabling UTF-8 and UTF-16
+independently because that would allow ridiculous settings such as requesting
+UTF-16 support while building only the 8-bit library. It is not possible to
+build one library with UTF support and the other without in the same
+configuration. (For backwards compatibility, --enable-utf8 is a synonym of
+--enable-utf.)
 .P
-If you set --enable-utf8 when compiling in an EBCDIC environment, PCRE expects
+Of itself, this setting does not make PCRE treat strings as UTF-8 or UTF-16. As
+well as compiling PCRE with this option, you also have have to set the
+PCRE_UTF8 or PCRE_UTF16 option when you call one of the pattern compiling
+functions.
+.P
+If you set --enable-utf when compiling in an EBCDIC environment, PCRE expects
 its input to be either ASCII or UTF-8 (depending on the runtime option). It is
 not possible to support both EBCDIC and UTF-8 codes in the same version of the
-library. Consequently, --enable-utf8 and --enable-ebcdic are mutually
+library. Consequently, --enable-utf and --enable-ebcdic are mutually
 exclusive.
 .
 .
 .SH "UNICODE CHARACTER PROPERTY SUPPORT"
 .rs
 .sp
-UTF-8 support allows PCRE to process character values greater than 255 in the
-strings that it handles. On its own, however, it does not provide any
+UTF support allows the libraries to process character codepoints up to 0x10ffff
+in the strings that they handle. On its own, however, it does not provide any
 facilities for accessing the properties of such characters. If you want to be
 able to use the pattern escapes \eP, \ep, and \eX, which refer to Unicode
 character properties, you must add
 .sp
   --enable-unicode-properties
 .sp
-to the \fBconfigure\fP command. This implies UTF-8 support, even if you have
+to the \fBconfigure\fP command. This implies UTF support, even if you have
 not explicitly requested it.
 .P
 Including Unicode property support adds around 30K of tables to the PCRE
@@ -84,6 +127,27 @@ supported. Details are given in the
 \fBpcrepattern\fP
 .\"
 documentation.
+.
+.
+.SH "JUST-IN-TIME COMPILER SUPPORT"
+.rs
+.sp
+Just-in-time compiler support is included in the build by specifying
+.sp
+  --enable-jit
+.sp
+This support is available only for certain hardware architectures. If this
+option is set for an unsupported architecture, a compile time error occurs.
+See the
+.\" HREF
+\fBpcrejit\fP
+.\"
+documentation for a discussion of JIT usage. When JIT support is enabled,
+pcregrep automatically makes use of it, unless you add
+.sp
+  --disable-pcregrep-jit
+.sp
+to the "configure" command.
 .
 .
 .SH "CODE VALUE OF NEWLINE"
@@ -132,22 +196,10 @@ selected when PCRE is built can be overridden when the library functions are
 called.
 .
 .
-.SH "BUILDING SHARED AND STATIC LIBRARIES"
-.rs
-.sp
-The PCRE building process uses \fBlibtool\fP to build both shared and static
-Unix libraries by default. You can suppress one of these by adding one of
-.sp
-  --disable-shared
-  --disable-static
-.sp
-to the \fBconfigure\fP command, as required.
-.
-.
 .SH "POSIX MALLOC USAGE"
 .rs
 .sp
-When PCRE is called through the POSIX interface (see the
+When the 8-bit library is called through the POSIX interface (see the
 .\" HREF
 \fBpcreposix\fP
 .\"
@@ -172,14 +224,15 @@ another (for example, from an opening parenthesis to an alternation
 metacharacter). By default, two-byte values are used for these offsets, leading
 to a maximum size for a compiled pattern of around 64K. This is sufficient to
 handle all but the most gigantic patterns. Nevertheless, some people do want to
-process truyl enormous patterns, so it is possible to compile PCRE to use
+process truly enormous patterns, so it is possible to compile PCRE to use
 three-byte or four-byte offsets by adding a setting such as
 .sp
   --with-link-size=3
 .sp
-to the \fBconfigure\fP command. The value given must be 2, 3, or 4. Using
-longer offsets slows down the operation of PCRE because it has to load
-additional bytes when handling them.
+to the \fBconfigure\fP command. The value given must be 2, 3, or 4. For the
+16-bit library, a value of 3 is rounded up to 4. Using longer offsets slows
+down the operation of PCRE because it has to load additional data when handling
+them.
 .
 .
 .SH "AVOIDING EXCESSIVE STACK USAGE"
@@ -280,7 +333,7 @@ EBCDIC environment by adding
 to the \fBconfigure\fP command. This setting implies
 --enable-rebuild-chartables. You should only use it if you know that you are in
 an EBCDIC environment (for example, an IBM mainframe operating system). The
---enable-ebcdic option is incompatible with --enable-utf8.
+--enable-ebcdic option is incompatible with --enable-utf.
 .
 .
 .SH "PCREGREP OPTIONS FOR COMPRESSED FILE SUPPORT"
@@ -296,6 +349,23 @@ them with \fBlibz\fP or \fBlibbz2\fP, respectively, by adding one or both of
 to the \fBconfigure\fP command. These options naturally require that the
 relevant libraries are installed on your system. Configuration will fail if
 they are not.
+.
+.
+.SH "PCREGREP BUFFER SIZE"
+.rs
+.sp
+\fBpcregrep\fP uses an internal buffer to hold a "window" on the file it is
+scanning, in order to be able to output "before" and "after" lines when it
+finds a match. The size of the buffer is controlled by a parameter whose
+default value is 20K. The buffer itself is three times this size, but because
+of the way it is used for holding "before" lines, the longest line that is
+guaranteed to be processable is the parameter size. You can change the default
+parameter value by adding, for example,
+.sp
+  --with-pcregrep-bufsize=50K
+.sp
+to the \fBconfigure\fP command. The caller of \fPpcregrep\fP can, however,
+override this value by specifying a run-time option.
 .
 .
 .SH "PCRETEST OPTION FOR LIBREADLINE SUPPORT"
@@ -333,7 +403,7 @@ immediately before the \fBconfigure\fP command.
 .SH "SEE ALSO"
 .rs
 .sp
-\fBpcreapi\fP(3), \fBpcre_config\fP(3).
+\fBpcreapi\fP(3), \fBpcre16\fP, \fBpcre_config\fP(3).
 .
 .
 .SH AUTHOR
@@ -350,6 +420,6 @@ Cambridge CB2 3QH, England.
 .rs
 .sp
 .nf
-Last updated: 29 September 2009
-Copyright (c) 1997-2009 University of Cambridge.
+Last updated: 07 January 2012
+Copyright (c) 1997-2012 University of Cambridge.
 .fi

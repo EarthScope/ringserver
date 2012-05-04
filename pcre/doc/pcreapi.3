@@ -1,11 +1,13 @@
 .TH PCREAPI 3
 .SH NAME
 PCRE - Perl-compatible regular expressions
-.SH "PCRE NATIVE API"
-.rs
 .sp
 .B #include <pcre.h>
-.PP
+.
+.
+.SH "PCRE NATIVE API BASIC FUNCTIONS"
+.rs
+.sp
 .SM
 .B pcre *pcre_compile(const char *\fIpattern\fP, int \fIoptions\fP,
 .ti +5n
@@ -25,6 +27,8 @@ PCRE - Perl-compatible regular expressions
 .ti +5n
 .B const char **\fIerrptr\fP);
 .PP
+.B void pcre_free_study(pcre_extra *\fIextra\fP);
+.PP
 .B int pcre_exec(const pcre *\fIcode\fP, "const pcre_extra *\fIextra\fP,"
 .ti +5n
 .B "const char *\fIsubject\fP," int \fIlength\fP, int \fIstartoffset\fP,
@@ -38,7 +42,11 @@ PCRE - Perl-compatible regular expressions
 .B int \fIoptions\fP, int *\fIovector\fP, int \fIovecsize\fP,
 .ti +5n
 .B int *\fIworkspace\fP, int \fIwscount\fP);
-.PP
+.
+.
+.SH "PCRE NATIVE API STRING EXTRACTION FUNCTIONS"
+.rs
+.sp
 .B int pcre_copy_named_substring(const pcre *\fIcode\fP,
 .ti +5n
 .B const char *\fIsubject\fP, int *\fIovector\fP,
@@ -82,6 +90,18 @@ PCRE - Perl-compatible regular expressions
 .B void pcre_free_substring(const char *\fIstringptr\fP);
 .PP
 .B void pcre_free_substring_list(const char **\fIstringptr\fP);
+.
+.
+.SH "PCRE NATIVE API AUXILIARY FUNCTIONS"
+.rs
+.sp
+.B pcre_jit_stack *pcre_jit_stack_alloc(int \fIstartsize\fP, int \fImaxsize\fP);
+.PP
+.B void pcre_jit_stack_free(pcre_jit_stack *\fIstack\fP);
+.PP
+.B void pcre_assign_jit_stack(pcre_extra *\fIextra\fP,
+.ti +5n
+.B pcre_jit_callback \fIcallback\fP, void *\fIdata\fP);
 .PP
 .B const unsigned char *pcre_maketables(void);
 .PP
@@ -89,15 +109,20 @@ PCRE - Perl-compatible regular expressions
 .ti +5n
 .B int \fIwhat\fP, void *\fIwhere\fP);
 .PP
-.B int pcre_info(const pcre *\fIcode\fP, int *\fIoptptr\fP, int
-.B *\fIfirstcharptr\fP);
-.PP
 .B int pcre_refcount(pcre *\fIcode\fP, int \fIadjust\fP);
 .PP
 .B int pcre_config(int \fIwhat\fP, void *\fIwhere\fP);
 .PP
-.B char *pcre_version(void);
+.B const char *pcre_version(void);
 .PP
+.B int pcre_pattern_to_host_byte_order(pcre *\fIcode\fP,
+.ti +5n
+.B pcre_extra *\fIextra\fP, const unsigned char *\fItables\fP);
+.
+.
+.SH "PCRE NATIVE API INDIRECTED FUNCTIONS"
+.rs
+.sp
 .B void *(*pcre_malloc)(size_t);
 .PP
 .B void (*pcre_free)(void *);
@@ -109,28 +134,57 @@ PCRE - Perl-compatible regular expressions
 .B int (*pcre_callout)(pcre_callout_block *);
 .
 .
+.SH "PCRE 8-BIT AND 16-BIT LIBRARIES"
+.rs
+.sp
+From release 8.30, PCRE can be compiled as a library for handling 16-bit
+character strings as well as, or instead of, the original library that handles
+8-bit character strings. To avoid too much complication, this document
+describes the 8-bit versions of the functions, with only occasional references
+to the 16-bit library.
+.P
+The 16-bit functions operate in the same way as their 8-bit counterparts; they
+just use different data types for their arguments and results, and their names
+start with \fBpcre16_\fP instead of \fBpcre_\fP. For every option that has UTF8
+in its name (for example, PCRE_UTF8), there is a corresponding 16-bit name with
+UTF8 replaced by UTF16. This facility is in fact just cosmetic; the 16-bit
+option names define the same bit values.
+.P
+References to bytes and UTF-8 in this document should be read as references to
+16-bit data quantities and UTF-16 when using the 16-bit library, unless
+specified otherwise. More details of the specific differences for the 16-bit
+library are given in the
+.\" HREF
+\fBpcre16\fP
+.\"
+page.
+.
+.
 .SH "PCRE API OVERVIEW"
 .rs
 .sp
 PCRE has its own native API, which is described in this document. There are
-also some wrapper functions that correspond to the POSIX regular expression
-API. These are described in the
+also some wrapper functions (for the 8-bit library only) that correspond to the
+POSIX regular expression API, but they do not give access to all the
+functionality. They are described in the
 .\" HREF
 \fBpcreposix\fP
 .\"
 documentation. Both of these APIs define a set of C function calls. A C++
-wrapper is distributed with PCRE. It is documented in the
+wrapper (again for the 8-bit library only) is also distributed with PCRE. It is
+documented in the
 .\" HREF
 \fBpcrecpp\fP
 .\"
 page.
 .P
 The native API C function prototypes are defined in the header file
-\fBpcre.h\fP, and on Unix systems the library itself is called \fBlibpcre\fP.
-It can normally be accessed by adding \fB-lpcre\fP to the command for linking
-an application that uses PCRE. The header file defines the macros PCRE_MAJOR
-and PCRE_MINOR to contain the major and minor release numbers for the library.
-Applications can use these to include support for different releases of PCRE.
+\fBpcre.h\fP, and on Unix-like systems the (8-bit) library itself is called
+\fBlibpcre\fP. It can normally be accessed by adding \fB-lpcre\fP to the
+command for linking an application that uses PCRE. The header file defines the
+macros PCRE_MAJOR and PCRE_MINOR to contain the major and minor release numbers
+for the library. Applications can use these to include support for different
+releases of PCRE.
 .P
 In a Windows environment, if you want to statically link an application program
 against a non-dll \fBpcre.a\fP file, you must define PCRE_STATIC before
@@ -151,6 +205,19 @@ documentation, and the
 \fBpcresample\fP
 .\"
 documentation describes how to compile and run it.
+.P
+Just-in-time compiler support is an optional feature of PCRE that can be built
+in appropriate hardware environments. It greatly speeds up the matching
+performance of many patterns. Simple programs can easily request that it be
+used if available, by setting an option that is ignored when it is not
+relevant. More complicated programs might need to make use of the functions
+\fBpcre_jit_stack_alloc()\fP, \fBpcre_jit_stack_free()\fP, and
+\fBpcre_assign_jit_stack()\fP in order to control the JIT code's memory usage.
+These functions are discussed in the
+.\" HREF
+\fBpcrejit\fP
+.\"
+documentation.
 .P
 A second matching function, \fBpcre_dfa_exec()\fP, which is not
 Perl-compatible, is also provided. This uses a different algorithm for the
@@ -186,10 +253,8 @@ specialist use. Most commonly, no special tables are passed, in which case
 internal tables that are generated when PCRE is built are used.
 .P
 The function \fBpcre_fullinfo()\fP is used to find out information about a
-compiled pattern; \fBpcre_info()\fP is an obsolete version that returns only
-some of the available information, but is retained for backwards compatibility.
-The function \fBpcre_version()\fP returns a pointer to a string containing the
-version of PCRE and its date of release.
+compiled pattern. The function \fBpcre_version()\fP returns a pointer to a
+string containing the version of PCRE and its date of release.
 .P
 The function \fBpcre_refcount()\fP maintains a reference count in a data block
 containing a compiled pattern. This is provided for the benefit of
@@ -282,6 +347,13 @@ callout function pointed to by \fBpcre_callout\fP, are shared by all threads.
 .P
 The compiled form of a regular expression is not altered during matching, so
 the same compiled pattern can safely be used by several threads at once.
+.P
+If the just-in-time optimization feature is being used, it needs separate
+memory stack areas for each thread. See the
+.\" HREF
+\fBpcrejit\fP
+.\"
+documentation for more details.
 .
 .
 .SH "SAVING PRECOMPILED PATTERNS FOR LATER USE"
@@ -293,9 +365,10 @@ which it was compiled. Details are given in the
 .\" HREF
 \fBpcreprecompile\fP
 .\"
-documentation. However, compiling a regular expression with one version of PCRE
-for use with a different version is not guaranteed to work and may cause
-crashes.
+documentation, which includes a description of the
+\fBpcre_pattern_to_host_byte_order()\fP function. However, compiling a regular
+expression with one version of PCRE for use with a different version is not
+guaranteed to work and may cause crashes.
 .
 .
 .SH "CHECKING BUILD-TIME OPTIONS"
@@ -312,17 +385,39 @@ documentation has more details about these optional features.
 .P
 The first argument for \fBpcre_config()\fP is an integer, specifying which
 information is required; the second argument is a pointer to a variable into
-which the information is placed. The following information is available:
+which the information is placed. The returned value is zero on success, or the
+negative error code PCRE_ERROR_BADOPTION if the value in the first argument is
+not recognized. The following information is available:
 .sp
   PCRE_CONFIG_UTF8
 .sp
 The output is an integer that is set to one if UTF-8 support is available;
-otherwise it is set to zero.
+otherwise it is set to zero. If this option is given to the 16-bit version of
+this function, \fBpcre16_config()\fP, the result is PCRE_ERROR_BADOPTION.
+.sp
+  PCRE_CONFIG_UTF16
+.sp
+The output is an integer that is set to one if UTF-16 support is available;
+otherwise it is set to zero. This value should normally be given to the 16-bit
+version of this function, \fBpcre16_config()\fP. If it is given to the 8-bit
+version of this function, the result is PCRE_ERROR_BADOPTION.
 .sp
   PCRE_CONFIG_UNICODE_PROPERTIES
 .sp
 The output is an integer that is set to one if support for Unicode character
 properties is available; otherwise it is set to zero.
+.sp
+  PCRE_CONFIG_JIT
+.sp
+The output is an integer that is set to one if support for just-in-time
+compiling is available; otherwise it is set to zero.
+.sp
+  PCRE_CONFIG_JITTARGET
+.sp
+The output is a pointer to a zero-terminated "const char *" string. If JIT
+support is available, the string contains the name of the architecture for
+which the JIT compiler is configured, for example "x86 32bit (little endian +
+unaligned)". If JIT support is not available, the result is NULL.
 .sp
   PCRE_CONFIG_NEWLINE
 .sp
@@ -343,10 +438,12 @@ or CRLF. The default can be overridden when a pattern is compiled or matched.
   PCRE_CONFIG_LINK_SIZE
 .sp
 The output is an integer that contains the number of bytes used for internal
-linkage in compiled regular expressions. The value is 2, 3, or 4. Larger values
-allow larger regular expressions to be compiled, at the expense of slower
-matching. The default value of 2 is sufficient for all but the most massive
-patterns, since it allows the compiled pattern to be up to 64K in size.
+linkage in compiled regular expressions. For the 8-bit library, the value can
+be 2, 3, or 4. For the 16-bit library, the value is either 2 or 4 and is still
+a number of bytes. The default value of 2 is sufficient for all but the most
+massive patterns, since it allows the compiled pattern to be up to 64K in size.
+Larger values allow larger regular expressions to be compiled, at the expense
+of slower matching.
 .sp
   PCRE_CONFIG_POSIX_MALLOC_THRESHOLD
 .sp
@@ -436,16 +533,16 @@ If \fIerrptr\fP is NULL, \fBpcre_compile()\fP returns NULL immediately.
 Otherwise, if compilation of a pattern fails, \fBpcre_compile()\fP returns
 NULL, and sets the variable pointed to by \fIerrptr\fP to point to a textual
 error message. This is a static string that is part of the library. You must
-not try to free it. The offset from the start of the pattern to the byte that
-was being processed when the error was discovered is placed in the variable
-pointed to by \fIerroffset\fP, which must not be NULL. If it is, an immediate
-error is given. Some errors are not detected until checks are carried out when
-the whole pattern has been scanned; in this case the offset is set to the end
-of the pattern.
+not try to free it. Normally, the offset from the start of the pattern to the
+byte that was being processed when the error was discovered is placed in the
+variable pointed to by \fIerroffset\fP, which must not be NULL (if it is, an
+immediate error is given). However, for an invalid UTF-8 string, the offset is
+that of the first byte of the failing character.
 .P
-Note that the offset is in bytes, not characters, even in UTF-8 mode. It may
-point into the middle of a UTF-8 character (for example, when
-PCRE_ERROR_BADUTF8 is returned for an invalid UTF-8 string).
+Some errors are not detected until the whole pattern has been scanned; in these
+cases, the offset passed back is the length of the pattern. Note that the
+offset is in bytes, not characters, even in UTF-8 mode. It may sometimes point
+into the middle of a UTF-8 character.
 .P
 If \fBpcre_compile2()\fP is used instead of \fBpcre_compile()\fP, and the
 \fIerrorcodeptr\fP argument is not NULL, a non-zero error code number is
@@ -552,9 +649,9 @@ unescaped # outside a character class and the next newline, inclusive, are also
 ignored. This is equivalent to Perl's /x option, and it can be changed within a
 pattern by a (?x) option setting.
 .P
-Which characters are interpreted as newlines
-is controlled by the options passed to \fBpcre_compile()\fP or by a special
-sequence at the start of the pattern, as described in the section entitled
+Which characters are interpreted as newlines is controlled by the options
+passed to \fBpcre_compile()\fP or by a special sequence at the start of the
+pattern, as described in the section entitled
 .\" HTML <a href="pcrepattern.html#newlines">
 .\" </a>
 "Newline conventions"
@@ -599,6 +696,20 @@ character). Thus, the pattern AB]CD becomes illegal when this option is set.
 string (by default this causes the current matching alternative to fail). A
 pattern such as (\e1)(a) succeeds when this option is set (assuming it can find
 an "a" in the subject), whereas it fails by default, for Perl compatibility.
+.P
+(3) \eU matches an upper case "U" character; by default \eU causes a compile
+time error (Perl uses \eU to upper case subsequent characters).
+.P
+(4) \eu matches a lower case "u" character unless it is followed by four
+hexadecimal digits, in which case the hexadecimal number defines the code point
+to match. By default, \eu causes a compile time error (Perl uses it to upper
+case the following character).
+.P
+(5) \ex matches a lower case "x" character unless it is followed by two
+hexadecimal digits, in which case the hexadecimal number defines the code point
+to match. By default, as in Perl, a hexadecimal number is always expected after
+\ex, but it may have zero, one, or two digits (so, for example, \exz matches a
+binary zero character followed by z).
 .sp
   PCRE_MULTILINE
 .sp
@@ -631,8 +742,8 @@ preceding sequences should be recognized. Setting PCRE_NEWLINE_ANY specifies
 that any Unicode newline sequence should be recognized. The Unicode newline
 sequences are the three just mentioned, plus the single characters VT (vertical
 tab, U+000B), FF (formfeed, U+000C), NEL (next line, U+0085), LS (line
-separator, U+2028), and PS (paragraph separator, U+2029). The last two are
-recognized only in UTF-8 mode.
+separator, U+2028), and PS (paragraph separator, U+2029). For the 8-bit
+library, the last two are recognized only in UTF-8 mode.
 .P
 The newline setting in the options word uses three bits that are treated
 as a number, giving eight possibilities. Currently only six are used (default
@@ -697,39 +808,34 @@ with Perl. It can also be set by a (?U) option setting within the pattern.
   PCRE_UTF8
 .sp
 This option causes PCRE to regard both the pattern and the subject as strings
-of UTF-8 characters instead of single-byte character strings. However, it is
-available only when PCRE is built to include UTF-8 support. If not, the use
-of this option provokes an error. Details of how this option changes the
-behaviour of PCRE are given in the
-.\" HTML <a href="pcre.html#utf8support">
-.\" </a>
-section on UTF-8 support
-.\"
-in the main
+of UTF-8 characters instead of single-byte strings. However, it is available
+only when PCRE is built to include UTF support. If not, the use of this option
+provokes an error. Details of how this option changes the behaviour of PCRE are
+given in the
 .\" HREF
-\fBpcre\fP
+\fBpcreunicode\fP
 .\"
 page.
 .sp
   PCRE_NO_UTF8_CHECK
 .sp
-When PCRE_UTF8 is set, the validity of the pattern as a UTF-8 string is
-automatically checked. There is a discussion about the
-.\" HTML <a href="pcre.html#utf8strings">
+When PCRE_UTF8 is set, the validity of the pattern as a UTF-8
+string is automatically checked. There is a discussion about the
+.\" HTML <a href="pcreunicode.html#utf8strings">
 .\" </a>
 validity of UTF-8 strings
 .\"
-in the main
+in the
 .\" HREF
-\fBpcre\fP
+\fBpcreunicode\fP
 .\"
-page. If an invalid UTF-8 sequence of bytes is found, \fBpcre_compile()\fP
-returns an error. If you already know that your pattern is valid, and you want
-to skip this check for performance reasons, you can set the PCRE_NO_UTF8_CHECK
-option. When it is set, the effect of passing an invalid UTF-8 string as a
-pattern is undefined. It may cause your program to crash. Note that this option
-can also be passed to \fBpcre_exec()\fP and \fBpcre_dfa_exec()\fP, to suppress
-the UTF-8 validity checking of subject strings.
+page. If an invalid UTF-8 sequence is found, \fBpcre_compile()\fP returns an
+error. If you already know that your pattern is valid, and you want to skip
+this check for performance reasons, you can set the PCRE_NO_UTF8_CHECK option.
+When it is set, the effect of passing an invalid UTF-8 string as a pattern is
+undefined. It may cause your program to crash. Note that this option can also
+be passed to \fBpcre_exec()\fP and \fBpcre_dfa_exec()\fP, to suppress the
+validity checking of subject strings.
 .
 .
 .SH "COMPILATION ERROR CODES"
@@ -737,8 +843,9 @@ the UTF-8 validity checking of subject strings.
 .sp
 The following table lists the error codes than may be returned by
 \fBpcre_compile2()\fP, along with the error messages that may be returned by
-both compiling functions. As PCRE has developed, some error codes have fallen
-out of use. To avoid confusion, they have not been re-used.
+both compiling functions. Note that error messages are always 8-bit ASCII
+strings, even in 16-bit mode. As PCRE has developed, some error codes have
+fallen out of use. To avoid confusion, they have not been re-used.
 .sp
    0  no error
    1  \e at end of pattern
@@ -772,26 +879,26 @@ out of use. To avoid confusion, they have not been re-used.
   29  (?R or (?[+-]digits must be followed by )
   30  unknown POSIX class name
   31  POSIX collating elements are not supported
-  32  this version of PCRE is not compiled with PCRE_UTF8 support
+  32  this version of PCRE is compiled without UTF support
   33  [this code is not in use]
   34  character value in \ex{...} sequence is too large
   35  invalid condition (?(0)
   36  \eC not allowed in lookbehind assertion
-  37  PCRE does not support \eL, \el, \eN, \eU, or \eu
+  37  PCRE does not support \eL, \el, \eN{name}, \eU, or \eu
   38  number after (?C is > 255
   39  closing ) for (?C expected
   40  recursive call could loop indefinitely
   41  unrecognized character after (?P
   42  syntax error in subpattern name (missing terminator)
   43  two named subpatterns have the same name
-  44  invalid UTF-8 string
+  44  invalid UTF-8 string (specifically UTF-8)
   45  support for \eP, \ep, and \eX has not been compiled
   46  malformed \eP or \ep sequence
   47  unknown property name after \eP or \ep
   48  subpattern name is too long (maximum 32 characters)
   49  too many named subpatterns (maximum 10000)
   50  [this code is not in use]
-  51  octal value is greater than \e377 (not in UTF-8 mode)
+  51  octal value is greater than \e377 in 8-bit non-UTF-8 mode
   52  internal error: overran compiling workspace
   53  internal error: previously-checked referenced subpattern
         not found
@@ -810,12 +917,21 @@ out of use. To avoid confusion, they have not been re-used.
   65  different names for subpatterns of the same number are
         not allowed
   66  (*MARK) must have an argument
-  67  this version of PCRE is not compiled with PCRE_UCP support
+  67  this version of PCRE is not compiled with Unicode property
+        support
+  68  \ec must be followed by an ASCII character
+  69  \ek is not followed by a braced, angle-bracketed, or quoted name
+  70  internal error: unknown opcode in find_fixedlength()
+  71  \eN is not supported in a class
+  72  too many forward references
+  73  disallowed Unicode code point (>= 0xd800 && <= 0xdfff)
+  74  invalid UTF-16 string (specifically UTF-16)
 .sp
 The numbers 32 and 10000 in errors 48 and 49 are defaults; different values may
 be used if the limits were changed when PCRE was built.
 .
 .
+.\" HTML <a name="studyingapattern"></a>
 .SH "STUDYING A PATTERN"
 .rs
 .sp
@@ -846,8 +962,23 @@ If studying the pattern does not produce any useful information,
 wants to pass any of the other fields to \fBpcre_exec()\fP or
 \fBpcre_dfa_exec()\fP, it must set up its own \fBpcre_extra\fP block.
 .P
-The second argument of \fBpcre_study()\fP contains option bits. At present, no
-options are defined, and this argument should always be zero.
+The second argument of \fBpcre_study()\fP contains option bits. There is only
+one option: PCRE_STUDY_JIT_COMPILE. If this is set, and the just-in-time
+compiler is available, the pattern is further compiled into machine code that
+executes much faster than the \fBpcre_exec()\fP matching function. If
+the just-in-time compiler is not available, this option is ignored. All other
+bits in the \fIoptions\fP argument must be zero.
+.P
+JIT compilation is a heavyweight optimization. It can take some time for
+patterns to be analyzed, and for one-off matches and simple patterns the
+benefit of faster execution might be offset by a much slower study time.
+Not all patterns can be optimized by the JIT compiler. For those that cannot be
+handled, matching automatically falls back to the \fBpcre_exec()\fP
+interpreter. For more details, see the
+.\" HREF
+\fBpcrejit\fP
+.\"
+documentation.
 .P
 The third argument for \fBpcre_study()\fP is a pointer for an error message. If
 studying succeeds (even if no data is returned), the variable it points to is
@@ -856,13 +987,29 @@ static string that is part of the library. You must not try to free it. You
 should test the error pointer for NULL after calling \fBpcre_study()\fP, to be
 sure that it has run successfully.
 .P
-This is a typical call to \fBpcre_study\fP():
+When you are finished with a pattern, you can free the memory used for the
+study data by calling \fBpcre_free_study()\fP. This function was added to the
+API for release 8.20. For earlier versions, the memory could be freed with
+\fBpcre_free()\fP, just like the pattern itself. This will still work in cases
+where PCRE_STUDY_JIT_COMPILE is not used, but it is advisable to change to the
+new function when convenient.
+.P
+This is a typical way in which \fBpcre_study\fP() is used (except that in a
+real application there should be tests for errors):
 .sp
-  pcre_extra *pe;
-  pe = pcre_study(
+  int rc;
+  pcre *re;
+  pcre_extra *sd;
+  re = pcre_compile("pattern", 0, &error, &erroroffset, NULL);
+  sd = pcre_study(
     re,             /* result of pcre_compile() */
-    0,              /* no options exist */
+    0,              /* no options */
     &error);        /* set to NULL or points to a message */
+  rc = pcre_exec(   /* see below for details of pcre_exec() options */
+    re, sd, "subject", 7, 0, 0, ovector, 30);
+  ...
+  pcre_free_study(sd);
+  pcre_free(re);
 .sp
 Studying a pattern does two things: first, a lower bound for the length of
 subject string that is needed to match the pattern is computed. This does not
@@ -875,13 +1022,17 @@ in a calling program via the \fBpcre_fullinfo()\fP function.
 Studying a pattern is also useful for non-anchored patterns that do not have a
 single fixed starting character. A bitmap of possible starting bytes is
 created. This speeds up finding a position in the subject at which to start
-matching.
+matching. (In 16-bit mode, the bitmap is used for 16-bit values less than 256.)
 .P
-The two optimizations just described can be disabled by setting the
-PCRE_NO_START_OPTIMIZE option when calling \fBpcre_exec()\fP or
+These two optimizations apply to both \fBpcre_exec()\fP and
+\fBpcre_dfa_exec()\fP. However, they are not used by \fBpcre_exec()\fP if
+\fBpcre_study()\fP is called with the PCRE_STUDY_JIT_COMPILE option, and
+just-in-time compiling is successful. The optimizations can be disabled by
+setting the PCRE_NO_START_OPTIMIZE option when calling \fBpcre_exec()\fP or
 \fBpcre_dfa_exec()\fP. You might want to do this if your pattern contains
-callouts or (*MARK), and you want to make use of these facilities in cases
-where matching fails. See the discussion of PCRE_NO_START_OPTIMIZE
+callouts or (*MARK) (which cannot be handled by the JIT compiler), and you want
+to make use of these facilities in cases where matching fails. See the
+discussion of PCRE_NO_START_OPTIMIZE
 .\" HTML <a href="#execoptions">
 .\" </a>
 below.
@@ -894,14 +1045,15 @@ below.
 .sp
 PCRE handles caseless matching, and determines whether characters are letters,
 digits, or whatever, by reference to a set of tables, indexed by character
-value. When running in UTF-8 mode, this applies only to characters with codes
-less than 128. By default, higher-valued codes never match escapes such as \ew
-or \ed, but they can be tested with \ep if PCRE is built with Unicode character
-property support. Alternatively, the PCRE_UCP option can be set at compile
-time; this causes \ew and friends to use Unicode property support instead of
-built-in tables. The use of locales with Unicode is discouraged. If you are
-handling characters with codes greater than 128, you should either use UTF-8
-and Unicode, or use locales, but not try to mix the two.
+value. When running in UTF-8 mode, this applies only to characters
+with codes less than 128. By default, higher-valued codes never match escapes
+such as \ew or \ed, but they can be tested with \ep if PCRE is built with
+Unicode character property support. Alternatively, the PCRE_UCP option can be
+set at compile time; this causes \ew and friends to use Unicode property
+support instead of built-in tables. The use of locales with Unicode is
+discouraged. If you are handling characters with codes greater than 128, you
+should either use UTF-8 and Unicode, or use locales, but not try to mix the
+two.
 .P
 PCRE contains an internal set of tables that are used when the final argument
 of \fBpcre_compile()\fP is NULL. These are sufficient for many applications.
@@ -946,6 +1098,7 @@ one in which it was compiled. Passing table pointers at run time is discussed
 below in the section on matching a pattern.
 .
 .
+.\" HTML <a name="infoaboutpattern"></a>
 .SH "INFORMATION ABOUT A PATTERN"
 .rs
 .sp
@@ -954,8 +1107,8 @@ below in the section on matching a pattern.
 .B int \fIwhat\fP, void *\fIwhere\fP);
 .PP
 The \fBpcre_fullinfo()\fP function returns information about a compiled
-pattern. It replaces the obsolete \fBpcre_info()\fP function, which is
-nevertheless retained for backwards compability (and is documented below).
+pattern. It replaces the \fBpcre_info()\fP function, which was removed from the
+library at version 8.30, after more than 10 years of obsolescence.
 .P
 The first argument for \fBpcre_fullinfo()\fP is a pointer to the compiled
 pattern. The second argument is the result of \fBpcre_study()\fP, or NULL if
@@ -964,20 +1117,24 @@ information is required, and the fourth argument is a pointer to a variable
 to receive the data. The yield of the function is zero for success, or one of
 the following negative numbers:
 .sp
-  PCRE_ERROR_NULL       the argument \fIcode\fP was NULL
-                        the argument \fIwhere\fP was NULL
-  PCRE_ERROR_BADMAGIC   the "magic number" was not found
-  PCRE_ERROR_BADOPTION  the value of \fIwhat\fP was invalid
+  PCRE_ERROR_NULL           the argument \fIcode\fP was NULL
+                            the argument \fIwhere\fP was NULL
+  PCRE_ERROR_BADMAGIC       the "magic number" was not found
+  PCRE_ERROR_BADENDIANNESS  the pattern was compiled with different
+                            endianness
+  PCRE_ERROR_BADOPTION      the value of \fIwhat\fP was invalid
 .sp
 The "magic number" is placed at the start of each compiled pattern as an simple
-check against passing an arbitrary memory pointer. Here is a typical call of
-\fBpcre_fullinfo()\fP, to obtain the length of the compiled pattern:
+check against passing an arbitrary memory pointer. The endianness error can
+occur if a compiled pattern is saved and reloaded on a different host. Here is
+a typical call of \fBpcre_fullinfo()\fP, to obtain the length of the compiled
+pattern:
 .sp
   int rc;
   size_t length;
   rc = pcre_fullinfo(
     re,               /* result of pcre_compile() */
-    pe,               /* result of pcre_study(), or NULL */
+    sd,               /* result of pcre_study(), or NULL */
     PCRE_INFO_SIZE,   /* what is required */
     &length);         /* where to put the data */
 .sp
@@ -1005,13 +1162,17 @@ a NULL table pointer.
 .sp
   PCRE_INFO_FIRSTBYTE
 .sp
-Return information about the first byte of any matched string, for a
-non-anchored pattern. The fourth argument should point to an \fBint\fP
-variable. (This option used to be called PCRE_INFO_FIRSTCHAR; the old name is
-still recognized for backwards compatibility.)
+Return information about the first data unit of any matched string, for a
+non-anchored pattern. (The name of this option refers to the 8-bit library,
+where data units are bytes.) The fourth argument should point to an \fBint\fP
+variable.
 .P
-If there is a fixed first byte, for example, from a pattern such as
-(cat|cow|coyote), its value is returned. Otherwise, if either
+If there is a fixed first value, for example, the letter "c" from a pattern
+such as (cat|cow|coyote), its value is returned. In the 8-bit library, the
+value is always less than 256; in the 16-bit library the value can be up to
+0xffff.
+.P
+If there is no fixed first value, and if either
 .sp
 (a) the pattern was compiled with the PCRE_MULTILINE option, and every branch
 starts with "^", or
@@ -1026,7 +1187,7 @@ returned. For anchored patterns, -2 is returned.
   PCRE_INFO_FIRSTTABLE
 .sp
 If the pattern was studied, and this resulted in the construction of a 256-bit
-table indicating a fixed set of bytes for the first byte in any matching
+table indicating a fixed set of values for the first data unit in any matching
 string, a pointer to the table is returned. Otherwise NULL is returned. The
 fourth argument should point to an \fBunsigned char *\fP variable.
 .sp
@@ -1042,13 +1203,32 @@ Return 1 if the (?J) or (?-J) option setting is used in the pattern, otherwise
 0. The fourth argument should point to an \fBint\fP variable. (?J) and
 (?-J) set and unset the local PCRE_DUPNAMES option, respectively.
 .sp
+  PCRE_INFO_JIT
+.sp
+Return 1 if the pattern was studied with the PCRE_STUDY_JIT_COMPILE option, and
+just-in-time compiling was successful. The fourth argument should point to an
+\fBint\fP variable. A return value of 0 means that JIT support is not available
+in this version of PCRE, or that the pattern was not studied with the
+PCRE_STUDY_JIT_COMPILE option, or that the JIT compiler could not handle this
+particular pattern. See the
+.\" HREF
+\fBpcrejit\fP
+.\"
+documentation for details of what can and cannot be handled.
+.sp
+  PCRE_INFO_JITSIZE
+.sp
+If the pattern was successfully studied with the PCRE_STUDY_JIT_COMPILE option,
+return the size of the JIT compiled code, otherwise return zero. The fourth
+argument should point to a \fBsize_t\fP variable.
+.sp
   PCRE_INFO_LASTLITERAL
 .sp
-Return the value of the rightmost literal byte that must exist in any matched
-string, other than at its start, if such a byte has been recorded. The fourth
-argument should point to an \fBint\fP variable. If there is no such byte, -1 is
-returned. For anchored patterns, a last literal byte is recorded only if it
-follows something of variable length. For example, for the pattern
+Return the value of the rightmost literal data unit that must exist in any
+matched string, other than at its start, if such a value has been recorded. The
+fourth argument should point to an \fBint\fP variable. If there is no such
+value, -1 is returned. For anchored patterns, a last literal value is recorded
+only if it follows something of variable length. For example, for the pattern
 /^a\ed+z\ed+/ the returned value is "z", but for /^a\edz\ed/ the returned value
 is -1.
 .sp
@@ -1056,8 +1236,8 @@ is -1.
 .sp
 If the pattern was studied and a minimum length for matching subject strings
 was computed, its value is returned. Otherwise the returned value is -1. The
-value is a number of characters, not bytes (this may be relevant in UTF-8
-mode). The fourth argument should point to an \fBint\fP variable. A
+value is a number of characters, which in UTF-8 mode may be different from the
+number of bytes. The fourth argument should point to an \fBint\fP variable. A
 non-negative value is a lower bound to the length of any matching string. There
 may not be any strings of that length that do actually match, but every string
 that does match is at least that long.
@@ -1080,9 +1260,11 @@ The map consists of a number of fixed-size entries. PCRE_INFO_NAMECOUNT gives
 the number of entries, and PCRE_INFO_NAMEENTRYSIZE gives the size of each
 entry; both of these return an \fBint\fP value. The entry size depends on the
 length of the longest name. PCRE_INFO_NAMETABLE returns a pointer to the first
-entry of the table (a pointer to \fBchar\fP). The first two bytes of each entry
-are the number of the capturing parenthesis, most significant byte first. The
-rest of the entry is the corresponding name, zero terminated.
+entry of the table. This is a pointer to \fBchar\fP in the 8-bit library, where
+the first two bytes of each entry are the number of the capturing parenthesis,
+most significant byte first. In the 16-bit library, the pointer points to
+16-bit data units, the first of which contains the parenthesis number. The rest
+of the entry is the corresponding name, zero terminated.
 .P
 The names are in alphabetical order. Duplicate names may appear if (?| is used
 to create multiple groups with the same number, as described in the
@@ -1101,8 +1283,8 @@ table in the order in which they were found in the pattern. In the absence of
 necessarily the case because later subpatterns may have lower numbers.
 .P
 As a simple example of the name/number table, consider the following pattern
-(assume PCRE_EXTENDED is set, so white space - including newlines - is
-ignored):
+after compilation by the 8-bit library (assume PCRE_EXTENDED is set, so white
+space - including newlines - is ignored):
 .sp
 .\" JOIN
   (?<date> (?<year>(\ed\ed)?\ed\ed) -
@@ -1157,43 +1339,32 @@ For such patterns, the PCRE_ANCHORED bit is set in the options returned by
 .sp
   PCRE_INFO_SIZE
 .sp
-Return the size of the compiled pattern, that is, the value that was passed as
-the argument to \fBpcre_malloc()\fP when PCRE was getting memory in which to
-place the compiled data. The fourth argument should point to a \fBsize_t\fP
-variable.
+Return the size of the compiled pattern in bytes (for both libraries). The
+fourth argument should point to a \fBsize_t\fP variable. This value does not
+include the size of the \fBpcre\fP structure that is returned by
+\fBpcre_compile()\fP. The value that is passed as the argument to
+\fBpcre_malloc()\fP when \fBpcre_compile()\fP is getting memory in which to
+place the compiled data is the value returned by this option plus the size of
+the \fBpcre\fP structure. Studying a compiled pattern, with or without JIT,
+does not alter the value returned by this option.
 .sp
   PCRE_INFO_STUDYSIZE
 .sp
-Return the size of the data block pointed to by the \fIstudy_data\fP field in
-a \fBpcre_extra\fP block. That is, it is the value that was passed to
-\fBpcre_malloc()\fP when PCRE was getting memory into which to place the data
-created by \fBpcre_study()\fP. If \fBpcre_extra\fP is NULL, or there is no
+Return the size in bytes of the data block pointed to by the \fIstudy_data\fP
+field in a \fBpcre_extra\fP block. If \fBpcre_extra\fP is NULL, or there is no
 study data, zero is returned. The fourth argument should point to a
-\fBsize_t\fP variable.
-.
-.
-.SH "OBSOLETE INFO FUNCTION"
-.rs
-.sp
-.B int pcre_info(const pcre *\fIcode\fP, int *\fIoptptr\fP, int
-.B *\fIfirstcharptr\fP);
-.PP
-The \fBpcre_info()\fP function is now obsolete because its interface is too
-restrictive to return all the available data about a compiled pattern. New
-programs should use \fBpcre_fullinfo()\fP instead. The yield of
-\fBpcre_info()\fP is the number of capturing subpatterns, or one of the
-following negative numbers:
-.sp
-  PCRE_ERROR_NULL       the argument \fIcode\fP was NULL
-  PCRE_ERROR_BADMAGIC   the "magic number" was not found
-.sp
-If the \fIoptptr\fP argument is not NULL, a copy of the options with which the
-pattern was compiled is placed in the integer it points to (see
-PCRE_INFO_OPTIONS above).
-.P
-If the pattern is not anchored and the \fIfirstcharptr\fP argument is not NULL,
-it is used to pass back information about the first character of any matched
-string (see PCRE_INFO_FIRSTBYTE above).
+\fBsize_t\fP variable. The \fIstudy_data\fP field is set by \fBpcre_study()\fP
+to record information that will speed up matching (see the section entitled
+.\" HTML <a href="#studyingapattern">
+.\" </a>
+"Studying a pattern"
+.\"
+above). The format of the \fIstudy_data\fP block is private, but its length
+is made available via this option so that it can be saved and restored (see the
+.\" HREF
+\fBpcreprecompile\fP
+.\"
+documentation for details).
 .
 .
 .SH "REFERENCE COUNTS"
@@ -1231,9 +1402,13 @@ is different. (This seems a highly unlikely scenario.)
 The function \fBpcre_exec()\fP is called to match a subject string against a
 compiled pattern, which is passed in the \fIcode\fP argument. If the
 pattern was studied, the result of the study should be passed in the
-\fIextra\fP argument. This function is the main matching facility of the
-library, and it operates in a Perl-like manner. For specialist use there is
-also an alternative matching function, which is described
+\fIextra\fP argument. You can call \fBpcre_exec()\fP with the same \fIcode\fP
+and \fIextra\fP arguments as many times as you like, in order to match
+different subject strings with the same pattern.
+.P
+This function is the main matching facility of the library, and it operates in
+a Perl-like manner. For specialist use there is also an alternative matching
+function, which is described
 .\" HTML <a href="#dfamatch">
 .\" </a>
 below
@@ -1264,6 +1439,7 @@ Here is an example of a simple call to \fBpcre_exec()\fP:
     ovector,        /* vector of integers for substring information */
     30);            /* number of elements (NOT size in bytes) */
 .
+.
 .\" HTML <a name="extradata"></a>
 .SS "Extra data for \fBpcre_exec()\fR"
 .rs
@@ -1276,38 +1452,51 @@ fields (not necessarily in this order):
 .sp
   unsigned long int \fIflags\fP;
   void *\fIstudy_data\fP;
+  void *\fIexecutable_jit\fP;
   unsigned long int \fImatch_limit\fP;
   unsigned long int \fImatch_limit_recursion\fP;
   void *\fIcallout_data\fP;
   const unsigned char *\fItables\fP;
   unsigned char **\fImark\fP;
 .sp
+In the 16-bit version of this structure, the \fImark\fP field has type
+"PCRE_UCHAR16 **".
+.P
 The \fIflags\fP field is a bitmap that specifies which of the other fields
 are set. The flag bits are:
 .sp
   PCRE_EXTRA_STUDY_DATA
+  PCRE_EXTRA_EXECUTABLE_JIT
   PCRE_EXTRA_MATCH_LIMIT
   PCRE_EXTRA_MATCH_LIMIT_RECURSION
   PCRE_EXTRA_CALLOUT_DATA
   PCRE_EXTRA_TABLES
   PCRE_EXTRA_MARK
 .sp
-Other flag bits should be set to zero. The \fIstudy_data\fP field is set in the
-\fBpcre_extra\fP block that is returned by \fBpcre_study()\fP, together with
-the appropriate flag bit. You should not set this yourself, but you may add to
-the block by setting the other fields and their corresponding flag bits.
+Other flag bits should be set to zero. The \fIstudy_data\fP field and sometimes
+the \fIexecutable_jit\fP field are set in the \fBpcre_extra\fP block that is
+returned by \fBpcre_study()\fP, together with the appropriate flag bits. You
+should not set these yourself, but you may add to the block by setting the
+other fields and their corresponding flag bits.
 .P
 The \fImatch_limit\fP field provides a means of preventing PCRE from using up a
 vast amount of resources when running patterns that are not going to match,
 but which have a very large number of possibilities in their search trees. The
 classic example is a pattern that uses nested unlimited repeats.
 .P
-Internally, PCRE uses a function called \fBmatch()\fP which it calls repeatedly
-(sometimes recursively). The limit set by \fImatch_limit\fP is imposed on the
-number of times this function is called during a match, which has the effect of
-limiting the amount of backtracking that can take place. For patterns that are
-not anchored, the count restarts from zero for each position in the subject
-string.
+Internally, \fBpcre_exec()\fP uses a function called \fBmatch()\fP, which it
+calls repeatedly (sometimes recursively). The limit set by \fImatch_limit\fP is
+imposed on the number of times this function is called during a match, which
+has the effect of limiting the amount of backtracking that can take place. For
+patterns that are not anchored, the count restarts from zero for each position
+in the subject string.
+.P
+When \fBpcre_exec()\fP is called with a pattern that was successfully studied
+with the PCRE_STUDY_JIT_COMPILE option, the way that the matching is executed
+is entirely different. However, there is still the possibility of runaway
+matching that goes on for a very long time, and so the \fImatch_limit\fP value
+is also used in this case (but in a different way) to limit how long the
+matching can continue.
 .P
 The default value for the limit can be set when PCRE is built; the default
 default is 10 million, which handles all but the most extreme cases. You can
@@ -1322,9 +1511,11 @@ limits the depth of recursion. The recursion depth is a smaller number than the
 total number of calls, because not all calls to \fBmatch()\fP are recursive.
 This limit is of use only if it is set smaller than \fImatch_limit\fP.
 .P
-Limiting the recursion depth limits the amount of stack that can be used, or,
-when PCRE has been compiled to use memory on the heap instead of the stack, the
-amount of heap memory that can be used.
+Limiting the recursion depth limits the amount of machine stack that can be
+used, or, when PCRE has been compiled to use memory on the heap instead of the
+stack, the amount of heap memory that can be used. This limit is not relevant,
+and is ignored, if the pattern was successfully studied with
+PCRE_STUDY_JIT_COMPILE.
 .P
 The default value for \fImatch_limit_recursion\fP can be set when PCRE is
 built; the default default is the same value as the default for
@@ -1355,13 +1546,13 @@ called. See the
 documentation for a discussion of saving compiled patterns for later use.
 .P
 If PCRE_EXTRA_MARK is set in the \fIflags\fP field, the \fImark\fP field must
-be set to point to a \fBchar *\fP variable. If the pattern contains any
+be set to point to a suitable variable. If the pattern contains any
 backtracking control verbs such as (*MARK:NAME), and the execution ends up with
 a name to pass back, a pointer to the name string (zero terminated) is placed
 in the variable pointed to by the \fImark\fP field. The names are within the
 compiled pattern; if you wish to retain such a name you must copy it before
 freeing the memory of a compiled pattern. If there is no name to pass back, the
-variable pointed to by the \fImark\fP field set to NULL. For details of the
+variable pointed to by the \fImark\fP field is set to NULL. For details of the
 backtracking control verbs, see the section entitled
 .\" HTML <a href="pcrepattern#backtrackcontrol">
 .\" </a>
@@ -1383,6 +1574,13 @@ zero. The only bits that may be set are PCRE_ANCHORED, PCRE_NEWLINE_\fIxxx\fP,
 PCRE_NOTBOL, PCRE_NOTEOL, PCRE_NOTEMPTY, PCRE_NOTEMPTY_ATSTART,
 PCRE_NO_START_OPTIMIZE, PCRE_NO_UTF8_CHECK, PCRE_PARTIAL_SOFT, and
 PCRE_PARTIAL_HARD.
+.P
+If the pattern was successfully studied with the PCRE_STUDY_JIT_COMPILE option,
+the only supported options for JIT execution are PCRE_NO_UTF8_CHECK,
+PCRE_NOTBOL, PCRE_NOTEOL, PCRE_NOTEMPTY, and PCRE_NOTEMPTY_ATSTART. Note in
+particular that partial matching is not supported. If an unsupported option is
+used, JIT execution is disabled and the normal interpretive code in
+\fBpcre_exec()\fP is run.
 .sp
   PCRE_ANCHORED
 .sp
@@ -1537,19 +1735,21 @@ string is automatically checked when \fBpcre_exec()\fP is subsequently called.
 The value of \fIstartoffset\fP is also checked to ensure that it points to the
 start of a UTF-8 character. There is a discussion about the validity of UTF-8
 strings in the
-.\" HTML <a href="pcre.html#utf8strings">
-.\" </a>
-section on UTF-8 support
-.\"
-in the main
 .\" HREF
-\fBpcre\fP
+\fBpcreunicode\fP
 .\"
-page. If an invalid UTF-8 sequence of bytes is found, \fBpcre_exec()\fP returns
-the error PCRE_ERROR_BADUTF8 or, if PCRE_PARTIAL_HARD is set and the problem is
-a truncated UTF-8 character at the end of the subject, PCRE_ERROR_SHORTUTF8. If
-\fIstartoffset\fP contains a value that does not point to the start of a UTF-8
-character (or to the end of the subject), PCRE_ERROR_BADUTF8_OFFSET is
+page. If an invalid sequence of bytes is found, \fBpcre_exec()\fP returns the
+error PCRE_ERROR_BADUTF8 or, if PCRE_PARTIAL_HARD is set and the problem is a
+truncated character at the end of the subject, PCRE_ERROR_SHORTUTF8. In both
+cases, information about the precise nature of the error may also be returned
+(see the descriptions of these errors in the section entitled \fIError return
+values from\fP \fBpcre_exec()\fP
+.\" HTML <a href="#errorlist">
+.\" </a>
+below).
+.\"
+If \fIstartoffset\fP contains a value that does not point to the start of a
+UTF-8 character (or to the end of the subject), PCRE_ERROR_BADUTF8_OFFSET is
 returned.
 .P
 If you already know that your subject is valid, and you want to skip these
@@ -1557,9 +1757,9 @@ checks for performance reasons, you can set the PCRE_NO_UTF8_CHECK option when
 calling \fBpcre_exec()\fP. You might want to do this for the second and
 subsequent calls to \fBpcre_exec()\fP if you are making repeated calls to find
 all the matches in a single subject string. However, you should be sure that
-the value of \fIstartoffset\fP points to the start of a UTF-8 character (or the
-end of the subject). When PCRE_NO_UTF8_CHECK is set, the effect of passing an
-invalid UTF-8 string as a subject or an invalid value of \fIstartoffset\fP is
+the value of \fIstartoffset\fP points to the start of a character (or the end
+of the subject). When PCRE_NO_UTF8_CHECK is set, the effect of passing an
+invalid string as a subject or an invalid value of \fIstartoffset\fP is
 undefined. Your program may crash.
 .sp
   PCRE_PARTIAL_HARD
@@ -1594,7 +1794,7 @@ documentation.
 .rs
 .sp
 The subject string is passed to \fBpcre_exec()\fP as a pointer in
-\fIsubject\fP, a length (in bytes) in \fIlength\fP, and a starting byte offset
+\fIsubject\fP, a length in bytes in \fIlength\fP, and a starting byte offset
 in \fIstartoffset\fP. If this is negative or greater than the length of the
 subject, \fBpcre_exec()\fP returns PCRE_ERROR_BADOFFSET. When the starting
 offset is zero, the search for a match starts at the beginning of the subject,
@@ -1682,12 +1882,27 @@ string that it matched that is returned.
 .P
 If the vector is too small to hold all the captured substring offsets, it is
 used as far as possible (up to two-thirds of its length), and the function
-returns a value of zero. If the substring offsets are not of interest,
-\fBpcre_exec()\fP may be called with \fIovector\fP passed as NULL and
-\fIovecsize\fP as zero. However, if the pattern contains back references and
-the \fIovector\fP is not big enough to remember the related substrings, PCRE
-has to get additional memory for use during matching. Thus it is usually
-advisable to supply an \fIovector\fP.
+returns a value of zero. If neither the actual string matched not any captured
+substrings are of interest, \fBpcre_exec()\fP may be called with \fIovector\fP
+passed as NULL and \fIovecsize\fP as zero. However, if the pattern contains
+back references and the \fIovector\fP is not big enough to remember the related
+substrings, PCRE has to get additional memory for use during matching. Thus it
+is usually advisable to supply an \fIovector\fP of reasonable size.
+.P
+There are some cases where zero is returned (indicating vector overflow) when
+in fact the vector is exactly the right size for the final match. For example,
+consider the pattern
+.sp
+  (a)(?:(b)c|bd)
+.sp
+If a vector of 6 elements (allowing for only 1 captured substring) is given
+with subject string "abd", \fBpcre_exec()\fP will try to set the second
+captured string, thereby recording a vector overflow, before failing to match
+"c" and backing up to try the second alternative. The zero return, however,
+does correctly indicate that the maximum number of slots (namely 2) have been
+filled. In similar cases where there is temporary overflow, but the final
+number of used slots is actually less than the maximum, a non-zero value is
+returned.
 .P
 The \fBpcre_fullinfo()\fP function can be used to find out how many capturing
 subpatterns there are in a compiled pattern. The smallest size for
@@ -1708,14 +1923,15 @@ return from the function is 2, because the highest used capturing subpattern
 number is 1, and the offsets for for the second and third capturing subpatterns
 (assuming the vector is large enough, of course) are set to -1.
 .P
-\fBNote\fP: Elements of \fIovector\fP that do not correspond to capturing
-parentheses in the pattern are never changed. That is, if a pattern contains
-\fIn\fP capturing parentheses, no more than \fIovector[0]\fP to
-\fIovector[2n+1]\fP are set by \fBpcre_exec()\fP. The other elements retain
-whatever values they previously had.
+\fBNote\fP: Elements in the first two-thirds of \fIovector\fP that do not
+correspond to capturing parentheses in the pattern are never changed. That is,
+if a pattern contains \fIn\fP capturing parentheses, no more than
+\fIovector[0]\fP to \fIovector[2n+1]\fP are set by \fBpcre_exec()\fP. The other
+elements (in the first two-thirds) retain whatever values they previously had.
 .P
 Some convenience functions are provided for extracting the captured substrings
 as separate strings. These are described below.
+.
 .
 .\" HTML <a name="errorlist"></a>
 .SS "Error return values from \fBpcre_exec()\fP"
@@ -1786,14 +2002,24 @@ documentation for details.
 .sp
   PCRE_ERROR_BADUTF8        (-10)
 .sp
-A string that contains an invalid UTF-8 byte sequence was passed as a subject.
-However, if PCRE_PARTIAL_HARD is set and the problem is a truncated UTF-8
-character at the end of the subject, PCRE_ERROR_SHORTUTF8 is used instead.
+A string that contains an invalid UTF-8 byte sequence was passed as a subject,
+and the PCRE_NO_UTF8_CHECK option was not set. If the size of the output vector
+(\fIovecsize\fP) is at least 2, the byte offset to the start of the the invalid
+UTF-8 character is placed in the first element, and a reason code is placed in
+the second element. The reason codes are listed in the
+.\" HTML <a href="#badutf8reasons">
+.\" </a>
+following section.
+.\"
+For backward compatibility, if PCRE_PARTIAL_HARD is set and the problem is a
+truncated UTF-8 character at the end of the subject (reason codes 1 to 5),
+PCRE_ERROR_SHORTUTF8 is returned instead of PCRE_ERROR_BADUTF8.
 .sp
   PCRE_ERROR_BADUTF8_OFFSET (-11)
 .sp
-The UTF-8 byte sequence that was passed as a subject was valid, but the value
-of \fIstartoffset\fP did not point to the beginning of a UTF-8 character or the
+The UTF-8 byte sequence that was passed as a subject was checked and found to
+be valid (the PCRE_NO_UTF8_CHECK option was not set), but the value of
+\fIstartoffset\fP did not point to the beginning of a UTF-8 character or the
 end of the subject.
 .sp
   PCRE_ERROR_PARTIAL        (-12)
@@ -1837,11 +2063,127 @@ subject, that is, the value in \fIlength\fP.
 .sp
   PCRE_ERROR_SHORTUTF8      (-25)
 .sp
-The subject string ended with an incomplete (truncated) UTF-8 character, and
-the PCRE_PARTIAL_HARD option was set. Without this option, PCRE_ERROR_BADUTF8
-is returned in this situation.
+This error is returned instead of PCRE_ERROR_BADUTF8 when the subject string
+ends with a truncated UTF-8 character and the PCRE_PARTIAL_HARD option is set.
+Information about the failure is returned as for PCRE_ERROR_BADUTF8. It is in
+fact sufficient to detect this case, but this special error code for
+PCRE_PARTIAL_HARD precedes the implementation of returned information; it is
+retained for backwards compatibility.
+.sp
+  PCRE_ERROR_RECURSELOOP    (-26)
+.sp
+This error is returned when \fBpcre_exec()\fP detects a recursion loop within
+the pattern. Specifically, it means that either the whole pattern or a
+subpattern has been called recursively for the second time at the same position
+in the subject string. Some simple patterns that might do this are detected and
+faulted at compile time, but more complicated cases, in particular mutual
+recursions between two different subpatterns, cannot be detected until run
+time.
+.sp
+  PCRE_ERROR_JIT_STACKLIMIT (-27)
+.sp
+This error is returned when a pattern that was successfully studied using the
+PCRE_STUDY_JIT_COMPILE option is being matched, but the memory available for
+the just-in-time processing stack is not large enough. See the
+.\" HREF
+\fBpcrejit\fP
+.\"
+documentation for more details.
+.sp
+  PCRE_ERROR_BADMODE (-28)
+.sp
+This error is given if a pattern that was compiled by the 8-bit library is
+passed to a 16-bit library function, or vice versa.
+.sp
+  PCRE_ERROR_BADENDIANNESS (-29)
+.sp
+This error is given if a pattern that was compiled and saved is reloaded on a
+host with different endianness. The utility function
+\fBpcre_pattern_to_host_byte_order()\fP can be used to convert such a pattern
+so that it runs on the new host.
 .P
 Error numbers -16 to -20 and -22 are not used by \fBpcre_exec()\fP.
+.
+.
+.\" HTML <a name="badutf8reasons"></a>
+.SS "Reason codes for invalid UTF-8 strings"
+.rs
+.sp
+This section applies only to the 8-bit library. The corresponding information
+for the 16-bit library is given in the
+.\" HREF
+\fBpcre16\fP
+.\"
+page.
+.P
+When \fBpcre_exec()\fP returns either PCRE_ERROR_BADUTF8 or
+PCRE_ERROR_SHORTUTF8, and the size of the output vector (\fIovecsize\fP) is at
+least 2, the offset of the start of the invalid UTF-8 character is placed in
+the first output vector element (\fIovector[0]\fP) and a reason code is placed
+in the second element (\fIovector[1]\fP). The reason codes are given names in
+the \fBpcre.h\fP header file:
+.sp
+  PCRE_UTF8_ERR1
+  PCRE_UTF8_ERR2
+  PCRE_UTF8_ERR3
+  PCRE_UTF8_ERR4
+  PCRE_UTF8_ERR5
+.sp
+The string ends with a truncated UTF-8 character; the code specifies how many
+bytes are missing (1 to 5). Although RFC 3629 restricts UTF-8 characters to be
+no longer than 4 bytes, the encoding scheme (originally defined by RFC 2279)
+allows for up to 6 bytes, and this is checked first; hence the possibility of
+4 or 5 missing bytes.
+.sp
+  PCRE_UTF8_ERR6
+  PCRE_UTF8_ERR7
+  PCRE_UTF8_ERR8
+  PCRE_UTF8_ERR9
+  PCRE_UTF8_ERR10
+.sp
+The two most significant bits of the 2nd, 3rd, 4th, 5th, or 6th byte of the
+character do not have the binary value 0b10 (that is, either the most
+significant bit is 0, or the next bit is 1).
+.sp
+  PCRE_UTF8_ERR11
+  PCRE_UTF8_ERR12
+.sp
+A character that is valid by the RFC 2279 rules is either 5 or 6 bytes long;
+these code points are excluded by RFC 3629.
+.sp
+  PCRE_UTF8_ERR13
+.sp
+A 4-byte character has a value greater than 0x10fff; these code points are
+excluded by RFC 3629.
+.sp
+  PCRE_UTF8_ERR14
+.sp
+A 3-byte character has a value in the range 0xd800 to 0xdfff; this range of
+code points are reserved by RFC 3629 for use with UTF-16, and so are excluded
+from UTF-8.
+.sp
+  PCRE_UTF8_ERR15
+  PCRE_UTF8_ERR16
+  PCRE_UTF8_ERR17
+  PCRE_UTF8_ERR18
+  PCRE_UTF8_ERR19
+.sp
+A 2-, 3-, 4-, 5-, or 6-byte character is "overlong", that is, it codes for a
+value that can be represented by fewer bytes, which is invalid. For example,
+the two bytes 0xc0, 0xae give the value 0x2e, whose correct coding uses just
+one byte.
+.sp
+  PCRE_UTF8_ERR20
+.sp
+The two most significant bits of the first byte of a character have the binary
+value 0b10 (that is, the most significant bit is 1 and the second is 0). Such a
+byte can only validly occur as the second or subsequent byte of a multi-byte
+character.
+.sp
+  PCRE_UTF8_ERR21
+.sp
+The first byte of a character has the value 0xfe or 0xff. These values can
+never occur in a valid UTF-8 string.
 .
 .
 .SH "EXTRACTING CAPTURED SUBSTRINGS BY NUMBER"
@@ -2006,6 +2348,7 @@ names are not included in the compiled code. The matching process uses only
 numbers. For this reason, the use of different names for subpatterns of the
 same number causes an error at compile time.
 .
+.
 .SH "DUPLICATE SUBPATTERN NAMES"
 .rs
 .sp
@@ -2039,7 +2382,11 @@ fourth are pointers to variables which are updated by the function. After it
 has run, they point to the first and last entries in the name-to-number table
 for the given name. The function itself returns the length of each entry, or
 PCRE_ERROR_NOSUBSTRING (-7) if there are none. The format of the table is
-described above in the section entitled \fIInformation about a pattern\fP.
+described above in the section entitled \fIInformation about a pattern\fP
+.\" HTML <a href="#infoaboutpattern">
+.\" </a>
+above.
+.\"
 Given all the relevant entries for the name, you can extract each of their
 numbers, and hence the captured data, if any.
 .
@@ -2064,6 +2411,32 @@ When your callout function is called, extract and save the current matched
 substring. Then return 1, which forces \fBpcre_exec()\fP to backtrack and try
 other alternatives. Ultimately, when it runs out of matches, \fBpcre_exec()\fP
 will yield PCRE_ERROR_NOMATCH.
+.
+.
+.SH "OBTAINING AN ESTIMATE OF STACK USAGE"
+.rs
+.sp
+Matching certain patterns using \fBpcre_exec()\fP can use a lot of process
+stack, which in certain environments can be rather limited in size. Some users
+find it helpful to have an estimate of the amount of stack that is used by
+\fBpcre_exec()\fP, to help them set recursion limits, as described in the
+.\" HREF
+\fBpcrestack\fP
+.\"
+documentation. The estimate that is output by \fBpcretest\fP when called with
+the \fB-m\fP and \fB-C\fP options is obtained by calling \fBpcre_exec\fP with
+the values NULL, NULL, NULL, -999, and -999 for its first five arguments.
+.P
+Normally, if its first argument is NULL, \fBpcre_exec()\fP immediately returns
+the negative error code PCRE_ERROR_NULL, but with this special combination of
+arguments, it returns instead a negative number whose absolute value is the
+approximate stack frame size in bytes. (A negative number is used so that it is
+clear that no match has happened.) The value is approximate because in some
+cases, recursive calls to \fBpcre_exec()\fP occur when there are one or two
+additional variables on the stack.
+.P
+If PCRE has been compiled to use the heap instead of the stack for recursion,
+the value returned is the size of each block that is obtained from the heap.
 .
 .
 .\" HTML <a name="dfamatch"></a>
@@ -2169,6 +2542,7 @@ match. There is more discussion of this facility in the
 .\"
 documentation.
 .
+.
 .SS "Successful returns from \fBpcre_dfa_exec()\fP"
 .rs
 .sp
@@ -2200,7 +2574,9 @@ returns data, even though the meaning of the strings is different.)
 The strings are returned in reverse order of length; that is, the longest
 matching string is given first. If there were too many matches to fit into
 \fIovector\fP, the yield of the function is zero, and the vector is filled with
-the longest matches.
+the longest matches. Unlike \fBpcre_exec()\fP, \fBpcre_dfa_exec()\fP can use
+the entire \fIovector\fP for returning matched strings.
+.
 .
 .SS "Error returns from \fBpcre_dfa_exec()\fP"
 .rs
@@ -2229,8 +2605,9 @@ group. These are not supported.
   PCRE_ERROR_DFA_UMLIMIT    (-18)
 .sp
 This return is given if \fBpcre_dfa_exec()\fP is called with an \fIextra\fP
-block that contains a setting of the \fImatch_limit\fP field. This is not
-supported (it is meaningless).
+block that contains a setting of the \fImatch_limit\fP or
+\fImatch_limit_recursion\fP fields. This is not supported (these fields are
+meaningless for DFA matching).
 .sp
   PCRE_ERROR_DFA_WSSIZE     (-19)
 .sp
@@ -2248,7 +2625,7 @@ extremely rare, as a vector of size 1000 is used.
 .SH "SEE ALSO"
 .rs
 .sp
-\fBpcrebuild\fP(3), \fBpcrecallout\fP(3), \fBpcrecpp(3)\fP(3),
+\fBpcre16\fP(3), \fBpcrebuild\fP(3), \fBpcrecallout\fP(3), \fBpcrecpp(3)\fP(3),
 \fBpcrematching\fP(3), \fBpcrepartial\fP(3), \fBpcreposix\fP(3),
 \fBpcreprecompile\fP(3), \fBpcresample\fP(3), \fBpcrestack\fP(3).
 .
@@ -2267,6 +2644,6 @@ Cambridge CB2 3QH, England.
 .rs
 .sp
 .nf
-Last updated: 21 November 2010
-Copyright (c) 1997-2010 University of Cambridge.
+Last updated: 21 January 2012
+Copyright (c) 1997-2012 University of Cambridge.
 .fi

@@ -74,11 +74,19 @@ possible to search for patterns that span line boundaries. What defines a line
 boundary is controlled by the <b>-N</b> (<b>--newline</b>) option.
 </P>
 <P>
-Patterns are limited to 8K or BUFSIZ characters, whichever is the greater.
-BUFSIZ is defined in <b>&#60;stdio.h&#62;</b>. When there is more than one pattern
-(specified by the use of <b>-e</b> and/or <b>-f</b>), each pattern is applied to
-each line in the order in which they are defined, except that all the <b>-e</b>
-patterns are tried before the <b>-f</b> patterns.
+The amount of memory used for buffering files that are being scanned is
+controlled by a parameter that can be set by the <b>--buffer-size</b> option.
+The default value for this parameter is specified when <b>pcregrep</b> is built,
+with the default default being 20K. A block of memory three times this size is
+used (to allow for buffering "before" and "after" lines). An error occurs if a
+line overflows the buffer.
+</P>
+<P>
+Patterns are limited to 8K or BUFSIZ bytes, whichever is the greater. BUFSIZ is
+defined in <b>&#60;stdio.h&#62;</b>. When there is more than one pattern (specified by
+the use of <b>-e</b> and/or <b>-f</b>), each pattern is applied to each line in
+the order in which they are defined, except that all the <b>-e</b> patterns are
+tried before the <b>-f</b> patterns.
 </P>
 <P>
 By default, as soon as one pattern matches (or fails to match when <b>-v</b> is
@@ -122,11 +130,12 @@ standard input is always so treated.
 The order in which some of the options appear can affect the output. For
 example, both the <b>-h</b> and <b>-l</b> options affect the printing of file
 names. Whichever comes later in the command line will be the one that takes
-effect.
+effect. Numerical values for options may be followed by K or M, to signify
+multiplication by 1024 or 1024*1024 respectively.
 </P>
 <P>
 <b>--</b>
-This terminate the list of options. It is useful if the next item on the
+This terminates the list of options. It is useful if the next item on the
 command line starts with a hyphen but is not an option. This allows for the
 processing of patterns and filenames that start with hyphens.
 </P>
@@ -147,6 +156,11 @@ colon for the context lines. A line containing "--" is output between each
 group of lines, unless they are in fact contiguous in the input file. The value
 of <i>number</i> is expected to be relatively small. However, <b>pcregrep</b>
 guarantees to have up to 8K of preceding text available for context output.
+</P>
+<P>
+<b>--buffer-size=</b><i>number</i>
+Set the parameter that controls how much memory is used for buffering files
+that are being scanned.
 </P>
 <P>
 <b>-C</b> <i>number</i>, <b>--context=</b><i>number</i>
@@ -421,7 +435,7 @@ and LF (linefeed), the two-character sequence CRLF, an "anycrlf" convention,
 which recognizes any of the preceding three types, and an "any" convention, in
 which any Unicode line ending sequence is assumed to end a line. The Unicode
 sequences are the three just mentioned, plus VT (vertical tab, U+000B), FF
-(formfeed, U+000C), NEL (next line, U+0085), LS (line separator, U+2028), and
+(form feed, U+000C), NEL (next line, U+0085), LS (line separator, U+2028), and
 PS (paragraph separator, U+2029).
 <br>
 <br>
@@ -440,6 +454,14 @@ Precede each output line by its line number in the file, followed by a colon
 for matching lines or a hyphen for context lines. If the filename is also being
 output, it precedes the line number. This option is forced if
 <b>--line-offsets</b> is used.
+</P>
+<P>
+<b>--no-jit</b>
+If the PCRE library is built with support for just-in-time compiling (which
+speeds up matching), <b>pcregrep</b> automatically makes use of this, unless it
+was explicitly disabled at build time. This option can be used to disable the
+use of JIT at run time. It is provided for testing and working round problems.
+It should never be needed in normal use.
 </P>
 <P>
 <b>-o</b>, <b>--only-matching</b>
@@ -600,10 +622,10 @@ discussion of these options above).
 <br><a name="SEC10" href="#TOC1">DIAGNOSTICS</a><br>
 <P>
 Exit status is 0 if any matches were found, 1 if no matches were found, and 2
-for syntax errors and non-existent or inacessible files (even if matches were
-found in other files) or too many matching errors. Using the <b>-s</b> option to
-suppress error messages about inaccessble files does not affect the return
-code.
+for syntax errors, overlong lines, non-existent or inaccessible files (even if
+matches were found in other files) or too many matching errors. Using the
+<b>-s</b> option to suppress error messages about inaccessible files does not
+affect the return code.
 </P>
 <br><a name="SEC11" href="#TOC1">SEE ALSO</a><br>
 <P>
@@ -620,7 +642,7 @@ Cambridge CB2 3QH, England.
 </P>
 <br><a name="SEC13" href="#TOC1">REVISION</a><br>
 <P>
-Last updated: 14 January 2011
+Last updated: 06 September 2011
 <br>
 Copyright &copy; 1997-2011 University of Cambridge.
 <br>
