@@ -15,7 +15,7 @@ extern "C" {
 #endif
 
 #define PACKAGE   "ringserver"
-#define VERSION   "2012.125"
+#define VERSION   "2012.126"
 
 /* Thread data flags */ 
 #define TDF_SPAWNING    (1<<0)          /* Thread is now spawning   */

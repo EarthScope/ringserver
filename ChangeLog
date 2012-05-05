@@ -1,3 +1,11 @@
+2012.126:
+	- Remove spinlock on ring parameters for read access.  Nearly all
+	modern architectures guarantee that reading and writing integer
+	primatives is atomic.  This means locking is not needed for readers
+	of the ring parameters.  Good thing, it was a performance killer.
+	- Add checking to ring positioning routines to gaurantee that the
+	reader position is only updated with consistent packet details.
+
 2012.125:
 	- Update pcre to 8.30.
 	- Update mxml to 2.7.
