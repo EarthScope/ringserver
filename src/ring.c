@@ -39,7 +39,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2012.120
+ * Modified: 2012.126
  **************************************************************************/
 
 #include <errno.h>

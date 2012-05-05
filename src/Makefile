@@ -10,7 +10,7 @@ LDLIBS  = ../pcre/.libs/libpcre.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpth
 BIN  = ../ringserver
 
 OBJS = stack.o rbtree.o logging.o clients.o slclient.o dlclient.o \
-       dsarchive.o mseedscan.o generic.o rslock.o ring.o ringserver.o
+       dsarchive.o mseedscan.o generic.o ring.o ringserver.o
 
 all: $(BIN)
 
