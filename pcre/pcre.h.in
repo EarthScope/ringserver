@@ -179,6 +179,7 @@ compiling). */
 #define PCRE_ERROR_JIT_STACKLIMIT  (-27)
 #define PCRE_ERROR_BADMODE         (-28)
 #define PCRE_ERROR_BADENDIANNESS   (-29)
+#define PCRE_ERROR_DFA_BADRESTART  (-30)
 
 /* Specific error codes for UTF-8 validity checks */
 
@@ -234,6 +235,7 @@ compiling). */
 #define PCRE_INFO_MINLENGTH         15
 #define PCRE_INFO_JIT               16
 #define PCRE_INFO_JITSIZE           17
+#define PCRE_INFO_MAXLOOKBEHIND     18
 
 /* Request types for pcre_config(). Do not re-arrange, in order to remain
 compatible. */
@@ -254,7 +256,9 @@ compatible. */
 /* Request types for pcre_study(). Do not re-arrange, in order to remain
 compatible. */
 
-#define PCRE_STUDY_JIT_COMPILE            0x0001
+#define PCRE_STUDY_JIT_COMPILE                0x0001
+#define PCRE_STUDY_JIT_PARTIAL_SOFT_COMPILE   0x0002
+#define PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE   0x0004
 
 /* Bit flags for the pcre[16]_extra structure. Do not re-arrange or redefine
 these bits, just add new ones on the end, in order to remain compatible. */

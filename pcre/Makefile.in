@@ -73,7 +73,7 @@ noinst_PROGRAMS = $(am__EXEEXT_2) $(am__EXEEXT_3) $(am__EXEEXT_4)
 @WITH_PCRE_CPP_TRUE@	pcre_scanner_unittest \
 @WITH_PCRE_CPP_TRUE@	pcre_stringpiece_unittest
 @WITH_PCRE8_TRUE@am__append_14 = pcre_printint.c
-@WITH_PCRE8_TRUE@am__append_15 = libpcreposix.la
+@WITH_PCRE8_TRUE@am__append_15 = libpcre.la libpcreposix.la
 @WITH_PCRE16_TRUE@am__append_16 = pcre16_printint.c
 @WITH_PCRE16_TRUE@am__append_17 = libpcre16.la
 @WITH_PCRE8_TRUE@am__append_18 = RunGrepTest
@@ -250,7 +250,8 @@ am__pcregrep_SOURCES_DIST = pcregrep.c
 pcregrep_OBJECTS = $(am_pcregrep_OBJECTS)
 am__DEPENDENCIES_1 =
 @WITH_PCRE8_TRUE@pcregrep_DEPENDENCIES = $(am__DEPENDENCIES_1) \
-@WITH_PCRE8_TRUE@	$(am__DEPENDENCIES_1) libpcreposix.la
+@WITH_PCRE8_TRUE@	$(am__DEPENDENCIES_1) libpcre.la \
+@WITH_PCRE8_TRUE@	libpcreposix.la
 am__pcretest_SOURCES_DIST = pcretest.c pcre_printint.c \
 	pcre16_printint.c
 @WITH_PCRE8_TRUE@am__objects_1 = pcre_printint.$(OBJEXT)
@@ -586,45 +587,47 @@ MAINTAINERCLEANFILES = pcre.h.generic
 # noinst_PROGRAMS += pcredemo
 # pcredemo_SOURCES = pcredemo.c
 # pcredemo_LDADD = libpcre.la
-EXTRA_DIST = doc/perltest.txt NON-UNIX-USE HACKING PrepareRelease \
-	CheckMan CleanTxt Detrail 132html doc/index.html.src \
-	makevp.bat makevp_c.txt makevp_l.txt pcregexp.pas \
-	pcre.h.generic config.h.generic pcre_chartables.c.dist \
-	sljit/sljitConfig.h sljit/sljitConfigInternal.h \
-	sljit/sljitExecAllocator.c sljit/sljitLir.c sljit/sljitLir.h \
+EXTRA_DIST = doc/perltest.txt NON-UNIX-USE NON-AUTOTOOLS-BUILD HACKING \
+	PrepareRelease CheckMan CleanTxt Detrail 132html \
+	doc/index.html.src makevp.bat makevp_c.txt makevp_l.txt \
+	pcregexp.pas pcre.h.generic config.h.generic \
+	pcre_chartables.c.dist sljit/sljitConfig.h \
+	sljit/sljitConfigInternal.h sljit/sljitExecAllocator.c \
+	sljit/sljitLir.c sljit/sljitLir.h \
 	sljit/sljitNativeARM_Thumb2.c sljit/sljitNativeARM_v5.c \
 	sljit/sljitNativeMIPS_32.c sljit/sljitNativeMIPS_common.c \
 	sljit/sljitNativePPC_32.c sljit/sljitNativePPC_64.c \
 	sljit/sljitNativePPC_common.c sljit/sljitNativeX86_32.c \
 	sljit/sljitNativeX86_64.c sljit/sljitNativeX86_common.c \
-	sljit/sljitUtils.c RunTest.bat testdata/grepinput \
-	testdata/grepinput3 testdata/grepinput8 testdata/grepinputv \
-	testdata/grepinputx testdata/greplist testdata/grepoutput \
-	testdata/grepoutput8 testdata/grepoutputN testdata/greppatN4 \
-	testdata/saved16 testdata/saved16BE-1 testdata/saved16BE-2 \
-	testdata/saved16LE-1 testdata/saved16LE-2 testdata/saved8 \
-	testdata/testinput1 testdata/testinput2 testdata/testinput3 \
-	testdata/testinput4 testdata/testinput5 testdata/testinput6 \
-	testdata/testinput7 testdata/testinput8 testdata/testinput9 \
-	testdata/testinput10 testdata/testinput11 testdata/testinput12 \
-	testdata/testinput13 testdata/testinput14 testdata/testinput15 \
-	testdata/testinput16 testdata/testinput17 testdata/testinput18 \
-	testdata/testinput19 testdata/testinput20 testdata/testinput21 \
-	testdata/testinput22 testdata/testoutput1 testdata/testoutput2 \
-	testdata/testoutput3 testdata/testoutput4 testdata/testoutput5 \
-	testdata/testoutput6 testdata/testoutput7 testdata/testoutput8 \
-	testdata/testoutput9 testdata/testoutput10 \
-	testdata/testoutput11-16 testdata/testoutput11-8 \
-	testdata/testoutput12 testdata/testoutput13 \
-	testdata/testoutput14 testdata/testoutput15 \
-	testdata/testoutput16 testdata/testoutput17 \
-	testdata/testoutput18 testdata/testoutput19 \
-	testdata/testoutput20 testdata/testoutput21 \
-	testdata/testoutput22 testdata/wintestinput3 \
-	testdata/wintestoutput3 perltest.pl pcredemo.c $(pcrecpp_man) \
-	cmake/COPYING-CMAKE-SCRIPTS \
+	sljit/sljitUtils.c RunTest.bat testdata/grepbinary \
+	testdata/grepfilelist testdata/grepinput testdata/grepinput3 \
+	testdata/grepinput8 testdata/grepinputv testdata/grepinputx \
+	testdata/greplist testdata/grepoutput testdata/grepoutput8 \
+	testdata/grepoutputN testdata/greppatN4 testdata/saved16 \
+	testdata/saved16BE-1 testdata/saved16BE-2 testdata/saved16LE-1 \
+	testdata/saved16LE-2 testdata/saved8 testdata/testinput1 \
+	testdata/testinput2 testdata/testinput3 testdata/testinput4 \
+	testdata/testinput5 testdata/testinput6 testdata/testinput7 \
+	testdata/testinput8 testdata/testinput9 testdata/testinput10 \
+	testdata/testinput11 testdata/testinput12 testdata/testinput13 \
+	testdata/testinput14 testdata/testinput15 testdata/testinput16 \
+	testdata/testinput17 testdata/testinput18 testdata/testinput19 \
+	testdata/testinput20 testdata/testinput21 testdata/testinput22 \
+	testdata/testoutput1 testdata/testoutput2 testdata/testoutput3 \
+	testdata/testoutput4 testdata/testoutput5 testdata/testoutput6 \
+	testdata/testoutput7 testdata/testoutput8 testdata/testoutput9 \
+	testdata/testoutput10 testdata/testoutput11-16 \
+	testdata/testoutput11-8 testdata/testoutput12 \
+	testdata/testoutput13 testdata/testoutput14 \
+	testdata/testoutput15 testdata/testoutput16 \
+	testdata/testoutput17 testdata/testoutput18 \
+	testdata/testoutput19 testdata/testoutput20 \
+	testdata/testoutput21 testdata/testoutput22 \
+	testdata/wintestinput3 testdata/wintestoutput3 perltest.pl \
+	pcredemo.c $(pcrecpp_man) cmake/COPYING-CMAKE-SCRIPTS \
 	cmake/FindPackageHandleStandardArgs.cmake \
-	cmake/FindReadline.cmake CMakeLists.txt config-cmake.h.in
+	cmake/FindReadline.cmake cmake/FindEditline.cmake \
+	CMakeLists.txt config-cmake.h.in
 
 # These are the header files we'll install. We do not distribute pcre.h because
 # it is generated from pcre.h.in.
@@ -713,7 +716,8 @@ BUILT_SOURCES = pcre_chartables.c
 pcretest_SOURCES = pcretest.c $(am__append_14) $(am__append_16)
 pcretest_LDADD = $(LIBREADLINE) $(am__append_15) $(am__append_17)
 @WITH_PCRE8_TRUE@pcregrep_SOURCES = pcregrep.c
-@WITH_PCRE8_TRUE@pcregrep_LDADD = $(LIBZ) $(LIBBZ2) libpcreposix.la
+@WITH_PCRE8_TRUE@pcregrep_LDADD = $(LIBZ) $(LIBBZ2) libpcre.la \
+@WITH_PCRE8_TRUE@	libpcreposix.la
 
 # A PCRE user submitted the following addition, saying that it "will allow
 # anyone using the 'mingw32' compiler to simply type 'make pcre.dll' and get a
@@ -1799,31 +1803,31 @@ pcre.dll: $(DLL_OBJS)
 
 # Arrange for the per-function man pages to have 16-bit names as well.
 install-data-hook:
-	ln -s pcre_assign_jit_stack.3		$(DESTDIR)$(man3dir)/pcre16_assign_jit_stack.3
-	ln -s pcre_compile.3			$(DESTDIR)$(man3dir)/pcre16_compile.3
-	ln -s pcre_compile2.3			$(DESTDIR)$(man3dir)/pcre16_compile2.3
-	ln -s pcre_config.3			$(DESTDIR)$(man3dir)/pcre16_config.3
-	ln -s pcre_copy_named_substring.3	$(DESTDIR)$(man3dir)/pcre16_copy_named_substring.3
-	ln -s pcre_copy_substring.3		$(DESTDIR)$(man3dir)/pcre16_copy_substring.3
-	ln -s pcre_dfa_exec.3			$(DESTDIR)$(man3dir)/pcre16_dfa_exec.3
-	ln -s pcre_exec.3			$(DESTDIR)$(man3dir)/pcre16_exec.3
-	ln -s pcre_free_study.3			$(DESTDIR)$(man3dir)/pcre16_free_study.3
-	ln -s pcre_free_substring.3		$(DESTDIR)$(man3dir)/pcre16_free_substring.3
-	ln -s pcre_free_substring_list.3	$(DESTDIR)$(man3dir)/pcre16_free_substring_list.3
-	ln -s pcre_fullinfo.3			$(DESTDIR)$(man3dir)/pcre16_fullinfo.3
-	ln -s pcre_get_named_substring.3	$(DESTDIR)$(man3dir)/pcre16_get_named_substring.3
-	ln -s pcre_get_stringnumber.3		$(DESTDIR)$(man3dir)/pcre16_get_stringnumber.3
-	ln -s pcre_get_stringtable_entries.3	$(DESTDIR)$(man3dir)/pcre16_get_stringtable_entries.3
-	ln -s pcre_get_substring.3		$(DESTDIR)$(man3dir)/pcre16_get_substring.3
-	ln -s pcre_get_substring_list.3		$(DESTDIR)$(man3dir)/pcre16_get_substring_list.3
-	ln -s pcre_jit_stack_alloc.3		$(DESTDIR)$(man3dir)/pcre16_jit_stack_alloc.3
-	ln -s pcre_jit_stack_free.3		$(DESTDIR)$(man3dir)/pcre16_jit_stack_free.3
-	ln -s pcre_maketables.3			$(DESTDIR)$(man3dir)/pcre16_maketables.3
-	ln -s pcre_pattern_to_host_byte_order.3 $(DESTDIR)$(man3dir)/pcre16_pattern_to_host_byte_order.3
-	ln -s pcre_refcount.3			$(DESTDIR)$(man3dir)/pcre16_refcount.3
-	ln -s pcre_study.3			$(DESTDIR)$(man3dir)/pcre16_study.3
-	ln -s pcre_utf16_to_host_byte_order.3	$(DESTDIR)$(man3dir)/pcre16_utf16_to_host_byte_order.3
-	ln -s pcre_version.3			$(DESTDIR)$(man3dir)/pcre16_version.3
+	ln -sf pcre_assign_jit_stack.3		 $(DESTDIR)$(man3dir)/pcre16_assign_jit_stack.3
+	ln -sf pcre_compile.3			 $(DESTDIR)$(man3dir)/pcre16_compile.3
+	ln -sf pcre_compile2.3			 $(DESTDIR)$(man3dir)/pcre16_compile2.3
+	ln -sf pcre_config.3			 $(DESTDIR)$(man3dir)/pcre16_config.3
+	ln -sf pcre_copy_named_substring.3	 $(DESTDIR)$(man3dir)/pcre16_copy_named_substring.3
+	ln -sf pcre_copy_substring.3		 $(DESTDIR)$(man3dir)/pcre16_copy_substring.3
+	ln -sf pcre_dfa_exec.3			 $(DESTDIR)$(man3dir)/pcre16_dfa_exec.3
+	ln -sf pcre_exec.3			 $(DESTDIR)$(man3dir)/pcre16_exec.3
+	ln -sf pcre_free_study.3		 $(DESTDIR)$(man3dir)/pcre16_free_study.3
+	ln -sf pcre_free_substring.3		 $(DESTDIR)$(man3dir)/pcre16_free_substring.3
+	ln -sf pcre_free_substring_list.3	 $(DESTDIR)$(man3dir)/pcre16_free_substring_list.3
+	ln -sf pcre_fullinfo.3			 $(DESTDIR)$(man3dir)/pcre16_fullinfo.3
+	ln -sf pcre_get_named_substring.3	 $(DESTDIR)$(man3dir)/pcre16_get_named_substring.3
+	ln -sf pcre_get_stringnumber.3		 $(DESTDIR)$(man3dir)/pcre16_get_stringnumber.3
+	ln -sf pcre_get_stringtable_entries.3	 $(DESTDIR)$(man3dir)/pcre16_get_stringtable_entries.3
+	ln -sf pcre_get_substring.3		 $(DESTDIR)$(man3dir)/pcre16_get_substring.3
+	ln -sf pcre_get_substring_list.3	 $(DESTDIR)$(man3dir)/pcre16_get_substring_list.3
+	ln -sf pcre_jit_stack_alloc.3		 $(DESTDIR)$(man3dir)/pcre16_jit_stack_alloc.3
+	ln -sf pcre_jit_stack_free.3		 $(DESTDIR)$(man3dir)/pcre16_jit_stack_free.3
+	ln -sf pcre_maketables.3		 $(DESTDIR)$(man3dir)/pcre16_maketables.3
+	ln -sf pcre_pattern_to_host_byte_order.3 $(DESTDIR)$(man3dir)/pcre16_pattern_to_host_byte_order.3
+	ln -sf pcre_refcount.3			 $(DESTDIR)$(man3dir)/pcre16_refcount.3
+	ln -sf pcre_study.3			 $(DESTDIR)$(man3dir)/pcre16_study.3
+	ln -sf pcre_utf16_to_host_byte_order.3	 $(DESTDIR)$(man3dir)/pcre16_utf16_to_host_byte_order.3
+	ln -sf pcre_version.3			 $(DESTDIR)$(man3dir)/pcre16_version.3
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

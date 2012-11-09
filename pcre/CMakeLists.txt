@@ -56,6 +56,7 @@
 # 2012-01-13 Stephen Kelly added out of source build support
 # 2012-01-17 PH applied Stephen Kelly's patch to parse the version data out
 #            of the configure.ac file
+# 2012-02-26 PH added support for libedit
 
 PROJECT(PCRE C CXX)
 
@@ -69,6 +70,7 @@ SET(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake) # for FindReadline.cmake
 FIND_PACKAGE( BZip2 )
 FIND_PACKAGE( ZLIB )
 FIND_PACKAGE( Readline )
+FIND_PACKAGE( Editline )
 
 # Configuration checks
 
@@ -181,6 +183,14 @@ IF(PCRE_SUPPORT_LIBZ)
   INCLUDE_DIRECTORIES(${ZLIB_INCLUDE_DIR})
 ENDIF(PCRE_SUPPORT_LIBZ)
 
+# editline lib
+IF(EDITLINE_FOUND)
+  OPTION (PCRE_SUPPORT_LIBEDIT  "Enable support for linking pcretest with libedit." OFF)
+ENDIF(EDITLINE_FOUND)
+IF(PCRE_SUPPORT_LIBEDIT)
+  INCLUDE_DIRECTORIES(${EDITLINE_INCLUDE_DIR})
+ENDIF(PCRE_SUPPORT_LIBEDIT)
+
 # readline lib
 IF(READLINE_FOUND)
   OPTION (PCRE_SUPPORT_LIBREADLINE  "Enable support for linking pcretest with libreadline." ON)
@@ -239,6 +249,10 @@ IF(PCRE_BUILD_PCREGREP AND NOT PCRE_BUILD_PCRE8)
         SET(PCRE_BUILD_PCREGREP OFF)
 ENDIF(PCRE_BUILD_PCREGREP AND NOT PCRE_BUILD_PCRE8)
 
+IF(PCRE_SUPPORT_LIBREADLINE AND PCRE_SUPPORT_LIBEDIT)
+        MESSAGE(FATAL_ERROR "Only one of libreadline or libeditline can be specified")
+ENDIF(PCRE_SUPPORT_LIBREADLINE AND PCRE_SUPPORT_LIBEDIT)
+
 IF(PCRE_SUPPORT_BSR_ANYCRLF)
         SET(BSR_ANYCRLF 1)
 ENDIF(PCRE_SUPPORT_BSR_ANYCRLF)
@@ -270,6 +284,13 @@ IF(PCRE_SUPPORT_LIBREADLINE)
         SET(SUPPORT_LIBREADLINE 1)
         SET(PCRETEST_LIBS ${READLINE_LIBRARY} ${NCURSES_LIBRARY})
 ENDIF(PCRE_SUPPORT_LIBREADLINE)
+
+# libedit is a plug-compatible alternative to libreadline
+
+IF(PCRE_SUPPORT_LIBEDIT)
+        SET(SUPPORT_LIBEDIT 1)
+        SET(PCRETEST_LIBS ${EDITLINE_LIBRARY} ${NCURSES_LIBRARY})
+ENDIF(PCRE_SUPPORT_LIBEDIT)
 
 IF(PCRE_SUPPORT_LIBZ)
         SET(SUPPORT_LIBZ 1)
@@ -817,18 +838,24 @@ IF(PCRE_SHOW_REPORT)
   IF(ZLIB_FOUND)
     MESSAGE(STATUS "  Link pcregrep with libz ......... : ${PCRE_SUPPORT_LIBZ}")
   ELSE(ZLIB_FOUND)
-    MESSAGE(STATUS "  Link pcregrep with libz ......... : None" )
+    MESSAGE(STATUS "  Link pcregrep with libz ......... : Library not found" )
   ENDIF(ZLIB_FOUND)
   IF(BZIP2_FOUND)
     MESSAGE(STATUS "  Link pcregrep with libbz2 ....... : ${PCRE_SUPPORT_LIBBZ2}")
   ELSE(BZIP2_FOUND)
-    MESSAGE(STATUS "  Link pcregrep with libbz2 ....... : None" )
+    MESSAGE(STATUS "  Link pcregrep with libbz2 ....... : Library not found" )
   ENDIF(BZIP2_FOUND)
-  IF(NOT PCRE_SUPPORT_LIBREADLINE)
-    MESSAGE(STATUS "  Link pcretest with libreadline .. : None" )
-  ELSE(NOT PCRE_SUPPORT_LIBREADLINE)
+  IF(EDITLINE_FOUND)
+    MESSAGE(STATUS "  Link pcretest with libeditline .. : ${PCRE_SUPPORT_LIBEDIT}")
+  ELSE(EDITLINE_FOUND)
+    MESSAGE(STATUS "  Link pcretest with libeditline .. : Library not found" )
+  ENDIF(EDITLINE_FOUND)
+  IF(READLINE_FOUND)
     MESSAGE(STATUS "  Link pcretest with libreadline .. : ${PCRE_SUPPORT_LIBREADLINE}")
-  ENDIF(NOT PCRE_SUPPORT_LIBREADLINE)
+  ELSE(READLINE_FOUND)
+    MESSAGE(STATUS "  Link pcretest with libreadline .. : Library not found" )
+  ENDIF(READLINE_FOUND)
+
   IF(MINGW AND NOT PCRE_STATIC)
     MESSAGE(STATUS "  Non-standard dll names (prefix) . : ${NON_STANDARD_LIB_PREFIX}")
     MESSAGE(STATUS "  Non-standard dll names (suffix) . : ${NON_STANDARD_LIB_SUFFIX}")

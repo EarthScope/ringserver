@@ -62,16 +62,14 @@ JIT. The support is limited to the following hardware platforms:
   MIPS 32-bit
   Power PC 32-bit and 64-bit
 </pre>
-The Power PC support is designated as experimental because it has not been
-fully tested. If --enable-jit is set on an unsupported platform, compilation
-fails.
+If --enable-jit is set on an unsupported platform, compilation fails.
 </P>
 <P>
 A program that is linked with PCRE 8.20 or later can tell if JIT support is
 available by calling <b>pcre_config()</b> with the PCRE_CONFIG_JIT option. The
 result is 1 when JIT is available, and 0 otherwise. However, a simple program
 does not need to check this in order to use JIT. The API is implemented in a
-way that falls back to the ordinary PCRE code if JIT is not available.
+way that falls back to the interpretive code if JIT is not available.
 </P>
 <P>
 If your program may sometimes be linked with versions of PCRE that are older
@@ -88,7 +86,7 @@ You have to do two things to make use of the JIT support in the simplest way:
       <b>pcre_exec()</b>.
 
   (2) Use <b>pcre_free_study()</b> to free the <b>pcre_extra</b> block when it is
-      no longer needed instead of just freeing it yourself. This
+      no longer needed, instead of just freeing it yourself. This
       ensures that any JIT data is also freed.
 </pre>
 For a program that may be linked with pre-8.20 versions of PCRE, you can insert
@@ -106,32 +104,55 @@ this to free the study data:
       pcre_free(study_ptr);
   #endif
 </pre>
+PCRE_STUDY_JIT_COMPILE requests the JIT compiler to generate code for complete
+matches. If you want to run partial matches using the PCRE_PARTIAL_HARD or
+PCRE_PARTIAL_SOFT options of <b>pcre_exec()</b>, you should set one or both of
+the following options in addition to, or instead of, PCRE_STUDY_JIT_COMPILE
+when you call <b>pcre_study()</b>:
+<pre>
+  PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE
+  PCRE_STUDY_JIT_PARTIAL_SOFT_COMPILE
+</pre>
+The JIT compiler generates different optimized code for each of the three
+modes (normal, soft partial, hard partial). When <b>pcre_exec()</b> is called,
+the appropriate code is run if it is available. Otherwise, the pattern is
+matched using interpretive code.
+</P>
+<P>
 In some circumstances you may need to call additional functions. These are
 described in the section entitled
 <a href="#stackcontrol">"Controlling the JIT stack"</a>
 below.
 </P>
 <P>
-If JIT support is not available, PCRE_STUDY_JIT_COMPILE is ignored, and no JIT
-data is set up. Otherwise, the compiled pattern is passed to the JIT compiler,
-which turns it into machine code that executes much faster than the normal
-interpretive code. When <b>pcre_exec()</b> is passed a <b>pcre_extra</b> block
-containing a pointer to JIT code, it obeys that instead of the normal code. The
-result is identical, but the code runs much faster.
+If JIT support is not available, PCRE_STUDY_JIT_COMPILE etc. are ignored, and
+no JIT data is created. Otherwise, the compiled pattern is passed to the JIT
+compiler, which turns it into machine code that executes much faster than the
+normal interpretive code. When <b>pcre_exec()</b> is passed a <b>pcre_extra</b>
+block containing a pointer to JIT code of the appropriate mode (normal or
+hard/soft partial), it obeys that code instead of running the interpreter. The
+result is identical, but the compiled JIT code runs much faster.
 </P>
 <P>
 There are some <b>pcre_exec()</b> options that are not supported for JIT
 execution. There are also some pattern items that JIT cannot handle. Details
 are given below. In both cases, execution automatically falls back to the
-interpretive code.
+interpretive code. If you want to know whether JIT was actually used for a
+particular match, you should arrange for a JIT callback function to be set up
+as described in the section entitled
+<a href="#stackcontrol">"Controlling the JIT stack"</a>
+below, even if you do not need to supply a non-default JIT stack. Such a
+callback function is called whenever JIT code is about to be obeyed. If the
+execution options are not right for JIT execution, the callback function is not
+obeyed.
 </P>
 <P>
 If the JIT compiler finds an unsupported item, no JIT data is generated. You
 can find out if JIT execution is available after studying a pattern by calling
 <b>pcre_fullinfo()</b> with the PCRE_INFO_JIT option. A result of 1 means that
 JIT compilation was successful. A result of 0 means that JIT support is not
-available, or the pattern was not studied with PCRE_STUDY_JIT_COMPILE, or the
-JIT compiler was not able to handle the pattern.
+available, or the pattern was not studied with PCRE_STUDY_JIT_COMPILE etc., or
+the JIT compiler was not able to handle the pattern.
 </P>
 <P>
 Once a pattern has been studied, with or without JIT, it can be used as many
@@ -140,19 +161,16 @@ times as you like for matching different subject strings.
 <br><a name="SEC5" href="#TOC1">UNSUPPORTED OPTIONS AND PATTERN ITEMS</a><br>
 <P>
 The only <b>pcre_exec()</b> options that are supported for JIT execution are
-PCRE_NO_UTF8_CHECK, PCRE_NOTBOL, PCRE_NOTEOL, PCRE_NOTEMPTY, and
-PCRE_NOTEMPTY_ATSTART. Note in particular that partial matching is not
-supported.
+PCRE_NO_UTF8_CHECK, PCRE_NO_UTF16_CHECK, PCRE_NOTBOL, PCRE_NOTEOL,
+PCRE_NOTEMPTY, PCRE_NOTEMPTY_ATSTART, PCRE_PARTIAL_HARD, and PCRE_PARTIAL_SOFT.
 </P>
 <P>
 The unsupported pattern items are:
 <pre>
   \C             match a single byte; not supported in UTF-8 mode
   (?Cn)          callouts
-  (*COMMIT)      )
-  (*MARK)        )
-  (*PRUNE)       ) the backtracking control verbs
-  (*SKIP)        )
+  (*PRUNE)       )
+  (*SKIP)        ) backtracking control verbs
   (*THEN)        )
 </pre>
 Support for some of these may be added in future.
@@ -221,8 +239,8 @@ should use. Its arguments are as follows:
   void               *data
 </pre>
 The <i>extra</i> argument must be the result of studying a pattern with
-PCRE_STUDY_JIT_COMPILE. There are three cases for the values of the other two
-options:
+PCRE_STUDY_JIT_COMPILE etc. There are three cases for the values of the other
+two options:
 <pre>
   (1) If <i>callback</i> is NULL and <i>data</i> is NULL, an internal 32K block
       on the machine stack is used.
@@ -230,26 +248,38 @@ options:
   (2) If <i>callback</i> is NULL and <i>data</i> is not NULL, <i>data</i> must be
       a valid JIT stack, the result of calling <b>pcre_jit_stack_alloc()</b>.
 
-  (3) If <i>callback</i> not NULL, it must point to a function that is called
-      with <i>data</i> as an argument at the start of matching, in order to
-      set up a JIT stack. If the result is NULL, the internal 32K stack
-      is used; otherwise the return value must be a valid JIT stack,
-      the result of calling <b>pcre_jit_stack_alloc()</b>.
+  (3) If <i>callback</i> is not NULL, it must point to a function that is
+      called with <i>data</i> as an argument at the start of matching, in
+      order to set up a JIT stack. If the return from the callback
+      function is NULL, the internal 32K stack is used; otherwise the
+      return value must be a valid JIT stack, the result of calling
+      <b>pcre_jit_stack_alloc()</b>.
 </pre>
-You may safely assign the same JIT stack to more than one pattern, as long as
-they are all matched sequentially in the same thread. In a multithread
-application, each thread must use its own JIT stack.
+A callback function is obeyed whenever JIT code is about to be run; it is not
+obeyed when <b>pcre_exec()</b> is called with options that are incompatible for
+JIT execution. A callback function can therefore be used to determine whether a
+match operation was executed by JIT or by the interpreter.
 </P>
 <P>
-Strictly speaking, even more is allowed. You can assign the same stack to any
-number of patterns as long as they are not used for matching by multiple
+You may safely use the same JIT stack for more than one pattern (either by
+assigning directly or by callback), as long as the patterns are all matched
+sequentially in the same thread. In a multithread application, if you do not
+specify a JIT stack, or if you assign or pass back NULL from a callback, that
+is thread-safe, because each thread has its own machine stack. However, if you
+assign or pass back a non-NULL JIT stack, this must be a different stack for
+each thread so that the application is thread-safe.
+</P>
+<P>
+Strictly speaking, even more is allowed. You can assign the same non-NULL stack
+to any number of patterns as long as they are not used for matching by multiple
 threads at the same time. For example, you can assign the same stack to all
 compiled patterns, and use a global mutex in the callback to wait until the
-stack is available for use. However, this is an inefficient solution, and
-not recommended.
+stack is available for use. However, this is an inefficient solution, and not
+recommended.
 </P>
 <P>
-This is a suggestion for how a typical multithreaded program might operate:
+This is a suggestion for how a multithreaded program that needs to set up
+non-default JIT stacks might operate:
 <pre>
   During thread initalization
     thread_local_var = pcre_jit_stack_alloc(...)
@@ -263,7 +293,7 @@ This is a suggestion for how a typical multithreaded program might operate:
 All the functions described in this section do nothing if JIT is not available,
 and <b>pcre_assign_jit_stack()</b> does nothing unless the <b>extra</b> argument
 is non-NULL and points to a <b>pcre_extra</b> block that is the result of a
-successful study with PCRE_STUDY_JIT_COMPILE.
+successful study with PCRE_STUDY_JIT_COMPILE etc.
 <a name="stackfaq"></a></P>
 <br><a name="SEC9" href="#TOC1">JIT STACK FAQ</a><br>
 <P>
@@ -329,11 +359,11 @@ pattern causes stack overflow with a stack of 1M? Is that 1M kept until the
 stack is freed?
 <br>
 <br>
-Especially on embedded sytems, it might be a good idea to release
-memory sometimes without freeing the stack. There is no API for this at the
-moment. Probably a function call which returns with the currently allocated
-memory for any stack and another which allows releasing memory (shrinking the
-stack) would be a good idea if someone needs this.
+Especially on embedded sytems, it might be a good idea to release memory
+sometimes without freeing the stack. There is no API for this at the moment.
+Probably a function call which returns with the currently allocated memory for
+any stack and another which allows releasing memory (shrinking the stack) would
+be a good idea if someone needs this.
 </P>
 <P>
 (7) This is too much of a headache. Isn't there any better solution for JIT
@@ -383,7 +413,7 @@ Cambridge CB2 3QH, England.
 </P>
 <br><a name="SEC13" href="#TOC1">REVISION</a><br>
 <P>
-Last updated: 08 January 2012
+Last updated: 04 May 2012
 <br>
 Copyright &copy; 1997-2012 University of Cambridge.
 <br>

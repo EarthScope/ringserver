@@ -26,6 +26,64 @@
 # executables under a simulator, for example:
 #
 # RunTest 3 sim "qemu-arm -s 8388608"
+#
+# Finally, if the script is obeyed as "RunTest list", a list of available
+# tests is output, but none of them are run.
+
+# Define test titles in variables so that they can be output as a list. Some
+# of them are modified (e.g. with -8 or -16) when used in the actual tests.
+
+title1="Test 1: Main functionality (Compatible with Perl >= 5.10)"
+title2="Test 2: API, errors, internals, and non-Perl stuff"
+title3="Test 3: Locale-specific features"
+title4A="Test 4: UTF"
+title4B=" support (Compatible with Perl >= 5.10)"
+title5="Test 5: API, internals, and non-Perl stuff for UTF"
+title6="Test 6: Unicode property support (Compatible with Perl >= 5.10)"
+title7="Test 7: API, internals, and non-Perl stuff for Unicode property support"
+title8="Test 8: DFA matching main functionality"
+title9="Test 9: DFA matching with UTF"
+title10="Test 10: DFA matching with Unicode properties"
+title11="Test 11: Internal offsets and code size tests"
+title12="Test 12: JIT-specific features (JIT available)"
+title13="Test 13: JIT-specific features (JIT not available)"
+title14="Test 14: Specials for the basic 8-bit library"
+title15="Test 15: Specials for the 8-bit library with UTF-8 support"
+title16="Test 16: Specials for the 8-bit library with Unicode propery support"
+title17="Test 17: Specials for the basic 16-bit library"
+title18="Test 18: Specials for the 16-bit library with UTF-16 support"
+title19="Test 19: Specials for the 16-bit library with Unicode propery support"
+title20="Test 20: DFA specials for the basic 16-bit library"
+title21="Test 21: Reloads for the basic 16-bit library"
+title22="Test 22: Reloads for the 16-bit library with UTF-16 support"
+
+if [ $# -eq 1 -a "$1" = "list" ]; then
+  echo $title1
+  echo $title2 "(not UTF)"
+  echo $title3
+  echo $title4A $title4B
+  echo $title5 support
+  echo $title6
+  echo $title7
+  echo $title8
+  echo $title9
+  echo $title10
+  echo $title11
+  echo $title12
+  echo $title13
+  echo $title14
+  echo $title15
+  echo $title16
+  echo $title17
+  echo $title18
+  echo $title19
+  echo $title20
+  echo $title21
+  echo $title22
+  exit 0
+fi
+
+# Default values
 
 valgrind=
 sim=
@@ -89,7 +147,7 @@ while [ $# -gt 0 ] ; do
   -16) arg16=yes;;
    valgrind) valgrind="valgrind -q --smc-check=all";;
    sim) shift; sim=$1;;
-    *) echo "Unknown test number $1"; exit 1;;
+    *) echo "Unknown test number '$1'"; exit 1;;
   esac
   shift
 done
@@ -135,7 +193,7 @@ $sim ./pcretest -C pcre8 >/dev/null
 support8=$?
 $sim ./pcretest -C pcre16 >/dev/null
 support16=$?
-if [ $(( $support8 + $support16 )) -eq 2 ] ; then
+if [ `expr $support8 + $support16` -eq 2 ] ; then
   test8=
   test16=-16
   if [ "$arg8" = yes -a "$arg16" != yes ] ; then
@@ -295,7 +353,7 @@ for bmode in "$test8" "$test16"; do
 # Primary test, compatible with JIT and all versions of Perl >= 5.8
 
 if [ $do1 = yes ] ; then
-  echo "Test 1: main functionality (Compatible with Perl >= 5.10)"
+  echo $title1
   for opt in "" "-s" $jitopt; do
     $sim $valgrind ./pcretest -q $bmode $opt $testdata/testinput1 testtry
     if [ $? = 0 ] ; then
@@ -313,7 +371,7 @@ fi
 # PCRE tests that are not JIT or Perl-compatible: API, errors, internals
 
 if [ $do2 = yes ] ; then
-  echo "Test 2: API, errors, internals, and non-Perl stuff (not UTF-$bits)"
+  echo $title2 "(not UTF-$bits)"
   for opt in "" "-s" $jitopt; do
     $sim $valgrind ./pcretest -q $bmode $opt $testdata/testinput2 testtry
     if [ $? = 0 ] ; then
@@ -367,7 +425,7 @@ if [ $do3 = yes ] ; then
   fi
 
   if [ "$locale" != "" ] ; then
-    echo "Test 3: locale-specific features (using '$locale' locale)"
+    echo $title3 "(using '$locale' locale)"
     for opt in "" "-s" $jitopt; do
       $sim $valgrind ./pcretest -q $bmode $opt $infile testtry
       if [ $? = 0 ] ; then
@@ -398,7 +456,7 @@ fi
 # Additional tests for UTF support
 
 if [ $do4 = yes ] ; then
-  echo "Test 4: UTF-$bits support (Compatible with Perl >= 5.10)"
+  echo ${title4A}-${bits}${title4B}
   if [ $utf -eq 0 ] ; then
     echo "  Skipped because UTF-$bits support is not available"
   else
@@ -418,7 +476,7 @@ if [ $do4 = yes ] ; then
 fi
 
 if [ $do5 = yes ] ; then
-  echo "Test 5: API, internals, and non-Perl stuff for UTF-$bits support"
+  echo ${title5}-${bits} support
   if [ $utf -eq 0 ] ; then
     echo "  Skipped because UTF-$bits support is not available"
   else
@@ -438,7 +496,7 @@ if [ $do5 = yes ] ; then
 fi
 
 if [ $do6 = yes ] ; then
-  echo "Test 6: Unicode property support (Compatible with Perl >= 5.10)"
+  echo $title6
   if [ $utf -eq 0 -o $ucp -eq 0 ] ; then
     echo "  Skipped because Unicode property support is not available"
   else
@@ -460,7 +518,7 @@ fi
 # Test non-Perl-compatible Unicode property support
 
 if [ $do7 = yes ] ; then
-  echo "Test 7: API, internals, and non-Perl stuff for Unicode property support"
+  echo $title7
   if [ $utf -eq 0 -o $ucp -eq 0 ] ; then
     echo "  Skipped because Unicode property support is not available"
   else
@@ -482,7 +540,7 @@ fi
 # Tests for DFA matching support
 
 if [ $do8 = yes ] ; then
-  echo "Test 8: DFA matching main functionality"
+  echo $title8
   for opt in "" "-s"; do
     $sim $valgrind ./pcretest -q $bmode $opt -dfa $testdata/testinput8 testtry
     if [ $? = 0 ] ; then
@@ -495,7 +553,7 @@ if [ $do8 = yes ] ; then
 fi
 
 if [ $do9 = yes ] ; then
-  echo "Test 9: DFA matching with UTF-$bits"
+  echo ${title9}-${bits}
   if [ $utf -eq 0 ] ; then
     echo "  Skipped because UTF-$bits support is not available"
   else
@@ -512,7 +570,7 @@ if [ $do9 = yes ] ; then
 fi
 
 if [ $do10 = yes ] ; then
-  echo "Test 10: DFA matching with Unicode properties"
+  echo $title10
   if [ $utf -eq 0 -o $ucp -eq 0 ] ; then
     echo "  Skipped because Unicode property support is not available"
   else
@@ -536,7 +594,7 @@ fi
 # this test is not the same in 8-bit and 16-bit modes.
 
 if [ $do11 = yes ] ; then
-  echo "Test 11: Internal offsets and code size tests"
+  echo $title11
   if [ $link_size -ne 2 ] ; then
     echo "  Skipped because link size is not 2"
   elif [ $ucp -eq 0 ] ; then
@@ -557,7 +615,7 @@ fi
 # Test JIT-specific features when JIT is available
 
 if [ $do12 = yes ] ; then
-  echo "Test 12: JIT-specific features (JIT available)"
+  echo $title12
   if [ $jit -eq 0 ] ; then
     echo "  Skipped because JIT is not available or not usable"
   else
@@ -574,7 +632,7 @@ fi
 # Test JIT-specific features when JIT is not available
 
 if [ $do13 = yes ] ; then
-  echo "Test 13: JIT-specific features (JIT not available)"
+  echo $title13
   if [ $jit -ne 0 ] ; then
     echo "  Skipped because JIT is available"
   else
@@ -591,7 +649,7 @@ fi
 # Tests for 8-bit-specific features
 
 if [ "$do14" = yes ] ; then
-  echo "Test 14: specials for the basic 8-bit library"
+  echo $title14
   if [ "$bits" = "16" ] ; then
     echo "  Skipped when running 16-bit tests"
   else
@@ -614,7 +672,7 @@ fi
 # Tests for 8-bit-specific features (needs UTF-8 support)
 
 if [ "$do15" = yes ] ; then
-  echo "Test 15: specials for the 8-bit library with UTF-8 support"
+  echo $title15
   if [ "$bits" = "16" ] ; then
     echo "  Skipped when running 16-bit tests"
   elif [ $utf -eq 0 ] ; then
@@ -638,7 +696,7 @@ fi
 # Tests for 8-bit-specific features (Unicode property support)
 
 if [ $do16 = yes ] ; then
-  echo "Test 16: specials for the 8-bit library with Unicode propery support"
+  echo $title16
   if [ "$bits" = "16" ] ; then
     echo "  Skipped when running 16-bit tests"
   elif [ $ucp -eq 0 ] ; then
@@ -662,7 +720,7 @@ fi
 # Tests for 16-bit-specific features
 
 if [ $do17 = yes ] ; then
-  echo "Test 17: specials for the basic 16-bit library"
+  echo $title17
   if [ "$bits" = "8" ] ; then
     echo "  Skipped when running 8-bit tests"
   else
@@ -684,7 +742,7 @@ fi
 # Tests for 16-bit-specific features (UTF-16 support)
 
 if [ $do18 = yes ] ; then
-  echo "Test 18: specials for the 16-bit library with UTF-16 support"
+  echo $title18
   if [ "$bits" = "8" ] ; then
     echo "  Skipped when running 8-bit tests"
   elif [ $utf -eq 0 ] ; then
@@ -708,7 +766,7 @@ fi
 # Tests for 16-bit-specific features (Unicode property support)
 
 if [ $do19 = yes ] ; then
-  echo "Test 19: specials for the 16-bit library with Unicode propery support"
+  echo $title19
   if [ "$bits" = "8" ] ; then
     echo "  Skipped when running 8-bit tests"
   elif [ $ucp -eq 0 ] ; then
@@ -732,7 +790,7 @@ fi
 # Tests for 16-bit-specific features in DFA non-UTF-16 mode
 
 if [ $do20 = yes ] ; then
-  echo "Test 20: DFA specials for the basic 16-bit library"
+  echo $title20
   if [ "$bits" = "8" ] ; then
     echo "  Skipped when running 8-bit tests"
   else
@@ -753,7 +811,7 @@ fi
 # Tests for reloads with 16-bit library
 
 if [ $do21 = yes ] ; then
-  echo "Test 21: reloads for the basic 16-bit library"
+  echo $title21
   if [ "$bits" = "8" ] ; then
     echo "  Skipped when running 8-bit tests"
   elif [ $link_size -ne 2 ] ; then
@@ -775,7 +833,7 @@ fi
 # Tests for reloads with 16-bit library (UTF-16 support)
 
 if [ $do22 = yes ] ; then
-  echo "Test 22: reloads for the 16-bit library with UTF-16 support"
+  echo $title22
   if [ "$bits" = "8" ] ; then
     echo "  Skipped when running 8-bit tests"
   elif [ $utf -eq 0 ] ; then

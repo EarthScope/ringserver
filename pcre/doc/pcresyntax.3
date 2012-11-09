@@ -1,4 +1,4 @@
-.TH PCRESYNTAX 3
+.TH PCRESYNTAX 3 "10 January 2012" "PCRE 8.30"
 .SH NAME
 PCRE - Perl-compatible regular expressions
 .SH "PCRE REGULAR EXPRESSION SYNTAX SUMMARY"
@@ -25,7 +25,7 @@ documentation. This document contains a quick-reference summary of the syntax.
   \ea         alarm, that is, the BEL character (hex 07)
   \ecx        "control-x", where x is any ASCII character
   \ee         escape (hex 1B)
-  \ef         formfeed (hex 0C)
+  \ef         form feed (hex 0C)
   \en         newline (hex 0A)
   \er         carriage return (hex 0D)
   \et         tab (hex 09)
@@ -42,16 +42,16 @@ documentation. This document contains a quick-reference summary of the syntax.
   \eC         one data unit, even in UTF mode (best avoided)
   \ed         a decimal digit
   \eD         a character that is not a decimal digit
-  \eh         a horizontal whitespace character
-  \eH         a character that is not a horizontal whitespace character
+  \eh         a horizontal white space character
+  \eH         a character that is not a horizontal white space character
   \eN         a character that is not a newline
   \ep{\fIxx\fP}     a character with the \fIxx\fP property
   \eP{\fIxx\fP}     a character without the \fIxx\fP property
   \eR         a newline sequence
-  \es         a whitespace character
-  \eS         a character that is not a whitespace character
-  \ev         a vertical whitespace character
-  \eV         a character that is not a vertical whitespace character
+  \es         a white space character
+  \eS         a character that is not a white space character
+  \ev         a vertical white space character
+  \eV         a character that is not a vertical white space character
   \ew         a "word" character
   \eW         a "non-word" character
   \eX         an extended Unicode sequence
@@ -127,13 +127,16 @@ Armenian,
 Avestan,
 Balinese,
 Bamum,
+Batak,
 Bengali,
 Bopomofo,
+Brahmi,
 Braille,
 Buginese,
 Buhid,
 Canadian_Aboriginal,
 Carian,
+Chakma,
 Cham,
 Cherokee,
 Common,
@@ -176,7 +179,11 @@ Lisu,
 Lycian,
 Lydian,
 Malayalam,
+Mandaic,
 Meetei_Mayek,
+Meroitic_Cursive,
+Meroitic_Hieroglyphs,
+Miao,
 Mongolian,
 Myanmar,
 New_Tai_Lue,
@@ -195,8 +202,10 @@ Rejang,
 Runic,
 Samaritan,
 Saurashtra,
+Sharada,
 Shavian,
 Sinhala,
+Sora_Sompeng,
 Sundanese,
 Syloti_Nagri,
 Syriac,
@@ -205,6 +214,7 @@ Tagbanwa,
 Tai_Le,
 Tai_Tham,
 Tai_Viet,
+Takri,
 Tamil,
 Telugu,
 Thaana,
@@ -235,7 +245,7 @@ Yi.
   lower       lower case letter
   print       printing, including space
   punct       printing, excluding alphanumeric
-  space       whitespace
+  space       white space
   upper       upper case letter
   word        same as \ew
   xdigit      hexadecimal digit

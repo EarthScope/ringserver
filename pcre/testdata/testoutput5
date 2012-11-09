@@ -1649,4 +1649,201 @@ Failed: disallowed Unicode code point (>= 0xd800 && <= 0xdfff) at offset 7
     \x09\x0e\x{84}\x{86}\x{85}\x0a\x0b\x0c\x0d
  0: \x{85}\x{0a}\x{0b}\x{0c}\x{0d}
 
+/(..)\1/8
+    ab\P
+Partial match: ab
+    aba\P
+Partial match: aba
+    abab\P
+ 0: abab
+ 1: ab
+
+/(..)\1/8i
+    ab\P
+Partial match: ab
+    abA\P
+Partial match: abA
+    aBAb\P
+ 0: aBAb
+ 1: aB
+
+/(..)\1{2,}/8
+    ab\P
+Partial match: ab
+    aba\P
+Partial match: aba
+    abab\P
+Partial match: abab
+    ababa\P
+Partial match: ababa
+    ababab\P
+ 0: ababab
+ 1: ab
+    ababab\P\P
+Partial match: ababab
+    abababa\P
+ 0: ababab
+ 1: ab
+    abababa\P\P
+Partial match: abababa
+
+/(..)\1{2,}/8i
+    ab\P
+Partial match: ab
+    aBa\P
+Partial match: aBa
+    aBAb\P
+Partial match: aBAb
+    AbaBA\P
+Partial match: AbaBA
+    abABAb\P
+ 0: abABAb
+ 1: ab
+    aBAbaB\P\P
+Partial match: aBAbaB
+    abABabA\P
+ 0: abABab
+ 1: ab
+    abaBABa\P\P
+Partial match: abaBABa
+
+/(..)\1{2,}?x/8i
+    ab\P
+Partial match: ab
+    abA\P
+Partial match: abA
+    aBAb\P
+Partial match: aBAb
+    abaBA\P
+Partial match: abaBA
+    abAbaB\P
+Partial match: abAbaB
+    abaBabA\P
+Partial match: abaBabA
+    abAbABaBx\P
+ 0: abAbABaBx
+ 1: ab
+
+/./8<CRLF>
+    \r\P
+ 0: \x{0d}
+    \r\P\P 
+Partial match: \x{0d}
+  
+/.{2,3}/8<CRLF>
+    \r\P 
+Partial match: \x{0d}
+    \r\P\P
+Partial match: \x{0d}
+    \r\r\P
+ 0: \x{0d}\x{0d}
+    \r\r\P\P
+Partial match: \x{0d}\x{0d}
+    \r\r\r\P
+ 0: \x{0d}\x{0d}\x{0d}
+    \r\r\r\P\P     
+Partial match: \x{0d}\x{0d}\x{0d}
+
+/.{2,3}?/8<CRLF>
+    \r\P 
+Partial match: \x{0d}
+    \r\P\P
+Partial match: \x{0d}
+    \r\r\P
+ 0: \x{0d}\x{0d}
+    \r\r\P\P
+Partial match: \x{0d}\x{0d}
+    \r\r\r\P
+ 0: \x{0d}\x{0d}
+    \r\r\r\P\P     
+ 0: \x{0d}\x{0d}
+
+/[^\x{100}][^\x{1234}][^\x{ffff}][^\x{10000}][^\x{10ffff}]/8BZ
+------------------------------------------------------------------
+        Bra
+        [^\x{100}]
+        [^\x{1234}]
+        [^\x{ffff}]
+        [^\x{10000}]
+        [^\x{10ffff}]
+        Ket
+        End
+------------------------------------------------------------------
+
+/[^\x{100}][^\x{1234}][^\x{ffff}][^\x{10000}][^\x{10ffff}]/8BZi
+------------------------------------------------------------------
+        Bra
+     /i [^\x{100}]
+     /i [^\x{1234}]
+     /i [^\x{ffff}]
+     /i [^\x{10000}]
+     /i [^\x{10ffff}]
+        Ket
+        End
+------------------------------------------------------------------
+
+/[^\x{100}]*[^\x{10000}]+[^\x{10ffff}]??[^\x{8000}]{4,}[^\x{7fff}]{2,9}?[^\x{fffff}]{5,6}+/8BZ
+------------------------------------------------------------------
+        Bra
+        [^\x{100}]*
+        [^\x{10000}]+
+        [^\x{10ffff}]??
+        [^\x{8000}]{4}
+        [^\x{8000}]*
+        [^\x{7fff}]{2}
+        [^\x{7fff}]{0,7}?
+        [^\x{fffff}]{5}
+        [^\x{fffff}]?+
+        Ket
+        End
+------------------------------------------------------------------
+
+/[^\x{100}]*[^\x{10000}]+[^\x{10ffff}]??[^\x{8000}]{4,}[^\x{7fff}]{2,9}?[^\x{fffff}]{5,6}+/8BZi
+------------------------------------------------------------------
+        Bra
+     /i [^\x{100}]*
+     /i [^\x{10000}]+
+     /i [^\x{10ffff}]??
+     /i [^\x{8000}]{4}
+     /i [^\x{8000}]*
+     /i [^\x{7fff}]{2}
+     /i [^\x{7fff}]{0,7}?
+        Once
+     /i [^\x{fffff}]{5}
+     /i [^\x{fffff}]?
+        Ket
+        Ket
+        End
+------------------------------------------------------------------
+
+/(?<=\x{1234}\x{1234})\bxy/I8
+Capturing subpattern count = 0
+Options: utf
+First char = 'x'
+Need char = 'y'
+Max lookbehind = 2
+
+/(?<!^)ETA/8
+    ETA
+No match
+
+/\u0100/<JS>8BZ
+------------------------------------------------------------------
+        Bra
+        \x{100}
+        Ket
+        End
+------------------------------------------------------------------
+
+/[\u0100-\u0200]/<JS>8BZ
+------------------------------------------------------------------
+        Bra
+        [\x{100}-\x{200}]
+        Ket
+        End
+------------------------------------------------------------------
+
+/\ud800/<JS>8
+Failed: disallowed Unicode code point (>= 0xd800 && <= 0xdfff) at offset 5
+
 /-- End of testinput5 --/

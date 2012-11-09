@@ -285,9 +285,7 @@ Character classes
 
 If there is only one character in the class, OP_CHAR or OP_CHARI is used for a
 positive class, and OP_NOT or OP_NOTI for a negative one (that is, for
-something like [^a]). However, OP_NOT[I] can be used only with single-unit
-characters, so in UTF-8 (UTF-16) mode, the use of OP_NOT[I] applies only to
-characters whose code points are no greater than 127 (0xffff).
+something like [^a]). 
 
 Another set of 13 repeating opcodes (called OP_NOTSTAR etc.) are used for
 repeated, negated, single-character classes. The normal single-character
@@ -467,4 +465,4 @@ item giving the length of the next item.
 
 
 Philip Hazel
-December 2011
+February 2012

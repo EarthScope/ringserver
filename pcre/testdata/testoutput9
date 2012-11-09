@@ -1323,4 +1323,49 @@ Error -16 (item unsupported for DFA matching)
 /(?<=ab\Cde)X/8
 Failed: \C not allowed in lookbehind assertion at offset 10
 
+/./8<CRLF>
+    \r\P
+ 0: \x{0d}
+    \r\P\P 
+Partial match: \x{0d}
+  
+/.{2,3}/8<CRLF>
+    \r\P 
+Partial match: \x{0d}
+    \r\P\P
+Partial match: \x{0d}
+    \r\r\P
+ 0: \x{0d}\x{0d}
+    \r\r\P\P
+Partial match: \x{0d}\x{0d}
+    \r\r\r\P
+ 0: \x{0d}\x{0d}\x{0d}
+ 1: \x{0d}\x{0d}
+    \r\r\r\P\P     
+Partial match: \x{0d}\x{0d}\x{0d}
+
+/.{2,3}?/8<CRLF>
+    \r\P 
+Partial match: \x{0d}
+    \r\P\P
+Partial match: \x{0d}
+    \r\r\P
+ 0: \x{0d}\x{0d}
+    \r\r\P\P
+Partial match: \x{0d}\x{0d}
+    \r\r\r\P
+ 0: \x{0d}\x{0d}\x{0d}
+ 1: \x{0d}\x{0d}
+    \r\r\r\P\P     
+Partial match: \x{0d}\x{0d}\x{0d}
+
+/[^\x{100}]/8
+    \x{100}\x{101}X
+ 0: \x{101}
+
+/[^\x{100}]+/8
+    \x{100}\x{101}X
+ 0: \x{101}X
+ 1: \x{101}
+
 /-- End of testinput9 --/ 

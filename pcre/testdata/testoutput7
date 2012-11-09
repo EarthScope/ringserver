@@ -1211,4 +1211,106 @@ No match
 /(?<=ab\Cde)X/8
 Failed: \C not allowed in lookbehind assertion at offset 10
 
+/\X/
+    a\P
+ 0: a
+    a\P\P
+Partial match: a
+
+/\Xa/
+    aa\P
+ 0: aa
+    aa\P\P
+ 0: aa
+
+/\X{2}/
+    aa\P
+ 0: aa
+    aa\P\P
+Partial match: aa
+
+/\X+a/
+    a\P
+Partial match: a
+    aa\P
+ 0: aa
+    aa\P\P
+Partial match: aa
+
+/\X+?a/
+    a\P
+Partial match: a
+    ab\P
+Partial match: ab
+    aa\P
+ 0: aa
+    aa\P\P
+ 0: aa
+    aba\P
+ 0: aba
+    
+/-- These Unicode 6.1.0 scripts are not known to Perl. --/ 
+
+/\p{Chakma}\d/8W
+    \x{11100}\x{1113c}
+ 0: \x{11100}\x{1113c}
+
+/\p{Takri}\d/8W
+    \x{11680}\x{116c0}
+ 0: \x{11680}\x{116c0}
+
+/^\X/8
+    A\P
+ 0: A
+    A\P\P 
+Partial match: A
+    A\x{300}\x{301}\P
+ 0: A\x{300}\x{301}
+    A\x{300}\x{301}\P\P  
+Partial match: A\x{300}\x{301}
+    A\x{301}\P
+ 0: A\x{301}
+    A\x{301}\P\P  
+Partial match: A\x{301}
+    
+/^\X{2,3}/8
+    A\P
+Partial match: A
+    A\P\P 
+Partial match: A
+    AA\P
+ 0: AA
+    AA\P\P  
+Partial match: AA
+    A\x{300}\x{301}\P
+Partial match: A\x{300}\x{301}
+    A\x{300}\x{301}\P\P  
+Partial match: A\x{300}\x{301}
+    A\x{300}\x{301}A\x{300}\x{301}\P
+ 0: A\x{300}\x{301}A\x{300}\x{301}
+    A\x{300}\x{301}A\x{300}\x{301}\P\P  
+Partial match: A\x{300}\x{301}A\x{300}\x{301}
+
+/^\X{2}/8
+    AA\P
+ 0: AA
+    AA\P\P  
+Partial match: AA
+    A\x{300}\x{301}A\x{300}\x{301}\P
+ 0: A\x{300}\x{301}A\x{300}\x{301}
+    A\x{300}\x{301}A\x{300}\x{301}\P\P  
+Partial match: A\x{300}\x{301}A\x{300}\x{301}
+    
+/^\X+/8
+    AA\P
+ 0: AA
+    AA\P\P  
+Partial match: AA
+
+/^\X+?Z/8
+    AA\P
+Partial match: AA
+    AA\P\P 
+Partial match: AA
+
 /-- End of testinput7 --/

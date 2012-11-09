@@ -1,4 +1,4 @@
-.TH PCREUNICODE 3
+.TH PCREUNICODE 3 "14 April 2012" "PCRE 8.30"
 .SH NAME
 PCRE - Perl-compatible regular expressions
 .SH "UTF-8, UTF-16, AND UNICODE PROPERTY SUPPORT"
@@ -70,11 +70,12 @@ compatibility with Perl 5.6. PCRE does not support this.
 .sp
 When you set the PCRE_UTF8 flag, the byte strings passed as patterns and
 subjects are (by default) checked for validity on entry to the relevant
-functions. From release 7.3 of PCRE, the check is according the rules of RFC
-3629, which are themselves derived from the Unicode specification. Earlier
-releases of PCRE followed the rules of RFC 2279, which allows the full range of
-31-bit values (0 to 0x7FFFFFFF). The current check allows only values in the
-range U+0 to U+10FFFF, excluding U+D800 to U+DFFF.
+functions. The entire string is checked before any other processing takes
+place. From release 7.3 of PCRE, the check is according the rules of RFC 3629,
+which are themselves derived from the Unicode specification. Earlier releases
+of PCRE followed the rules of RFC 2279, which allows the full range of 31-bit
+values (0 to 0x7FFFFFFF). The current check allows only values in the range U+0
+to U+10FFFF, excluding U+D800 to U+DFFF.
 .P
 The excluded code points are the "Surrogate Area" of Unicode. They are reserved
 for use by UTF-16, where they are used in pairs to encode codepoints with
@@ -84,15 +85,17 @@ surrogate thing is a fudge for UTF-16 which unfortunately messes up UTF-8.)
 .P
 If an invalid UTF-8 string is passed to PCRE, an error return is given. At
 compile time, the only additional information is the offset to the first byte
-of the failing character. The runtime functions \fBpcre_exec()\fP and
+of the failing character. The run-time functions \fBpcre_exec()\fP and
 \fBpcre_dfa_exec()\fP also pass back this information, as well as a more
 detailed reason code if the caller has provided memory in which to do this.
 .P
 In some situations, you may already know that your strings are valid, and
-therefore want to skip these checks in order to improve performance. If you set
-the PCRE_NO_UTF8_CHECK flag at compile time or at run time, PCRE assumes that
-the pattern or subject it is given (respectively) contains only valid UTF-8
-codes. In this case, it does not diagnose an invalid UTF-8 string.
+therefore want to skip these checks in order to improve performance, for
+example in the case of a long subject string that is being scanned repeatedly
+with different patterns. If you set the PCRE_NO_UTF8_CHECK flag at compile time
+or at run time, PCRE assumes that the pattern or subject it is given
+(respectively) contains only valid UTF-8 codes. In this case, it does not
+diagnose an invalid UTF-8 string.
 .P
 If you pass an invalid UTF-8 string when PCRE_NO_UTF8_CHECK is set, what
 happens depends on why the string is invalid. If the string conforms to the
@@ -124,7 +127,7 @@ must be used in pairs in the correct manner.
 .P
 If an invalid UTF-16 string is passed to PCRE, an error return is given. At
 compile time, the only additional information is the offset to the first data
-unit of the failing character. The runtime functions \fBpcre16_exec()\fP and
+unit of the failing character. The run-time functions \fBpcre16_exec()\fP and
 \fBpcre16_dfa_exec()\fP also pass back this information, as well as a more
 detailed reason code if the caller has provided memory in which to do this.
 .P
@@ -189,7 +192,7 @@ documentation.
 7. Similarly, characters that match the POSIX named character classes are all
 low-valued characters, unless the PCRE_UCP option is set.
 .P
-8. However, the horizontal and vertical whitespace matching escapes (\eh, \eH,
+8. However, the horizontal and vertical white space matching escapes (\eh, \eH,
 \ev, and \eV) do match all the appropriate Unicode characters, whether or not
 PCRE_UCP is set.
 .P
@@ -217,6 +220,6 @@ Cambridge CB2 3QH, England.
 .rs
 .sp
 .nf
-Last updated: 13 January 2012
+Last updated: 14 April 2012
 Copyright (c) 1997-2012 University of Cambridge.
 .fi

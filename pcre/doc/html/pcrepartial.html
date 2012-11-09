@@ -58,9 +58,19 @@ the details differ between the two types of matching function. If both options
 are set, PCRE_PARTIAL_HARD takes precedence.
 </P>
 <P>
-Setting a partial matching option disables the use of any just-in-time code
-that was set up by studying the compiled pattern with the
-PCRE_STUDY_JIT_COMPILE option. It also disables two of PCRE's standard
+If you want to use partial matching with just-in-time optimized code, you must
+call <b>pcre_study()</b> or <b>pcre16_study()</b> with one or both of these
+options:
+<pre>
+  PCRE_STUDY_JIT_PARTIAL_SOFT_COMPILE
+  PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE
+</pre>
+PCRE_STUDY_JIT_COMPILE should also be set if you are going to run non-partial
+matches on the same pattern. If the appropriate JIT study mode has not been set
+for a match, the interpretive matching code is used.
+</P>
+<P>
+Setting a partial matching option disables two of PCRE's standard
 optimizations. PCRE remembers the last literal data unit in a pattern, and
 abandons matching immediately if it is not present in the subject string. This
 optimization cannot be used for a subject string that might match only
@@ -317,8 +327,8 @@ treat the end of a segment as the end of the subject when matching \z, \Z,
 </pre>
 At this stage, an application could discard the text preceding "23ja", add on
 text from the next segment, and call the matching function again. Unlike the
-DFA matching functions the entire matching string must always be available, and
-the complete matching process occurs for each call, so more memory and more
+DFA matching functions, the entire matching string must always be available,
+and the complete matching process occurs for each call, so more memory and more
 processing time is needed.
 </P>
 <P>
@@ -326,6 +336,8 @@ processing time is needed.
 with \b or \B, the string that is returned for a partial match includes
 characters that precede the partially matched string itself, because these must
 be retained when adding on more characters for a subsequent matching attempt.
+However, in some cases you may need to retain even earlier characters, as
+discussed in the next section.
 </P>
 <br><a name="SEC9" href="#TOC1">ISSUES WITH MULTI-SEGMENT MATCHING</a><br>
 <P>
@@ -340,15 +352,33 @@ doing multi-segment matching you should be using PCRE_PARTIAL_HARD, which
 includes the effect of PCRE_NOTEOL.
 </P>
 <P>
-2. Lookbehind assertions at the start of a pattern are catered for in the
-offsets that are returned for a partial match. However, in theory, a lookbehind
-assertion later in the pattern could require even earlier characters to be
-inspected, and it might not have been reached when a partial match occurs. This
-is probably an extremely unlikely case; you could guard against it to a certain
-extent by always including extra characters at the start.
+2. Lookbehind assertions that have already been obeyed are catered for in the
+offsets that are returned for a partial match. However a lookbehind assertion
+later in the pattern could require even earlier characters to be inspected. You
+can handle this case by using the PCRE_INFO_MAXLOOKBEHIND option of the
+<b>pcre_fullinfo()</b> or <b>pcre16_fullinfo()</b> functions to obtain the length
+of the largest lookbehind in the pattern. This length is given in characters,
+not bytes. If you always retain at least that many characters before the
+partially matched string, all should be well. (Of course, near the start of the
+subject, fewer characters may be present; in that case all characters should be
+retained.)
 </P>
 <P>
-3. Matching a subject string that is split into multiple segments may not
+3. Because a partial match must always contain at least one character, what
+might be considered a partial match of an empty string actually gives a "no
+match" result. For example:
+<pre>
+    re&#62; /c(?&#60;=abc)x/
+  data&#62; ab\P
+  No match
+</pre>
+If the next segment begins "cx", a match should be found, but this will only
+happen if characters from the previous segment are retained. For this reason, a
+"no match" result should be interpreted as "partial match of an empty string"
+when the pattern contains lookbehinds.
+</P>
+<P>
+4. Matching a subject string that is split into multiple segments may not
 always produce exactly the same result as matching over one single long string,
 especially when PCRE_PARTIAL_SOFT is used. The section "Partial Matching and
 Word Boundaries" above describes an issue that arises if the pattern ends with
@@ -390,7 +420,7 @@ multi-segment data. The example above then behaves differently:
   data&#62; gsb\R\P\P\D
   Partial match: gsb
 </pre>
-4. Patterns that contain alternatives at the top level which do not all start
+5. Patterns that contain alternatives at the top level which do not all start
 with the same pattern item may not work as expected when PCRE_DFA_RESTART is
 used. For example, consider this pattern:
 <pre>
@@ -435,7 +465,7 @@ Cambridge CB2 3QH, England.
 </P>
 <br><a name="SEC11" href="#TOC1">REVISION</a><br>
 <P>
-Last updated: 21 January 2012
+Last updated: 24 February 2012
 <br>
 Copyright &copy; 1997-2012 University of Cambridge.
 <br>

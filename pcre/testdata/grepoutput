@@ -638,3 +638,33 @@ RC=0
 pcregrep: line 4 of file ./testdata/grepinput3 is too long for the internal buffer
 pcregrep: check the --buffer-size option
 RC=2
+---------------------------- Test 84 -----------------------------
+testdata/grepinputv:fox jumps
+testdata/grepinputx:complete pair
+testdata/grepinputx:That was a complete pair
+testdata/grepinputx:complete pair
+RC=0
+---------------------------- Test 85 -----------------------------
+./testdata/grepinput3:Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+RC=0
+---------------------------- Test 86 -----------------------------
+Binary file ./testdata/grepbinary matches
+RC=0
+---------------------------- Test 87 -----------------------------
+RC=1
+---------------------------- Test 88 -----------------------------
+Binary file ./testdata/grepbinary matches
+RC=0
+---------------------------- Test 89 -----------------------------
+RC=1
+---------------------------- Test 90 -----------------------------
+RC=1
+---------------------------- Test 91 -----------------------------
+The quick brown f x jumps over the lazy dog.
+RC=0
+---------------------------- Test 92 -----------------------------
+The quick brown f x jumps over the lazy dog.
+RC=0
+---------------------------- Test 93 -----------------------------
+The quick brown f x jumps over the lazy dog.
+RC=0

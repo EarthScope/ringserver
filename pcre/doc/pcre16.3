@@ -1,4 +1,4 @@
-.TH PCRE 3
+.TH PCRE 3 "14 April 2012" "PCRE 8.31"
 .SH NAME
 PCRE - Perl-compatible regular expressions
 .sp
@@ -264,7 +264,17 @@ units.
 .sp
 There are two new general option names, PCRE_UTF16 and PCRE_NO_UTF16_CHECK,
 which correspond to PCRE_UTF8 and PCRE_NO_UTF8_CHECK in the 8-bit library. In
-fact, these new options define the same bits in the options word.
+fact, these new options define the same bits in the options word. There is a
+discussion about the
+.\" HTML <a href="pcreunicode.html#utf16strings">
+.\" </a>
+validity of UTF-16 strings
+.\"
+in the
+.\" HREF
+\fBpcreunicode\fP
+.\"
+page.
 .P
 For the \fBpcre16_config()\fP function there is an option PCRE_CONFIG_UTF16
 that returns 1 if UTF-16 support is configured, otherwise 0. If this option is
@@ -374,6 +384,6 @@ Cambridge CB2 3QH, England.
 .rs
 .sp
 .nf
-Last updated: 08 January 2012
+Last updated: 14 April 2012
 Copyright (c) 1997-2012 University of Cambridge.
 .fi

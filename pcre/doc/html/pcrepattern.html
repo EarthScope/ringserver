@@ -227,10 +227,10 @@ backslash. All other characters (in particular, those whose codepoints are
 greater than 127) are treated as literals.
 </P>
 <P>
-If a pattern is compiled with the PCRE_EXTENDED option, whitespace in the
+If a pattern is compiled with the PCRE_EXTENDED option, white space in the
 pattern (other than in a character class) and characters between a # outside
 a character class and the next newline are ignored. An escaping backslash can
-be used to include a whitespace or # character as part of the pattern.
+be used to include a white space or # character as part of the pattern.
 </P>
 <P>
 If you want to remove the special meaning from a sequence of characters, you
@@ -264,7 +264,7 @@ one of the following escape sequences than the binary character it represents:
   \a        alarm, that is, the BEL character (hex 07)
   \cx       "control-x", where x is any ASCII character
   \e        escape (hex 1B)
-  \f        formfeed (hex 0C)
+  \f        form feed (hex 0C)
   \n        linefeed (hex 0A)
   \r        carriage return (hex 0D)
   \t        tab (hex 09)
@@ -307,6 +307,8 @@ as just described only when it is followed by two hexadecimal digits.
 Otherwise, it matches a literal "x" character. In JavaScript mode, support for
 code points greater than 256 is provided by \u, which must be followed by
 four hexadecimal digits; otherwise it matches a literal "u" character.
+Character codes specified by \u in JavaScript mode are constrained in the same
+was as those specified by \x in non-JavaScript mode.
 </P>
 <P>
 Characters whose value is less than 256 can be defined by either of the two
@@ -406,12 +408,12 @@ Another use of backslash is for specifying generic character types:
 <pre>
   \d     any decimal digit
   \D     any character that is not a decimal digit
-  \h     any horizontal whitespace character
-  \H     any character that is not a horizontal whitespace character
-  \s     any whitespace character
-  \S     any character that is not a whitespace character
-  \v     any vertical whitespace character
-  \V     any character that is not a vertical whitespace character
+  \h     any horizontal white space character
+  \H     any character that is not a horizontal white space character
+  \s     any white space character
+  \S     any character that is not a white space character
+  \v     any vertical white space character
+  \V     any character that is not a vertical white space character
   \w     any "word" character
   \W     any "non-word" character
 </pre>
@@ -497,7 +499,7 @@ The vertical space characters are:
 <pre>
   U+000A     Linefeed
   U+000B     Vertical tab
-  U+000C     Formfeed
+  U+000C     Form feed
   U+000D     Carriage return
   U+0085     Next line
   U+2028     Line separator
@@ -520,7 +522,7 @@ This is an example of an "atomic group", details of which are given
 <a href="#atomicgroup">below.</a>
 This particular group matches either the two-character sequence CR followed by
 LF, or one of the single characters LF (linefeed, U+000A), VT (vertical tab,
-U+000B), FF (formfeed, U+000C), CR (carriage return, U+000D), or NEL (next
+U+000B), FF (form feed, U+000C), CR (carriage return, U+000D), or NEL (next
 line, U+0085). The two-character sequence is treated as a single unit that
 cannot be split.
 </P>
@@ -596,13 +598,16 @@ Armenian,
 Avestan,
 Balinese,
 Bamum,
+Batak,
 Bengali,
 Bopomofo,
+Brahmi,
 Braille,
 Buginese,
 Buhid,
 Canadian_Aboriginal,
 Carian,
+Chakma,
 Cham,
 Cherokee,
 Common,
@@ -645,7 +650,11 @@ Lisu,
 Lycian,
 Lydian,
 Malayalam,
+Mandaic,
 Meetei_Mayek,
+Meroitic_Cursive,
+Meroitic_Hieroglyphs,
+Miao,
 Mongolian,
 Myanmar,
 New_Tai_Lue,
@@ -664,8 +673,10 @@ Rejang,
 Runic,
 Samaritan,
 Saurashtra,
+Sharada,
 Shavian,
 Sinhala,
+Sora_Sompeng,
 Sundanese,
 Syloti_Nagri,
 Syriac,
@@ -674,6 +685,7 @@ Tagbanwa,
 Tai_Le,
 Tai_Tham,
 Tai_Viet,
+Takri,
 Tamil,
 Telugu,
 Thaana,
@@ -812,7 +824,7 @@ PCRE_UCP is set. They are:
   Xwd   Any Perl "word" character
 </pre>
 Xan matches characters that have either the L (letter) or the N (number)
-property. Xps matches the characters tab, linefeed, vertical tab, formfeed, or
+property. Xps matches the characters tab, linefeed, vertical tab, form feed, or
 carriage return, and any other character that has the Z (separator) property.
 Xsp is the same as Xps, except that vertical tab is excluded. Xwd matches the
 same characters as Xan, plus underscore.
@@ -1008,7 +1020,8 @@ used. Because \C breaks up characters into individual data units, matching one
 unit with \C in a UTF mode means that the rest of the string may start with a
 malformed UTF character. This has undefined results, because PCRE assumes that
 it is dealing with valid UTF strings (and by default it checks this at the
-start of processing unless the PCRE_NO_UTF8_CHECK option is used).
+start of processing unless the PCRE_NO_UTF8_CHECK or PCRE_NO_UTF16_CHECK option
+is used).
 </P>
 <P>
 PCRE does not allow \C to appear in lookbehind assertions
@@ -1818,7 +1831,7 @@ Because there may be many capturing parentheses in a pattern, all digits
 following a backslash are taken as part of a potential back reference number.
 If the pattern continues with a digit character, some delimiter must be used to
 terminate the back reference. If the PCRE_EXTENDED option is set, this can be
-whitespace. Otherwise, the \g{ syntax or an empty comment (see
+white space. Otherwise, the \g{ syntax or an empty comment (see
 <a href="#comments">"Comments"</a>
 below) can be used.
 </P>
@@ -2160,7 +2173,7 @@ point in the pattern; the idea of DEFINE is that it can be used to define
 subroutines that can be referenced from elsewhere. (The use of
 <a href="#subpatternsassubroutines">subroutines</a>
 is described below.) For example, a pattern to match an IPv4 address such as
-"192.168.23.245" could be written like this (ignore whitespace and line
+"192.168.23.245" could be written like this (ignore white space and line
 breaks):
 <pre>
   (?(DEFINE) (?&#60;byte&#62; 2[0-4]\d | 25[0-5] | 1\d\d | [1-9]?\d) )
@@ -2554,18 +2567,22 @@ exception: the name from a *(MARK), (*PRUNE), or (*THEN) that is encountered in
 a successful positive assertion <i>is</i> passed back when a match succeeds
 (compare capturing parentheses in assertions). Note that such subpatterns are
 processed as anchored at the point where they are tested. Note also that Perl's
-treatment of subroutines is different in some cases.
+treatment of subroutines and assertions is different in some cases.
 </P>
 <P>
 The new verbs make use of what was previously invalid syntax: an opening
 parenthesis followed by an asterisk. They are generally of the form
 (*VERB) or (*VERB:NAME). Some may take either form, with differing behaviour,
 depending on whether or not an argument is present. A name is any sequence of
-characters that does not include a closing parenthesis. If the name is empty,
-that is, if the closing parenthesis immediately follows the colon, the effect
-is as if the colon were not there. Any number of these verbs may occur in a
-pattern.
-</P>
+characters that does not include a closing parenthesis. The maximum length of
+name is 255 in the 8-bit library and 65535 in the 16-bit library. If the name
+is empty, that is, if the closing parenthesis immediately follows the colon,
+the effect is as if the colon were not there. Any number of these verbs may
+occur in a pattern.
+<a name="nooptimize"></a></P>
+<br><b>
+Optimizations that affect backtracking verbs
+</b><br>
 <P>
 PCRE contains some optimizations that are used to speed up matching by running
 some checks at the start of each match attempt. For example, it may know the
@@ -2574,7 +2591,12 @@ present. When one of these optimizations suppresses the running of a match, any
 included backtracking verbs will not, of course, be processed. You can suppress
 the start-of-match optimizations by setting the PCRE_NO_START_OPTIMIZE option
 when calling <b>pcre_compile()</b> or <b>pcre_exec()</b>, or by starting the
-pattern with (*NO_START_OPT).
+pattern with (*NO_START_OPT). There is more discussion of this option in the
+section entitled
+<a href="pcreapi.html#execoptions">"Option bits for <b>pcre_exec()</b>"</a>
+in the
+<a href="pcreapi.html"><b>pcreapi</b></a>
+documentation.
 </P>
 <P>
 Experiments with Perl suggest that it too has similar optimizations, sometimes
@@ -2662,9 +2684,15 @@ After a partial match or a failed match, the name of the last encountered
   No match, mark = B
 </pre>
 Note that in this unanchored example the mark is retained from the match
-attempt that started at the letter "X". Subsequent match attempts starting at
-"P" and then with an empty string do not get as far as the (*MARK) item, but
-nevertheless do not reset it.
+attempt that started at the letter "X" in the subject. Subsequent match
+attempts starting at "P" and then with an empty string do not get as far as the
+(*MARK) item, but nevertheless do not reset it.
+</P>
+<P>
+If you are interested in (*MARK) values after failed matches, you should
+probably set the PCRE_NO_START_OPTIMIZE option
+<a href="#nooptimize">(see above)</a>
+to ensure that the match is always attempted.
 </P>
 <br><b>
 Verbs that act after backtracking
@@ -2843,7 +2871,7 @@ Cambridge CB2 3QH, England.
 </P>
 <br><a name="SEC28" href="#TOC1">REVISION</a><br>
 <P>
-Last updated: 09 January 2012
+Last updated: 17 June 2012
 <br>
 Copyright &copy; 1997-2012 University of Cambridge.
 <br>

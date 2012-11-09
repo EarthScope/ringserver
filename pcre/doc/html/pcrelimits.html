@@ -48,6 +48,10 @@ The maximum length of name for a named subpattern is 32 characters, and the
 maximum number of named subpatterns is 10000.
 </P>
 <P>
+The maximum length of a name in a (*MARK), (*PRUNE), (*SKIP), or (*THEN) verb
+is 255 for the 8-bit library and 65535 for the 16-bit library.
+</P>
+<P>
 The maximum length of a subject string is the largest positive number that an
 integer variable can hold. However, when using the traditional matching
 function, PCRE uses recursion to handle subpatterns and indefinite repetition.
@@ -72,7 +76,7 @@ Cambridge CB2 3QH, England.
 REVISION
 </b><br>
 <P>
-Last updated: 08 January 2012
+Last updated: 04 May 2012
 <br>
 Copyright &copy; 1997-2012 University of Cambridge.
 <br>

@@ -1,4 +1,4 @@
-.TH PCRELIMITS 3
+.TH PCRELIMITS 3 "04 May 2012" "PCRE 8.30"
 .SH NAME
 PCRE - Perl-compatible regular expressions
 .SH "SIZE AND OTHER LIMITATIONS"
@@ -32,6 +32,9 @@ the count. There is no limit to the number of backward references.
 The maximum length of name for a named subpattern is 32 characters, and the
 maximum number of named subpatterns is 10000.
 .P
+The maximum length of a name in a (*MARK), (*PRUNE), (*SKIP), or (*THEN) verb
+is 255 for the 8-bit library and 65535 for the 16-bit library.
+.P
 The maximum length of a subject string is the largest positive number that an
 integer variable can hold. However, when using the traditional matching
 function, PCRE uses recursion to handle subpatterns and indefinite repetition.
@@ -58,6 +61,6 @@ Cambridge CB2 3QH, England.
 .rs
 .sp
 .nf
-Last updated: 08 January 2012
+Last updated: 04 May 2012
 Copyright (c) 1997-2012 University of Cambridge.
 .fi

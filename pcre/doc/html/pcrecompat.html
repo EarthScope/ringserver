@@ -107,8 +107,16 @@ in the
 page.
 </P>
 <P>
-11. If (*THEN) is present in a group that is called as a subroutine, its action
-is limited to that group, even if the group does not contain any | characters.
+11. If any of the backtracking control verbs are used in an assertion or in a
+subpattern that is called as a subroutine (whether or not recursively), their
+effect is confined to that subpattern; it does not extend to the surrounding
+pattern. This is not always the case in Perl. In particular, if (*THEN) is
+present in a group that is called as a subroutine, its action is limited to
+that group, even if the group does not contain any | characters. There is one
+exception to this: the name from a *(MARK), (*PRUNE), or (*THEN) that is
+encountered in a successful positive assertion <i>is</i> passed back when a
+match succeeds (compare capturing parentheses in assertions). Note that such
+subpatterns are processed as anchored at the point where they are tested.
 </P>
 <P>
 12. There are some differences that are concerned with the settings of captured
@@ -129,7 +137,7 @@ an error is given at compile time.
 <P>
 14. Perl recognizes comments in some places that PCRE does not, for example,
 between the ( and ? at the start of a subpattern. If the /x modifier is set,
-Perl allows whitespace between ( and ? but PCRE never does, even if the
+Perl allows white space between ( and ? but PCRE never does, even if the
 PCRE_EXTENDED option is set.
 </P>
 <P>
@@ -203,7 +211,7 @@ Cambridge CB2 3QH, England.
 REVISION
 </b><br>
 <P>
-Last updated: 08 Januray 2012
+Last updated: 01 June 2012
 <br>
 Copyright &copy; 1997-2012 University of Cambridge.
 <br>

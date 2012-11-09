@@ -2,6 +2,7 @@
 	- Increase limit on number of SeedLink selectors that may be
 	specified per station by increasing the limit on the composite
 	string length that contains these selectors.
+	- Update pcre to 8.31.
 
 2012.126:
 	- Remove spinlock on ring parameters for read access.  Nearly all

@@ -1,6 +1,32 @@
 News about PCRE releases
 ------------------------
 
+Release 8.31 06-July-2012
+-------------------------
+
+This is mainly a bug-fixing release, with a small number of developments:
+
+. The JIT compiler now supports partial matching and the (*MARK) and
+  (*COMMIT) verbs.
+
+. PCRE_INFO_MAXLOOKBEHIND can be used to find the longest lookbehing in a
+  pattern.
+
+. There should be a performance improvement when using the heap instead of the
+  stack for recursion.
+
+. pcregrep can now be linked with libedit as an alternative to libreadline.
+
+. pcregrep now has a --file-list option where the list of files to scan is
+  given as a file.
+
+. pcregrep now recognizes binary files and there are related options.
+
+. The Unicode tables have been updated to 6.1.0.
+
+As always, the full list of changes is in the ChangeLog file.
+
+
 Release 8.30 04-February-2012
 -----------------------------
 

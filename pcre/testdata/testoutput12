@@ -11,7 +11,7 @@ Subject length lower bound = 3
 No set of starting bytes
 JIT study was successful
 
-/ab(*COMMIT)/S+I
+/ab(*THEN)/S+I
 Capturing subpattern count = 0
 No options
 First char = 'a'
@@ -47,5 +47,109 @@ Study returned NULL
 /(?(R)a*(?1)|((?R))b)/S+
     aaaabcde
 Error -27 (JIT stack limit reached)
+    
+/-- Test various compile modes --/ 
+    
+/abcd/S++
+    abcd
+ 0: abcd (JIT)
+    xyz  
+No match (JIT)
+
+/abcd/S+
+    abcd
+ 0: abcd (JIT)
+    ab\P
+Partial match: ab (JIT)
+    ab\P\P
+Partial match: ab (JIT)
+    xyz
+No match (JIT)
+
+/abcd/S++
+    abcd
+ 0: abcd (JIT)
+    ab\P
+Partial match: ab (JIT)
+    ab\P\P
+Partial match: ab (JIT)
+    xyz
+No match (JIT)
+
+/abcd/S++1
+    abcd
+ 0: abcd (JIT)
+    ab\P
+Partial match: ab
+    ab\P\P
+Partial match: ab
+    xyz
+No match (JIT)
+    xyz\P
+No match
+
+/abcd/S++2
+    abcd
+ 0: abcd
+    ab\P
+Partial match: ab (JIT)
+    ab\P\P
+Partial match: ab
+    xyz
+No match
+
+/abcd/S++3
+    abcd
+ 0: abcd (JIT)
+    ab\P
+Partial match: ab (JIT)
+    ab\P\P
+Partial match: ab
+    xyz
+No match (JIT)
+
+/abcd/S++4
+    abcd
+ 0: abcd
+    ab\P
+Partial match: ab
+    ab\P\P
+Partial match: ab (JIT)
+    xyz
+No match
+
+/abcd/S++5
+    abcd
+ 0: abcd (JIT)
+    ab\P
+Partial match: ab
+    ab\P\P
+Partial match: ab (JIT)
+    xyz
+No match (JIT)
+
+/abcd/S++6
+    abcd
+ 0: abcd
+    ab\P
+Partial match: ab (JIT)
+    ab\P\P
+Partial match: ab (JIT)
+    xyz
+No match
+
+/abcd/S++7
+    abcd
+ 0: abcd (JIT)
+    ab\P
+Partial match: ab (JIT)
+    ab\P\P
+Partial match: ab (JIT)
+    xyz
+No match (JIT)
+
+/(*NO_START_OPT)a(*:m)b/KS++
+    a
+No match, mark = m (JIT)
 
 /-- End of testinput12 --/

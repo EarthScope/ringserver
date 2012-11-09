@@ -8715,4 +8715,22 @@ No match
     hello world test
 No match
 
+/(a(*COMMIT)b){0}a(?1)|aac/
+    aac
+ 0: aac
+
+/(?!a(*COMMIT)b)ac|cd/
+    ac
+ 0: ac
+
+/((?:a?)*)*c/
+  aac   
+ 0: aac
+ 1: 
+
+/((?>a?)*)*c/
+  aac   
+ 0: aac
+ 1: 
+
 /-- End of testinput1 --/

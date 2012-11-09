@@ -2033,5 +2033,71 @@ No match
  0: ++\xc1
     !\x{c0}+++++ 
  0: \xc0++
+    
+/-- Caseless single negated characters > 127 need UCP support --/
+
+/[^\x{100}]/8i
+    \x{100}\x{101}X
+ 0: X
+
+/[^\x{100}]+/8i
+    \x{100}\x{101}XX
+ 0: XX
+ 1: X
+
+/^\X/8
+    A\P
+ 0: A
+    A\P\P 
+Partial match: A
+    A\x{300}\x{301}\P
+ 0: A\x{300}\x{301}
+    A\x{300}\x{301}\P\P  
+Partial match: A\x{300}\x{301}
+    A\x{301}\P
+ 0: A\x{301}
+    A\x{301}\P\P  
+Partial match: A\x{301}
+    
+/^\X{2,3}/8
+    A\P
+Partial match: A
+    A\P\P 
+Partial match: A
+    AA\P
+ 0: AA
+    AA\P\P  
+Partial match: AA
+    A\x{300}\x{301}\P
+Partial match: A\x{300}\x{301}
+    A\x{300}\x{301}\P\P  
+Partial match: A\x{300}\x{301}
+    A\x{300}\x{301}A\x{300}\x{301}\P
+ 0: A\x{300}\x{301}A\x{300}\x{301}
+    A\x{300}\x{301}A\x{300}\x{301}\P\P  
+Partial match: A\x{300}\x{301}A\x{300}\x{301}
+
+/^\X{2}/8
+    AA\P
+ 0: AA
+    AA\P\P  
+Partial match: AA
+    A\x{300}\x{301}A\x{300}\x{301}\P
+ 0: A\x{300}\x{301}A\x{300}\x{301}
+    A\x{300}\x{301}A\x{300}\x{301}\P\P  
+Partial match: A\x{300}\x{301}A\x{300}\x{301}
+    
+/^\X+/8
+    AA\P
+ 0: AA
+ 1: A
+    AA\P\P  
+Partial match: AA
+
+/^\X+?Z/8
+    AA\P
+Partial match: AA
+    AA\P\P 
+Partial match: AA
 
 /-- End of testinput10 --/ 

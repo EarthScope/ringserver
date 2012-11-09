@@ -451,6 +451,7 @@ Capturing subpattern count = 0
 No options
 First char = 'f'
 Need char = 'o'
+Max lookbehind = 6
     foo
  0: foo
     catfoo
@@ -658,6 +659,7 @@ Capturing subpattern count = 0
 No options
 No first char
 No need char
+Max lookbehind = 3
 Subject length lower bound = 1
 Starting byte set: a b 
 
@@ -666,6 +668,7 @@ Capturing subpattern count = 1
 No options
 No first char
 Need char = 'a'
+Max lookbehind = 3
 Subject length lower bound = 5
 Starting byte set: a o 
 
@@ -683,6 +686,7 @@ Contains explicit CR or LF match
 Options: multiline
 No first char
 Need char = 'r'
+Max lookbehind = 4
     foo\nbarbar
  0: bar
     ***Failers
@@ -700,6 +704,7 @@ Contains explicit CR or LF match
 Options: multiline
 First char at start or follows newline
 Need char = 'r'
+Max lookbehind = 4
     foo\nbarbar
  0: bar
     ***Failers
@@ -741,6 +746,7 @@ Capturing subpattern count = 0
 No options
 First char = '-'
 Need char = 't'
+Max lookbehind = 7
     the bullock-cart
  0: -cart
     a donkey-cart race
@@ -757,12 +763,14 @@ Capturing subpattern count = 0
 No options
 No first char
 No need char
+Max lookbehind = 3
 
 /(?>.*)(?<=(abcd)|(xyz))/I
 Capturing subpattern count = 2
 No options
 First char at start or follows newline
 No need char
+Max lookbehind = 4
     alphabetabcd
  0: alphabetabcd
  1: abcd
@@ -776,6 +784,7 @@ Capturing subpattern count = 0
 No options
 First char = 'Z'
 Need char = 'Z'
+Max lookbehind = 4
     abxyZZ
  0: ZZ
     abXyZZ
@@ -804,6 +813,7 @@ Capturing subpattern count = 1
 No options
 First char = 'b'
 Need char = 'r'
+Max lookbehind = 4
     bar
  0: bar
     foobbar
@@ -1205,6 +1215,7 @@ Capturing subpattern count = 0
 No options
 First char = 'i'
 Need char = 's'
+Max lookbehind = 1
     Mississippi
  0: iss
  0+ issippi
@@ -1225,6 +1236,7 @@ Capturing subpattern count = 0
 No options
 First char = 'i'
 Need char = 's'
+Max lookbehind = 1
     Mississippi
  0: iss
  0+ issippi
@@ -1234,6 +1246,7 @@ Capturing subpattern count = 0
 No options
 First char = 'i'
 Need char = 's'
+Max lookbehind = 1
     Mississippi
  0: iss
  0+ issippi
@@ -1249,6 +1262,7 @@ Capturing subpattern count = 0
 No options
 First char = 'i'
 Need char = 's'
+Max lookbehind = 1
     Mississippi
  0: iss
  0+ issippi
@@ -1260,6 +1274,7 @@ Capturing subpattern count = 0
 No options
 First char = 'i'
 Need char = 's'
+Max lookbehind = 1
     Mississippi
  0: iss
  0+ issippi
@@ -1440,6 +1455,7 @@ Capturing subpattern count = 0
 No options
 No first char
 No need char
+Max lookbehind = 3
 
 /abc(?!pqr)/I
 Capturing subpattern count = 0
@@ -3220,6 +3236,7 @@ Capturing subpattern count = 0
 No options
 First char = '8'
 Need char = 'X'
+Max lookbehind = 1
 
 |\$\<\.X\+ix\[d1b\!H\#\?vV0vrK\:ZH1\=2M\>iV\;\?aPhFB\<\*vW\@QW\@sO9\}cfZA\-i\'w\%hKd6gt1UJP\,15_\#QY\$M\^Mss_U\/\]\&LK9\[5vQub\^w\[KDD\<EjmhUZ\?\.akp2dF\>qmj\;2\}YWFdYx\.Ap\]hjCPTP\(n28k\+3\;o\&WXqs\/gOXdr\$\:r\'do0\;b4c\(f_Gr\=\"\\4\)\[01T7ajQJvL\$W\~mL_sS\/4h\:x\*\[ZN\=KLs\&L5zX\/\/\>it\,o\:aU\(\;Z\>pW\&T7oP\'2K\^E\:x9\'c\[\%z\-\,64JQ5AeH_G\#KijUKghQw\^\\vea3a\?kka_G\$8\#\`\*kynsxzBLru\'\]k_\[7FrVx\}\^\=\$blx\>s\-N\%j\;D\*aZDnsw\:YKZ\%Q\.Kne9\#hP\?\+b3\(SOvL\,\^\;\&u5\@\?5C5Bhb\=m\-vEh_L15Jl\]U\)0RP6\{q\%L\^_z5E\'Dw6X\b|IDZ
 ------------------------------------------------------------------
@@ -3233,6 +3250,7 @@ Capturing subpattern count = 0
 No options
 First char = '$'
 Need char = 'X'
+Max lookbehind = 1
 
 /(.*)\d+\1/I
 Capturing subpattern count = 1
@@ -3748,6 +3766,7 @@ Capturing subpattern count = 1
 No options
 First char = 'x'
 Need char = 'z'
+Max lookbehind = 3
    abcxyz\C+
 Callout 0: last capture = 1
  0: <unset>
@@ -5395,6 +5414,7 @@ Capturing subpattern count = 0
 No options
 No first char
 No need char
+Max lookbehind = 1
   ab cd\>1
  0:  cd
 
@@ -5403,6 +5423,7 @@ Capturing subpattern count = 0
 Options: dotall
 No first char
 No need char
+Max lookbehind = 1
   ab cd\>1
  0:  cd
 
@@ -10734,11 +10755,76 @@ No match
 /\s*\R/BZ
 ------------------------------------------------------------------
         Bra
-        \s*+
+        \s*
         \R
         Ket
         End
 ------------------------------------------------------------------
+    \x20\x0a
+ 0:  \x0a
+    \x20\x0d
+ 0:  \x0d
+    \x20\x0d\x0a
+ 0:  \x0d\x0a
+
+/\S*\R/BZ
+------------------------------------------------------------------
+        Bra
+        \S*+
+        \R
+        Ket
+        End
+------------------------------------------------------------------
+    a\x0a
+ 0: a\x0a
+
+/X\h*\R/BZ
+------------------------------------------------------------------
+        Bra
+        X
+        \h*+
+        \R
+        Ket
+        End
+------------------------------------------------------------------
+    X\x20\x0a
+ 0: X \x0a
+
+/X\H*\R/BZ
+------------------------------------------------------------------
+        Bra
+        X
+        \H*
+        \R
+        Ket
+        End
+------------------------------------------------------------------
+    X\x0d\x0a
+ 0: X\x0d\x0a
+
+/X\H+\R/BZ
+------------------------------------------------------------------
+        Bra
+        X
+        \H+
+        \R
+        Ket
+        End
+------------------------------------------------------------------
+    X\x0d\x0a
+ 0: X\x0d\x0a
+
+/X\H++\R/BZ
+------------------------------------------------------------------
+        Bra
+        X
+        \H++
+        \R
+        Ket
+        End
+------------------------------------------------------------------
+    X\x0d\x0a
+No match
 
 /-- Perl treats this one differently, not failing the second string. I believe
     that is a bug in Perl. --/
@@ -11596,6 +11682,7 @@ Capturing subpattern count = 0
 No options
 First char = 't'
 Need char = 't'
+Max lookbehind = 1
 Subject length lower bound = 18
 No set of starting bytes
 
@@ -11604,6 +11691,7 @@ Capturing subpattern count = 0
 No options
 No first char
 No need char
+Max lookbehind = 1
 Subject length lower bound = 8
 Starting byte set: < o t u 
 
@@ -12010,5 +12098,267 @@ MK: x
  0: 
  0+ ab
 MK: x
+
+/(..)\1/
+    ab\P
+Partial match: ab
+    aba\P
+Partial match: aba
+    abab\P
+ 0: abab
+ 1: ab
+
+/(..)\1/i
+    ab\P
+Partial match: ab
+    abA\P
+Partial match: abA
+    aBAb\P
+ 0: aBAb
+ 1: aB
+
+/(..)\1{2,}/
+    ab\P
+Partial match: ab
+    aba\P
+Partial match: aba
+    abab\P
+Partial match: abab
+    ababa\P
+Partial match: ababa
+    ababab\P
+ 0: ababab
+ 1: ab
+    ababab\P\P
+Partial match: ababab
+    abababa\P
+ 0: ababab
+ 1: ab
+    abababa\P\P
+Partial match: abababa
+
+/(..)\1{2,}/i
+    ab\P
+Partial match: ab
+    aBa\P
+Partial match: aBa
+    aBAb\P
+Partial match: aBAb
+    AbaBA\P
+Partial match: AbaBA
+    abABAb\P
+ 0: abABAb
+ 1: ab
+    aBAbaB\P\P
+Partial match: aBAbaB
+    abABabA\P
+ 0: abABab
+ 1: ab
+    abaBABa\P\P
+Partial match: abaBABa
+
+/(..)\1{2,}?x/i
+    ab\P
+Partial match: ab
+    abA\P
+Partial match: abA
+    aBAb\P
+Partial match: aBAb
+    abaBA\P
+Partial match: abaBA
+    abAbaB\P
+Partial match: abAbaB
+    abaBabA\P
+Partial match: abaBabA
+    abAbABaBx\P
+ 0: abAbABaBx
+ 1: ab
+
+/^(..)\1/
+    aba\P
+Partial match: aba
+
+/^(..)\1{2,3}x/
+    aba\P
+Partial match: aba
+    ababa\P
+Partial match: ababa
+    ababa\P\P
+Partial match: ababa
+    abababx
+ 0: abababx
+ 1: ab
+    ababababx  
+ 0: ababababx
+ 1: ab
+
+/^(..)\1{2,3}?x/
+    aba\P
+Partial match: aba
+    ababa\P
+Partial match: ababa
+    ababa\P\P
+Partial match: ababa
+    abababx
+ 0: abababx
+ 1: ab
+    ababababx  
+ 0: ababababx
+ 1: ab
+    
+/^(..)(\1{2,3})ab/
+    abababab
+ 0: abababab
+ 1: ab
+ 2: abab
+
+/^\R/
+    \r\P
+ 0: \x0d
+    \r\P\P
+Partial match: \x0d
+    
+/^\R{2,3}x/
+    \r\P
+Partial match: \x0d
+    \r\P\P
+Partial match: \x0d
+    \r\r\P 
+Partial match: \x0d\x0d
+    \r\r\P\P
+Partial match: \x0d\x0d
+    \r\r\r\P  
+Partial match: \x0d\x0d\x0d
+    \r\r\r\P\P
+Partial match: \x0d\x0d\x0d
+    \r\rx
+ 0: \x0d\x0dx
+    \r\r\rx    
+ 0: \x0d\x0d\x0dx
+
+/^\R{2,3}?x/
+    \r\P
+Partial match: \x0d
+    \r\P\P
+Partial match: \x0d
+    \r\r\P 
+Partial match: \x0d\x0d
+    \r\r\P\P
+Partial match: \x0d\x0d
+    \r\r\r\P  
+Partial match: \x0d\x0d\x0d
+    \r\r\r\P\P
+Partial match: \x0d\x0d\x0d
+    \r\rx
+ 0: \x0d\x0dx
+    \r\r\rx    
+ 0: \x0d\x0d\x0dx
+    
+/^\R?x/
+    \r\P
+Partial match: \x0d
+    \r\P\P 
+Partial match: \x0d
+    x
+ 0: x
+    \rx  
+ 0: \x0dx
+
+/^\R+x/
+    \r\P
+Partial match: \x0d
+    \r\P\P 
+Partial match: \x0d
+    \r\n\P
+Partial match: \x0d\x0a
+    \r\n\P\P  
+Partial match: \x0d\x0a
+    \rx  
+ 0: \x0dx
+
+/^a$/<CRLF>
+    a\r\P
+Partial match: a\x0d
+    a\r\P\P 
+Partial match: a\x0d
+
+/^a$/m<CRLF>
+    a\r\P
+Partial match: a\x0d
+    a\r\P\P 
+Partial match: a\x0d
+
+/^(a$|a\r)/<CRLF>
+    a\r\P
+ 0: a\x0d
+ 1: a\x0d
+    a\r\P\P 
+Partial match: a\x0d
+
+/^(a$|a\r)/m<CRLF>
+    a\r\P
+ 0: a\x0d
+ 1: a\x0d
+    a\r\P\P 
+Partial match: a\x0d
+
+/./<CRLF>
+    \r\P
+ 0: \x0d
+    \r\P\P 
+Partial match: \x0d
+  
+/.{2,3}/<CRLF>
+    \r\P 
+Partial match: \x0d
+    \r\P\P
+Partial match: \x0d
+    \r\r\P
+ 0: \x0d\x0d
+    \r\r\P\P
+Partial match: \x0d\x0d
+    \r\r\r\P
+ 0: \x0d\x0d\x0d
+    \r\r\r\P\P     
+Partial match: \x0d\x0d\x0d
+
+/.{2,3}?/<CRLF>
+    \r\P 
+Partial match: \x0d
+    \r\P\P
+Partial match: \x0d
+    \r\r\P
+ 0: \x0d\x0d
+    \r\r\P\P
+Partial match: \x0d\x0d
+    \r\r\r\P
+ 0: \x0d\x0d
+    \r\r\r\P\P     
+ 0: \x0d\x0d
+
+/-- These two are here because Perl does not match: it seems to allow the
+COMMIT to escape from the assertion. --/
+
+/(?=a(*COMMIT)b|ac)ac|ac/
+    ac
+ 0: ac
+
+/(?=a(*COMMIT)b|(ac)) ac | (a)c/x
+    ac
+ 0: ac
+ 1: <unset>
+ 2: a
+
+"AB(C(D))(E(F))?(?(?=\2)(?=\4))"
+    ABCDGHI\O03
+Matched, but too many substrings
+ 0: ABCD
+    
+/-- This one is here because Perl does not confine the *COMMIT to the 
+assertion, and therefore fails the entire subroutine call. --/ 
+    
+/((?=a(*COMMIT)b)ab|ac){0}(?:(?1)|a(c))/
+    ac 
+ 0: ac
 
 /-- End of testinput2 --/

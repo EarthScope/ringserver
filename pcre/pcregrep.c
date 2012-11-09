@@ -104,6 +104,10 @@ enum { DEE_READ, DEE_SKIP };
 
 enum { EL_LF, EL_CR, EL_CRLF, EL_ANY, EL_ANYCRLF };
 
+/* Binary file options */
+
+enum { BIN_BINARY, BIN_NOMATCH, BIN_TEXT };
+
 /* In newer versions of gcc, with FORTIFY_SOURCE set (the default in some
 environments), a warning is issued if the value of fwrite() is ignored.
 Unfortunately, casting to (void) does not suppress the warning. To get round
@@ -147,6 +151,7 @@ static int  pattern_count = 0;
 static pcre **pattern_list = NULL;
 static pcre_extra **hints_list = NULL;
 
+static char *file_list = NULL;
 static char *include_pattern = NULL;
 static char *exclude_pattern = NULL;
 static char *include_dir_pattern = NULL;
@@ -159,6 +164,7 @@ static pcre *exclude_dir_compiled = NULL;
 
 static int after_context = 0;
 static int before_context = 0;
+static int binary_files = BIN_BINARY;
 static int both_context = 0;
 static int bufthird = PCREGREP_BUFSIZE;
 static int bufsize = 3*PCREGREP_BUFSIZE;
@@ -196,7 +202,7 @@ static BOOL utf8 = FALSE;
 /* Structure for options and list of them */
 
 enum { OP_NODATA, OP_STRING, OP_OP_STRING, OP_NUMBER, OP_LONGNUMBER,
-       OP_OP_NUMBER, OP_PATLIST };
+       OP_OP_NUMBER, OP_PATLIST, OP_BINFILES };
 
 typedef struct option_item {
   int type;
@@ -225,12 +231,16 @@ used to identify them. */
 #define N_M_LIMIT_REC  (-14)
 #define N_BUFSIZE      (-15)
 #define N_NOJIT        (-16)
+#define N_FILE_LIST    (-17)
+#define N_BINARY_FILES (-18)
 
 static option_item optionlist[] = {
-  { OP_NODATA,     N_NULL,   NULL,              "",              "  terminate options" },
+  { OP_NODATA,     N_NULL,   NULL,              "",              "terminate options" },
   { OP_NODATA,     N_HELP,   NULL,              "help",          "display this help and exit" },
   { OP_NUMBER,     'A',      &after_context,    "after-context=number", "set number of following context lines" },
+  { OP_NODATA,     'a',      NULL,              "text",          "treat binary files as text" },
   { OP_NUMBER,     'B',      &before_context,   "before-context=number", "set number of prior context lines" },
+  { OP_BINFILES,   N_BINARY_FILES, NULL,        "binary-files=word", "set treatment of binary files" },
   { OP_NUMBER,     N_BUFSIZE,&bufthird,         "buffer-size=number", "set processing buffer size parameter" },
   { OP_OP_STRING,  N_COLOUR, &colour_option,    "color=option",  "matched text color option" },
   { OP_OP_STRING,  N_COLOUR, &colour_option,    "colour=option", "matched text colour option" },
@@ -241,9 +251,11 @@ static option_item optionlist[] = {
   { OP_PATLIST,    'e',      NULL,              "regex(p)=pattern", "specify pattern (may be used more than once)" },
   { OP_NODATA,     'F',      NULL,              "fixed-strings", "patterns are sets of newline-separated strings" },
   { OP_STRING,     'f',      &pattern_filename, "file=path",     "read patterns from file" },
+  { OP_STRING,     N_FILE_LIST, &file_list,     "file-list=path","read files to search from file" },
   { OP_NODATA,     N_FOFFSETS, NULL,            "file-offsets",  "output file offsets, not text" },
   { OP_NODATA,     'H',      NULL,              "with-filename", "force the prefixing filename on output" },
   { OP_NODATA,     'h',      NULL,              "no-filename",   "suppress the prefixing filename on output" },
+  { OP_NODATA,     'I',      NULL,              "",              "treat binary files as not matching (ignore)" },
   { OP_NODATA,     'i',      NULL,              "ignore-case",   "ignore case distinctions" },
 #ifdef SUPPORT_PCREGREP_JIT
   { OP_NODATA,     N_NOJIT,  NULL,              "no-jit",        "do not use just-in-time compiler optimization" },
@@ -1044,6 +1056,7 @@ char *lastmatchrestart = NULL;
 char *ptr = main_buffer;
 char *endptr;
 size_t bufflength;
+BOOL binary = FALSE;
 BOOL endhyphenpending = FALSE;
 BOOL input_line_buffered = line_buffered;
 FILE *in = NULL;                    /* Ensure initialized */
@@ -1090,6 +1103,17 @@ else
   }
 
 endptr = main_buffer + bufflength;
+
+/* Unless binary-files=text, see if we have a binary file. This uses the same
+rule as GNU grep, namely, a search for a binary zero byte near the start of the
+file. */
+
+if (binary_files != BIN_TEXT)
+  {
+  binary =
+    memchr(main_buffer, 0, (bufflength > 1024)? 1024 : bufflength) != NULL;
+  if (binary && binary_files == BIN_NOMATCH) return 1;
+  }
 
 /* Loop while the current pointer is not at the end of the file. For large
 files, endptr will be at the end of the buffer when we are in the middle of the
@@ -1206,6 +1230,16 @@ while (ptr < endptr)
     /* Just count if just counting is wanted. */
 
     if (count_only) count++;
+
+    /* When handling a binary file and binary-files==binary, the "binary"
+    variable will be set true (it's false in all other cases). In this
+    situation we just want to output the file name. No need to scan further. */
+
+    else if (binary)
+      {
+      fprintf(stdout, "Binary file %s matches\n", filename);
+      return 0;
+      }
 
     /* If all we want is a file name, there is no need to scan any more lines
     in the file. */
@@ -1584,7 +1618,7 @@ gzFile ingz = NULL;
 BZFILE *inbz2 = NULL;
 #endif
 
-#if defined SUPPORT_LIBZ || defined SUPPORT_LIBZ2
+#if defined SUPPORT_LIBZ || defined SUPPORT_LIBBZ2
 int pathlen;
 #endif
 
@@ -1667,7 +1701,7 @@ skipping was not requested. The scan proceeds. If this is the first and only
 argument at top level, we don't show the file name, unless we are only showing
 the file name, or the filename was forced (-H). */
 
-#if defined SUPPORT_LIBZ || defined SUPPORT_LIBZ2
+#if defined SUPPORT_LIBZ || defined SUPPORT_LIBBZ2
 pathlen = (int)(strlen(pathname));
 #endif
 
@@ -1843,16 +1877,23 @@ for (op = optionlist; op->one_char != 0; op++)
 
   if (strchr(op->long_name, '_') != NULL) continue;
 
-  if (op->one_char > 0) sprintf(s, "-%c,", op->one_char); else strcpy(s, "   ");
-  n = 31 - printf("  %s --%s", s, op->long_name);
+  if (op->one_char > 0 && (op->long_name)[0] == 0)
+    n = 31 - printf("  -%c", op->one_char);
+  else
+    {
+    if (op->one_char > 0) sprintf(s, "-%c,", op->one_char);
+      else strcpy(s, "   ");
+    n = 31 - printf("  %s --%s", s, op->long_name);
+    }
+
   if (n < 1) n = 1;
-  printf("%.*s%s\n", n, "                     ", op->help_text);
+  printf("%.*s%s\n", n, "                           ", op->help_text);
   }
 
 printf("\nNumbers may be followed by K or M, e.g. --buffer-size=100K.\n");
 printf("The default value for --buffer-size is %d.\n", PCREGREP_BUFSIZE);
-printf("When reading patterns from a file instead of using a command line option,\n");
-printf("trailing white space is removed and blank lines are ignored.\n");
+printf("When reading patterns or file names from a file, trailing white\n");
+printf("space is removed and blank lines are ignored.\n");
 printf("There is a maximum of %d patterns, each of maximum size %d bytes.\n",
   MAX_PATTERN_COUNT, PATBUFSIZE);
 
@@ -1877,9 +1918,11 @@ switch(letter)
   case N_LBUFFER: line_buffered = TRUE; break;
   case N_LOFFSETS: line_offsets = number = TRUE; break;
   case N_NOJIT: study_options &= ~PCRE_STUDY_JIT_COMPILE; break;
+  case 'a': binary_files = BIN_TEXT; break;
   case 'c': count_only = TRUE; break;
   case 'F': process_options |= PO_FIXED_STRINGS; break;
   case 'H': filenames = FN_FORCE; break;
+  case 'I': binary_files = BIN_NOMATCH; break;
   case 'h': filenames = FN_NONE; break;
   case 'i': options |= PCRE_CASELESS; break;
   case 'l': omit_zero_count = TRUE; filenames = FN_MATCH_ONLY; break;
@@ -2325,6 +2368,24 @@ for (i = 1; i < argc; i++)
     patterns[cmd_pattern_count++] = option_data;
     }
 
+  /* Handle OP_BINARY_FILES */
+
+  else if (op->type == OP_BINFILES)
+    {
+    if (strcmp(option_data, "binary") == 0)
+      binary_files = BIN_BINARY;
+    else if (strcmp(option_data, "without-match") == 0)
+      binary_files = BIN_NOMATCH;
+    else if (strcmp(option_data, "text") == 0)
+      binary_files = BIN_TEXT;
+    else
+      {
+      fprintf(stderr, "pcregrep: unknown value \"%s\" for binary-files\n",
+        option_data);
+      pcregrep_exit(usage(2));
+      }
+    }
+
   /* Otherwise, deal with single string or numeric data values. */
 
   else if (op->type != OP_NUMBER && op->type != OP_LONGNUMBER &&
@@ -2695,21 +2756,55 @@ if (include_dir_pattern != NULL)
     }
   }
 
-/* If there are no further arguments, do the business on stdin and exit. */
+/* If a file that contains a list of files to search has been specified, read
+it line by line and search the given files. Otherwise, if there are no further
+arguments, do the business on stdin and exit. */
 
-if (i >= argc)
+if (file_list != NULL)
+  {
+  char buffer[PATBUFSIZE];
+  FILE *fl;
+  if (strcmp(file_list, "-") == 0) fl = stdin; else
+    {
+    fl = fopen(file_list, "rb");
+    if (fl == NULL)
+      {
+      fprintf(stderr, "pcregrep: Failed to open %s: %s\n", file_list,
+        strerror(errno));
+      goto EXIT2;
+      }
+    }
+  while (fgets(buffer, PATBUFSIZE, fl) != NULL)
+    {
+    int frc;
+    char *end = buffer + (int)strlen(buffer);
+    while (end > buffer && isspace(end[-1])) end--;
+    *end = 0;
+    if (*buffer != 0)
+      {
+      frc = grep_or_recurse(buffer, dee_action == dee_RECURSE, FALSE);
+      if (frc > 1) rc = frc;
+        else if (frc == 0 && rc == 1) rc = 0;
+      }
+    }
+  if (fl != stdin) fclose (fl);
+  }
+
+/* Do this only if there was no file list (and no file arguments). */
+
+else if (i >= argc)
   {
   rc = pcregrep(stdin, FR_PLAIN, stdin_name,
     (filenames > FN_DEFAULT)? stdin_name : NULL);
   goto EXIT;
   }
 
-/* Otherwise, work through the remaining arguments as files or directories.
-Pass in the fact that there is only one argument at top level - this suppresses
-the file name if the argument is not a directory and filenames are not
-otherwise forced. */
+/* After handling file-list or if there are remaining arguments, work through
+them as files or directories. Pass in the fact that there is only one argument
+at top level - this suppresses the file name if the argument is not a directory
+and filenames are not otherwise forced. */
 
-only_one_at_top = i == argc - 1;   /* Catch initial value of i */
+only_one_at_top = i == argc - 1 && file_list == NULL;
 
 for (; i < argc; i++)
   {

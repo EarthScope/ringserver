@@ -173,6 +173,7 @@ files="\
   AUTHORS \
   NEWS \
   NON-UNIX-USE \
+  NON-AUTOTOOLS-BUILD \
   INSTALL \
   132html \
   CleanTxt \

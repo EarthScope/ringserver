@@ -7866,4 +7866,154 @@ Matched, but too many subsidiary matches
     abZdeX
  0: X
 
+/^\R/
+    \r\P
+ 0: \x0d
+    \r\P\P
+Partial match: \x0d
+    
+/^\R{2,3}x/
+    \r\P
+Partial match: \x0d
+    \r\P\P
+Partial match: \x0d
+    \r\r\P 
+Partial match: \x0d\x0d
+    \r\r\P\P
+Partial match: \x0d\x0d
+    \r\r\r\P  
+Partial match: \x0d\x0d\x0d
+    \r\r\r\P\P
+Partial match: \x0d\x0d\x0d
+    \r\rx
+ 0: \x0d\x0dx
+    \r\r\rx    
+ 0: \x0d\x0d\x0dx
+
+/^\R{2,3}?x/
+    \r\P
+Partial match: \x0d
+    \r\P\P
+Partial match: \x0d
+    \r\r\P 
+Partial match: \x0d\x0d
+    \r\r\P\P
+Partial match: \x0d\x0d
+    \r\r\r\P  
+Partial match: \x0d\x0d\x0d
+    \r\r\r\P\P
+Partial match: \x0d\x0d\x0d
+    \r\rx
+ 0: \x0d\x0dx
+    \r\r\rx    
+ 0: \x0d\x0d\x0dx
+    
+/^\R?x/
+    \r\P
+Partial match: \x0d
+    \r\P\P 
+Partial match: \x0d
+    x
+ 0: x
+    \rx  
+ 0: \x0dx
+
+/^\R+x/
+    \r\P
+Partial match: \x0d
+    \r\P\P 
+Partial match: \x0d
+    \r\n\P
+Partial match: \x0d\x0a
+    \r\n\P\P  
+Partial match: \x0d\x0a
+    \rx  
+ 0: \x0dx
+
+/^a$/<CRLF>
+    a\r\P
+Partial match: a\x0d
+    a\r\P\P 
+Partial match: a\x0d
+
+/^a$/m<CRLF>
+    a\r\P
+Partial match: a\x0d
+    a\r\P\P 
+Partial match: a\x0d
+
+/^(a$|a\r)/<CRLF>
+    a\r\P
+ 0: a\x0d
+    a\r\P\P 
+Partial match: a\x0d
+
+/^(a$|a\r)/m<CRLF>
+    a\r\P
+ 0: a\x0d
+    a\r\P\P 
+Partial match: a\x0d
+
+/./<CRLF>
+    \r\P
+ 0: \x0d
+    \r\P\P 
+Partial match: \x0d
+  
+/.{2,3}/<CRLF>
+    \r\P 
+Partial match: \x0d
+    \r\P\P
+Partial match: \x0d
+    \r\r\P
+ 0: \x0d\x0d
+    \r\r\P\P
+Partial match: \x0d\x0d
+    \r\r\r\P
+ 0: \x0d\x0d\x0d
+ 1: \x0d\x0d
+    \r\r\r\P\P     
+Partial match: \x0d\x0d\x0d
+
+/.{2,3}?/<CRLF>
+    \r\P 
+Partial match: \x0d
+    \r\P\P
+Partial match: \x0d
+    \r\r\P
+ 0: \x0d\x0d
+    \r\r\P\P
+Partial match: \x0d\x0d
+    \r\r\r\P
+ 0: \x0d\x0d\x0d
+ 1: \x0d\x0d
+    \r\r\r\P\P     
+Partial match: \x0d\x0d\x0d
+
+/-- Test simple validity check for restarts --/
+
+/abcdef/
+   abc\R
+Error -30 (invalid data in workspace for DFA restart)
+
+/<H((?(?!<H|F>)(.)|(?R))++)*F>/
+    text <H more text <H texting more  hexA0-"\xA0"    hex above 7F-"\xBC" F> text xxxxx <H text F> text F> text2 <H text sample F> more text.
+ 0: <H more text <H texting more  hexA0-"\xa0"    hex above 7F-"\xbc" F> text xxxxx <H text F> text F>
+
+/^(?>.{4})abc|^\w\w.xabcd/
+    xxxxabcd
+ 0: xxxxabcd
+ 1: xxxxabc
+    xx\xa0xabcd 
+ 0: xx\xa0xabcd
+ 1: xx\xa0xabc
+
+/^(.{4}){2}+abc|^\w\w.x\w\w\w\wabcd/
+    xxxxxxxxabcd
+ 0: xxxxxxxxabcd
+ 1: xxxxxxxxabc
+    xx\xa0xxxxxabcd 
+ 0: xx\xa0xxxxxabcd
+ 1: xx\xa0xxxxxabc
+
 /-- End of testinput8 --/

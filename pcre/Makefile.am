@@ -97,6 +97,7 @@ EXTRA_DIST =
 EXTRA_DIST += \
   doc/perltest.txt \
   NON-UNIX-USE \
+  NON-AUTOTOOLS-BUILD \
   HACKING
 
 # These files are used in the preparation of a release
@@ -339,7 +340,7 @@ pcretest_SOURCES = pcretest.c
 pcretest_LDADD = $(LIBREADLINE)
 if WITH_PCRE8
 pcretest_SOURCES += pcre_printint.c
-pcretest_LDADD += libpcreposix.la
+pcretest_LDADD += libpcre.la libpcreposix.la
 endif # WITH_PCRE8
 if WITH_PCRE16
 pcretest_SOURCES += pcre16_printint.c
@@ -352,10 +353,12 @@ dist_noinst_SCRIPTS += RunGrepTest
 bin_PROGRAMS += pcregrep
 pcregrep_SOURCES = pcregrep.c
 pcregrep_LDADD = $(LIBZ) $(LIBBZ2)
-pcregrep_LDADD += libpcreposix.la
+pcregrep_LDADD += libpcre.la libpcreposix.la
 endif # WITH_PCRE8
 
 EXTRA_DIST += \
+  testdata/grepbinary \
+  testdata/grepfilelist \
   testdata/grepinput \
   testdata/grepinput3 \
   testdata/grepinput8 \
@@ -521,31 +524,31 @@ dist_man_MANS = \
 
 # Arrange for the per-function man pages to have 16-bit names as well.
 install-data-hook:
-	ln -s pcre_assign_jit_stack.3		$(DESTDIR)$(man3dir)/pcre16_assign_jit_stack.3
-	ln -s pcre_compile.3			$(DESTDIR)$(man3dir)/pcre16_compile.3
-	ln -s pcre_compile2.3			$(DESTDIR)$(man3dir)/pcre16_compile2.3
-	ln -s pcre_config.3			$(DESTDIR)$(man3dir)/pcre16_config.3
-	ln -s pcre_copy_named_substring.3	$(DESTDIR)$(man3dir)/pcre16_copy_named_substring.3
-	ln -s pcre_copy_substring.3		$(DESTDIR)$(man3dir)/pcre16_copy_substring.3
-	ln -s pcre_dfa_exec.3			$(DESTDIR)$(man3dir)/pcre16_dfa_exec.3
-	ln -s pcre_exec.3			$(DESTDIR)$(man3dir)/pcre16_exec.3
-	ln -s pcre_free_study.3			$(DESTDIR)$(man3dir)/pcre16_free_study.3
-	ln -s pcre_free_substring.3		$(DESTDIR)$(man3dir)/pcre16_free_substring.3
-	ln -s pcre_free_substring_list.3	$(DESTDIR)$(man3dir)/pcre16_free_substring_list.3
-	ln -s pcre_fullinfo.3			$(DESTDIR)$(man3dir)/pcre16_fullinfo.3
-	ln -s pcre_get_named_substring.3	$(DESTDIR)$(man3dir)/pcre16_get_named_substring.3
-	ln -s pcre_get_stringnumber.3		$(DESTDIR)$(man3dir)/pcre16_get_stringnumber.3
-	ln -s pcre_get_stringtable_entries.3	$(DESTDIR)$(man3dir)/pcre16_get_stringtable_entries.3
-	ln -s pcre_get_substring.3		$(DESTDIR)$(man3dir)/pcre16_get_substring.3
-	ln -s pcre_get_substring_list.3		$(DESTDIR)$(man3dir)/pcre16_get_substring_list.3
-	ln -s pcre_jit_stack_alloc.3		$(DESTDIR)$(man3dir)/pcre16_jit_stack_alloc.3
-	ln -s pcre_jit_stack_free.3		$(DESTDIR)$(man3dir)/pcre16_jit_stack_free.3
-	ln -s pcre_maketables.3			$(DESTDIR)$(man3dir)/pcre16_maketables.3
-	ln -s pcre_pattern_to_host_byte_order.3 $(DESTDIR)$(man3dir)/pcre16_pattern_to_host_byte_order.3
-	ln -s pcre_refcount.3			$(DESTDIR)$(man3dir)/pcre16_refcount.3
-	ln -s pcre_study.3			$(DESTDIR)$(man3dir)/pcre16_study.3
-	ln -s pcre_utf16_to_host_byte_order.3	$(DESTDIR)$(man3dir)/pcre16_utf16_to_host_byte_order.3
-	ln -s pcre_version.3			$(DESTDIR)$(man3dir)/pcre16_version.3
+	ln -sf pcre_assign_jit_stack.3		 $(DESTDIR)$(man3dir)/pcre16_assign_jit_stack.3
+	ln -sf pcre_compile.3			 $(DESTDIR)$(man3dir)/pcre16_compile.3
+	ln -sf pcre_compile2.3			 $(DESTDIR)$(man3dir)/pcre16_compile2.3
+	ln -sf pcre_config.3			 $(DESTDIR)$(man3dir)/pcre16_config.3
+	ln -sf pcre_copy_named_substring.3	 $(DESTDIR)$(man3dir)/pcre16_copy_named_substring.3
+	ln -sf pcre_copy_substring.3		 $(DESTDIR)$(man3dir)/pcre16_copy_substring.3
+	ln -sf pcre_dfa_exec.3			 $(DESTDIR)$(man3dir)/pcre16_dfa_exec.3
+	ln -sf pcre_exec.3			 $(DESTDIR)$(man3dir)/pcre16_exec.3
+	ln -sf pcre_free_study.3		 $(DESTDIR)$(man3dir)/pcre16_free_study.3
+	ln -sf pcre_free_substring.3		 $(DESTDIR)$(man3dir)/pcre16_free_substring.3
+	ln -sf pcre_free_substring_list.3	 $(DESTDIR)$(man3dir)/pcre16_free_substring_list.3
+	ln -sf pcre_fullinfo.3			 $(DESTDIR)$(man3dir)/pcre16_fullinfo.3
+	ln -sf pcre_get_named_substring.3	 $(DESTDIR)$(man3dir)/pcre16_get_named_substring.3
+	ln -sf pcre_get_stringnumber.3		 $(DESTDIR)$(man3dir)/pcre16_get_stringnumber.3
+	ln -sf pcre_get_stringtable_entries.3	 $(DESTDIR)$(man3dir)/pcre16_get_stringtable_entries.3
+	ln -sf pcre_get_substring.3		 $(DESTDIR)$(man3dir)/pcre16_get_substring.3
+	ln -sf pcre_get_substring_list.3	 $(DESTDIR)$(man3dir)/pcre16_get_substring_list.3
+	ln -sf pcre_jit_stack_alloc.3		 $(DESTDIR)$(man3dir)/pcre16_jit_stack_alloc.3
+	ln -sf pcre_jit_stack_free.3		 $(DESTDIR)$(man3dir)/pcre16_jit_stack_free.3
+	ln -sf pcre_maketables.3		 $(DESTDIR)$(man3dir)/pcre16_maketables.3
+	ln -sf pcre_pattern_to_host_byte_order.3 $(DESTDIR)$(man3dir)/pcre16_pattern_to_host_byte_order.3
+	ln -sf pcre_refcount.3			 $(DESTDIR)$(man3dir)/pcre16_refcount.3
+	ln -sf pcre_study.3			 $(DESTDIR)$(man3dir)/pcre16_study.3
+	ln -sf pcre_utf16_to_host_byte_order.3	 $(DESTDIR)$(man3dir)/pcre16_utf16_to_host_byte_order.3
+	ln -sf pcre_version.3			 $(DESTDIR)$(man3dir)/pcre16_version.3
 
 pcrecpp_man = doc/pcrecpp.3
 EXTRA_DIST += $(pcrecpp_man)
@@ -560,6 +563,7 @@ EXTRA_DIST += \
   cmake/COPYING-CMAKE-SCRIPTS \
   cmake/FindPackageHandleStandardArgs.cmake \
   cmake/FindReadline.cmake \
+  cmake/FindEditline.cmake \
   CMakeLists.txt \
   config-cmake.h.in
 

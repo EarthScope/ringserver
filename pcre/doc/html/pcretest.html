@@ -164,15 +164,31 @@ megabytes.
 <P>
 <b>-s</b> or <b>-s+</b>
 Behave as if each pattern has the <b>/S</b> modifier; in other words, force each
-pattern to be studied. If <b>-s+</b> is used, the PCRE_STUDY_JIT_COMPILE flag is
+pattern to be studied. If <b>-s+</b> is used, all the JIT compile options are
 passed to <b>pcre[16]_study()</b>, causing just-in-time optimization to be set
-up if it is available. If the <b>/I</b> or <b>/D</b> option is present on a
-pattern (requesting output about the compiled pattern), information about the
-result of studying is not included when studying is caused only by <b>-s</b> and
-neither <b>-i</b> nor <b>-d</b> is present on the command line. This behaviour
-means that the output from tests that are run with and without <b>-s</b> should
-be identical, except when options that output information about the actual
-running of a match are set.
+up if it is available, for both full and partial matching. Specific JIT compile
+options can be selected by following <b>-s+</b> with a digit in the range 1 to
+7, which selects the JIT compile modes as follows:
+<pre>
+  1  normal match only
+  2  soft partial match only
+  3  normal match and soft partial match
+  4  hard partial match only
+  6  soft and hard partial match
+  7  all three modes (default)
+</pre>
+If <b>-s++</b> is used instead of <b>-s+</b> (with or without a following digit),
+the text "(JIT)" is added to the first output line after a match or no match
+when JIT-compiled code was actually used.
+</P>
+<P>
+If the <b>/I</b> or <b>/D</b> option is present on a pattern (requesting output
+about the compiled pattern), information about the result of studying is not
+included when studying is caused only by <b>-s</b> and neither <b>-i</b> nor
+<b>-d</b> is present on the command line. This behaviour means that the output
+from tests that are run with and without <b>-s</b> should be identical, except
+when options that output information about the actual running of a match are
+set.
 <br>
 <br>
 The <b>-M</b>, <b>-t</b>, and <b>-tm</b> options, which give information about
@@ -356,7 +372,7 @@ contains multiple copies of the same substring. If the <b>+</b> modifier appears
 twice, the same action is taken for captured substrings. In each case the
 remainder is output on the following line with a plus character following the
 capture number. Note that this modifier must not immediately follow the /S
-modifier because /S+ has another meaning.
+modifier because /S+ and /S++ have other meanings.
 </P>
 <P>
 The <b>/=</b> modifier requests that the values of all potential captured
@@ -435,13 +451,30 @@ files in a few cases where the output is different when the pattern is studied.
 </P>
 <P>
 If the <b>/S</b> modifier is immediately followed by a + character, the call to
-<b>pcre[16]_study()</b> is made with the PCRE_STUDY_JIT_COMPILE option,
-requesting just-in-time optimization support if it is available. Note that
-there is also a <b>/+</b> modifier; it must not be given immediately after
-<b>/S</b> because this will be misinterpreted. If JIT studying is successful, it
-will automatically be used when <b>pcre[16]_exec()</b> is run, except when
-incompatible run-time options are specified. These include the partial matching
-options; a complete list is given in the
+<b>pcre[16]_study()</b> is made with all the JIT study options, requesting
+just-in-time optimization support if it is available, for both normal and
+partial matching. If you want to restrict the JIT compiling modes, you can
+follow <b>/S+</b> with a digit in the range 1 to 7:
+<pre>
+  1  normal match only
+  2  soft partial match only
+  3  normal match and soft partial match
+  4  hard partial match only
+  6  soft and hard partial match
+  7  all three modes (default)
+</pre>
+If <b>/S++</b> is used instead of <b>/S+</b> (with or without a following digit),
+the text "(JIT)" is added to the first output line after a match or no match
+when JIT-compiled code was actually used.
+</P>
+<P>
+Note that there is also an independent <b>/+</b> modifier; it must not be given
+immediately after <b>/S</b> or <b>/S+</b> because this will be misinterpreted.
+</P>
+<P>
+If JIT studying is successful, the compiled JIT code will automatically be used
+when <b>pcre[16]_exec()</b> is run, except when incompatible run-time options
+are specified. For more details, see the
 <a href="pcrejit.html"><b>pcrejit</b></a>
 documentation. See also the <b>\J</b> escape sequence below for a way of
 setting the size of the JIT stack.
@@ -923,7 +956,7 @@ Cambridge CB2 3QH, England.
 </P>
 <br><a name="SEC16" href="#TOC1">REVISION</a><br>
 <P>
-Last updated: 14 January 2012
+Last updated: 21 February 2012
 <br>
 Copyright &copy; 1997-2012 University of Cambridge.
 <br>

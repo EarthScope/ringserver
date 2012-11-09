@@ -277,4 +277,40 @@ correctly, but that messes up comparisons). --/
 
 /\777/8DZ
 
+/\w+\x{C4}/8BZ
+    a\x{C4}\x{C4}
+
+/\w+\x{C4}/8BZT1
+    a\x{C4}\x{C4}
+    
+/\W+\x{C4}/8BZ
+    !\x{C4}
+ 
+/\W+\x{C4}/8BZT1
+    !\x{C4}
+
+/\W+\x{A1}/8BZ
+    !\x{A1}
+ 
+/\W+\x{A1}/8BZT1
+    !\x{A1}
+
+/X\s+\x{A0}/8BZ
+    X\x20\x{A0}\x{A0}
+
+/X\s+\x{A0}/8BZT1
+    X\x20\x{A0}\x{A0}
+
+/\S+\x{A0}/8BZ
+    X\x{A0}\x{A0}
+
+/\S+\x{A0}/8BZT1
+    X\x{A0}\x{A0}
+
+/\x{a0}+\s!/8BZ
+    \x{a0}\x20!
+
+/\x{a0}+\s!/8BZT1
+    \x{a0}\x20!
+
 /-- End of testinput15 --/

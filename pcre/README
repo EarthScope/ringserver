@@ -18,11 +18,12 @@ The contents of this README file are:
   The PCRE APIs
   Documentation for PCRE
   Contributions by users of PCRE
-  Building PCRE on non-Unix systems
-  Building PCRE on Unix-like systems
-  Retrieving configuration information on Unix-like systems
-  Shared libraries on Unix-like systems
-  Cross-compiling on Unix-like systems
+  Building PCRE on non-Unix-like systems
+  Building PCRE without using autotools
+  Building PCRE using autotools
+  Retrieving configuration information
+  Shared libraries
+  Cross-compiling using autotools
   Using HP's ANSI C++ compiler (aCC)
   Using PCRE from MySQL
   Making new tarballs
@@ -109,36 +110,45 @@ Windows (I myself do not use Windows). Nowadays there is more Windows support
 in the standard distribution, so these contibutions have been archived.
 
 
-Building PCRE on non-Unix systems
----------------------------------
+Building PCRE on non-Unix-like systems
+--------------------------------------
 
-For a non-Unix system, please read the comments in the file NON-UNIX-USE,
-though if your system supports the use of "configure" and "make" you may be
-able to build PCRE in the same way as for Unix-like systems. PCRE can also be
-configured in many platform environments using the GUI facility provided by
-CMake's cmake-gui command. This creates Makefiles, solution files, etc.
+For a non-Unix-like system, please read the comments in the file
+NON-AUTOTOOLS-BUILD, though if your system supports the use of "configure" and
+"make" you may be able to build PCRE using autotools in the same way as for
+many Unix-like systems.
+
+PCRE can also be configured using the GUI facility provided by CMake's
+cmake-gui command. This creates Makefiles, solution files, etc. The file
+NON-AUTOTOOLS-BUILD has information about CMake.
 
 PCRE has been compiled on many different operating systems. It should be
 straightforward to build PCRE on any system that has a Standard C compiler and
 library, because it uses only Standard C functions.
 
 
-Building PCRE on Unix-like systems
-----------------------------------
+Building PCRE without using autotools
+-------------------------------------
+
+The use of autotools (in particular, libtool) is problematic in some
+environments, even some that are Unix or Unix-like. See the NON-AUTOTOOLS-BUILD
+file for ways of building PCRE without using autotools.
+
+
+Building PCRE using autotools
+-----------------------------
 
 If you are using HP's ANSI C++ compiler (aCC), please see the special note
 in the section entitled "Using HP's ANSI C++ compiler (aCC)" below.
 
-The following instructions assume the use of the widely used "configure, make,
-make install" process. There is also support for CMake in the PCRE
-distribution; there are some comments about using CMake in the NON-UNIX-USE
-file, though it can also be used in Unix-like systems.
+The following instructions assume the use of the widely used "configure; make;
+make install" (autotools) process.
 
-To build PCRE on a Unix-like system, first run the "configure" command from the
-PCRE distribution directory, with your current directory set to the directory
-where you want the files to be created. This command is a standard GNU
-"autoconf" configuration script, for which generic instructions are supplied in
-the file INSTALL.
+To build PCRE on system that supports autotools, first run the "configure"
+command from the PCRE distribution directory, with your current directory set
+to the directory where you want the files to be created. This command is a
+standard GNU "autoconf" configuration script, for which generic instructions
+are supplied in the file INSTALL.
 
 Most commonly, people build PCRE within its own distribution directory, and in
 this case, on many systems, just running "./configure" is sufficient. However,
@@ -326,16 +336,17 @@ library. They are also documented in the pcrebuild man page.
   The default value is 20K.
 
 . It is possible to compile pcretest so that it links with the libreadline
-  library, by specifying
+  or libedit libraries, by specifying, respectively,
 
-  --enable-pcretest-libreadline
+  --enable-pcretest-libreadline or --enable-pcretest-libedit
 
   If this is done, when pcretest's input is from a terminal, it reads it using
   the readline() function. This provides line-editing and history facilities.
   Note that libreadline is GPL-licenced, so if you distribute a binary of
-  pcretest linked in this way, there may be licensing issues.
+  pcretest linked in this way, there may be licensing issues. These can be
+  avoided by linking with libedit (which has a BSD licence) instead.
 
-  Setting this option causes the -lreadline option to be added to the pcretest
+  Enabling libreadline causes the -lreadline option to be added to the pcretest
   build. In many operating environments with a sytem-installed readline
   library this is sufficient. However, in some environments (e.g. if an
   unmodified distribution version of readline is in use), it may be necessary
@@ -357,8 +368,6 @@ The "configure" script builds the following files for the basic C library:
 . libpcre16.pc       )
 . libpcreposix.pc    )
 . libtool              script that builds shared and/or static libraries
-. RunTest              script for running tests on the basic C library
-. RunGrepTest          script for running tests on the pcregrep command
 
 Versions of config.h and pcre.h are distributed in the PCRE tarballs under the
 names config.h.generic and pcre.h.generic. These are provided for those who
@@ -447,8 +456,8 @@ This removes all the files that "make install" installed. However, it does not
 remove any directories, because these are often shared with other programs.
 
 
-Retrieving configuration information on Unix-like systems
----------------------------------------------------------
+Retrieving configuration information
+------------------------------------
 
 Running "make install" installs the command pcre-config, which can be used to
 recall information about the PCRE configuration and installation. For example:
@@ -473,8 +482,8 @@ The data is held in *.pc files that are installed in a directory called
 <prefix>/lib/pkgconfig.
 
 
-Shared libraries on Unix-like systems
--------------------------------------
+Shared libraries
+----------------
 
 The default distribution builds PCRE as shared libraries and static libraries,
 as long as the operating system supports shared libraries. Shared library
@@ -499,8 +508,8 @@ Then run "make" in the usual way. Similarly, you can use --disable-static to
 build only shared libraries.
 
 
-Cross-compiling on Unix-like systems
-------------------------------------
+Cross-compiling using autotools
+-------------------------------
 
 You can specify CC and CFLAGS in the normal way to the "configure" command, in
 order to cross-compile PCRE for some other host. However, you should NOT
@@ -572,15 +581,16 @@ script creates the .txt and HTML forms of the documentation from the man pages.
 Testing PCRE
 ------------
 
-To test the basic PCRE library on a Unix system, run the RunTest script that is
-created by the configuring process. There is also a script called RunGrepTest
-that tests the options of the pcregrep command. If the C++ wrapper library is
-built, three test programs called pcrecpp_unittest, pcre_scanner_unittest, and
-pcre_stringpiece_unittest are also built. When JIT support is enabled, another
-test program called pcre_jit_test is built.
+To test the basic PCRE library on a Unix-like system, run the RunTest script.
+There is another script called RunGrepTest that tests the options of the
+pcregrep command. If the C++ wrapper library is built, three test programs
+called pcrecpp_unittest, pcre_scanner_unittest, and pcre_stringpiece_unittest
+are also built. When JIT support is enabled, another test program called
+pcre_jit_test is built.
 
 Both the scripts and all the program tests are run if you obey "make check" or
-"make test". For other systems, see the instructions in NON-UNIX-USE.
+"make test". For other environments, see the instructions in
+NON-AUTOTOOLS-BUILD.
 
 The RunTest script runs the pcretest test program (which is documented in its
 own man page) on each of the relevant testinput files in the testdata
@@ -605,6 +615,9 @@ tests. To run pcretest on just one or more specific test files, give their
 numbers as arguments to RunTest, for example:
 
   RunTest 2 7 11
+
+You can also call RunTest with the single argument "list" to cause it to output
+a list of tests.
 
 The first test file can be fed directly into the perltest.pl script to check
 that Perl gives the same results. The only difference you should see is in the
@@ -811,7 +824,8 @@ pcre_xxx and the other with the name pcre16_xxx.
   Makefile.am             ) the automake input that was used to create
                           )   Makefile.in
   NEWS                    important changes in this release
-  NON-UNIX-USE            notes on building PCRE on non-Unix systems
+  NON-UNIX-USE            the previous name for NON-AUTOTOOLS-BUILD
+  NON-AUTOTOOLS-BUILD     notes on building PCRE without using autotools
   PrepareRelease          script to make preparations for "make dist"
   README                  this file
   RunTest                 a Unix shell script for running tests
@@ -855,6 +869,7 @@ pcre_xxx and the other with the name pcre16_xxx.
 
   cmake/COPYING-CMAKE-SCRIPTS
   cmake/FindPackageHandleStandardArgs.cmake
+  cmake/FindEditline.cmake
   cmake/FindReadline.cmake
   CMakeLists.txt
   config-cmake.h.in
@@ -880,4 +895,4 @@ pcre_xxx and the other with the name pcre16_xxx.
 Philip Hazel
 Email local part: ph10
 Email domain: cam.ac.uk
-Last updated: 20 January 2012
+Last updated: 18 June 2012

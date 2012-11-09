@@ -317,7 +317,7 @@ PCRE supports five different conventions for indicating line breaks in
 strings: a single CR (carriage return) character, a single LF (linefeed)
 character, the two-character sequence CRLF, any of the three preceding, or any
 Unicode newline sequence. The Unicode newline sequences are the three just
-mentioned, plus the single characters VT (vertical tab, U+000B), FF (formfeed,
+mentioned, plus the single characters VT (vertical tab, U+000B), FF (form feed,
 U+000C), NEL (next line, U+0085), LS (line separator, U+2028), and PS
 (paragraph separator, U+2029).
 </P>
@@ -524,7 +524,7 @@ documentation). For those options that can be different in different parts of
 the pattern, the contents of the <i>options</i> argument specifies their
 settings at the start of compilation and execution. The PCRE_ANCHORED,
 PCRE_BSR_<i>xxx</i>, PCRE_NEWLINE_<i>xxx</i>, PCRE_NO_UTF8_CHECK, and
-PCRE_NO_START_OPT options can be set at the time of matching as well as at
+PCRE_NO_START_OPTIMIZE options can be set at the time of matching as well as at
 compile time.
 </P>
 <P>
@@ -641,8 +641,8 @@ documentation.
 <pre>
   PCRE_EXTENDED
 </pre>
-If this bit is set, whitespace data characters in the pattern are totally
-ignored except when escaped or inside a character class. Whitespace does not
+If this bit is set, white space data characters in the pattern are totally
+ignored except when escaped or inside a character class. White space does not
 include the VT character (code 11). In addition, characters between an
 unescaped # outside a character class and the next newline, inclusive, are also
 ignored. This is equivalent to Perl's /x option, and it can be changed within a
@@ -659,7 +659,7 @@ happen to represent a newline do not count.
 </P>
 <P>
 This option makes it possible to include comments inside complicated patterns.
-Note, however, that this applies only to data characters. Whitespace characters
+Note, however, that this applies only to data characters. White space characters
 may never appear within special character sequences in a pattern, for example
 within the sequence (?( that introduces a conditional subpattern.
 <pre>
@@ -745,7 +745,7 @@ CRLF sequence. Setting PCRE_NEWLINE_ANYCRLF specifies that any of the three
 preceding sequences should be recognized. Setting PCRE_NEWLINE_ANY specifies
 that any Unicode newline sequence should be recognized. The Unicode newline
 sequences are the three just mentioned, plus the single characters VT (vertical
-tab, U+000B), FF (formfeed, U+000C), NEL (next line, U+0085), LS (line
+tab, U+000B), FF (form feed, U+000C), NEL (next line, U+0085), LS (line
 separator, U+2028), and PS (paragraph separator, U+2029). For the 8-bit
 library, the last two are recognized only in UTF-8 mode.
 </P>
@@ -759,7 +759,7 @@ other combinations may yield unused numbers and cause an error.
 </P>
 <P>
 The only time that a line break in a pattern is specially recognized when
-compiling is when PCRE_EXTENDED is set. CR and LF are whitespace characters,
+compiling is when PCRE_EXTENDED is set. CR and LF are white space characters,
 and so are ignored in this mode. Also, an unescaped # outside a character class
 indicates a comment that lasts until after the next line break sequence. In
 other circumstances, line break sequences in patterns are treated as literal
@@ -916,6 +916,8 @@ fallen out of use. To avoid confusion, they have not been re-used.
   72  too many forward references
   73  disallowed Unicode code point (&#62;= 0xd800 && &#60;= 0xdfff)
   74  invalid UTF-16 string (specifically UTF-16)
+  75  name is too long in (*MARK), (*PRUNE), (*SKIP), or (*THEN)
+  76  character value in \u.... sequence is too large
 </pre>
 The numbers 32 and 10000 in errors 48 and 49 are defaults; different values may
 be used if the limits were changed when PCRE was built.
@@ -949,12 +951,18 @@ wants to pass any of the other fields to <b>pcre_exec()</b> or
 <b>pcre_dfa_exec()</b>, it must set up its own <b>pcre_extra</b> block.
 </P>
 <P>
-The second argument of <b>pcre_study()</b> contains option bits. There is only
-one option: PCRE_STUDY_JIT_COMPILE. If this is set, and the just-in-time
-compiler is available, the pattern is further compiled into machine code that
-executes much faster than the <b>pcre_exec()</b> matching function. If
-the just-in-time compiler is not available, this option is ignored. All other
-bits in the <i>options</i> argument must be zero.
+The second argument of <b>pcre_study()</b> contains option bits. There are three
+options:
+<pre>
+  PCRE_STUDY_JIT_COMPILE
+  PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE
+  PCRE_STUDY_JIT_PARTIAL_SOFT_COMPILE
+</pre>
+If any of these are set, and the just-in-time compiler is available, the
+pattern is further compiled into machine code that executes much faster than
+the <b>pcre_exec()</b> interpretive matching function. If the just-in-time
+compiler is not available, these options are ignored. All other bits in the
+<i>options</i> argument must be zero.
 </P>
 <P>
 JIT compilation is a heavyweight optimization. It can take some time for
@@ -979,8 +987,8 @@ When you are finished with a pattern, you can free the memory used for the
 study data by calling <b>pcre_free_study()</b>. This function was added to the
 API for release 8.20. For earlier versions, the memory could be freed with
 <b>pcre_free()</b>, just like the pattern itself. This will still work in cases
-where PCRE_STUDY_JIT_COMPILE is not used, but it is advisable to change to the
-new function when convenient.
+where JIT optimization is not used, but it is advisable to change to the new
+function when convenient.
 </P>
 <P>
 This is a typical way in which <b>pcre_study</b>() is used (except that in a
@@ -1016,14 +1024,12 @@ matching. (In 16-bit mode, the bitmap is used for 16-bit values less than 256.)
 </P>
 <P>
 These two optimizations apply to both <b>pcre_exec()</b> and
-<b>pcre_dfa_exec()</b>. However, they are not used by <b>pcre_exec()</b> if
-<b>pcre_study()</b> is called with the PCRE_STUDY_JIT_COMPILE option, and
-just-in-time compiling is successful. The optimizations can be disabled by
-setting the PCRE_NO_START_OPTIMIZE option when calling <b>pcre_exec()</b> or
-<b>pcre_dfa_exec()</b>. You might want to do this if your pattern contains
-callouts or (*MARK) (which cannot be handled by the JIT compiler), and you want
-to make use of these facilities in cases where matching fails. See the
-discussion of PCRE_NO_START_OPTIMIZE
+<b>pcre_dfa_exec()</b>, and the information is also used by the JIT compiler.
+The optimizations can be disabled by setting the PCRE_NO_START_OPTIMIZE option
+when calling <b>pcre_exec()</b> or <b>pcre_dfa_exec()</b>, but if this is done,
+JIT execution is also disabled. You might want to do this if your pattern
+contains callouts or (*MARK) and you want to make use of these facilities in
+cases where matching fails. See the discussion of PCRE_NO_START_OPTIMIZE
 <a href="#execoptions">below.</a>
 <a name="localesupport"></a></P>
 <br><a name="SEC14" href="#TOC1">LOCALE SUPPORT</a><br>
@@ -1199,20 +1205,19 @@ Return 1 if the (?J) or (?-J) option setting is used in the pattern, otherwise
 <pre>
   PCRE_INFO_JIT
 </pre>
-Return 1 if the pattern was studied with the PCRE_STUDY_JIT_COMPILE option, and
+Return 1 if the pattern was studied with one of the JIT options, and
 just-in-time compiling was successful. The fourth argument should point to an
 <b>int</b> variable. A return value of 0 means that JIT support is not available
-in this version of PCRE, or that the pattern was not studied with the
-PCRE_STUDY_JIT_COMPILE option, or that the JIT compiler could not handle this
-particular pattern. See the
+in this version of PCRE, or that the pattern was not studied with a JIT option,
+or that the JIT compiler could not handle this particular pattern. See the
 <a href="pcrejit.html"><b>pcrejit</b></a>
 documentation for details of what can and cannot be handled.
 <pre>
   PCRE_INFO_JITSIZE
 </pre>
-If the pattern was successfully studied with the PCRE_STUDY_JIT_COMPILE option,
-return the size of the JIT compiled code, otherwise return zero. The fourth
-argument should point to a <b>size_t</b> variable.
+If the pattern was successfully studied with a JIT option, return the size of
+the JIT compiled code, otherwise return zero. The fourth argument should point
+to a <b>size_t</b> variable.
 <pre>
   PCRE_INFO_LASTLITERAL
 </pre>
@@ -1223,6 +1228,13 @@ value, -1 is returned. For anchored patterns, a last literal value is recorded
 only if it follows something of variable length. For example, for the pattern
 /^a\d+z\d+/ the returned value is "z", but for /^a\dz\d/ the returned value
 is -1.
+<pre>
+  PCRE_INFO_MAXLOOKBEHIND
+</pre>
+Return the number of characters (NB not bytes) in the longest lookbehind
+assertion in the pattern. Note that the simple assertions \b and \B require a
+one-character lookbehind. This information is useful when doing multi-segment
+matching using the partial matching facilities.
 <pre>
   PCRE_INFO_MINLENGTH
 </pre>
@@ -1439,22 +1451,22 @@ In the 16-bit version of this structure, the <i>mark</i> field has type
 "PCRE_UCHAR16 **".
 </P>
 <P>
-The <i>flags</i> field is a bitmap that specifies which of the other fields
-are set. The flag bits are:
+The <i>flags</i> field is used to specify which of the other fields are set. The
+flag bits are:
 <pre>
-  PCRE_EXTRA_STUDY_DATA
+  PCRE_EXTRA_CALLOUT_DATA
   PCRE_EXTRA_EXECUTABLE_JIT
+  PCRE_EXTRA_MARK
   PCRE_EXTRA_MATCH_LIMIT
   PCRE_EXTRA_MATCH_LIMIT_RECURSION
-  PCRE_EXTRA_CALLOUT_DATA
+  PCRE_EXTRA_STUDY_DATA
   PCRE_EXTRA_TABLES
-  PCRE_EXTRA_MARK
 </pre>
 Other flag bits should be set to zero. The <i>study_data</i> field and sometimes
 the <i>executable_jit</i> field are set in the <b>pcre_extra</b> block that is
 returned by <b>pcre_study()</b>, together with the appropriate flag bits. You
-should not set these yourself, but you may add to the block by setting the
-other fields and their corresponding flag bits.
+should not set these yourself, but you may add to the block by setting other
+fields and their corresponding flag bits.
 </P>
 <P>
 The <i>match_limit</i> field provides a means of preventing PCRE from using up a
@@ -1472,11 +1484,10 @@ in the subject string.
 </P>
 <P>
 When <b>pcre_exec()</b> is called with a pattern that was successfully studied
-with the PCRE_STUDY_JIT_COMPILE option, the way that the matching is executed
-is entirely different. However, there is still the possibility of runaway
-matching that goes on for a very long time, and so the <i>match_limit</i> value
-is also used in this case (but in a different way) to limit how long the
-matching can continue.
+with a JIT option, the way that the matching is executed is entirely different.
+However, there is still the possibility of runaway matching that goes on for a
+very long time, and so the <i>match_limit</i> value is also used in this case
+(but in a different way) to limit how long the matching can continue.
 </P>
 <P>
 The default value for the limit can be set when PCRE is built; the default
@@ -1497,8 +1508,7 @@ This limit is of use only if it is set smaller than <i>match_limit</i>.
 Limiting the recursion depth limits the amount of machine stack that can be
 used, or, when PCRE has been compiled to use memory on the heap instead of the
 stack, the amount of heap memory that can be used. This limit is not relevant,
-and is ignored, if the pattern was successfully studied with
-PCRE_STUDY_JIT_COMPILE.
+and is ignored, when matching is done using JIT compiled code.
 </P>
 <P>
 The default value for <i>match_limit_recursion</i> can be set when PCRE is
@@ -1549,16 +1559,16 @@ Option bits for <b>pcre_exec()</b>
 The unused bits of the <i>options</i> argument for <b>pcre_exec()</b> must be
 zero. The only bits that may be set are PCRE_ANCHORED, PCRE_NEWLINE_<i>xxx</i>,
 PCRE_NOTBOL, PCRE_NOTEOL, PCRE_NOTEMPTY, PCRE_NOTEMPTY_ATSTART,
-PCRE_NO_START_OPTIMIZE, PCRE_NO_UTF8_CHECK, PCRE_PARTIAL_SOFT, and
-PCRE_PARTIAL_HARD.
+PCRE_NO_START_OPTIMIZE, PCRE_NO_UTF8_CHECK, PCRE_PARTIAL_HARD, and
+PCRE_PARTIAL_SOFT.
 </P>
 <P>
-If the pattern was successfully studied with the PCRE_STUDY_JIT_COMPILE option,
-the only supported options for JIT execution are PCRE_NO_UTF8_CHECK,
-PCRE_NOTBOL, PCRE_NOTEOL, PCRE_NOTEMPTY, and PCRE_NOTEMPTY_ATSTART. Note in
-particular that partial matching is not supported. If an unsupported option is
-used, JIT execution is disabled and the normal interpretive code in
-<b>pcre_exec()</b> is run.
+If the pattern was successfully studied with one of the just-in-time (JIT)
+compile options, the only supported options for JIT execution are
+PCRE_NO_UTF8_CHECK, PCRE_NOTBOL, PCRE_NOTEOL, PCRE_NOTEMPTY,
+PCRE_NOTEMPTY_ATSTART, PCRE_PARTIAL_HARD, and PCRE_PARTIAL_SOFT. If an
+unsupported option is used, JIT execution is disabled and the normal
+interpretive code in <b>pcre_exec()</b> is run.
 <pre>
   PCRE_ANCHORED
 </pre>
@@ -1681,7 +1691,8 @@ causing performance to suffer, but ensuring that in cases where the result is
 "no match", the callouts do occur, and that items such as (*COMMIT) and (*MARK)
 are considered at every possible starting position in the subject string. If
 PCRE_NO_START_OPTIMIZE is set at compile time, it cannot be unset at matching
-time.
+time. The use of PCRE_NO_START_OPTIMIZE disables JIT execution; when it is set,
+matching is always done using interpretively.
 </P>
 <P>
 Setting PCRE_NO_START_OPTIMIZE can change the outcome of a matching operation.
@@ -1715,9 +1726,11 @@ returned.
 </pre>
 When PCRE_UTF8 is set at compile time, the validity of the subject as a UTF-8
 string is automatically checked when <b>pcre_exec()</b> is subsequently called.
-The value of <i>startoffset</i> is also checked to ensure that it points to the
-start of a UTF-8 character. There is a discussion about the validity of UTF-8
-strings in the
+The entire string is checked before any other processing takes place. The value
+of <i>startoffset</i> is also checked to ensure that it points to the start of a
+UTF-8 character. There is a discussion about the
+<a href="pcreunicode.html#utf8strings">validity of UTF-8 strings</a>
+in the
 <a href="pcreunicode.html"><b>pcreunicode</b></a>
 page. If an invalid sequence of bytes is found, <b>pcre_exec()</b> returns the
 error PCRE_ERROR_BADUTF8 or, if PCRE_PARTIAL_HARD is set and the problem is a
@@ -1868,7 +1881,7 @@ string that it matched that is returned.
 <P>
 If the vector is too small to hold all the captured substring offsets, it is
 used as far as possible (up to two-thirds of its length), and the function
-returns a value of zero. If neither the actual string matched not any captured
+returns a value of zero. If neither the actual string matched nor any captured
 substrings are of interest, <b>pcre_exec()</b> may be called with <i>ovector</i>
 passed as NULL and <i>ovecsize</i> as zero. However, if the pattern contains
 back references and the <i>ovector</i> is not big enough to remember the related
@@ -2067,18 +2080,18 @@ time.
 <pre>
   PCRE_ERROR_JIT_STACKLIMIT (-27)
 </pre>
-This error is returned when a pattern that was successfully studied using the
-PCRE_STUDY_JIT_COMPILE option is being matched, but the memory available for
-the just-in-time processing stack is not large enough. See the
+This error is returned when a pattern that was successfully studied using a
+JIT compile option is being matched, but the memory available for the
+just-in-time processing stack is not large enough. See the
 <a href="pcrejit.html"><b>pcrejit</b></a>
 documentation for more details.
 <pre>
-  PCRE_ERROR_BADMODE (-28)
+  PCRE_ERROR_BADMODE        (-28)
 </pre>
 This error is given if a pattern that was compiled by the 8-bit library is
 passed to a 16-bit library function, or vice versa.
 <pre>
-  PCRE_ERROR_BADENDIANNESS (-29)
+  PCRE_ERROR_BADENDIANNESS  (-29)
 </pre>
 This error is given if a pattern that was compiled and saved is reloaded on a
 host with different endianness. The utility function
@@ -2086,7 +2099,7 @@ host with different endianness. The utility function
 so that it runs on the new host.
 </P>
 <P>
-Error numbers -16 to -20 and -22 are not used by <b>pcre_exec()</b>.
+Error numbers -16 to -20, -22, and -30 are not used by <b>pcre_exec()</b>.
 <a name="badutf8reasons"></a></P>
 <br><b>
 Reason codes for invalid UTF-8 strings
@@ -2581,6 +2594,13 @@ When a recursive subpattern is processed, the matching function calls itself
 recursively, using private vectors for <i>ovector</i> and <i>workspace</i>. This
 error is given if the output vector is not large enough. This should be
 extremely rare, as a vector of size 1000 is used.
+<pre>
+  PCRE_ERROR_DFA_BADRESTART (-30)
+</pre>
+When <b>pcre_dfa_exec()</b> is called with the <b>PCRE_DFA_RESTART</b> option,
+some plausibility checks are made on the contents of the workspace, which
+should contain data about the previous partial match. If any of these checks
+fail, this error is given.
 </P>
 <br><a name="SEC24" href="#TOC1">SEE ALSO</a><br>
 <P>
@@ -2599,7 +2619,7 @@ Cambridge CB2 3QH, England.
 </P>
 <br><a name="SEC26" href="#TOC1">REVISION</a><br>
 <P>
-Last updated: 21 January 2012
+Last updated: 17 June 2012
 <br>
 Copyright &copy; 1997-2012 University of Cambridge.
 <br>

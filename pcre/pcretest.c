@@ -46,7 +46,6 @@ pcre_internal.h that depend on COMPILE_PCRE8 or COMPILE_PCRE16. It does,
 however, make use of SUPPORT_PCRE8 and SUPPORT_PCRE16 to ensure that it calls
 only supported library functions. */
 
-
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -59,14 +58,26 @@ only supported library functions. */
 #include <locale.h>
 #include <errno.h>
 
-#ifdef SUPPORT_LIBREADLINE
+/* Both libreadline and libedit are optionally supported. The user-supplied
+original patch uses readline/readline.h for libedit, but in at least one system
+it is installed as editline/readline.h, so the configuration code now looks for
+that first, falling back to readline/readline.h. */
+
+#if defined(SUPPORT_LIBREADLINE) || defined(SUPPORT_LIBEDIT)
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
+#if defined(SUPPORT_LIBREADLINE)
 #include <readline/readline.h>
 #include <readline/history.h>
+#else
+#if defined(HAVE_EDITLINE_READLINE_H)
+#include <editline/readline.h>
+#else
+#include <readline/readline.h>
 #endif
-
+#endif
+#endif
 
 /* A number of things vary for Windows builds. Originally, pcretest opened its
 input and output without "b"; then I was told that "b" was needed in some
@@ -599,6 +610,10 @@ version is called. ----- */
 #endif
 #endif
 
+#if !defined NODFA
+#define DFA_WS_DIMENSION 1000
+#endif
+
 /* This is the default loop count for timing. */
 
 #define LOOPREPEAT 500000
@@ -613,6 +628,7 @@ static int callout_fail_count;
 static int callout_fail_id;
 static int debug_lengths;
 static int first_callout;
+static int jit_was_used;
 static int locale_set = 0;
 static int show_malloc;
 static int use_utf;
@@ -674,6 +690,20 @@ static int use_pcre16 = 0;
 static int use_pcre16 = 1;
 #endif
 
+/* JIT study options for -s+n and /S+n where '1' <= n <= '7'. */
+
+static int jit_study_bits[] =
+  {
+  PCRE_STUDY_JIT_COMPILE,
+  PCRE_STUDY_JIT_PARTIAL_SOFT_COMPILE,
+  PCRE_STUDY_JIT_COMPILE + PCRE_STUDY_JIT_PARTIAL_SOFT_COMPILE,
+  PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE,
+  PCRE_STUDY_JIT_COMPILE + PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE,
+  PCRE_STUDY_JIT_PARTIAL_SOFT_COMPILE + PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE,
+  PCRE_STUDY_JIT_COMPILE + PCRE_STUDY_JIT_PARTIAL_SOFT_COMPILE +
+    PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE
+};
+
 /* Textual explanations for runtime error codes */
 
 static const char *errtexts[] = {
@@ -705,7 +735,9 @@ static const char *errtexts[] = {
   NULL,  /* SHORTUTF8/16 is handled specially */
   "nested recursion at the same subject position",
   "JIT stack limit reached",
-  "pattern compiled in wrong mode: 8-bit/16-bit error"
+  "pattern compiled in wrong mode: 8-bit/16-bit error",
+  "pattern compiled with other endianness",
+  "invalid data in workspace for DFA restart"
 };
 
 
@@ -1063,6 +1095,7 @@ return sys_errlist[n];
 
 static pcre_jit_stack* jit_callback(void *arg)
 {
+jit_was_used = TRUE;
 return (pcre_jit_stack *)arg;
 }
 
@@ -1276,11 +1309,11 @@ for (;;)
     {
     int dlen;
 
-    /* If libreadline support is required, use readline() to read a line if the
-    input is a terminal. Note that readline() removes the trailing newline, so
-    we must put it back again, to be compatible with fgets(). */
+    /* If libreadline or libedit support is required, use readline() to read a
+    line if the input is a terminal. Note that readline() removes the trailing
+    newline, so we must put it back again, to be compatible with fgets(). */
 
-#ifdef SUPPORT_LIBREADLINE
+#if defined(SUPPORT_LIBREADLINE) || defined(SUPPORT_LIBEDIT)
     if (isatty(fileno(f)))
       {
       size_t len;
@@ -2096,7 +2129,7 @@ usage(void)
 {
 printf("Usage:     pcretest [options] [<input file> [<output file>]]\n\n");
 printf("Input and output default to stdin and stdout.\n");
-#ifdef SUPPORT_LIBREADLINE
+#if defined(SUPPORT_LIBREADLINE) || defined(SUPPORT_LIBEDIT)
 printf("If input is a terminal, readline() is used to read from it.\n");
 #else
 printf("This version of pcretest is not linked with readline().\n");
@@ -2132,6 +2165,10 @@ printf("  -q       quiet: do not output PCRE version number at start\n");
 printf("  -S <n>   set stack size to <n> megabytes\n");
 printf("  -s       force each pattern to be studied at basic level\n"
        "  -s+      force each pattern to be studied, using JIT if available\n"
+       "  -s++     ditto, verifying when JIT was actually used\n"
+       "  -s+n     force each pattern to be studied, using JIT if available,\n"
+       "             where 1 <= n <= 7 selects JIT options\n"
+       "  -s++n    ditto, verifying when JIT was actually used\n"
        "  -t       time compilation and execution\n");
 printf("  -t <n>   time compilation and execution, repeating <n> times\n");
 printf("  -tm      time execution (matching) only\n");
@@ -2166,14 +2203,19 @@ int quiet = 0;
 int size_offsets = 45;
 int size_offsets_max;
 int *offsets = NULL;
-#if !defined NOPOSIX
-int posix = 0;
-#endif
 int debug = 0;
 int done = 0;
 int all_use_dfa = 0;
+int verify_jit = 0;
 int yield = 0;
 int stack_size;
+
+#if !defined NOPOSIX
+int posix = 0;
+#endif
+#if !defined NODFA
+int *dfa_workspace = NULL;
+#endif
 
 pcre_jit_stack *jit_stack = NULL;
 
@@ -2233,15 +2275,23 @@ version = pcre16_version();
 while (argc > 1 && argv[op][0] == '-')
   {
   pcre_uint8 *endptr;
+  char *arg = argv[op];
 
-  if (strcmp(argv[op], "-m") == 0) showstore = 1;
-  else if (strcmp(argv[op], "-s") == 0) force_study = 0;
-  else if (strcmp(argv[op], "-s+") == 0)
+  if (strcmp(arg, "-m") == 0) showstore = 1;
+  else if (strcmp(arg, "-s") == 0) force_study = 0;
+
+  else if (strncmp(arg, "-s+", 3) == 0)
     {
+    arg += 3;
+    if (*arg == '+') { arg++; verify_jit = TRUE; }
     force_study = 1;
-    force_study_options = PCRE_STUDY_JIT_COMPILE;
+    if (*arg == 0)
+      force_study_options = jit_study_bits[6];
+    else if (*arg >= '1' && *arg <= '7')
+      force_study_options = jit_study_bits[*arg - '1'];
+    else goto BAD_ARG;
     }
-  else if (strcmp(argv[op], "-16") == 0)
+  else if (strcmp(arg, "-16") == 0)
     {
 #ifdef SUPPORT_PCRE16
     use_pcre16 = 1;
@@ -2250,24 +2300,24 @@ while (argc > 1 && argv[op][0] == '-')
     exit(1);
 #endif
     }
-  else if (strcmp(argv[op], "-q") == 0) quiet = 1;
-  else if (strcmp(argv[op], "-b") == 0) debug = 1;
-  else if (strcmp(argv[op], "-i") == 0) showinfo = 1;
-  else if (strcmp(argv[op], "-d") == 0) showinfo = debug = 1;
-  else if (strcmp(argv[op], "-M") == 0) default_find_match_limit = TRUE;
+  else if (strcmp(arg, "-q") == 0) quiet = 1;
+  else if (strcmp(arg, "-b") == 0) debug = 1;
+  else if (strcmp(arg, "-i") == 0) showinfo = 1;
+  else if (strcmp(arg, "-d") == 0) showinfo = debug = 1;
+  else if (strcmp(arg, "-M") == 0) default_find_match_limit = TRUE;
 #if !defined NODFA
-  else if (strcmp(argv[op], "-dfa") == 0) all_use_dfa = 1;
+  else if (strcmp(arg, "-dfa") == 0) all_use_dfa = 1;
 #endif
-  else if (strcmp(argv[op], "-o") == 0 && argc > 2 &&
+  else if (strcmp(arg, "-o") == 0 && argc > 2 &&
       ((size_offsets = get_value((pcre_uint8 *)argv[op+1], &endptr)),
         *endptr == 0))
     {
     op++;
     argc--;
     }
-  else if (strcmp(argv[op], "-t") == 0 || strcmp(argv[op], "-tm") == 0)
+  else if (strcmp(arg, "-t") == 0 || strcmp(arg, "-tm") == 0)
     {
-    int both = argv[op][2] == 0;
+    int both = arg[2] == 0;
     int temp;
     if (argc > 2 && (temp = get_value((pcre_uint8 *)argv[op+1], &endptr),
                      *endptr == 0))
@@ -2279,7 +2329,7 @@ while (argc > 1 && argv[op][0] == '-')
     else timeitm = LOOPREPEAT;
     if (both) timeit = timeitm;
     }
-  else if (strcmp(argv[op], "-S") == 0 && argc > 2 &&
+  else if (strcmp(arg, "-S") == 0 && argc > 2 &&
       ((stack_size = get_value((pcre_uint8 *)argv[op+1], &endptr)),
         *endptr == 0))
     {
@@ -2302,9 +2352,9 @@ while (argc > 1 && argv[op][0] == '-')
 #endif
     }
 #if !defined NOPOSIX
-  else if (strcmp(argv[op], "-p") == 0) posix = 1;
+  else if (strcmp(arg, "-p") == 0) posix = 1;
 #endif
-  else if (strcmp(argv[op], "-C") == 0)
+  else if (strcmp(arg, "-C") == 0)
     {
     int rc;
     unsigned long int lrc;
@@ -2444,15 +2494,16 @@ are set, either both UTFs are supported or both are not supported. */
     printf("\n");
     goto EXIT;
     }
-  else if (strcmp(argv[op], "-help") == 0 ||
-           strcmp(argv[op], "--help") == 0)
+  else if (strcmp(arg, "-help") == 0 ||
+           strcmp(arg, "--help") == 0)
     {
     usage();
     goto EXIT;
     }
   else
     {
-    printf("** Unknown or malformed option %s\n", argv[op]);
+    BAD_ARG:
+    printf("** Unknown or malformed option %s\n", arg);
     usage();
     yield = 1;
     goto EXIT;
@@ -2549,6 +2600,10 @@ while (!done)
   int do_showcaprest = 0;
   int do_flip = 0;
   int erroroffset, len, delimiter, poffset;
+
+#if !defined NODFA
+  int dfa_matched = 0;
+#endif
 
   use_utf = 0;
   debug_lengths = 1;
@@ -2768,8 +2823,15 @@ while (!done)
         do_study = 1;
         if (*pp == '+')
           {
-          study_options |= PCRE_STUDY_JIT_COMPILE;
-          pp++;
+          if (*(++pp) == '+')
+            {
+            verify_jit = TRUE;
+            pp++;
+            }
+          if (*pp >= '1' && *pp <= '7')
+            study_options |= jit_study_bits[*pp++ - '1'];
+          else
+            study_options |= jit_study_bits[6];
           }
         }
       else
@@ -3062,7 +3124,7 @@ while (!done)
       {
       unsigned long int all_options;
       int count, backrefmax, first_char, need_char, okpartial, jchanged,
-        hascrorlf;
+        hascrorlf, maxlookbehind;
       int nameentrysize, namecount;
       const pcre_uint8 *nametable;
 
@@ -3076,7 +3138,8 @@ while (!done)
           new_info(re, NULL, PCRE_INFO_NAMETABLE, (void *)&nametable) +
           new_info(re, NULL, PCRE_INFO_OKPARTIAL, &okpartial) +
           new_info(re, NULL, PCRE_INFO_JCHANGED, &jchanged) +
-          new_info(re, NULL, PCRE_INFO_HASCRORLF, &hascrorlf)
+          new_info(re, NULL, PCRE_INFO_HASCRORLF, &hascrorlf) +
+          new_info(re, NULL, PCRE_INFO_MAXLOOKBEHIND, &maxlookbehind)
           != 0)
         goto SKIP_DATA;
 
@@ -3215,6 +3278,9 @@ while (!done)
           fprintf(outfile, "%s\n", caseless);
           }
         }
+
+      if (maxlookbehind > 0)
+        fprintf(outfile, "Max lookbehind = %d\n", maxlookbehind);
 
       /* Don't output study size; at present it is in any case a fixed
       value, but it varies, depending on the computer architecture, and
@@ -3653,6 +3719,7 @@ while (!done)
           }
         use_size_offsets = n;
         if (n == 0) use_offsets = NULL;   /* Ensures it can't write to it */
+          else use_offsets = offsets + size_offsets_max - n;  /* To catch overruns */
         continue;
 
         case 'P':
@@ -3855,9 +3922,16 @@ while (!done)
       }
 #endif
 
+    /* Ensure that there is a JIT callback if we want to verify that JIT was
+    actually used. If jit_stack == NULL, no stack has yet been assigned. */
+
+    if (verify_jit && jit_stack == NULL && extra != NULL)
+       { PCRE_ASSIGN_JIT_STACK(extra, jit_callback, jit_stack); }
+
     for (;; gmatched++)    /* Loop for /g or /G */
       {
       markptr = NULL;
+      jit_was_used = FALSE;
 
       if (timeitm > 0)
         {
@@ -3868,12 +3942,18 @@ while (!done)
 #if !defined NODFA
         if (all_use_dfa || use_dfa)
           {
-          int workspace[1000];
+          if ((options & PCRE_DFA_RESTART) != 0)
+            {
+            fprintf(outfile, "Timing DFA restarts is not supported\n");
+            break;
+            }
+          if (dfa_workspace == NULL)
+            dfa_workspace = (int *)malloc(DFA_WS_DIMENSION*sizeof(int));
           for (i = 0; i < timeitm; i++)
             {
             PCRE_DFA_EXEC(count, re, extra, bptr, len, start_offset,
-              (options | g_notempty), use_offsets, use_size_offsets, workspace,
-              (sizeof(workspace)/sizeof(int)));
+              (options | g_notempty), use_offsets, use_size_offsets,
+              dfa_workspace, DFA_WS_DIMENSION);
             }
           }
         else
@@ -3939,10 +4019,13 @@ while (!done)
 #if !defined NODFA
       else if (all_use_dfa || use_dfa)
         {
-        int workspace[1000];
+        if (dfa_workspace == NULL)
+          dfa_workspace = (int *)malloc(DFA_WS_DIMENSION*sizeof(int));
+        if (dfa_matched++ == 0)
+          dfa_workspace[0] = -1;  /* To catch bad restart */
         PCRE_DFA_EXEC(count, re, extra, bptr, len, start_offset,
-          (options | g_notempty), use_offsets, use_size_offsets, workspace,
-          (sizeof(workspace)/sizeof(int)));
+          (options | g_notempty), use_offsets, use_size_offsets, dfa_workspace,
+          DFA_WS_DIMENSION);
         if (count == 0)
           {
           fprintf(outfile, "Matched, but too many subsidiary matches\n");
@@ -4019,6 +4102,7 @@ while (!done)
             fprintf(outfile, "%2d: ", i/2);
             PCHARSV(bptr, use_offsets[i],
               use_offsets[i+1] - use_offsets[i], outfile);
+            if (verify_jit && jit_was_used) fprintf(outfile, " (JIT)");
             fprintf(outfile, "\n");
             if (do_showcaprest || (i == 0 && do_showrest))
               {
@@ -4185,6 +4269,7 @@ while (!done)
           PCHARSV(bptr, use_offsets[0], use_offsets[1] - use_offsets[0],
             outfile);
           }
+        if (verify_jit && jit_was_used) fprintf(outfile, " (JIT)");
         fprintf(outfile, "\n");
         break;  /* Out of the /g loop */
         }
@@ -4264,14 +4349,15 @@ while (!done)
               {
               if (markptr == NULL)
                 {
-                fprintf(outfile, "No match\n");
+                fprintf(outfile, "No match");
                 }
               else
                 {
                 fprintf(outfile, "No match, mark = ");
                 PCHARSV(markptr, 0, -1, outfile);
-                putc('\n', outfile);
                 }
+              if (verify_jit && jit_was_used) fprintf(outfile, " (JIT)");
+              putc('\n', outfile);
               }
             break;
 

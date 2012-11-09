@@ -49,6 +49,12 @@ them both to 0; an emulation function will be used. */
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
 
+/* Define to 1 if you have the <editline/readline.h> header file. */
+#undef HAVE_EDITLINE_READLINE_H
+
+/* Define to 1 if you have the <edit/readline/readline.h> header file. */
+#undef HAVE_EDIT_READLINE_READLINE_H
+
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
 
@@ -242,6 +248,9 @@ them both to 0; an emulation function will be used. */
 /* Define to allow pcregrep to be linked with libbz2, so that it is able to
    handle .bz2 files. */
 #undef SUPPORT_LIBBZ2
+
+/* Define to allow pcretest to be linked with libedit. */
+#undef SUPPORT_LIBEDIT
 
 /* Define to allow pcretest to be linked with libreadline. */
 #undef SUPPORT_LIBREADLINE

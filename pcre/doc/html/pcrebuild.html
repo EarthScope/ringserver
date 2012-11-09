@@ -127,7 +127,7 @@ functions.
 </P>
 <P>
 If you set --enable-utf when compiling in an EBCDIC environment, PCRE expects
-its input to be either ASCII or UTF-8 (depending on the runtime option). It is
+its input to be either ASCII or UTF-8 (depending on the run-time option). It is
 not possible to support both EBCDIC and UTF-8 codes in the same version of the
 library. Consequently, --enable-utf and --enable-ebcdic are mutually
 exclusive.
@@ -317,7 +317,7 @@ only. If you add
 </pre>
 to the <b>configure</b> command, the distributed tables are no longer used.
 Instead, a program called <b>dftables</b> is compiled and run. This outputs the
-source for new set of tables, created in the default locale of your C runtime
+source for new set of tables, created in the default locale of your C run-time
 system. (This method of replacing the tables does not work if you are cross
 compiling, because <b>dftables</b> is run on the local host. If you need to
 create alternative tables when cross compiling, you will have to do so "by

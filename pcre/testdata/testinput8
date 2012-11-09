@@ -4709,4 +4709,93 @@
 /(?<=ab\Cde)X/
     abZdeX
 
+/^\R/
+    \r\P
+    \r\P\P
+    
+/^\R{2,3}x/
+    \r\P
+    \r\P\P
+    \r\r\P 
+    \r\r\P\P
+    \r\r\r\P  
+    \r\r\r\P\P
+    \r\rx
+    \r\r\rx    
+
+/^\R{2,3}?x/
+    \r\P
+    \r\P\P
+    \r\r\P 
+    \r\r\P\P
+    \r\r\r\P  
+    \r\r\r\P\P
+    \r\rx
+    \r\r\rx    
+    
+/^\R?x/
+    \r\P
+    \r\P\P 
+    x
+    \rx  
+
+/^\R+x/
+    \r\P
+    \r\P\P 
+    \r\n\P
+    \r\n\P\P  
+    \rx  
+
+/^a$/<CRLF>
+    a\r\P
+    a\r\P\P 
+
+/^a$/m<CRLF>
+    a\r\P
+    a\r\P\P 
+
+/^(a$|a\r)/<CRLF>
+    a\r\P
+    a\r\P\P 
+
+/^(a$|a\r)/m<CRLF>
+    a\r\P
+    a\r\P\P 
+
+/./<CRLF>
+    \r\P
+    \r\P\P 
+  
+/.{2,3}/<CRLF>
+    \r\P 
+    \r\P\P
+    \r\r\P
+    \r\r\P\P
+    \r\r\r\P
+    \r\r\r\P\P     
+
+/.{2,3}?/<CRLF>
+    \r\P 
+    \r\P\P
+    \r\r\P
+    \r\r\P\P
+    \r\r\r\P
+    \r\r\r\P\P     
+
+/-- Test simple validity check for restarts --/
+
+/abcdef/
+   abc\R
+
+/<H((?(?!<H|F>)(.)|(?R))++)*F>/
+    text <H more text <H texting more  hexA0-"\xA0"    hex above 7F-"\xBC" F> text xxxxx <H text F> text F> text2 <H text sample F> more text.
+
+/^(?>.{4})abc|^\w\w.xabcd/
+    xxxxabcd
+    xx\xa0xabcd 
+
+/^(.{4}){2}+abc|^\w\w.x\w\w\w\wabcd/
+    xxxxxxxxabcd
+    xx\xa0xxxxxabcd 
+
 /-- End of testinput8 --/

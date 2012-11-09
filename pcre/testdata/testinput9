@@ -688,4 +688,30 @@
 
 /(?<=ab\Cde)X/8
 
+/./8<CRLF>
+    \r\P
+    \r\P\P 
+  
+/.{2,3}/8<CRLF>
+    \r\P 
+    \r\P\P
+    \r\r\P
+    \r\r\P\P
+    \r\r\r\P
+    \r\r\r\P\P     
+
+/.{2,3}?/8<CRLF>
+    \r\P 
+    \r\P\P
+    \r\r\P
+    \r\r\P\P
+    \r\r\r\P
+    \r\r\r\P\P     
+
+/[^\x{100}]/8
+    \x{100}\x{101}X
+
+/[^\x{100}]+/8
+    \x{100}\x{101}X
+
 /-- End of testinput9 --/ 
