@@ -37,7 +37,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2011.264
+ * Modified: 2012.313
  **************************************************************************/
 
 /* Unsupported protocol features:
@@ -912,9 +912,9 @@ HandleNegotiation (char *recvbuffer, int recvlength, ClientInfo *cinfo,
 	    }
 	  else
 	    {
-	      /* Add selector to the StaNode.selectors, maximum of 81 bytes */
+	      /* Add selector to the StaNode.selectors, maximum of 400 bytes */
 	      /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
-	      if ( AddToString (&(stanode->selectors), pattern, ",", (pattern[0]=='!')?0:1, 81) )
+	      if ( AddToString (&(stanode->selectors), pattern, ",", (pattern[0]=='!')?0:1, 400) )
 		{
 		  lprintf (0, "[%s] Error in AddToString for command SELECT", cinfo->hostname);
 		  
@@ -931,9 +931,9 @@ HandleNegotiation (char *recvbuffer, int recvlength, ClientInfo *cinfo,
       /* Otherwise add selector to global list */
       else if ( OKGO )
 	{
-	  /* Add selector to the SLStaNode.selectors, maximum of 81 bytes */
+	  /* Add selector to the SLStaNode.selectors, maximum of 400 bytes */
 	  /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
-	  if ( AddToString (&(slinfo->selectors), pattern, ",", (pattern[0]=='!')?0:1, 81) )
+	  if ( AddToString (&(slinfo->selectors), pattern, ",", (pattern[0]=='!')?0:1, 400) )
 	    {
 	      lprintf (0, "[%s] Error in AddToString for command SELECT", cinfo->hostname);
 	      
