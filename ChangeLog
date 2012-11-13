@@ -1,5 +1,6 @@
 2012.317:
 	- Store match and reject strings for DataLink clients correctly.
+	- Change SLMAXREGEXLEN to match DLMAXREGEXLEN of 16384.
 
 2012.313:
 	- Increase limit on number of SeedLink selectors that may be
