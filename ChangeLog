@@ -1,3 +1,6 @@
+2012.317:
+	- Store match and reject strings for DataLink clients correctly.
+
 2012.313:
 	- Increase limit on number of SeedLink selectors that may be
 	specified per station by increasing the limit on the composite

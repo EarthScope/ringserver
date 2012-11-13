@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2011.143
+ * Modified: 2012.317
  **************************************************************************/
 
 #include <fcntl.h>
@@ -693,24 +693,27 @@ HandleNegotiation (ClientInfo *cinfo)
 	}
       else
 	{
+	  if ( cinfo->matchstr )
+	    free (cinfo->matchstr);
+	  
 	  /* Read regex of size bytes from socket */
-	  if ( ! (buffer = (char *) malloc (size+1)) )
+	  if ( ! (cinfo->matchstr = (char *) malloc (size+1)) )
 	    {
 	      lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
 	      return -1;
 	    }
 	  
-	  if ( RecvData (cinfo->socket, buffer, size, cinfo->hostname) < 0 )
+	  if ( RecvData (cinfo->socket, cinfo->matchstr, size, cinfo->hostname) < 0 )
 	    {
 	      lprintf (0, "[%s] Error Recv'ing data", cinfo->hostname);
 	      return -1;	      
 	    }
 	  
 	  /* Make sure buffer is a terminated string */
-	  buffer[size] = '\0';
+	  cinfo->matchstr[size] = '\0';
 	  
 	  /* Compile match expression */
-	  if ( RingMatch (cinfo->reader, buffer) )
+	  if ( RingMatch (cinfo->reader, cinfo->matchstr) )
 	    {
 	      lprintf (0, "[%s] Error with match expression", cinfo->hostname);
 	      
@@ -771,24 +774,27 @@ HandleNegotiation (ClientInfo *cinfo)
 	}
       else
 	{
+	  if ( cinfo->rejectstr )
+	    free (cinfo->rejectstr);
+
 	  /* Read regex of size bytes from socket */
-	  if ( ! (buffer = (char *) malloc (size+1)) )
+	  if ( ! (cinfo->rejectstr = (char *) malloc (size+1)) )
 	    {
 	      lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
 	      return -1;
 	    }
 	  
-	  if ( RecvData (cinfo->socket, buffer, size, cinfo->hostname) < 0 )
+	  if ( RecvData (cinfo->socket, cinfo->rejectstr, size, cinfo->hostname) < 0 )
 	    {
 	      lprintf (0, "[%s] Error Recv'ing data", cinfo->hostname);
 	      return -1;	      
 	    }
 	  
 	  /* Make sure buffer is a terminated string */
-	  buffer[size] = '\0';
+	  cinfo->rejectstr[size] = '\0';
 	  
 	  /* Compile reject expression */
-	  if ( RingReject (cinfo->reader, buffer) )
+	  if ( RingReject (cinfo->reader, cinfo->rejectstr) )
 	    {
 	      lprintf (0, "[%s] Error with reject expression", cinfo->hostname);
 	      
