@@ -1,3 +1,6 @@
+2013.161:
+	- Log server port number with client connection message.
+
 2012.317:
 	- Store match and reject strings for DataLink clients correctly.
 	- Change SLMAXREGEXLEN to match DLMAXREGEXLEN of 16384.

@@ -37,7 +37,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2012.313
+ * Modified: 2013.161
  **************************************************************************/
 
 /* Unsupported protocol features:
@@ -114,6 +114,10 @@ SL_ClientThread (void *arg)
   int nread;
   int skiprecord;
   
+  struct sockaddr_in sin;
+  socklen_t sinlen = sizeof(struct sockaddr_in);
+  int serverport = -1;
+
   /* Client thread-specific buffers used during negotiation */
   char reqnet[10];
   char reqsta[10];
@@ -178,8 +182,14 @@ SL_ClientThread (void *arg)
       strncpy (cinfo->hostname, cinfo->ipstr, sizeof (cinfo->hostname)-1);
     }
   
-  lprintf (1, "Client connected [SeedLink]: %s [%s] port %s",
-	   cinfo->hostname, cinfo->ipstr, cinfo->portstr);
+  /* Find the server port used for this connection */
+  if ( getsockname (cinfo->socket, (struct sockaddr *)&sin, &sinlen) == 0 )
+    {
+      serverport = ntohs(sin.sin_port);
+    }
+  
+  lprintf (1, "Client connected [SeedLink:%d]: %s [%s] port %s",
+	   serverport, cinfo->hostname, cinfo->ipstr, cinfo->portstr);
   
   /* Initialize SLInfo structure */
   if ( ! (slinfo = (SLInfo *) calloc (1, sizeof(SLInfo))) )
