@@ -1,4 +1,4 @@
-.TH PCRE_EXEC 3 "13 January 2012" "PCRE 8.30"
+.TH PCRE_EXEC 3 "12 May 2013" "PCRE 8.33"
 .SH NAME
 PCRE - Perl-compatible regular expressions
 .SH SYNOPSIS
@@ -18,6 +18,12 @@ PCRE - Perl-compatible regular expressions
 .B "PCRE_SPTR16 \fIsubject\fP," int \fIlength\fP, int \fIstartoffset\fP,
 .ti +5n
 .B int \fIoptions\fP, int *\fIovector\fP, int \fIovecsize\fP);
+.PP
+.B int pcre32_exec(const pcre32 *\fIcode\fP, "const pcre32_extra *\fIextra\fP,"
+.ti +5n
+.B "PCRE_SPTR32 \fIsubject\fP," int \fIlength\fP, int \fIstartoffset\fP,
+.ti +5n
+.B int \fIoptions\fP, int *\fIovector\fP, int \fIovecsize\fP);
 .
 .SH DESCRIPTION
 .rs
@@ -27,17 +33,18 @@ string, using a matching algorithm that is similar to Perl's. It returns
 offsets to captured substrings. Its arguments are:
 .sp
   \fIcode\fP         Points to the compiled pattern
-  \fIextra\fP        Points to an associated \fBpcre[16]_extra\fP structure,
+  \fIextra\fP        Points to an associated \fBpcre[16|32]_extra\fP structure,
                  or is NULL
   \fIsubject\fP      Points to the subject string
-  \fIlength\fP       Length of the subject string, in bytes
-  \fIstartoffset\fP  Offset in bytes in the subject at which to
-                 start matching
+  \fIlength\fP       Length of the subject string
+  \fIstartoffset\fP  Offset in the subject at which to start matching
   \fIoptions\fP      Option bits
   \fIovector\fP      Points to a vector of ints for result offsets
   \fIovecsize\fP     Number of elements in the vector (a multiple of 3)
 .sp
-The options are:
+The units for \fIlength\fP and \fIstartoffset\fP are bytes for
+\fBpcre_exec()\fP, 16-bit data items for \fBpcre16_exec()\fP, and 32-bit items
+for \fBpcre32_exec()\fP. The options are:
 .sp
   PCRE_ANCHORED          Match only at the first position
   PCRE_BSR_ANYCRLF       \eR matches only CR, LF, or CRLF
@@ -56,6 +63,9 @@ The options are:
   PCRE_NO_UTF16_CHECK    Do not check the subject for UTF-16
                            validity (only relevant if PCRE_UTF16
                            was set at compile time)
+  PCRE_NO_UTF32_CHECK    Do not check the subject for UTF-32
+                           validity (only relevant if PCRE_UTF32
+                           was set at compile time)
   PCRE_NO_UTF8_CHECK     Do not check the subject for UTF-8
                            validity (only relevant if PCRE_UTF8
                            was set at compile time)
@@ -71,7 +81,7 @@ For details of partial matching, see the
 page. A \fBpcre_extra\fP structure contains the following fields:
 .sp
   \fIflags\fP            Bits indicating which fields are set
-  \fIstudy_data\fP       Opaque data from \fBpcre[16]_study()\fP
+  \fIstudy_data\fP       Opaque data from \fBpcre[16|32]_study()\fP
   \fImatch_limit\fP      Limit on internal resource use
   \fImatch_limit_recursion\fP  Limit on internal recursion depth
   \fIcallout_data\fP     Opaque data passed back to callouts

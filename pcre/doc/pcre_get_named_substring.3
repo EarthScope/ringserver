@@ -1,4 +1,4 @@
-.TH PCRE_GET_NAMED_SUBSTRING 3 "13 January 2012" "PCRE 8.30"
+.TH PCRE_GET_NAMED_SUBSTRING 3 "24 June 2012" "PCRE 8.30"
 .SH NAME
 PCRE - Perl-compatible regular expressions
 .SH SYNOPSIS
@@ -22,6 +22,14 @@ PCRE - Perl-compatible regular expressions
 .B int \fIstringcount\fP, PCRE_SPTR16 \fIstringname\fP,
 .ti +5n
 .B PCRE_SPTR16 *\fIstringptr\fP);
+.PP
+.B int pcre32_get_named_substring(const pcre32 *\fIcode\fP,
+.ti +5n
+.B PCRE_SPTR32 \fIsubject\fP, int *\fIovector\fP,
+.ti +5n
+.B int \fIstringcount\fP, PCRE_SPTR32 \fIstringname\fP,
+.ti +5n
+.B PCRE_SPTR32 *\fIstringptr\fP);
 .
 .SH DESCRIPTION
 .rs
@@ -31,14 +39,14 @@ arguments are:
 .sp
   \fIcode\fP          Compiled pattern
   \fIsubject\fP       Subject that has been successfully matched
-  \fIovector\fP       Offset vector that \fBpcre[16]_exec()\fP used
-  \fIstringcount\fP   Value returned by \fBpcre[16]_exec()\fP
+  \fIovector\fP       Offset vector that \fBpcre[16|32]_exec()\fP used
+  \fIstringcount\fP   Value returned by \fBpcre[16|32]_exec()\fP
   \fIstringname\fP    Name of the required substring
   \fIstringptr\fP     Where to put the string pointer
 .sp
 The memory in which the substring is placed is obtained by calling
-\fBpcre[16]_malloc()\fP. The convenience function
-\fBpcre[16]_free_substring()\fP can be used to free it when it is no longer
+\fBpcre[16|32]_malloc()\fP. The convenience function
+\fBpcre[16|32]_free_substring()\fP can be used to free it when it is no longer
 needed. The yield of the function is the length of the extracted substring,
 PCRE_ERROR_NOMEMORY if sufficient memory could not be obtained, or
 PCRE_ERROR_NOSUBSTRING if the string name is invalid.

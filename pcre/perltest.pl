@@ -12,6 +12,7 @@
 
 # Function for turning a string into a string of printing chars.
 
+#use utf8;
 #require Encode;
 
 sub pchars {

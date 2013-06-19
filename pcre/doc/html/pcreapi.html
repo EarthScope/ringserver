@@ -17,7 +17,7 @@ man page, in case the conversion went wrong.
 <li><a name="TOC2" href="#SEC2">PCRE NATIVE API STRING EXTRACTION FUNCTIONS</a>
 <li><a name="TOC3" href="#SEC3">PCRE NATIVE API AUXILIARY FUNCTIONS</a>
 <li><a name="TOC4" href="#SEC4">PCRE NATIVE API INDIRECTED FUNCTIONS</a>
-<li><a name="TOC5" href="#SEC5">PCRE 8-BIT AND 16-BIT LIBRARIES</a>
+<li><a name="TOC5" href="#SEC5">PCRE 8-BIT, 16-BIT, AND 32-BIT LIBRARIES</a>
 <li><a name="TOC6" href="#SEC6">PCRE API OVERVIEW</a>
 <li><a name="TOC7" href="#SEC7">NEWLINES</a>
 <li><a name="TOC8" href="#SEC8">MULTITHREADING</a>
@@ -116,6 +116,12 @@ man page, in case the conversion went wrong.
 </P>
 <br><a name="SEC3" href="#TOC1">PCRE NATIVE API AUXILIARY FUNCTIONS</a><br>
 <P>
+<b>int pcre_jit_exec(const pcre *<i>code</i>, const pcre_extra *<i>extra</i>,</b>
+<b>const char *<i>subject</i>, int <i>length</i>, int <i>startoffset</i>,</b>
+<b>int <i>options</i>, int *<i>ovector</i>, int <i>ovecsize</i>,</b>
+<b>pcre_jit_stack *<i>jstack</i>);</b>
+</P>
+<P>
 <b>pcre_jit_stack *pcre_jit_stack_alloc(int <i>startsize</i>, int <i>maxsize</i>);</b>
 </P>
 <P>
@@ -161,29 +167,34 @@ man page, in case the conversion went wrong.
 <P>
 <b>int (*pcre_callout)(pcre_callout_block *);</b>
 </P>
-<br><a name="SEC5" href="#TOC1">PCRE 8-BIT AND 16-BIT LIBRARIES</a><br>
+<br><a name="SEC5" href="#TOC1">PCRE 8-BIT, 16-BIT, AND 32-BIT LIBRARIES</a><br>
 <P>
-From release 8.30, PCRE can be compiled as a library for handling 16-bit
-character strings as well as, or instead of, the original library that handles
-8-bit character strings. To avoid too much complication, this document
-describes the 8-bit versions of the functions, with only occasional references
-to the 16-bit library.
+As well as support for 8-bit character strings, PCRE also supports 16-bit
+strings (from release 8.30) and 32-bit strings (from release 8.32), by means of
+two additional libraries. They can be built as well as, or instead of, the
+8-bit library. To avoid too much complication, this document describes the
+8-bit versions of the functions, with only occasional references to the 16-bit
+and 32-bit libraries.
 </P>
 <P>
-The 16-bit functions operate in the same way as their 8-bit counterparts; they
-just use different data types for their arguments and results, and their names
-start with <b>pcre16_</b> instead of <b>pcre_</b>. For every option that has UTF8
-in its name (for example, PCRE_UTF8), there is a corresponding 16-bit name with
-UTF8 replaced by UTF16. This facility is in fact just cosmetic; the 16-bit
-option names define the same bit values.
+The 16-bit and 32-bit functions operate in the same way as their 8-bit
+counterparts; they just use different data types for their arguments and
+results, and their names start with <b>pcre16_</b> or <b>pcre32_</b> instead of
+<b>pcre_</b>. For every option that has UTF8 in its name (for example,
+PCRE_UTF8), there are corresponding 16-bit and 32-bit names with UTF8 replaced
+by UTF16 or UTF32, respectively. This facility is in fact just cosmetic; the
+16-bit and 32-bit option names define the same bit values.
 </P>
 <P>
 References to bytes and UTF-8 in this document should be read as references to
-16-bit data quantities and UTF-16 when using the 16-bit library, unless
-specified otherwise. More details of the specific differences for the 16-bit
-library are given in the
+16-bit data units and UTF-16 when using the 16-bit library, or 32-bit data
+units and UTF-32 when using the 32-bit library, unless specified otherwise.
+More details of the specific differences for the 16-bit and 32-bit libraries
+are given in the
 <a href="pcre16.html"><b>pcre16</b></a>
-page.
+and
+<a href="pcre32.html"><b>pcre32</b></a>
+pages.
 </P>
 <br><a name="SEC6" href="#TOC1">PCRE API OVERVIEW</a><br>
 <P>
@@ -233,7 +244,10 @@ used if available, by setting an option that is ignored when it is not
 relevant. More complicated programs might need to make use of the functions
 <b>pcre_jit_stack_alloc()</b>, <b>pcre_jit_stack_free()</b>, and
 <b>pcre_assign_jit_stack()</b> in order to control the JIT code's memory usage.
-These functions are discussed in the
+</P>
+<P>
+From release 8.32 there is also a direct interface for JIT execution, which
+gives improved performance. The JIT-specific functions are discussed in the
 <a href="pcrejit.html"><b>pcrejit</b></a>
 documentation.
 </P>
@@ -398,15 +412,23 @@ not recognized. The following information is available:
   PCRE_CONFIG_UTF8
 </pre>
 The output is an integer that is set to one if UTF-8 support is available;
-otherwise it is set to zero. If this option is given to the 16-bit version of
-this function, <b>pcre16_config()</b>, the result is PCRE_ERROR_BADOPTION.
+otherwise it is set to zero. This value should normally be given to the 8-bit
+version of this function, <b>pcre_config()</b>. If it is given to the 16-bit
+or 32-bit version of this function, the result is PCRE_ERROR_BADOPTION.
 <pre>
   PCRE_CONFIG_UTF16
 </pre>
 The output is an integer that is set to one if UTF-16 support is available;
 otherwise it is set to zero. This value should normally be given to the 16-bit
 version of this function, <b>pcre16_config()</b>. If it is given to the 8-bit
-version of this function, the result is PCRE_ERROR_BADOPTION.
+or 32-bit version of this function, the result is PCRE_ERROR_BADOPTION.
+<pre>
+  PCRE_CONFIG_UTF32
+</pre>
+The output is an integer that is set to one if UTF-32 support is available;
+otherwise it is set to zero. This value should normally be given to the 32-bit
+version of this function, <b>pcre32_config()</b>. If it is given to the 8-bit
+or 16-bit version of this function, the result is PCRE_ERROR_BADOPTION.
 <pre>
   PCRE_CONFIG_UNICODE_PROPERTIES
 </pre>
@@ -428,11 +450,13 @@ unaligned)". If JIT support is not available, the result is NULL.
   PCRE_CONFIG_NEWLINE
 </pre>
 The output is an integer whose value specifies the default character sequence
-that is recognized as meaning "newline". The four values that are supported
-are: 10 for LF, 13 for CR, 3338 for CRLF, -2 for ANYCRLF, and -1 for ANY.
-Though they are derived from ASCII, the same values are returned in EBCDIC
-environments. The default should normally correspond to the standard sequence
-for your operating system.
+that is recognized as meaning "newline". The values that are supported in
+ASCII/Unicode environments are: 10 for LF, 13 for CR, 3338 for CRLF, -2 for
+ANYCRLF, and -1 for ANY. In EBCDIC environments, CR, ANYCRLF, and ANY yield the
+same values. However, the value for LF is normally 21, though some EBCDIC
+environments use 37. The corresponding values for CRLF are 3349 and 3365. The
+default should normally correspond to the standard sequence for your operating
+system.
 <pre>
   PCRE_CONFIG_BSR
 </pre>
@@ -446,10 +470,11 @@ or CRLF. The default can be overridden when a pattern is compiled or matched.
 The output is an integer that contains the number of bytes used for internal
 linkage in compiled regular expressions. For the 8-bit library, the value can
 be 2, 3, or 4. For the 16-bit library, the value is either 2 or 4 and is still
-a number of bytes. The default value of 2 is sufficient for all but the most
-massive patterns, since it allows the compiled pattern to be up to 64K in size.
-Larger values allow larger regular expressions to be compiled, at the expense
-of slower matching.
+a number of bytes. For the 32-bit library, the value is either 2 or 4 and is
+still a number of bytes. The default value of 2 is sufficient for all but the
+most massive patterns, since it allows the compiled pattern to be up to 64K in
+size. Larger values allow larger regular expressions to be compiled, at the
+expense of slower matching.
 <pre>
   PCRE_CONFIG_POSIX_MALLOC_THRESHOLD
 </pre>
@@ -533,16 +558,16 @@ Otherwise, if compilation of a pattern fails, <b>pcre_compile()</b> returns
 NULL, and sets the variable pointed to by <i>errptr</i> to point to a textual
 error message. This is a static string that is part of the library. You must
 not try to free it. Normally, the offset from the start of the pattern to the
-byte that was being processed when the error was discovered is placed in the
-variable pointed to by <i>erroffset</i>, which must not be NULL (if it is, an
-immediate error is given). However, for an invalid UTF-8 string, the offset is
-that of the first byte of the failing character.
+data unit that was being processed when the error was discovered is placed in
+the variable pointed to by <i>erroffset</i>, which must not be NULL (if it is,
+an immediate error is given). However, for an invalid UTF-8 or UTF-16 string,
+the offset is that of the first data unit of the failing character.
 </P>
 <P>
 Some errors are not detected until the whole pattern has been scanned; in these
 cases, the offset passed back is the length of the pattern. Note that the
-offset is in bytes, not characters, even in UTF-8 mode. It may sometimes point
-into the middle of a UTF-8 character.
+offset is in data units, not characters, even in a UTF mode. It may sometimes
+point into the middle of a UTF-8 or UTF-16 character.
 </P>
 <P>
 If <b>pcre_compile2()</b> is used instead of <b>pcre_compile()</b>, and the
@@ -716,12 +741,14 @@ binary zero character followed by z).
 <pre>
   PCRE_MULTILINE
 </pre>
-By default, PCRE treats the subject string as consisting of a single line of
-characters (even if it actually contains newlines). The "start of line"
-metacharacter (^) matches only at the start of the string, while the "end of
-line" metacharacter ($) matches only at the end of the string, or before a
-terminating newline (unless PCRE_DOLLAR_ENDONLY is set). This is the same as
-Perl.
+By default, for the purposes of matching "start of line" and "end of line",
+PCRE treats the subject string as consisting of a single line of characters,
+even if it actually contains newlines. The "start of line" metacharacter (^)
+matches only at the start of the string, and the "end of line" metacharacter
+($) matches only at the end of the string, or before a terminating newline
+(except when PCRE_DOLLAR_ENDONLY is set). Note, however, that unless
+PCRE_DOTALL is set, the "any character" metacharacter (.) does not match at a
+newline. This behaviour (for ^, $, and dot) is the same as Perl.
 </P>
 <P>
 When PCRE_MULTILINE it is set, the "start of line" and "end of line" constructs
@@ -730,6 +757,15 @@ subject string, respectively, as well as at the very start and end. This is
 equivalent to Perl's /m option, and it can be changed within a pattern by a
 (?m) option setting. If there are no newlines in a subject string, or no
 occurrences of ^ or $ in a pattern, setting PCRE_MULTILINE has no effect.
+<pre>
+  PCRE_NEVER_UTF
+</pre>
+This option locks out interpretation of the pattern as UTF-8 (or UTF-16 or
+UTF-32 in the 16-bit and 32-bit libraries). In particular, it prevents the
+creator of the pattern from switching to UTF interpretation by starting the
+pattern with (*UTF). This may be useful in applications that process patterns
+from external sources. The combination of PCRE_UTF8 and PCRE_NEVER_UTF also
+causes an error.
 <pre>
   PCRE_NEWLINE_CR
   PCRE_NEWLINE_LF
@@ -743,11 +779,23 @@ indicated by a single character (CR or LF, respectively). Setting
 PCRE_NEWLINE_CRLF specifies that a newline is indicated by the two-character
 CRLF sequence. Setting PCRE_NEWLINE_ANYCRLF specifies that any of the three
 preceding sequences should be recognized. Setting PCRE_NEWLINE_ANY specifies
-that any Unicode newline sequence should be recognized. The Unicode newline
-sequences are the three just mentioned, plus the single characters VT (vertical
-tab, U+000B), FF (form feed, U+000C), NEL (next line, U+0085), LS (line
-separator, U+2028), and PS (paragraph separator, U+2029). For the 8-bit
-library, the last two are recognized only in UTF-8 mode.
+that any Unicode newline sequence should be recognized.
+</P>
+<P>
+In an ASCII/Unicode environment, the Unicode newline sequences are the three
+just mentioned, plus the single characters VT (vertical tab, U+000B), FF (form
+feed, U+000C), NEL (next line, U+0085), LS (line separator, U+2028), and PS
+(paragraph separator, U+2029). For the 8-bit library, the last two are
+recognized only in UTF-8 mode.
+</P>
+<P>
+When PCRE is compiled to run in an EBCDIC (mainframe) environment, the code for
+CR is 0x0d, the same as ASCII. However, the character code for LF is normally
+0x15, though in some EBCDIC environments 0x25 is used. Whichever of these is
+not LF is made to correspond to Unicode's NEL character. EBCDIC codes are all
+less than 256. For more details, see the
+<a href="pcrebuild.html"><b>pcrebuild</b></a>
+documentation.
 </P>
 <P>
 The newline setting in the options word uses three bits that are treated
@@ -777,12 +825,14 @@ were followed by ?: but named parentheses can still be used for capturing (and
 they acquire numbers in the usual way). There is no equivalent of this option
 in Perl.
 <pre>
-  NO_START_OPTIMIZE
+  PCRE_NO_START_OPTIMIZE
 </pre>
 This is an option that acts at matching time; that is, it is really an option
 for <b>pcre_exec()</b> or <b>pcre_dfa_exec()</b>. If it is set at compile time,
-it is remembered with the compiled pattern and assumed at matching time. For
-details see the discussion of PCRE_NO_START_OPTIMIZE
+it is remembered with the compiled pattern and assumed at matching time. This
+is necessary if you want to use JIT execution, because the JIT compiler needs
+to know whether or not this option is set. For details see the discussion of
+PCRE_NO_START_OPTIMIZE
 <a href="#execoptions">below.</a>
 <pre>
   PCRE_UCP
@@ -816,8 +866,8 @@ page.
 <pre>
   PCRE_NO_UTF8_CHECK
 </pre>
-When PCRE_UTF8 is set, the validity of the pattern as a UTF-8
-string is automatically checked. There is a discussion about the
+When PCRE_UTF8 is set, the validity of the pattern as a UTF-8 string is
+automatically checked. There is a discussion about the
 <a href="pcreunicode.html#utf8strings">validity of UTF-8 strings</a>
 in the
 <a href="pcreunicode.html"><b>pcreunicode</b></a>
@@ -827,15 +877,17 @@ this check for performance reasons, you can set the PCRE_NO_UTF8_CHECK option.
 When it is set, the effect of passing an invalid UTF-8 string as a pattern is
 undefined. It may cause your program to crash. Note that this option can also
 be passed to <b>pcre_exec()</b> and <b>pcre_dfa_exec()</b>, to suppress the
-validity checking of subject strings.
+validity checking of subject strings only. If the same string is being matched
+many times, the option can be safely set for the second and subsequent
+matchings to improve performance.
 </P>
 <br><a name="SEC12" href="#TOC1">COMPILATION ERROR CODES</a><br>
 <P>
 The following table lists the error codes than may be returned by
 <b>pcre_compile2()</b>, along with the error messages that may be returned by
 both compiling functions. Note that error messages are always 8-bit ASCII
-strings, even in 16-bit mode. As PCRE has developed, some error codes have
-fallen out of use. To avoid confusion, they have not been re-used.
+strings, even in 16-bit or 32-bit mode. As PCRE has developed, some error codes
+have fallen out of use. To avoid confusion, they have not been re-used.
 <pre>
    0  no error
    1  \ at end of pattern
@@ -899,7 +951,7 @@ fallen out of use. To avoid confusion, they have not been re-used.
         name/number or by a plain number
   58  a numbered reference must not be zero
   59  an argument is not allowed for (*ACCEPT), (*FAIL), or (*COMMIT)
-  60  (*VERB) not recognized
+  60  (*VERB) not recognized or malformed
   61  number is too big
   62  subpattern name expected
   63  digit expected after (?+
@@ -918,6 +970,7 @@ fallen out of use. To avoid confusion, they have not been re-used.
   74  invalid UTF-16 string (specifically UTF-16)
   75  name is too long in (*MARK), (*PRUNE), (*SKIP), or (*THEN)
   76  character value in \u.... sequence is too large
+  77  invalid UTF-32 string (specifically UTF-32)
 </pre>
 The numbers 32 and 10000 in errors 48 and 49 are defaults; different values may
 be used if the limits were changed when PCRE was built.
@@ -946,13 +999,17 @@ in the section on matching a pattern.
 </P>
 <P>
 If studying the pattern does not produce any useful information,
-<b>pcre_study()</b> returns NULL. In that circumstance, if the calling program
-wants to pass any of the other fields to <b>pcre_exec()</b> or
-<b>pcre_dfa_exec()</b>, it must set up its own <b>pcre_extra</b> block.
+<b>pcre_study()</b> returns NULL by default. In that circumstance, if the
+calling program wants to pass any of the other fields to <b>pcre_exec()</b> or
+<b>pcre_dfa_exec()</b>, it must set up its own <b>pcre_extra</b> block. However,
+if <b>pcre_study()</b> is called with the PCRE_STUDY_EXTRA_NEEDED option, it
+returns a <b>pcre_extra</b> block even if studying did not find any additional
+information. It may still return NULL, however, if an error occurs in
+<b>pcre_study()</b>.
 </P>
 <P>
 The second argument of <b>pcre_study()</b> contains option bits. There are three
-options:
+further options in addition to PCRE_STUDY_EXTRA_NEEDED:
 <pre>
   PCRE_STUDY_JIT_COMPILE
   PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE
@@ -961,7 +1018,7 @@ options:
 If any of these are set, and the just-in-time compiler is available, the
 pattern is further compiled into machine code that executes much faster than
 the <b>pcre_exec()</b> interpretive matching function. If the just-in-time
-compiler is not available, these options are ignored. All other bits in the
+compiler is not available, these options are ignored. All undefined bits in the
 <i>options</i> argument must be zero.
 </P>
 <P>
@@ -1011,25 +1068,33 @@ real application there should be tests for errors):
 Studying a pattern does two things: first, a lower bound for the length of
 subject string that is needed to match the pattern is computed. This does not
 mean that there are any strings of that length that match, but it does
-guarantee that no shorter strings match. The value is used by
-<b>pcre_exec()</b> and <b>pcre_dfa_exec()</b> to avoid wasting time by trying to
-match strings that are shorter than the lower bound. You can find out the value
-in a calling program via the <b>pcre_fullinfo()</b> function.
+guarantee that no shorter strings match. The value is used to avoid wasting
+time by trying to match strings that are shorter than the lower bound. You can
+find out the value in a calling program via the <b>pcre_fullinfo()</b> function.
 </P>
 <P>
 Studying a pattern is also useful for non-anchored patterns that do not have a
 single fixed starting character. A bitmap of possible starting bytes is
 created. This speeds up finding a position in the subject at which to start
-matching. (In 16-bit mode, the bitmap is used for 16-bit values less than 256.)
+matching. (In 16-bit mode, the bitmap is used for 16-bit values less than 256.
+In 32-bit mode, the bitmap is used for 32-bit values less than 256.)
 </P>
 <P>
 These two optimizations apply to both <b>pcre_exec()</b> and
 <b>pcre_dfa_exec()</b>, and the information is also used by the JIT compiler.
-The optimizations can be disabled by setting the PCRE_NO_START_OPTIMIZE option
-when calling <b>pcre_exec()</b> or <b>pcre_dfa_exec()</b>, but if this is done,
-JIT execution is also disabled. You might want to do this if your pattern
-contains callouts or (*MARK) and you want to make use of these facilities in
-cases where matching fails. See the discussion of PCRE_NO_START_OPTIMIZE
+The optimizations can be disabled by setting the PCRE_NO_START_OPTIMIZE option.
+You might want to do this if your pattern contains callouts or (*MARK) and you
+want to make use of these facilities in cases where matching fails.
+</P>
+<P>
+PCRE_NO_START_OPTIMIZE can be specified at either compile time or execution
+time. However, if PCRE_NO_START_OPTIMIZE is passed to <b>pcre_exec()</b>, (that
+is, after any JIT compilation has happened) JIT execution is disabled. For JIT
+execution to work with PCRE_NO_START_OPTIMIZE, the option must be set at
+compile time.
+</P>
+<P>
+There is a longer discussion of PCRE_NO_START_OPTIMIZE
 <a href="#execoptions">below.</a>
 <a name="localesupport"></a></P>
 <br><a name="SEC14" href="#TOC1">LOCALE SUPPORT</a><br>
@@ -1118,6 +1183,7 @@ the following negative numbers:
   PCRE_ERROR_BADENDIANNESS  the pattern was compiled with different
                             endianness
   PCRE_ERROR_BADOPTION      the value of <i>what</i> was invalid
+  PCRE_ERROR_UNSET          the requested field is not set
 </pre>
 The "magic number" is placed at the start of each compiled pattern as an simple
 check against passing an arbitrary memory pointer. The endianness error can
@@ -1165,8 +1231,8 @@ variable.
 <P>
 If there is a fixed first value, for example, the letter "c" from a pattern
 such as (cat|cow|coyote), its value is returned. In the 8-bit library, the
-value is always less than 256; in the 16-bit library the value can be up to
-0xffff.
+value is always less than 256. In the 16-bit library the value can be up to
+0xffff. In the 32-bit library the value can be up to 0x10ffff.
 </P>
 <P>
 If there is no fixed first value, and if either
@@ -1183,6 +1249,12 @@ starts with "^", or
 -1 is returned, indicating that the pattern matches only at the start of a
 subject string or after any newline within the string. Otherwise -2 is
 returned. For anchored patterns, -2 is returned.
+</P>
+<P>
+Since for the 32-bit library using the non-UTF-32 mode, this function is unable
+to return the full 32-bit range of the character, this value is deprecated;
+instead the PCRE_INFO_FIRSTCHARACTERFLAGS and PCRE_INFO_FIRSTCHARACTER values
+should be used.
 <pre>
   PCRE_INFO_FIRSTTABLE
 </pre>
@@ -1228,23 +1300,41 @@ value, -1 is returned. For anchored patterns, a last literal value is recorded
 only if it follows something of variable length. For example, for the pattern
 /^a\d+z\d+/ the returned value is "z", but for /^a\dz\d/ the returned value
 is -1.
+</P>
+<P>
+Since for the 32-bit library using the non-UTF-32 mode, this function is unable
+to return the full 32-bit range of the character, this value is deprecated;
+instead the PCRE_INFO_REQUIREDCHARFLAGS and PCRE_INFO_REQUIREDCHAR values should
+be used.
+<pre>
+  PCRE_INFO_MATCHLIMIT
+</pre>
+If the pattern set a match limit by including an item of the form
+(*LIMIT_MATCH=nnnn) at the start, the value is returned. The fourth argument
+should point to an unsigned 32-bit integer. If no such value has been set, the
+call to <b>pcre_fullinfo()</b> returns the error PCRE_ERROR_UNSET.
 <pre>
   PCRE_INFO_MAXLOOKBEHIND
 </pre>
-Return the number of characters (NB not bytes) in the longest lookbehind
-assertion in the pattern. Note that the simple assertions \b and \B require a
-one-character lookbehind. This information is useful when doing multi-segment
-matching using the partial matching facilities.
+Return the number of characters (NB not data units) in the longest lookbehind
+assertion in the pattern. This information is useful when doing multi-segment
+matching using the partial matching facilities. Note that the simple assertions
+\b and \B require a one-character lookbehind. \A also registers a
+one-character lookbehind, though it does not actually inspect the previous
+character. This is to ensure that at least one character from the old segment
+is retained when a new segment is processed. Otherwise, if there are no
+lookbehinds in the pattern, \A might match incorrectly at the start of a new
+segment.
 <pre>
   PCRE_INFO_MINLENGTH
 </pre>
 If the pattern was studied and a minimum length for matching subject strings
 was computed, its value is returned. Otherwise the returned value is -1. The
-value is a number of characters, which in UTF-8 mode may be different from the
-number of bytes. The fourth argument should point to an <b>int</b> variable. A
-non-negative value is a lower bound to the length of any matching string. There
-may not be any strings of that length that do actually match, but every string
-that does match is at least that long.
+value is a number of characters, which in UTF mode may be different from the
+number of data units. The fourth argument should point to an <b>int</b>
+variable. A non-negative value is a lower bound to the length of any matching
+string. There may not be any strings of that length that do actually match, but
+every string that does match is at least that long.
 <pre>
   PCRE_INFO_NAMECOUNT
   PCRE_INFO_NAMEENTRYSIZE
@@ -1268,8 +1358,10 @@ length of the longest name. PCRE_INFO_NAMETABLE returns a pointer to the first
 entry of the table. This is a pointer to <b>char</b> in the 8-bit library, where
 the first two bytes of each entry are the number of the capturing parenthesis,
 most significant byte first. In the 16-bit library, the pointer points to
-16-bit data units, the first of which contains the parenthesis number. The rest
-of the entry is the corresponding name, zero terminated.
+16-bit data units, the first of which contains the parenthesis number. In the
+32-bit library, the pointer points to 32-bit data units, the first of which
+contains the parenthesis number. The rest of the entry is the corresponding
+name, zero terminated.
 </P>
 <P>
 The names are in alphabetical order. Duplicate names may appear if (?| is used
@@ -1334,9 +1426,16 @@ alternatives begin with one of the following:
 For such patterns, the PCRE_ANCHORED bit is set in the options returned by
 <b>pcre_fullinfo()</b>.
 <pre>
+  PCRE_INFO_RECURSIONLIMIT
+</pre>
+If the pattern set a recursion limit by including an item of the form
+(*LIMIT_RECURSION=nnnn) at the start, the value is returned. The fourth
+argument should point to an unsigned 32-bit integer. If no such value has been
+set, the call to <b>pcre_fullinfo()</b> returns the error PCRE_ERROR_UNSET.
+<pre>
   PCRE_INFO_SIZE
 </pre>
-Return the size of the compiled pattern in bytes (for both libraries). The
+Return the size of the compiled pattern in bytes (for all three libraries). The
 fourth argument should point to a <b>size_t</b> variable. This value does not
 include the size of the <b>pcre</b> structure that is returned by
 <b>pcre_compile()</b>. The value that is passed as the argument to
@@ -1347,16 +1446,91 @@ does not alter the value returned by this option.
 <pre>
   PCRE_INFO_STUDYSIZE
 </pre>
-Return the size in bytes of the data block pointed to by the <i>study_data</i>
-field in a <b>pcre_extra</b> block. If <b>pcre_extra</b> is NULL, or there is no
-study data, zero is returned. The fourth argument should point to a
-<b>size_t</b> variable. The <i>study_data</i> field is set by <b>pcre_study()</b>
-to record information that will speed up matching (see the section entitled
+Return the size in bytes (for all three libraries) of the data block pointed to
+by the <i>study_data</i> field in a <b>pcre_extra</b> block. If <b>pcre_extra</b>
+is NULL, or there is no study data, zero is returned. The fourth argument
+should point to a <b>size_t</b> variable. The <i>study_data</i> field is set by
+<b>pcre_study()</b> to record information that will speed up matching (see the
+section entitled
 <a href="#studyingapattern">"Studying a pattern"</a>
 above). The format of the <i>study_data</i> block is private, but its length
 is made available via this option so that it can be saved and restored (see the
 <a href="pcreprecompile.html"><b>pcreprecompile</b></a>
 documentation for details).
+<pre>
+  PCRE_INFO_FIRSTCHARACTERFLAGS
+</pre>
+Return information about the first data unit of any matched string, for a
+non-anchored pattern. The fourth argument should point to an <b>int</b>
+variable.
+</P>
+<P>
+If there is a fixed first value, for example, the letter "c" from a pattern
+such as (cat|cow|coyote), 1 is returned, and the character value can be
+retrieved using PCRE_INFO_FIRSTCHARACTER.
+</P>
+<P>
+If there is no fixed first value, and if either
+<br>
+<br>
+(a) the pattern was compiled with the PCRE_MULTILINE option, and every branch
+starts with "^", or
+<br>
+<br>
+(b) every branch of the pattern starts with ".*" and PCRE_DOTALL is not set
+(if it were set, the pattern would be anchored),
+<br>
+<br>
+2 is returned, indicating that the pattern matches only at the start of a
+subject string or after any newline within the string. Otherwise 0 is
+returned. For anchored patterns, 0 is returned.
+<pre>
+  PCRE_INFO_FIRSTCHARACTER
+</pre>
+Return the fixed first character value, if PCRE_INFO_FIRSTCHARACTERFLAGS
+returned 1; otherwise returns 0. The fourth argument should point to an
+<b>uint_t</b> variable.
+</P>
+<P>
+In the 8-bit library, the value is always less than 256. In the 16-bit library
+the value can be up to 0xffff. In the 32-bit library in UTF-32 mode the value
+can be up to 0x10ffff, and up to 0xffffffff when not using UTF-32 mode.
+</P>
+<P>
+If there is no fixed first value, and if either
+<br>
+<br>
+(a) the pattern was compiled with the PCRE_MULTILINE option, and every branch
+starts with "^", or
+<br>
+<br>
+(b) every branch of the pattern starts with ".*" and PCRE_DOTALL is not set
+(if it were set, the pattern would be anchored),
+<br>
+<br>
+-1 is returned, indicating that the pattern matches only at the start of a
+subject string or after any newline within the string. Otherwise -2 is
+returned. For anchored patterns, -2 is returned.
+<pre>
+  PCRE_INFO_REQUIREDCHARFLAGS
+</pre>
+Returns 1 if there is a rightmost literal data unit that must exist in any
+matched string, other than at its start. The fourth argument should  point to
+an <b>int</b> variable. If there is no such value, 0 is returned. If returning
+1, the character value itself can be retrieved using PCRE_INFO_REQUIREDCHAR.
+</P>
+<P>
+For anchored patterns, a last literal value is recorded only if it follows
+something of variable length. For example, for the pattern /^a\d+z\d+/ the
+returned value 1 (with "z" returned from PCRE_INFO_REQUIREDCHAR), but for
+/^a\dz\d/ the returned value is 0.
+<pre>
+  PCRE_INFO_REQUIREDCHAR
+</pre>
+Return the value of the rightmost literal data unit that must exist in any
+matched string, other than at its start, if such a value has been recorded. The
+fourth argument should point to an <b>uint32_t</b> variable. If there is no such
+value, 0 is returned.
 </P>
 <br><a name="SEC16" href="#TOC1">REFERENCE COUNTS</a><br>
 <P>
@@ -1449,6 +1623,10 @@ fields (not necessarily in this order):
 </pre>
 In the 16-bit version of this structure, the <i>mark</i> field has type
 "PCRE_UCHAR16 **".
+<br>
+<br>
+In the 32-bit version of this structure, the <i>mark</i> field has type
+"PCRE_UCHAR32 **".
 </P>
 <P>
 The <i>flags</i> field is used to specify which of the other fields are set. The
@@ -1498,6 +1676,16 @@ the <i>flags</i> field. If the limit is exceeded, <b>pcre_exec()</b> returns
 PCRE_ERROR_MATCHLIMIT.
 </P>
 <P>
+A value for the match limit may also be supplied by an item at the start of a
+pattern of the form
+<pre>
+  (*LIMIT_MATCH=d)
+</pre>
+where d is a decimal number. However, such a setting is ignored unless d is
+less than the limit set by the caller of <b>pcre_exec()</b> or, if no such limit
+is set, less than the default.
+</P>
+<P>
 The <i>match_limit_recursion</i> field is similar to <i>match_limit</i>, but
 instead of limiting the total number of times that <b>match()</b> is called, it
 limits the depth of recursion. The recursion depth is a smaller number than the
@@ -1517,6 +1705,16 @@ built; the default default is the same value as the default for
 with a <b>pcre_extra</b> block in which <i>match_limit_recursion</i> is set, and
 PCRE_EXTRA_MATCH_LIMIT_RECURSION is set in the <i>flags</i> field. If the limit
 is exceeded, <b>pcre_exec()</b> returns PCRE_ERROR_RECURSIONLIMIT.
+</P>
+<P>
+A value for the recursion limit may also be supplied by an item at the start of
+a pattern of the form
+<pre>
+  (*LIMIT_RECURSION=d)
+</pre>
+where d is a decimal number. However, such a setting is ignored unless d is
+less than the limit set by the caller of <b>pcre_exec()</b> or, if no such limit
+is set, less than the default.
 </P>
 <P>
 The <i>callout_data</i> field is used in conjunction with the "callout" feature,
@@ -1680,10 +1878,10 @@ unanchored match must start with a specific character, it searches the subject
 for that character, and fails immediately if it cannot find it, without
 actually running the main matching function. This means that a special item
 such as (*COMMIT) at the start of a pattern is not considered until after a
-suitable starting point for the match has been found. When callouts or (*MARK)
-items are in use, these "start-up" optimizations can cause them to be skipped
-if the pattern is never actually used. The start-up optimizations are in effect
-a pre-scan of the subject that takes place before the pattern is run.
+suitable starting point for the match has been found. Also, when callouts or
+(*MARK) items are in use, these "start-up" optimizations can cause them to be
+skipped if the pattern is never actually used. The start-up optimizations are
+in effect a pre-scan of the subject that takes place before the pattern is run.
 </P>
 <P>
 The PCRE_NO_START_OPTIMIZE option disables the start-up optimizations, possibly
@@ -1691,8 +1889,9 @@ causing performance to suffer, but ensuring that in cases where the result is
 "no match", the callouts do occur, and that items such as (*COMMIT) and (*MARK)
 are considered at every possible starting position in the subject string. If
 PCRE_NO_START_OPTIMIZE is set at compile time, it cannot be unset at matching
-time. The use of PCRE_NO_START_OPTIMIZE disables JIT execution; when it is set,
-matching is always done using interpretively.
+time. The use of PCRE_NO_START_OPTIMIZE at matching time (that is, passing it
+to <b>pcre_exec()</b>) disables JIT execution; in this situation, matching is
+always done using interpretively.
 </P>
 <P>
 Setting PCRE_NO_START_OPTIMIZE can change the outcome of a matching operation.
@@ -1786,13 +1985,19 @@ The string to be matched by <b>pcre_exec()</b>
 </b><br>
 <P>
 The subject string is passed to <b>pcre_exec()</b> as a pointer in
-<i>subject</i>, a length in bytes in <i>length</i>, and a starting byte offset
-in <i>startoffset</i>. If this is negative or greater than the length of the
-subject, <b>pcre_exec()</b> returns PCRE_ERROR_BADOFFSET. When the starting
-offset is zero, the search for a match starts at the beginning of the subject,
-and this is by far the most common case. In UTF-8 mode, the byte offset must
-point to the start of a UTF-8 character (or the end of the subject). Unlike the
-pattern string, the subject may contain binary zero bytes.
+<i>subject</i>, a length in <i>length</i>, and a starting offset in
+<i>startoffset</i>. The units for <i>length</i> and <i>startoffset</i> are bytes
+for the 8-bit library, 16-bit data items for the 16-bit library, and 32-bit
+data items for the 32-bit library.
+</P>
+<P>
+If <i>startoffset</i> is negative or greater than the length of the subject,
+<b>pcre_exec()</b> returns PCRE_ERROR_BADOFFSET. When the starting offset is
+zero, the search for a match starts at the beginning of the subject, and this
+is by far the most common case. In UTF-8 or UTF-16 mode, the offset must point
+to the start of a character, or the end of the subject (in UTF-32 mode, one
+data unit equals one character, so all offsets are valid). Unlike the pattern
+string, the subject may contain binary zeroes.
 </P>
 <P>
 A non-zero starting offset is useful when searching for another match in the
@@ -1860,10 +2065,12 @@ rounded down.
 When a match is successful, information about captured substrings is returned
 in pairs of integers, starting at the beginning of <i>ovector</i>, and
 continuing up to two-thirds of its length at the most. The first element of
-each pair is set to the byte offset of the first character in a substring, and
-the second is set to the byte offset of the first character after the end of a
-substring. <b>Note</b>: these values are always byte offsets, even in UTF-8
-mode. They are not character counts.
+each pair is set to the offset of the first character in a substring, and the
+second is set to the offset of the first character after the end of a
+substring. These values are always data unit offsets, even in UTF mode. They
+are byte offsets in the 8-bit library, 16-bit data item offsets in the 16-bit
+library, and 32-bit data item offsets in the 32-bit library. <b>Note</b>: they
+are not character counts.
 </P>
 <P>
 The first pair of integers, <i>ovector[0]</i> and <i>ovector[1]</i>, identify the
@@ -2089,7 +2296,7 @@ documentation for more details.
   PCRE_ERROR_BADMODE        (-28)
 </pre>
 This error is given if a pattern that was compiled by the 8-bit library is
-passed to a 16-bit library function, or vice versa.
+passed to a 16-bit or 32-bit library function, or vice versa.
 <pre>
   PCRE_ERROR_BADENDIANNESS  (-29)
 </pre>
@@ -2097,18 +2304,34 @@ This error is given if a pattern that was compiled and saved is reloaded on a
 host with different endianness. The utility function
 <b>pcre_pattern_to_host_byte_order()</b> can be used to convert such a pattern
 so that it runs on the new host.
+<pre>
+  PCRE_ERROR_JIT_BADOPTION
+</pre>
+This error is returned when a pattern that was successfully studied using a JIT
+compile option is being matched, but the matching mode (partial or complete
+match) does not correspond to any JIT compilation mode. When the JIT fast path
+function is used, this error may be also given for invalid options. See the
+<a href="pcrejit.html"><b>pcrejit</b></a>
+documentation for more details.
+<pre>
+  PCRE_ERROR_BADLENGTH      (-32)
+</pre>
+This error is given if <b>pcre_exec()</b> is called with a negative value for
+the <i>length</i> argument.
 </P>
 <P>
-Error numbers -16 to -20, -22, and -30 are not used by <b>pcre_exec()</b>.
+Error numbers -16 to -20, -22, and 30 are not used by <b>pcre_exec()</b>.
 <a name="badutf8reasons"></a></P>
 <br><b>
 Reason codes for invalid UTF-8 strings
 </b><br>
 <P>
 This section applies only to the 8-bit library. The corresponding information
-for the 16-bit library is given in the
+for the 16-bit and 32-bit libraries is given in the
 <a href="pcre16.html"><b>pcre16</b></a>
-page.
+and
+<a href="pcre32.html"><b>pcre32</b></a>
+pages.
 </P>
 <P>
 When <b>pcre_exec()</b> returns either PCRE_ERROR_BADUTF8 or
@@ -2179,6 +2402,13 @@ character.
 </pre>
 The first byte of a character has the value 0xfe or 0xff. These values can
 never occur in a valid UTF-8 string.
+<pre>
+  PCRE_UTF8_ERR22
+</pre>
+This error code was formerly used when the presence of a so-called
+"non-character" caused an error. Unicode corrigendum #9 makes it clear that
+such characters should not cause a string to be rejected, and so this code is
+no longer in use and is never returned.
 </P>
 <br><a name="SEC18" href="#TOC1">EXTRACTING CAPTURED SUBSTRINGS BY NUMBER</a><br>
 <P>
@@ -2604,9 +2834,10 @@ fail, this error is given.
 </P>
 <br><a name="SEC24" href="#TOC1">SEE ALSO</a><br>
 <P>
-<b>pcre16</b>(3), <b>pcrebuild</b>(3), <b>pcrecallout</b>(3), <b>pcrecpp(3)</b>(3),
-<b>pcrematching</b>(3), <b>pcrepartial</b>(3), <b>pcreposix</b>(3),
-<b>pcreprecompile</b>(3), <b>pcresample</b>(3), <b>pcrestack</b>(3).
+<b>pcre16</b>(3), <b>pcre32</b>(3), <b>pcrebuild</b>(3), <b>pcrecallout</b>(3),
+<b>pcrecpp(3)</b>(3), <b>pcrematching</b>(3), <b>pcrepartial</b>(3),
+<b>pcreposix</b>(3), <b>pcreprecompile</b>(3), <b>pcresample</b>(3),
+<b>pcrestack</b>(3).
 </P>
 <br><a name="SEC25" href="#TOC1">AUTHOR</a><br>
 <P>
@@ -2619,9 +2850,9 @@ Cambridge CB2 3QH, England.
 </P>
 <br><a name="SEC26" href="#TOC1">REVISION</a><br>
 <P>
-Last updated: 17 June 2012
+Last updated: 12 May 2013
 <br>
-Copyright &copy; 1997-2012 University of Cambridge.
+Copyright &copy; 1997-2013 University of Cambridge.
 <br>
 <p>
 Return to the <a href="index.html">PCRE index page</a>.

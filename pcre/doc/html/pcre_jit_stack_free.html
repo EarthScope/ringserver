@@ -24,12 +24,15 @@ SYNOPSIS
 <P>
 <b>void pcre16_jit_stack_free(pcre16_jit_stack *<i>stack</i>);</b>
 </P>
+<P>
+<b>void pcre32_jit_stack_free(pcre32_jit_stack *<i>stack</i>);</b>
+</P>
 <br><b>
 DESCRIPTION
 </b><br>
 <P>
 This function is used to free a JIT stack that was created by
-<b>pcre[16]_jit_stack_alloc()</b> when it is no longer needed. For more details,
+<b>pcre[16|32]_jit_stack_alloc()</b> when it is no longer needed. For more details,
 see the
 <a href="pcrejit.html"><b>pcrejit</b></a>
 page.

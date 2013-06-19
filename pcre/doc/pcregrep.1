@@ -1,4 +1,4 @@
-.TH PCREGREP 1 "04 March 2012" "PCRE 8.31"
+.TH PCREGREP 1 "13 September 2012" "PCRE 8.32"
 .SH NAME
 pcregrep - a grep with Perl-compatible regular expressions.
 .SH SYNOPSIS
@@ -24,7 +24,7 @@ without delimiters. For example:
 If you attempt to use delimiters (for example, by surrounding a pattern with
 slashes, as is common in Perl scripts), they are interpreted as part of the
 pattern. Quotes can of course be used to delimit patterns on the command line
-because they are interpreted by the shell, and indeed they are required if a
+because they are interpreted by the shell, and indeed quotes are required if a
 pattern contains white space or shell metacharacters.
 .P
 The first argument that follows any option settings is treated as the single
@@ -53,25 +53,26 @@ with the default default being 20K. A block of memory three times this size is
 used (to allow for buffering "before" and "after" lines). An error occurs if a
 line overflows the buffer.
 .P
-Patterns are limited to 8K or BUFSIZ bytes, whichever is the greater. BUFSIZ is
-defined in \fB<stdio.h>\fP. When there is more than one pattern (specified by
-the use of \fB-e\fP and/or \fB-f\fP), each pattern is applied to each line in
-the order in which they are defined, except that all the \fB-e\fP patterns are
-tried before the \fB-f\fP patterns.
+Patterns can be no longer than 8K or BUFSIZ bytes, whichever is the greater.
+BUFSIZ is defined in \fB<stdio.h>\fP. When there is more than one pattern
+(specified by the use of \fB-e\fP and/or \fB-f\fP), each pattern is applied to
+each line in the order in which they are defined, except that all the \fB-e\fP
+patterns are tried before the \fB-f\fP patterns.
 .P
-By default, as soon as one pattern matches (or fails to match when \fB-v\fP is
-used), no further patterns are considered. However, if \fB--colour\fP (or
-\fB--color\fP) is used to colour the matching substrings, or if
-\fB--only-matching\fP, \fB--file-offsets\fP, or \fB--line-offsets\fP is used to
-output only the part of the line that matched (either shown literally, or as an
-offset), scanning resumes immediately following the match, so that further
-matches on the same line can be found. If there are multiple patterns, they are
-all tried on the remainder of the line, but patterns that follow the one that
-matched are not tried on the earlier part of the line.
+By default, as soon as one pattern matches a line, no further patterns are
+considered. However, if \fB--colour\fP (or \fB--color\fP) is used to colour the
+matching substrings, or if \fB--only-matching\fP, \fB--file-offsets\fP, or
+\fB--line-offsets\fP is used to output only the part of the line that matched
+(either shown literally, or as an offset), scanning resumes immediately
+following the match, so that further matches on the same line can be found. If
+there are multiple patterns, they are all tried on the remainder of the line,
+but patterns that follow the one that matched are not tried on the earlier part
+of the line.
 .P
-This is the same behaviour as GNU grep, but it does mean that the order in
-which multiple patterns are specified can affect the output when one of the
-above options is used.
+This behaviour means that the order in which multiple patterns are specified
+can affect the output when one of the above options is used. This is no longer
+the same behaviour as GNU grep, which now manages to display earlier matches
+for later patterns (as long as there is no overlap).
 .P
 Patterns that can match an empty string are accepted, but empty string
 matches are never recognized. An example is the pattern "(super)?(man)?", in
@@ -110,8 +111,9 @@ for a means of changing the way binary files are handled.
 The order in which some of the options appear can affect the output. For
 example, both the \fB-h\fP and \fB-l\fP options affect the printing of file
 names. Whichever comes later in the command line will be the one that takes
-effect. Numerical values for options may be followed by K or M, to signify
-multiplication by 1024 or 1024*1024 respectively.
+effect. Similarly, except where noted below, if an option is given twice, the
+later setting is used. Numerical values for options may be followed by K or M,
+to signify multiplication by 1024 or 1024*1024 respectively.
 .TP 10
 \fB--\fP
 This terminates the list of options. It is useful if the next item on the
@@ -194,75 +196,98 @@ it is to be processed. Valid values are "read" (the default) or "skip"
 .TP
 \fB-d\fP \fIaction\fP, \fB--directories=\fP\fIaction\fP
 If an input path is a directory, "action" specifies how it is to be processed.
-Valid values are "read" (the default), "recurse" (equivalent to the \fB-r\fP
-option), or "skip" (silently skip the path). In the default case, directories
-are read as if they were ordinary files. In some operating systems the effect
-of reading a directory like this is an immediate end-of-file.
+Valid values are "read" (the default in non-Windows environments, for
+compatibility with GNU grep), "recurse" (equivalent to the \fB-r\fP option), or
+"skip" (silently skip the path, the default in Windows environments). In the
+"read" case, directories are read as if they were ordinary files. In some
+operating systems the effect of reading a directory like this is an immediate
+end-of-file; in others it may provoke an error.
 .TP
 \fB-e\fP \fIpattern\fP, \fB--regex=\fP\fIpattern\fP, \fB--regexp=\fP\fIpattern\fP
 Specify a pattern to be matched. This option can be used multiple times in
 order to specify several patterns. It can also be used as a way of specifying a
 single pattern that starts with a hyphen. When \fB-e\fP is used, no argument
 pattern is taken from the command line; all arguments are treated as file
-names. There is an overall maximum of 100 patterns. They are applied to each
-line in the order in which they are defined until one matches (or fails to
-match if \fB-v\fP is used). If \fB-f\fP is used with \fB-e\fP, the command line
-patterns are matched first, followed by the patterns from the file, independent
-of the order in which these options are specified. Note that multiple use of
-\fB-e\fP is not the same as a single pattern with alternatives. For example,
-X|Y finds the first character in a line that is X or Y, whereas if the two
-patterns are given separately, \fBpcregrep\fP finds X if it is present, even if
-it follows Y in the line. It finds Y only if there is no X in the line. This
-really matters only if you are using \fB-o\fP to show the part(s) of the line
-that matched.
+names. There is no limit to the number of patterns. They are applied to each
+line in the order in which they are defined until one matches.
+.sp
+If \fB-f\fP is used with \fB-e\fP, the command line patterns are matched first,
+followed by the patterns from the file(s), independent of the order in which
+these options are specified. Note that multiple use of \fB-e\fP is not the same
+as a single pattern with alternatives. For example, X|Y finds the first
+character in a line that is X or Y, whereas if the two patterns are given
+separately, with X first, \fBpcregrep\fP finds X if it is present, even if it
+follows Y in the line. It finds Y only if there is no X in the line. This
+matters only if you are using \fB-o\fP or \fB--colo(u)r\fP to show the part(s)
+of the line that matched.
 .TP
 \fB--exclude\fP=\fIpattern\fP
-When \fBpcregrep\fP is searching the files in a directory as a consequence of
-the \fB-r\fP (recursive search) option, any regular files whose names match the
-pattern are excluded. Subdirectories are not excluded by this option; they are
-searched recursively, subject to the \fB--exclude-dir\fP and
-\fB--include_dir\fP options. The pattern is a PCRE regular expression, and is
-matched against the final component of the file name (not the entire path). If
-a file name matches both \fB--include\fP and \fB--exclude\fP, it is excluded.
-There is no short form for this option.
+Files (but not directories) whose names match the pattern are skipped without
+being processed. This applies to all files, whether listed on the command line,
+obtained from \fB--file-list\fP, or by scanning a directory. The pattern is a
+PCRE regular expression, and is matched against the final component of the file
+name, not the entire path. The \fB-F\fP, \fB-w\fP, and \fB-x\fP options do not
+apply to this pattern. The option may be given any number of times in order to
+specify multiple patterns. If a file name matches both an \fB--include\fP
+and an \fB--exclude\fP pattern, it is excluded. There is no short form for this
+option.
+.TP
+\fB--exclude-from=\fP\fIfilename\fP
+Treat each non-empty line of the file as the data for an \fB--exclude\fP
+option. What constitutes a newline when reading the file is the operating
+system's default. The \fB--newline\fP option has no effect on this option. This
+option may be given more than once in order to specify a number of files to
+read.
 .TP
 \fB--exclude-dir\fP=\fIpattern\fP
-When \fBpcregrep\fP is searching the contents of a directory as a consequence
-of the \fB-r\fP (recursive search) option, any subdirectories whose names match
-the pattern are excluded. (Note that the \fP--exclude\fP option does not affect
-subdirectories.) The pattern is a PCRE regular expression, and is matched
-against the final component of the name (not the entire path). If a
-subdirectory name matches both \fB--include-dir\fP and \fB--exclude-dir\fP, it
-is excluded. There is no short form for this option.
+Directories whose names match the pattern are skipped without being processed,
+whatever the setting of the \fB--recursive\fP option. This applies to all
+directories, whether listed on the command line, obtained from
+\fB--file-list\fP, or by scanning a parent directory. The pattern is a PCRE
+regular expression, and is matched against the final component of the directory
+name, not the entire path. The \fB-F\fP, \fB-w\fP, and \fB-x\fP options do not
+apply to this pattern. The option may be given any number of times in order to
+specify more than one pattern. If a directory matches both \fB--include-dir\fP
+and \fB--exclude-dir\fP, it is excluded. There is no short form for this
+option.
 .TP
 \fB-F\fP, \fB--fixed-strings\fP
-Interpret each pattern as a list of fixed strings, separated by newlines,
-instead of as a regular expression. The \fB-w\fP (match as a word) and \fB-x\fP
-(match whole line) options can be used with \fB-F\fP. They apply to each of the
-fixed strings. A line is selected if any of the fixed strings are found in it
-(subject to \fB-w\fP or \fB-x\fP, if present).
+Interpret each data-matching pattern as a list of fixed strings, separated by
+newlines, instead of as a regular expression. What constitutes a newline for
+this purpose is controlled by the \fB--newline\fP option. The \fB-w\fP (match
+as a word) and \fB-x\fP (match whole line) options can be used with \fB-F\fP.
+They apply to each of the fixed strings. A line is selected if any of the fixed
+strings are found in it (subject to \fB-w\fP or \fB-x\fP, if present). This
+option applies only to the patterns that are matched against the contents of
+files; it does not apply to patterns specified by any of the \fB--include\fP or
+\fB--exclude\fP options.
 .TP
 \fB-f\fP \fIfilename\fP, \fB--file=\fP\fIfilename\fP
-Read a number of patterns from the file, one per line, and match them against
-each line of input. A data line is output if any of the patterns match it. The
-filename can be given as "-" to refer to the standard input. When \fB-f\fP is
-used, patterns specified on the command line using \fB-e\fP may also be
-present; they are tested before the file's patterns. However, no other pattern
-is taken from the command line; all arguments are treated as the names of paths
-to be searched. There is an overall maximum of 100 patterns. Trailing white
-space is removed from each line, and blank lines are ignored. An empty file
-contains no patterns and therefore matches nothing. See also the comments about
-multiple patterns versus a single pattern with alternatives in the description
-of \fB-e\fP above.
+Read patterns from the file, one per line, and match them against
+each line of input. What constitutes a newline when reading the file is the
+operating system's default. The \fB--newline\fP option has no effect on this
+option. Trailing white space is removed from each line, and blank lines are
+ignored. An empty file contains no patterns and therefore matches nothing. See
+also the comments about multiple patterns versus a single pattern with
+alternatives in the description of \fB-e\fP above.
+.sp
+If this option is given more than once, all the specified files are
+read. A data line is output if any of the patterns match it. A filename can
+be given as "-" to refer to the standard input. When \fB-f\fP is used, patterns
+specified on the command line using \fB-e\fP may also be present; they are
+tested before the file's patterns. However, no other pattern is taken from the
+command line; all arguments are treated as the names of paths to be searched.
 .TP
 \fB--file-list\fP=\fIfilename\fP
-Read a list of files to be searched from the given file, one per line. Trailing
-white space is removed from each line, and blank lines are ignored. These files
-are searched before any others that may be listed on the command line. The
-filename can be given as "-" to refer to the standard input. If \fB--file\fP
-and \fB--file-list\fP are both specified as "-", patterns are read first. This
-is useful only when the standard input is a terminal, from which further lines
-(the list of files) can be read after an end-of-file indication.
+Read a list of files and/or directories that are to be scanned from the given
+file, one per line. Trailing white space is removed from each line, and blank
+lines are ignored. These paths are processed before any that are listed on the
+command line. The filename can be given as "-" to refer to the standard input.
+If \fB--file\fP and \fB--file-list\fP are both specified as "-", patterns are
+read first. This is useful only when the standard input is a terminal, from
+which further lines (the list of files) can be read after an end-of-file
+indication. If this option is given more than once, all the specified files are
+read.
 .TP
 \fB--file-offsets\fP
 Instead of showing lines or parts of lines that match, show each match as an
@@ -287,7 +312,8 @@ If a line number is also being output, it follows the file name.
 .TP
 \fB--help\fP
 Output a help message, giving brief details of the command options and file
-type support, and then exit.
+type support, and then exit. Anything else on the command line is
+ignored.
 .TP
 \fB-I\fP
 Treat binary files as never matching. This is equivalent to
@@ -297,23 +323,33 @@ Treat binary files as never matching. This is equivalent to
 Ignore upper/lower case distinctions during comparisons.
 .TP
 \fB--include\fP=\fIpattern\fP
-When \fBpcregrep\fP is searching the files in a directory as a consequence of
-the \fB-r\fP (recursive search) option, only those regular files whose names
-match the pattern are included. Subdirectories are always included and searched
-recursively, subject to the \fP--include-dir\fP and \fB--exclude-dir\fP
-options. The pattern is a PCRE regular expression, and is matched against the
-final component of the file name (not the entire path). If a file name matches
-both \fB--include\fP and \fB--exclude\fP, it is excluded. There is no short
-form for this option.
+If any \fB--include\fP patterns are specified, the only files that are
+processed are those that match one of the patterns (and do not match an
+\fB--exclude\fP pattern). This option does not affect directories, but it
+applies to all files, whether listed on the command line, obtained from
+\fB--file-list\fP, or by scanning a directory. The pattern is a PCRE regular
+expression, and is matched against the final component of the file name, not
+the entire path. The \fB-F\fP, \fB-w\fP, and \fB-x\fP options do not apply to
+this pattern. The option may be given any number of times. If a file name
+matches both an \fB--include\fP and an \fB--exclude\fP pattern, it is excluded.
+There is no short form for this option.
+.TP
+\fB--include-from=\fP\fIfilename\fP
+Treat each non-empty line of the file as the data for an \fB--include\fP
+option. What constitutes a newline for this purpose is the operating system's
+default. The \fB--newline\fP option has no effect on this option. This option
+may be given any number of times; all the files are read.
 .TP
 \fB--include-dir\fP=\fIpattern\fP
-When \fBpcregrep\fP is searching the contents of a directory as a consequence
-of the \fB-r\fP (recursive search) option, only those subdirectories whose
-names match the pattern are included. (Note that the \fB--include\fP option
-does not affect subdirectories.) The pattern is a PCRE regular expression, and
-is matched against the final component of the name (not the entire path). If a
-subdirectory name matches both \fB--include-dir\fP and \fB--exclude-dir\fP, it
-is excluded. There is no short form for this option.
+If any \fB--include-dir\fP patterns are specified, the only directories that
+are processed are those that match one of the patterns (and do not match an
+\fB--exclude-dir\fP pattern). This applies to all directories, whether listed
+on the command line, obtained from \fB--file-list\fP, or by scanning a parent
+directory. The pattern is a PCRE regular expression, and is matched against the
+final component of the directory name, not the entire path. The \fB-F\fP,
+\fB-w\fP, and \fB-x\fP options do not apply to this pattern. The option may be
+given any number of times. If a directory matches both \fB--include-dir\fP and
+\fB--exclude-dir\fP, it is excluded. There is no short form for this option.
 .TP
 \fB-L\fP, \fB--files-without-match\fP
 Instead of outputting lines from the files, just output the names of the files
@@ -338,7 +374,7 @@ short form for this option.
 When this option is given, input is read and processed line by line, and the
 output is flushed after each write. By default, input is read in large chunks,
 unless \fBpcregrep\fP can determine that it is reading from a terminal (which
-is currently possible only in Unix environments). Output to terminal is
+is currently possible only in Unix-like environments). Output to terminal is
 normally automatically flushed by the operating system. This option can be
 useful when the input or output is attached to a pipe and you do not want
 \fBpcregrep\fP to buffer up large amounts of data. However, its use will affect
@@ -415,10 +451,13 @@ When the PCRE library is built, a default line-ending sequence is specified.
 This is normally the standard sequence for the operating system. Unless
 otherwise specified by this option, \fBpcregrep\fP uses the library's default.
 The possible values for this option are CR, LF, CRLF, ANYCRLF, or ANY. This
-makes it possible to use \fBpcregrep\fP on files that have come from other
+makes it possible to use \fBpcregrep\fP to scan files that have come from other
 environments without having to modify their line endings. If the data that is
 being scanned does not agree with the convention set by this option,
-\fBpcregrep\fP may behave in strange ways.
+\fBpcregrep\fP may behave in strange ways. Note that this option does not
+apply to files specified by the \fB-f\fP, \fB--exclude-from\fP, or
+\fB--include-from\fP options, which are expected to use the operating system's
+standard newline sequence.
 .TP
 \fB-n\fP, \fB--line-number\fP
 Precede each output line by its line number in the file, followed by a colon
@@ -446,13 +485,22 @@ exclusive with \fB--file-offsets\fP and \fB--line-offsets\fP.
 .TP
 \fB-o\fP\fInumber\fP, \fB--only-matching\fP=\fInumber\fP
 Show only the part of the line that matched the capturing parentheses of the
-given number. Up to 32 capturing parentheses are supported. Because these
-options can be given without an argument (see above), if an argument is
-present, it must be given in the same shell item, for example, -o3 or
---only-matching=2. The comments given for the non-argument case above also
-apply to this case. If the specified capturing parentheses do not exist in the
-pattern, or were not set in the match, nothing is output unless the file name
-or line number are being printed.
+given number. Up to 32 capturing parentheses are supported, and -o0 is
+equivalent to \fB-o\fP without a number. Because these options can be given
+without an argument (see above), if an argument is present, it must be given in
+the same shell item, for example, -o3 or --only-matching=2. The comments given
+for the non-argument case above also apply to this case. If the specified
+capturing parentheses do not exist in the pattern, or were not set in the
+match, nothing is output unless the file name or line number are being printed.
+.sp
+If this option is given multiple times, multiple substrings are output, in the
+order the options are given. For example, -o3 -o1 -o3 causes the substrings
+matched by capturing parentheses 3 and 1 and then 3 again to be output. By
+default, there is no separator (but see the next option).
+.TP
+\fB--om-separator\fP=\fItext\fP
+Specify a separating string for multiple occurrences of \fB-o\fP. The default
+is an empty string. Separating strings are never coloured.
 .TP
 \fB-q\fP, \fB--quiet\fP
 Work quietly, that is, display nothing except error messages. The exit
@@ -475,12 +523,14 @@ found in other files.
 .TP
 \fB-u\fP, \fB--utf-8\fP
 Operate in UTF-8 mode. This option is available only if PCRE has been compiled
-with UTF-8 support. Both patterns and subject lines must be valid strings of
-UTF-8 characters.
+with UTF-8 support. All patterns (including those for any \fB--exclude\fP and
+\fB--include\fP options) and all subject lines that are scanned must be valid
+strings of UTF-8 characters.
 .TP
 \fB-V\fP, \fB--version\fP
-Write the version numbers of \fBpcregrep\fP and the PCRE library that is being
-used to the standard error stream.
+Write the version numbers of \fBpcregrep\fP and the PCRE library to the
+standard output and then exit. Anything else on the command line is
+ignored.
 .TP
 \fB-v\fP, \fB--invert-match\fP
 Invert the sense of the match, so that lines which do \fInot\fP match any of
@@ -488,13 +538,17 @@ the patterns are the ones that are found.
 .TP
 \fB-w\fP, \fB--word-regex\fP, \fB--word-regexp\fP
 Force the patterns to match only whole words. This is equivalent to having \eb
-at the start and end of the pattern.
+at the start and end of the pattern. This option applies only to the patterns
+that are matched against the contents of files; it does not apply to patterns
+specified by any of the \fB--include\fP or \fB--exclude\fP options.
 .TP
 \fB-x\fP, \fB--line-regex\fP, \fB--line-regexp\fP
 Force the patterns to be anchored (each must start matching at the beginning of
-a line) and in addition, require them to match entire lines. This is
-equivalent to having ^ and $ characters at the start and end of each
-alternative branch in every pattern.
+a line) and in addition, require them to match entire lines. This is equivalent
+to having ^ and $ characters at the start and end of each alternative branch in
+every pattern. This option applies only to the patterns that are matched
+against the contents of files; it does not apply to patterns specified by any
+of the \fB--include\fP or \fB--exclude\fP options.
 .
 .
 .SH "ENVIRONMENT VARIABLES"
@@ -510,11 +564,15 @@ by the \fB--locale\fP option. If no locale is set, the PCRE library's default
 .rs
 .sp
 The \fB-N\fP (\fB--newline\fP) option allows \fBpcregrep\fP to scan files with
-different newline conventions from the default. However, the setting of this
-option does not affect the way in which \fBpcregrep\fP writes information to
-the standard error and output streams. It uses the string "\en" in C
-\fBprintf()\fP calls to indicate newlines, relying on the C I/O library to
-convert this to an appropriate sequence if the output is sent to a file.
+different newline conventions from the default. Any parts of the input files
+that are written to the standard output are copied identically, with whatever
+newline sequences they have in the input. However, the setting of this option
+does not affect the interpretation of files specified by the \fB-f\fP,
+\fB--exclude-from\fP, or \fB--include-from\fP options, which are assumed to use
+the operating system's standard newline sequence, nor does it affect the way in
+which \fBpcregrep\fP writes informational messages to the standard error and
+output streams. For these it uses the string "\en" to indicate newlines,
+relying on the C I/O library to convert this to an appropriate sequence.
 .
 .
 .SH "OPTIONS COMPATIBILITY"
@@ -525,7 +583,7 @@ as in the GNU \fBgrep\fP program. Any long option of the form
 \fB--xxx-regexp\fP (GNU terminology) is also available as \fB--xxx-regex\fP
 (PCRE terminology). However, the \fB--file-list\fP, \fB--file-offsets\fP,
 \fB--include-dir\fP, \fB--line-offsets\fP, \fB--locale\fP, \fB--match-limit\fP,
-\fB-M\fP, \fB--multiline\fP, \fB-N\fP, \fB--newline\fP,
+\fB-M\fP, \fB--multiline\fP, \fB-N\fP, \fB--newline\fP, \fB--om-separator\fP,
 \fB--recursion-limit\fP, \fB-u\fP, and \fB--utf-8\fP options are specific to
 \fBpcregrep\fP, as is the use of the \fB--only-matching\fP option with a
 capturing parentheses number.
@@ -599,7 +657,7 @@ affect the return code.
 .SH "SEE ALSO"
 .rs
 .sp
-\fBpcrepattern\fP(3), \fBpcretest\fP(1).
+\fBpcrepattern\fP(3), \fBpcresyntax\fP(3), \fBpcretest\fP(1).
 .
 .
 .SH AUTHOR
@@ -616,6 +674,6 @@ Cambridge CB2 3QH, England.
 .rs
 .sp
 .nf
-Last updated: 04 March 2012
+Last updated: 13 September 2012
 Copyright (c) 1997-2012 University of Cambridge.
 .fi

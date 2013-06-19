@@ -2,7 +2,7 @@
 
 # Run pcregrep tests. The assumption is that the PCRE tests check the library
 # itself. What we are checking here is the file handling and options that are
-# supported by pcregrep.
+# supported by pcregrep. This script must be run in the build directory.
 
 # Set the C locale, so that sort(1) behaves predictably.
 
@@ -14,9 +14,11 @@ export LC_ALL
 unset PCREGREP_COLOUR PCREGREP_COLOR
 unset cp ls mv rm
 
-# Set the program to be tested, and valgrind settings when requested.
+# Remember the current (build) directory, set the program to be tested, and
+# valgrind settings when requested.
 
-pcregrep=`pwd`/pcregrep
+builddir=`pwd`
+pcregrep=$builddir/pcregrep
 
 valgrind=
 while [ $# -gt 0 ] ; do
@@ -28,31 +30,26 @@ while [ $# -gt 0 ] ; do
 done
 
 echo " "
+pcregrep_version=`$pcregrep -V`
 if [ "$valgrind" = "" ] ; then
-  echo "Testing pcregrep"
+  echo "Testing $pcregrep_version"
 else
-  echo "Testing pcregrep using valgrind"
+  echo "Testing $pcregrep_version using valgrind"
 fi
-
-$pcregrep -V
 
 # Set up a suitable "diff" command for comparison. Some systems have a diff
 # that lacks a -u option. Try to deal with this; better do the test for the -b
 # option as well.
 
-cf="diff -ub"
-if diff -u /dev/null /dev/null; then
-  if diff -ub /dev/null /dev/null; then cf="diff -ub"; else cf="diff -u"; fi
-else
-  if diff -b /dev/null /dev/null; then cf="diff -b"; else cf="diff"; fi
-fi
+cf="diff"
+diff -b  /dev/null /dev/null 2>/dev/null && cf="diff -b"
+diff -u  /dev/null /dev/null 2>/dev/null && cf="diff -u"
+diff -ub /dev/null /dev/null 2>/dev/null && cf="diff -ub"
 
-# If PCRE has been built in a directory other than the source directory, and
-# this test is being run from "make check" as usual, then $srcdir will be
-# set. If not, set it to the current or parent directory, whichever one
-# contains the test data. We then arrange to run the pcregrep command in the
-# source directory so that the file names that appear in the output are always
-# the same.
+# If this test is being run from "make check", $srcdir will be set. If not, set
+# it to the current or parent directory, whichever one contains the test data.
+# Subsequently, we run most of the pcregrep tests in the source directory so
+# that the file names in the output are always the same.
 
 if [ -z "$srcdir" -o ! -d "$srcdir/testdata" ] ; then
   if [ -d "./testdata" ] ; then
@@ -69,6 +66,8 @@ fi
 
 ./pcretest -C utf >/dev/null
 utf8=$?
+
+echo "Testing pcregrep main features"
 
 echo "---------------------------- Test 1 ------------------------------" >testtry
 (cd $srcdir; $valgrind $pcregrep PATTERN ./testdata/grepinput) >>testtry
@@ -119,7 +118,8 @@ echo "---------------------------- Test 12 -----------------------------" >>test
 echo "RC=$?" >>testtry
 
 echo "---------------------------- Test 13 -----------------------------" >>testtry
-(cd $srcdir; $valgrind $pcregrep -f./testdata/greplist ./testdata/grepinputx) >>testtry
+echo seventeen >testtemp1
+(cd $srcdir; $valgrind $pcregrep -f./testdata/greplist -f $builddir/testtemp1 ./testdata/grepinputx) >>testtry
 echo "RC=$?" >>testtry
 
 echo "---------------------------- Test 14 -----------------------------" >>testtry
@@ -207,11 +207,11 @@ echo "---------------------------- Test 34 -----------------------------" >>test
 echo "RC=$?" >>testtry
 
 echo "---------------------------- Test 35 -----------------------------" >>testtry
-(cd $srcdir; $valgrind $pcregrep -L -r --include=grepinputx --exclude-dir='^\.' 'fox' ./testdata) >>testtry
+(cd $srcdir; $valgrind $pcregrep -L -r --include=grepinputx --include grepinput8 --exclude-dir='^\.' 'fox' ./testdata | sort) >>testtry
 echo "RC=$?" >>testtry
 
 echo "---------------------------- Test 36 -----------------------------" >>testtry
-(cd $srcdir; $valgrind $pcregrep -L -r --include=grepinput --exclude 'grepinput$' --exclude_dir='^\.' 'fox' ./testdata | sort) >>testtry
+(cd $srcdir; $valgrind $pcregrep -L -r --include=grepinput --exclude 'grepinput$' --exclude=grepinput8 --exclude-dir='^\.' 'fox' ./testdata | sort) >>testtry
 echo "RC=$?" >>testtry
 
 echo "---------------------------- Test 37 -----------------------------" >>testtry
@@ -408,7 +408,8 @@ echo "---------------------------- Test 83 -----------------------------" >>test
 echo "RC=$?" >>testtry
 
 echo "---------------------------- Test 84 -----------------------------" >>testtry
-(cd $srcdir; $valgrind $pcregrep --file-list ./testdata/grepfilelist "fox|complete") >>testtry 2>&1
+echo testdata/grepinput3 >testtemp1
+(cd $srcdir; $valgrind $pcregrep --file-list ./testdata/grepfilelist --file-list $builddir/testtemp1 "fox|complete|t7") >>testtry 2>&1
 echo "RC=$?" >>testtry
 
 echo "---------------------------- Test 85 -----------------------------" >>testtry
@@ -447,6 +448,61 @@ echo "---------------------------- Test 93 -----------------------------" >>test
 (cd $srcdir; $valgrind $pcregrep --text "dog" ./testdata/grepbinary) >>testtry 2>&1
 echo "RC=$?" >>testtry
 
+echo "---------------------------- Test 94 -----------------------------" >>testtry
+(cd $srcdir; $valgrind $pcregrep -L -r --include=grepinputx --include grepinput8 'fox' ./testdata/grepinput* | sort) >>testtry
+echo "RC=$?" >>testtry
+
+echo "---------------------------- Test 95 -----------------------------" >>testtry
+(cd $srcdir; $valgrind $pcregrep --file-list ./testdata/grepfilelist --exclude grepinputv "fox|complete") >>testtry 2>&1
+echo "RC=$?" >>testtry
+
+echo "---------------------------- Test 96 -----------------------------" >>testtry
+(cd $srcdir; $valgrind $pcregrep -L -r --include-dir=testdata --exclude '^(?!grepinput)' 'fox' ./test* | sort) >>testtry
+echo "RC=$?" >>testtry
+
+echo "---------------------------- Test 97 -----------------------------" >>testtry
+echo "grepinput$" >testtemp1
+echo "grepinput8" >>testtemp1
+(cd $srcdir; $valgrind $pcregrep -L -r --include=grepinput --exclude-from $builddir/testtemp1 --exclude-dir='^\.' 'fox' ./testdata | sort) >>testtry
+echo "RC=$?" >>testtry
+
+echo "---------------------------- Test 98 -----------------------------" >>testtry
+echo "grepinput$" >testtemp1
+echo "grepinput8" >>testtemp1
+(cd $srcdir; $valgrind $pcregrep -L -r --exclude=grepinput3 --include=grepinput --exclude-from $builddir/testtemp1 --exclude-dir='^\.' 'fox' ./testdata | sort) >>testtry
+echo "RC=$?" >>testtry
+
+echo "---------------------------- Test 99 -----------------------------" >>testtry
+echo "grepinput$" >testtemp1
+echo "grepinput8" >testtemp2
+(cd $srcdir; $valgrind $pcregrep -L -r --include grepinput --exclude-from $builddir/testtemp1 --exclude-from=$builddir/testtemp2 --exclude-dir='^\.' 'fox' ./testdata | sort) >>testtry
+echo "RC=$?" >>testtry
+
+echo "---------------------------- Test 100 ------------------------------" >>testtry
+(cd $srcdir; $valgrind $pcregrep -Ho2 --only-matching=1 -o3 '(\w+) binary (\w+)(\.)?' ./testdata/grepinput) >>testtry
+echo "RC=$?" >>testtry
+
+echo "---------------------------- Test 101 ------------------------------" >>testtry
+(cd $srcdir; $valgrind $pcregrep -o3 -Ho2 -o12 --only-matching=1 -o3 --colour=always --om-separator='|' '(\w+) binary (\w+)(\.)?' ./testdata/grepinput) >>testtry
+echo "RC=$?" >>testtry
+
+echo "---------------------------- Test 102 -----------------------------" >>testtry
+(cd $srcdir; $valgrind $pcregrep -n "^$" ./testdata/grepinput3) >>testtry 2>&1
+echo "RC=$?" >>testtry
+
+echo "---------------------------- Test 103 -----------------------------" >>testtry
+(cd $srcdir; $valgrind $pcregrep --only-matching "^$" ./testdata/grepinput3) >>testtry 2>&1
+echo "RC=$?" >>testtry
+
+echo "---------------------------- Test 104 -----------------------------" >>testtry
+(cd $srcdir; $valgrind $pcregrep -n --only-matching "^$" ./testdata/grepinput3) >>testtry 2>&1
+echo "RC=$?" >>testtry
+
+echo "---------------------------- Test 105 -----------------------------" >>testtry
+(cd $srcdir; $valgrind $pcregrep --colour=always "ipsum|" ./testdata/grepinput3) >>testtry 2>&1
+echo "RC=$?" >>testtry
+
+
 # Now compare the results.
 
 $cf $srcdir/testdata/grepoutput testtry
@@ -479,7 +535,7 @@ fi
 # is not \n. Do not use exported files, whose line endings might be changed.
 # Instead, create an input file using printf so that its contents are exactly
 # what we want. Note the messy fudge to get printf to write a string that
-# starts with a hyphen.
+# starts with a hyphen. These tests are run in the build directory.
 
 echo "Testing pcregrep newline settings"
 printf "abc\rdef\r\nghi\njkl" >testNinput

@@ -1,4 +1,4 @@
-.TH PCRECOMPAT 3 "08 January 2012" "PCRE 8.30"
+.TH PCRECOMPAT 3 "19 March 2013" "PCRE 8.33"
 .SH NAME
 PCRE - Perl-compatible regular expressions
 .SH "DIFFERENCES BETWEEN PCRE AND PERL"
@@ -23,10 +23,8 @@ just once). Perl allows repeat quantifiers on other assertions such as \eb, but
 these do not seem to have any use.
 .P
 3. Capturing subpatterns that occur inside negative lookahead assertions are
-counted, but their entries in the offsets vector are never set. Perl sets its
-numerical variables from any such patterns that are matched before the
-assertion fails to match something (thereby succeeding), but only if the
-negative lookahead assertion contains just one branch.
+counted, but their entries in the offsets vector are never set. Perl sometimes
+(but not always) sets its numerical variables from inside negative assertions.
 .P
 4. Though binary zero characters are supported in the subject string, they are
 not allowed in a pattern string because it is passed as a normal C string,
@@ -50,11 +48,7 @@ Perl documentation says "Because Perl hides the need for the user to understand
 the internal representation of Unicode characters, there is no need to
 implement the somewhat messy concept of surrogates."
 .P
-7. PCRE implements a simpler version of \eX than Perl, which changed to make
-\eX match what Unicode calls an "extended grapheme cluster". This is more
-complicated than an extended Unicode sequence, which is what PCRE matches.
-.P
-8. PCRE does support the \eQ...\eE escape for quoting substrings. Characters in
+7. PCRE does support the \eQ...\eE escape for quoting substrings. Characters in
 between are treated as literals. This is slightly different from Perl in that $
 and @ are also handled as literals inside the quotes. In Perl, they cause
 variable interpolation (but of course PCRE does not have variables). Note the
@@ -70,7 +64,7 @@ following examples:
 .sp
 The \eQ...\eE sequence is recognized both inside and outside character classes.
 .P
-9. Fairly obviously, PCRE does not support the (?{code}) and (??{code})
+8. Fairly obviously, PCRE does not support the (?{code}) and (??{code})
 constructions. However, there is support for recursive patterns. This is not
 available in Perl 5.8, but it is in Perl 5.10. Also, the PCRE "callout"
 feature allows an external function to be called during pattern matching. See
@@ -80,7 +74,7 @@ the
 .\"
 documentation for details.
 .P
-10. Subpatterns that are called as subroutines (whether or not recursively) are
+9. Subpatterns that are called as subroutines (whether or not recursively) are
 always treated as atomic groups in PCRE. This is like Python, but unlike Perl.
 Captured values that are set outside a subroutine call can be reference from
 inside in PCRE, but not in Perl. There is a discussion that explains these
@@ -95,22 +89,28 @@ in the
 .\"
 page.
 .P
-11. If any of the backtracking control verbs are used in an assertion or in a
-subpattern that is called as a subroutine (whether or not recursively), their
-effect is confined to that subpattern; it does not extend to the surrounding
-pattern. This is not always the case in Perl. In particular, if (*THEN) is
-present in a group that is called as a subroutine, its action is limited to
-that group, even if the group does not contain any | characters. There is one
-exception to this: the name from a *(MARK), (*PRUNE), or (*THEN) that is
-encountered in a successful positive assertion \fIis\fP passed back when a
-match succeeds (compare capturing parentheses in assertions). Note that such
-subpatterns are processed as anchored at the point where they are tested.
+10. If any of the backtracking control verbs are used in a subpattern that is
+called as a subroutine (whether or not recursively), their effect is confined
+to that subpattern; it does not extend to the surrounding pattern. This is not
+always the case in Perl. In particular, if (*THEN) is present in a group that
+is called as a subroutine, its action is limited to that group, even if the
+group does not contain any | characters. Note that such subpatterns are
+processed as anchored at the point where they are tested.
 .P
-12. There are some differences that are concerned with the settings of captured
+11. If a pattern contains more than one backtracking control verb, the first
+one that is backtracked onto acts. For example, in the pattern
+A(*COMMIT)B(*PRUNE)C a failure in B triggers (*COMMIT), but a failure in C
+triggers (*PRUNE). Perl's behaviour is more complex; in many cases it is the
+same as PCRE, but there are examples where it differs.
+.P
+12. Most backtracking verbs in assertions have their normal actions. They are
+not confined to the assertion.
+.P
+13. There are some differences that are concerned with the settings of captured
 strings when part of a pattern is repeated. For example, matching "aba" against
 the pattern /^(a(b)?)+$/ in Perl leaves $2 unset, but in PCRE it is set to "b".
 .P
-13. PCRE's handling of duplicate subpattern numbers and duplicate subpattern
+14. PCRE's handling of duplicate subpattern numbers and duplicate subpattern
 names is not as general as Perl's. This is a consequence of the fact the PCRE
 works internally just with numbers, using an external table to translate
 between numbers and names. In particular, a pattern such as (?|(?<a>A)|(?<b)B),
@@ -120,12 +120,18 @@ would not be possible to distinguish which parentheses matched, because both
 names map to capturing subpattern number 1. To avoid this confusing situation,
 an error is given at compile time.
 .P
-14. Perl recognizes comments in some places that PCRE does not, for example,
+15. Perl recognizes comments in some places that PCRE does not, for example,
 between the ( and ? at the start of a subpattern. If the /x modifier is set,
 Perl allows white space between ( and ? but PCRE never does, even if the
 PCRE_EXTENDED option is set.
 .P
-15. PCRE provides some extensions to the Perl regular expression facilities.
+16. In PCRE, the upper/lower case character properties Lu and Ll are not
+affected when case-independent matching is specified. For example, \ep{Lu}
+always matches an upper case letter. I think Perl has changed in this respect;
+in the release at the time of writing (5.16), \ep{Lu} and \ep{Ll} match all
+letters, regardless of case, when case independence is specified.
+.P
+17. PCRE provides some extensions to the Perl regular expression facilities.
 Perl 5.10 includes new features that are not in earlier versions of Perl, some
 of which (such as named parentheses) have been in PCRE for some time. This list
 is with respect to Perl 5.10:
@@ -162,8 +168,9 @@ by the PCRE_BSR_ANYCRLF option.
 different hosts that have the other endianness. However, this does not apply to
 optimized data created by the just-in-time compiler.
 .sp
-(k) The alternative matching functions (\fBpcre_dfa_exec()\fP and
-\fBpcre16_dfa_exec()\fP) match in a different way and are not Perl-compatible.
+(k) The alternative matching functions (\fBpcre_dfa_exec()\fP,
+\fBpcre16_dfa_exec()\fP and \fBpcre32_dfa_exec()\fP,) match in a different way
+and are not Perl-compatible.
 .sp
 (l) PCRE recognizes some special sequences such as (*CR) at the start of
 a pattern that set overall options that cannot be changed within the pattern.
@@ -183,6 +190,6 @@ Cambridge CB2 3QH, England.
 .rs
 .sp
 .nf
-Last updated: 01 June 2012
-Copyright (c) 1997-2012 University of Cambridge.
+Last updated: 19 March 2013
+Copyright (c) 1997-2013 University of Cambridge.
 .fi

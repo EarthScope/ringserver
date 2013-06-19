@@ -14,9 +14,10 @@ man page, in case the conversion went wrong.
 <br>
 <ul>
 <li><a name="TOC1" href="#SEC1">INTRODUCTION</a>
-<li><a name="TOC2" href="#SEC2">USER DOCUMENTATION</a>
-<li><a name="TOC3" href="#SEC3">AUTHOR</a>
-<li><a name="TOC4" href="#SEC4">REVISION</a>
+<li><a name="TOC2" href="#SEC2">SECURITY CONSIDERATIONS</a>
+<li><a name="TOC3" href="#SEC3">USER DOCUMENTATION</a>
+<li><a name="TOC4" href="#SEC4">AUTHOR</a>
+<li><a name="TOC5" href="#SEC5">REVISION</a>
 </ul>
 <br><a name="SEC1" href="#TOC1">INTRODUCTION</a><br>
 <P>
@@ -36,21 +37,32 @@ built. The majority of the work to make this possible was done by Zoltan
 Herczeg.
 </P>
 <P>
-The two libraries contain identical sets of functions, except that the names in
-the 16-bit library start with <b>pcre16_</b> instead of <b>pcre_</b>. To avoid
-over-complication and reduce the documentation maintenance load, most of the
-documentation describes the 8-bit library, with the differences for the 16-bit
-library described separately in the
+Starting with release 8.32 it is possible to compile a third separate PCRE
+library that supports 32-bit character strings (including UTF-32 strings). The
+build process allows any combination of the 8-, 16- and 32-bit libraries. The
+work to make this possible was done by Christian Persch.
+</P>
+<P>
+The three libraries contain identical sets of functions, except that the names
+in the 16-bit library start with <b>pcre16_</b> instead of <b>pcre_</b>, and the
+names in the 32-bit library start with <b>pcre32_</b> instead of <b>pcre_</b>. To
+avoid over-complication and reduce the documentation maintenance load, most of
+the documentation describes the 8-bit library, with the differences for the
+16-bit and 32-bit libraries described separately in the
 <a href="pcre16.html"><b>pcre16</b></a>
-page. References to functions or structures of the form <i>pcre[16]_xxx</i>
-should be read as meaning "<i>pcre_xxx</i> when using the 8-bit library and
-<i>pcre16_xxx</i> when using the 16-bit library".
+and
+<a href="pcre32.html"><b>pcre32</b></a>
+pages. References to functions or structures of the form <i>pcre[16|32]_xxx</i>
+should be read as meaning "<i>pcre_xxx</i> when using the 8-bit library,
+<i>pcre16_xxx</i> when using the 16-bit library, or <i>pcre32_xxx</i> when using
+the 32-bit library".
 </P>
 <P>
 The current implementation of PCRE corresponds approximately with Perl 5.12,
-including support for UTF-8/16 encoded strings and Unicode general category
-properties. However, UTF-8/16 and Unicode support has to be explicitly enabled;
-it is not the default. The Unicode tables correspond to Unicode release 6.0.0.
+including support for UTF-8/16/32 encoded strings and Unicode general category
+properties. However, UTF-8/16/32 and Unicode support has to be explicitly
+enabled; it is not the default. The Unicode tables correspond to Unicode
+release 6.2.0.
 </P>
 <P>
 In addition to the Perl-compatible matching function, PCRE contains an
@@ -88,19 +100,56 @@ function makes it possible for a client to discover which features are
 available. The features themselves are described in the
 <a href="pcrebuild.html"><b>pcrebuild</b></a>
 page. Documentation about building PCRE for various operating systems can be
-found in the <b>README</b> and <b>NON-UNIX-USE</b> files in the source
-distribution.
+found in the
+<a href="README.txt"><b>README</b></a>
+and
+<a href="NON-AUTOTOOLS-BUILD.txt"><b>NON-AUTOTOOLS_BUILD</b></a>
+files in the source distribution.
 </P>
 <P>
 The libraries contains a number of undocumented internal functions and data
 tables that are used by more than one of the exported external functions, but
 which are not intended for use by external callers. Their names all begin with
-"_pcre_" or "_pcre16_", which hopefully will not provoke any name clashes. In
-some environments, it is possible to control which external symbols are
-exported when a shared library is built, and in these cases the undocumented
-symbols are not exported.
+"_pcre_" or "_pcre16_" or "_pcre32_", which hopefully will not provoke any name
+clashes. In some environments, it is possible to control which external symbols
+are exported when a shared library is built, and in these cases the
+undocumented symbols are not exported.
 </P>
-<br><a name="SEC2" href="#TOC1">USER DOCUMENTATION</a><br>
+<br><a name="SEC2" href="#TOC1">SECURITY CONSIDERATIONS</a><br>
+<P>
+If you are using PCRE in a non-UTF application that permits users to supply
+arbitrary patterns for compilation, you should be aware of a feature that
+allows users to turn on UTF support from within a pattern, provided that PCRE
+was built with UTF support. For example, an 8-bit pattern that begins with
+"(*UTF8)" or "(*UTF)" turns on UTF-8 mode, which interprets patterns and
+subjects as strings of UTF-8 characters instead of individual 8-bit characters.
+This causes both the pattern and any data against which it is matched to be
+checked for UTF-8 validity. If the data string is very long, such a check might
+use sufficiently many resources as to cause your application to lose
+performance.
+</P>
+<P>
+One way of guarding against this possibility is to use the
+<b>pcre_fullinfo()</b> function to check the compiled pattern's options for UTF.
+Alternatively, from release 8.33, you can set the PCRE_NEVER_UTF option at
+compile time. This causes an compile time error if a pattern contains a
+UTF-setting sequence.
+</P>
+<P>
+If your application is one that supports UTF, be aware that validity checking
+can take time. If the same data string is to be matched many times, you can use
+the PCRE_NO_UTF[8|16|32]_CHECK option for the second and subsequent matches to
+save redundant checks.
+</P>
+<P>
+Another way that performance can be hit is by running a pattern that has a very
+large search tree against a string that will never match. Nested unlimited
+repeats in a pattern are a common example. PCRE provides some protection
+against this: see the PCRE_EXTRA_MATCH_LIMIT feature in the
+<a href="pcreapi.html"><b>pcreapi</b></a>
+page.
+</P>
+<br><a name="SEC3" href="#TOC1">USER DOCUMENTATION</a><br>
 <P>
 The user documentation for PCRE comprises a number of different sections. In
 the "man" format, each of these is a separate "man page". In the HTML format,
@@ -109,10 +158,11 @@ all the sections, except the <b>pcredemo</b> section, are concatenated, for ease
 of searching. The sections are as follows:
 <pre>
   pcre              this document
-  pcre16            details of the 16-bit library
   pcre-config       show PCRE installation configuration information
+  pcre16            details of the 16-bit library
+  pcre32            details of the 32-bit library
   pcreapi           details of PCRE's native C API
-  pcrebuild         options for building PCRE
+  pcrebuild         building PCRE
   pcrecallout       details of the callout feature
   pcrecompat        discussion of Perl compatibility
   pcrecpp           details of the C++ wrapper for the 8-bit library
@@ -130,12 +180,12 @@ of searching. The sections are as follows:
   pcrestack         discussion of stack usage
   pcresyntax        quick syntax reference
   pcretest          description of the <b>pcretest</b> testing command
-  pcreunicode       discussion of Unicode and UTF-8/16 support
+  pcreunicode       discussion of Unicode and UTF-8/16/32 support
 </pre>
 In addition, in the "man" and HTML formats, there is a short page for each
-8-bit C library function, listing its arguments and results.
+C library function, listing its arguments and results.
 </P>
-<br><a name="SEC3" href="#TOC1">AUTHOR</a><br>
+<br><a name="SEC4" href="#TOC1">AUTHOR</a><br>
 <P>
 Philip Hazel
 <br>
@@ -149,11 +199,11 @@ Putting an actual email address here seems to have been a spam magnet, so I've
 taken it away. If you want to email me, use my two initials, followed by the
 two digits 10, at the domain cam.ac.uk.
 </P>
-<br><a name="SEC4" href="#TOC1">REVISION</a><br>
+<br><a name="SEC5" href="#TOC1">REVISION</a><br>
 <P>
-Last updated: 10 January 2012
+Last updated: 13 May 2013
 <br>
-Copyright &copy; 1997-2012 University of Cambridge.
+Copyright &copy; 1997-2013 University of Cambridge.
 <br>
 <p>
 Return to the <a href="index.html">PCRE index page</a>.

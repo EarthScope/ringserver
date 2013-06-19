@@ -28,6 +28,11 @@ SYNOPSIS
 <b>int <i>stringcount</i>, int <i>stringnumber</i>,</b>
 <b>PCRE_SPTR16 *<i>stringptr</i>);</b>
 </P>
+<P>
+<b>int pcre32_get_substring(PCRE_SPTR32 <i>subject</i>, int *<i>ovector</i>,</b>
+<b>int <i>stringcount</i>, int <i>stringnumber</i>,</b>
+<b>PCRE_SPTR32 *<i>stringptr</i>);</b>
+</P>
 <br><b>
 DESCRIPTION
 </b><br>
@@ -36,14 +41,14 @@ This is a convenience function for extracting a captured substring. The
 arguments are:
 <pre>
   <i>subject</i>       Subject that has been successfully matched
-  <i>ovector</i>       Offset vector that <b>pcre[16]_exec()</b> used
-  <i>stringcount</i>   Value returned by <b>pcre[16]_exec()</b>
+  <i>ovector</i>       Offset vector that <b>pcre[16|32]_exec()</b> used
+  <i>stringcount</i>   Value returned by <b>pcre[16|32]_exec()</b>
   <i>stringnumber</i>  Number of the required substring
   <i>stringptr</i>     Where to put the string pointer
 </pre>
 The memory in which the substring is placed is obtained by calling
-<b>pcre[16]_malloc()</b>. The convenience function
-<b>pcre[16]_free_substring()</b> can be used to free it when it is no longer
+<b>pcre[16|32]_malloc()</b>. The convenience function
+<b>pcre[16|32]_free_substring()</b> can be used to free it when it is no longer
 needed. The yield of the function is the length of the substring,
 PCRE_ERROR_NOMEMORY if sufficient memory could not be obtained, or
 PCRE_ERROR_NOSUBSTRING if the string number is invalid.

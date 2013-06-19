@@ -1,5 +1,5 @@
 /-- This set of tests is for Unicode property support, relevant only to the
-    16-bit library. --/
+    16- and 32-bit library. --/
     
 /A\x{391}\x{10427}\x{ff3a}\x{1fb0}/8iDZ
 

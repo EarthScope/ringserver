@@ -90,7 +90,7 @@ documentation. This document contains a quick-reference summary of the syntax.
   \V         a character that is not a vertical white space character
   \w         a "word" character
   \W         a "non-word" character
-  \X         an extended Unicode sequence
+  \X         a Unicode extended grapheme cluster
 </pre>
 In PCRE, by default, \d, \D, \s, \S, \w, and \W recognize only ASCII
 characters, even in a UTF mode. However, this can be changed by setting the
@@ -151,6 +151,8 @@ PCRE_UCP option.
   Xan        Alphanumeric: union of properties L and N
   Xps        POSIX space: property Z or tab, NL, VT, FF, CR
   Xsp        Perl space: property Z or tab, NL, FF, CR
+  Xuc        Univerally-named character: one that can be
+               represented by a Universal Character Name
   Xwd        Perl word: property Xan or underscore
 </PRE>
 </P>
@@ -375,9 +377,13 @@ but some of them use Unicode properties if PCRE_UCP is set. You can use
 The following are recognized only at the start of a pattern or after one of the
 newline-setting options with similar syntax:
 <pre>
+  (*LIMIT_MATCH=d) set the match limit to d (decimal number)
+  (*LIMIT_RECURSION=d) set the recursion limit to d (decimal number)
   (*NO_START_OPT) no start-match optimization (PCRE_NO_START_OPTIMIZE)
   (*UTF8)         set UTF-8 mode: 8-bit library (PCRE_UTF8)
   (*UTF16)        set UTF-16 mode: 16-bit library (PCRE_UTF16)
+  (*UTF32)        set UTF-32 mode: 32-bit library (PCRE_UTF32)
+  (*UTF)          set appropriate UTF mode for the library in use
   (*UCP)          set PCRE_UCP (use Unicode properties for \d etc)
 </PRE>
 </P>
@@ -469,7 +475,7 @@ pattern is not anchored.
 <br><a name="SEC22" href="#TOC1">NEWLINE CONVENTIONS</a><br>
 <P>
 These are recognized only at the very start of the pattern or after a
-(*BSR_...), (*UTF8), (*UTF16) or (*UCP) option.
+(*BSR_...), (*UTF8), (*UTF16), (*UTF32) or (*UCP) option.
 <pre>
   (*CR)           carriage return only
   (*LF)           linefeed only
@@ -510,9 +516,9 @@ Cambridge CB2 3QH, England.
 </P>
 <br><a name="SEC27" href="#TOC1">REVISION</a><br>
 <P>
-Last updated: 10 January 2012
+Last updated: 26 April 2013
 <br>
-Copyright &copy; 1997-2012 University of Cambridge.
+Copyright &copy; 1997-2013 University of Cambridge.
 <br>
 <p>
 Return to the <a href="index.html">PCRE index page</a>.

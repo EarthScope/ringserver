@@ -1,4 +1,4 @@
-.TH PCRE_CONFIG 3 "21 January 2012" "PCRE 8.30"
+.TH PCRE_CONFIG 3 "24 June 2012" "PCRE 8.30"
 .SH NAME
 PCRE - Perl-compatible regular expressions
 .SH SYNOPSIS
@@ -10,6 +10,8 @@ PCRE - Perl-compatible regular expressions
 .B int pcre_config(int \fIwhat\fP, void *\fIwhere\fP);
 .PP
 .B int pcre16_config(int \fIwhat\fP, void *\fIwhere\fP);
+.PP
+.B int pcre32_config(int \fIwhat\fP, void *\fIwhere\fP);
 .
 .SH DESCRIPTION
 .rs
@@ -49,6 +51,8 @@ point to an unsigned long integer. The available codes are:
   PCRE_CONFIG_STACKRECURSE  Recursion implementation (1=stack 0=heap)
   PCRE_CONFIG_UTF16         Availability of UTF-16 support (1=yes
                                0=no); option for \fBpcre16_config()\fP
+  PCRE_CONFIG_UTF32         Availability of UTF-32 support (1=yes
+                               0=no); option for \fBpcre32_config()\fP
   PCRE_CONFIG_UTF8          Availability of UTF-8 support (1=yes 0=no);
                               option for \fBpcre_config()\fP
   PCRE_CONFIG_UNICODE_PROPERTIES
@@ -56,8 +60,10 @@ point to an unsigned long integer. The available codes are:
                               (1=yes 0=no)
 .sp
 The function yields 0 on success or PCRE_ERROR_BADOPTION otherwise. That error
-is also given if PCRE_CONFIG_UTF16 is passed to \fBpcre_config()\fP or if
-PCRE_CONFIG_UTF8 is passed to \fBpcre16_config()\fP.
+is also given if PCRE_CONFIG_UTF16 or PCRE_CONFIG_UTF32 is passed to
+\fBpcre_config()\fP, if PCRE_CONFIG_UTF8 or PCRE_CONFIG_UTF32 is passed to
+\fBpcre16_config()\fP, or if PCRE_CONFIG_UTF8 or PCRE_CONFIG_UTF16 is passed to
+\fBpcre32_config()\fP.
 .P
 There is a complete description of the PCRE native API in the
 .\" HREF

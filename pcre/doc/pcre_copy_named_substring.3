@@ -1,4 +1,4 @@
-.TH PCRE_COPY_NAMED_SUBSTRING 3 "13 January 2012" "PCRE 8.30"
+.TH PCRE_COPY_NAMED_SUBSTRING 3 "24 June 2012" "PCRE 8.30"
 .SH NAME
 PCRE - Perl-compatible regular expressions
 .SH SYNOPSIS
@@ -22,6 +22,14 @@ PCRE - Perl-compatible regular expressions
 .B int \fIstringcount\fP, PCRE_SPTR16 \fIstringname\fP,
 .ti +5n
 .B PCRE_UCHAR16 *\fIbuffer\fP, int \fIbuffersize\fP);
+.PP
+.B int pcre32_copy_named_substring(const pcre32 *\fIcode\fP,
+.ti +5n
+.B PCRE_SPTR32 \fIsubject\fP, int *\fIovector\fP,
+.ti +5n
+.B int \fIstringcount\fP, PCRE_SPTR32 \fIstringname\fP,
+.ti +5n
+.B PCRE_UCHAR32 *\fIbuffer\fP, int \fIbuffersize\fP);
 .
 .SH DESCRIPTION
 .rs
@@ -31,8 +39,8 @@ by name, into a given buffer. The arguments are:
 .sp
   \fIcode\fP          Pattern that was successfully matched
   \fIsubject\fP       Subject that has been successfully matched
-  \fIovector\fP       Offset vector that \fBpcre[16]_exec()\fP used
-  \fIstringcount\fP   Value returned by \fBpcre[16]_exec()\fP
+  \fIovector\fP       Offset vector that \fBpcre[16|32]_exec()\fP used
+  \fIstringcount\fP   Value returned by \fBpcre[16|32]_exec()\fP
   \fIstringname\fP    Name of the required substring
   \fIbuffer\fP        Buffer to receive the string
   \fIbuffersize\fP    Size of buffer

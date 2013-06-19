@@ -1,4 +1,4 @@
-.TH PCRELIMITS 3 "04 May 2012" "PCRE 8.30"
+.TH PCRELIMITS 3 "24 June 2012" "PCRE 8.30"
 .SH NAME
 PCRE - Perl-compatible regular expressions
 .SH "SIZE AND OTHER LIMITATIONS"
@@ -8,11 +8,12 @@ There are some size limitations in PCRE but it is hoped that they will never in
 practice be relevant.
 .P
 The maximum length of a compiled pattern is approximately 64K data units (bytes
-for the 8-bit library, 16-bit units for the 16-bit library) if PCRE is compiled
-with the default internal linkage size of 2 bytes. If you want to process
-regular expressions that are truly enormous, you can compile PCRE with an
-internal linkage size of 3 or 4 (when building the 16-bit library, 3 is rounded
-up to 4). See the \fBREADME\fP file in the source distribution and the
+for the 8-bit library, 32-bit units for the 32-bit library, and 32-bit units for
+the 32-bit library) if PCRE is compiled with the default internal linkage size
+of 2 bytes. If you want to process regular expressions that are truly enormous,
+you can compile PCRE with an internal linkage size of 3 or 4 (when building the
+16-bit or 32-bit library, 3 is rounded up to 4). See the \fBREADME\fP file in
+the source distribution and the
 .\" HREF
 \fBpcrebuild\fP
 .\"
@@ -33,7 +34,7 @@ The maximum length of name for a named subpattern is 32 characters, and the
 maximum number of named subpatterns is 10000.
 .P
 The maximum length of a name in a (*MARK), (*PRUNE), (*SKIP), or (*THEN) verb
-is 255 for the 8-bit library and 65535 for the 16-bit library.
+is 255 for the 8-bit library and 65535 for the 16-bit and 32-bit library.
 .P
 The maximum length of a subject string is the largest positive number that an
 integer variable can hold. However, when using the traditional matching

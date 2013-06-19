@@ -49,7 +49,7 @@ No match
 16: a
 17: 
     aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 
-Matched, but too many subsidiary matches
+Matched, but offsets vector is too small to show all matches
  0: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
  1: aaaaaaaaaaaaaaaaaaaaaaaaaaaaa
  2: aaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -985,7 +985,7 @@ Partial match: abc
    xyzfo\P 
 No match
    foob\P\>2 
-Partial match: foob
+Partial match at offset 3: foob
    foobar...\R\P\>4 
  0: ar
    xyzfo\P
@@ -3260,7 +3260,7 @@ No match
 
 /(.*)(\d*)/
     I have 2 numbers: 53147
-Matched, but too many subsidiary matches
+Matched, but offsets vector is too small to show all matches
  0: I have 2 numbers: 53147
  1: I have 2 numbers: 5314
  2: I have 2 numbers: 531
@@ -3295,7 +3295,7 @@ Matched, but too many subsidiary matches
  
 /(.*?)(\d*)/
     I have 2 numbers: 53147
-Matched, but too many subsidiary matches
+Matched, but offsets vector is too small to show all matches
  0: I have 2 numbers: 53147
  1: I have 2 numbers: 5314
  2: I have 2 numbers: 531
@@ -7466,17 +7466,17 @@ Error -16 (item unsupported for DFA matching)
     xyzabc123pqr 
  0: 123
     xyzabc12\P
-Partial match: abc12
+Partial match at offset 6: abc12
     xyzabc12\P\P
-Partial match: abc12
+Partial match at offset 6: abc12
 
 /\babc\b/
     +++abc+++
  0: abc
     +++ab\P
-Partial match: +ab
+Partial match at offset 3: +ab
     +++ab\P\P  
-Partial match: +ab
+Partial match at offset 3: +ab
 
 /(?=C)/g+
     ABCDECBA
@@ -7625,7 +7625,7 @@ Error -16 (item unsupported for DFA matching)
 
 /(?<=abc)def/
     abc\P\P
-Partial match: abc
+Partial match at offset 3: abc
 
 /abc$/
     abc
@@ -7848,7 +7848,7 @@ Error -26 (nested recursion at the same subject position)
 
 /(a+)/
     \O6aaaa
-Matched, but too many subsidiary matches
+Matched, but offsets vector is too small to show all matches
  0: aaaa
  1: aaa
  2: aa
@@ -8015,5 +8015,9 @@ Error -30 (invalid data in workspace for DFA restart)
     xx\xa0xxxxxabcd 
  0: xx\xa0xxxxxabcd
  1: xx\xa0xxxxxabc
+
+/abcd/
+    abcd\O0
+Matched, but offsets vector is too small to show all matches
 
 /-- End of testinput8 --/

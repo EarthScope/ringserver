@@ -24,6 +24,9 @@ SYNOPSIS
 <P>
 <b>int pcre16_config(int <i>what</i>, void *<i>where</i>);</b>
 </P>
+<P>
+<b>int pcre32_config(int <i>what</i>, void *<i>where</i>);</b>
+</P>
 <br><b>
 DESCRIPTION
 </b><br>
@@ -63,6 +66,8 @@ point to an unsigned long integer. The available codes are:
   PCRE_CONFIG_STACKRECURSE  Recursion implementation (1=stack 0=heap)
   PCRE_CONFIG_UTF16         Availability of UTF-16 support (1=yes
                                0=no); option for <b>pcre16_config()</b>
+  PCRE_CONFIG_UTF32         Availability of UTF-32 support (1=yes
+                               0=no); option for <b>pcre32_config()</b>
   PCRE_CONFIG_UTF8          Availability of UTF-8 support (1=yes 0=no);
                               option for <b>pcre_config()</b>
   PCRE_CONFIG_UNICODE_PROPERTIES
@@ -70,8 +75,10 @@ point to an unsigned long integer. The available codes are:
                               (1=yes 0=no)
 </pre>
 The function yields 0 on success or PCRE_ERROR_BADOPTION otherwise. That error
-is also given if PCRE_CONFIG_UTF16 is passed to <b>pcre_config()</b> or if
-PCRE_CONFIG_UTF8 is passed to <b>pcre16_config()</b>.
+is also given if PCRE_CONFIG_UTF16 or PCRE_CONFIG_UTF32 is passed to
+<b>pcre_config()</b>, if PCRE_CONFIG_UTF8 or PCRE_CONFIG_UTF32 is passed to
+<b>pcre16_config()</b>, or if PCRE_CONFIG_UTF8 or PCRE_CONFIG_UTF16 is passed to
+<b>pcre32_config()</b>.
 </P>
 <P>
 There is a complete description of the PCRE native API in the

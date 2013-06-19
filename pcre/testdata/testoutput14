@@ -366,6 +366,12 @@ No study data
 Error -28 from pcre_fullinfo(0)
 Running in 8-bit mode but pattern was compiled in 16-bit mode
 
+<!testsaved32
+Compiled pattern loaded from testsaved32
+No study data
+Error -28 from pcre_fullinfo(0)
+Running in 8-bit mode but pattern was compiled in 32-bit mode
+
 /\h/SI
 Capturing subpattern count = 0
 No options

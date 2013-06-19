@@ -14,7 +14,7 @@ man page, in case the conversion went wrong.
 <br>
 <ul>
 <li><a name="TOC1" href="#SEC1">PCRE JUST-IN-TIME COMPILER SUPPORT</a>
-<li><a name="TOC2" href="#SEC2">8-BIT and 16-BIT SUPPORT</a>
+<li><a name="TOC2" href="#SEC2">8-BIT, 16-BIT AND 32-BIT SUPPORT</a>
 <li><a name="TOC3" href="#SEC3">AVAILABILITY OF JIT SUPPORT</a>
 <li><a name="TOC4" href="#SEC4">SIMPLE USE OF JIT</a>
 <li><a name="TOC5" href="#SEC5">UNSUPPORTED OPTIONS AND PATTERN ITEMS</a>
@@ -23,9 +23,10 @@ man page, in case the conversion went wrong.
 <li><a name="TOC8" href="#SEC8">CONTROLLING THE JIT STACK</a>
 <li><a name="TOC9" href="#SEC9">JIT STACK FAQ</a>
 <li><a name="TOC10" href="#SEC10">EXAMPLE CODE</a>
-<li><a name="TOC11" href="#SEC11">SEE ALSO</a>
-<li><a name="TOC12" href="#SEC12">AUTHOR</a>
-<li><a name="TOC13" href="#SEC13">REVISION</a>
+<li><a name="TOC11" href="#SEC11">JIT FAST PATH API</a>
+<li><a name="TOC12" href="#SEC12">SEE ALSO</a>
+<li><a name="TOC13" href="#SEC13">AUTHOR</a>
+<li><a name="TOC14" href="#SEC14">REVISION</a>
 </ul>
 <br><a name="SEC1" href="#TOC1">PCRE JUST-IN-TIME COMPILER SUPPORT</a><br>
 <P>
@@ -43,13 +44,15 @@ JIT support applies only to the traditional Perl-compatible matching function.
 It does not apply when the DFA matching function is being used. The code for
 this support was written by Zoltan Herczeg.
 </P>
-<br><a name="SEC2" href="#TOC1">8-BIT and 16-BIT SUPPORT</a><br>
+<br><a name="SEC2" href="#TOC1">8-BIT, 16-BIT AND 32-BIT SUPPORT</a><br>
 <P>
-JIT support is available for both the 8-bit and 16-bit PCRE libraries. To keep
-this documentation simple, only the 8-bit interface is described in what
-follows. If you are using the 16-bit library, substitute the 16-bit functions
-and 16-bit structures (for example, <i>pcre16_jit_stack</i> instead of
-<i>pcre_jit_stack</i>).
+JIT support is available for all of the 8-bit, 16-bit and 32-bit PCRE
+libraries. To keep this documentation simple, only the 8-bit interface is
+described in what follows. If you are using the 16-bit library, substitute the
+16-bit functions and 16-bit structures (for example, <i>pcre16_jit_stack</i>
+instead of <i>pcre_jit_stack</i>). If you are using the 32-bit library,
+substitute the 32-bit functions and 32-bit structures (for example,
+<i>pcre32_jit_stack</i> instead of <i>pcre_jit_stack</i>).
 </P>
 <br><a name="SEC3" href="#TOC1">AVAILABILITY OF JIT SUPPORT</a><br>
 <P>
@@ -61,6 +64,7 @@ JIT. The support is limited to the following hardware platforms:
   Intel x86 32-bit and 64-bit
   MIPS 32-bit
   Power PC 32-bit and 64-bit
+  SPARC 32-bit (experimental)
 </pre>
 If --enable-jit is set on an unsupported platform, compilation fails.
 </P>
@@ -68,8 +72,10 @@ If --enable-jit is set on an unsupported platform, compilation fails.
 A program that is linked with PCRE 8.20 or later can tell if JIT support is
 available by calling <b>pcre_config()</b> with the PCRE_CONFIG_JIT option. The
 result is 1 when JIT is available, and 0 otherwise. However, a simple program
-does not need to check this in order to use JIT. The API is implemented in a
-way that falls back to the interpretive code if JIT is not available.
+does not need to check this in order to use JIT. The normal API is implemented
+in a way that falls back to the interpretive code if JIT is not available. For
+programs that need the best possible performance, there is also a "fast path"
+API that is JIT-specific.
 </P>
 <P>
 If your program may sometimes be linked with versions of PCRE that are older
@@ -86,8 +92,8 @@ You have to do two things to make use of the JIT support in the simplest way:
       <b>pcre_exec()</b>.
 
   (2) Use <b>pcre_free_study()</b> to free the <b>pcre_extra</b> block when it is
-      no longer needed, instead of just freeing it yourself. This
-      ensures that any JIT data is also freed.
+      no longer needed, instead of just freeing it yourself. This ensures that
+      any JIT data is also freed.
 </pre>
 For a program that may be linked with pre-8.20 versions of PCRE, you can insert
 <pre>
@@ -161,19 +167,14 @@ times as you like for matching different subject strings.
 <br><a name="SEC5" href="#TOC1">UNSUPPORTED OPTIONS AND PATTERN ITEMS</a><br>
 <P>
 The only <b>pcre_exec()</b> options that are supported for JIT execution are
-PCRE_NO_UTF8_CHECK, PCRE_NO_UTF16_CHECK, PCRE_NOTBOL, PCRE_NOTEOL,
-PCRE_NOTEMPTY, PCRE_NOTEMPTY_ATSTART, PCRE_PARTIAL_HARD, and PCRE_PARTIAL_SOFT.
+PCRE_NO_UTF8_CHECK, PCRE_NO_UTF16_CHECK, PCRE_NO_UTF32_CHECK, PCRE_NOTBOL,
+PCRE_NOTEOL, PCRE_NOTEMPTY, PCRE_NOTEMPTY_ATSTART, PCRE_PARTIAL_HARD, and
+PCRE_PARTIAL_SOFT.
 </P>
 <P>
-The unsupported pattern items are:
-<pre>
-  \C             match a single byte; not supported in UTF-8 mode
-  (?Cn)          callouts
-  (*PRUNE)       )
-  (*SKIP)        ) backtracking control verbs
-  (*THEN)        )
-</pre>
-Support for some of these may be added in future.
+The only unsupported pattern items are \C (match a single data unit) when
+running in a UTF mode, and a callout immediately before an assertion condition
+in a conditional group.
 </P>
 <br><a name="SEC6" href="#TOC1">RETURN VALUES FROM JIT EXECUTION</a><br>
 <P>
@@ -350,7 +351,7 @@ replacement.
 <br>
 No, because this is too costly in terms of resources. However, you could
 implement some clever idea which release the stack if it is not used in let's
-say two minutes. The JIT callback can help to achive this without keeping a
+say two minutes. The JIT callback can help to achieve this without keeping a
 list of the currently JIT studied patterns.
 </P>
 <P>
@@ -398,11 +399,40 @@ callback.
 
 </PRE>
 </P>
-<br><a name="SEC11" href="#TOC1">SEE ALSO</a><br>
+<br><a name="SEC11" href="#TOC1">JIT FAST PATH API</a><br>
+<P>
+Because the API described above falls back to interpreted execution when JIT is
+not available, it is convenient for programs that are written for general use
+in many environments. However, calling JIT via <b>pcre_exec()</b> does have a
+performance impact. Programs that are written for use where JIT is known to be
+available, and which need the best possible performance, can instead use a
+"fast path" API to call JIT execution directly instead of calling
+<b>pcre_exec()</b> (obviously only for patterns that have been successfully
+studied by JIT).
+</P>
+<P>
+The fast path function is called <b>pcre_jit_exec()</b>, and it takes exactly
+the same arguments as <b>pcre_exec()</b>, plus one additional argument that
+must point to a JIT stack. The JIT stack arrangements described above do not
+apply. The return values are the same as for <b>pcre_exec()</b>.
+</P>
+<P>
+When you call <b>pcre_exec()</b>, as well as testing for invalid options, a
+number of other sanity checks are performed on the arguments. For example, if
+the subject pointer is NULL, or its length is negative, an immediate error is
+given. Also, unless PCRE_NO_UTF[8|16|32] is set, a UTF subject string is tested
+for validity. In the interests of speed, these checks do not happen on the JIT
+fast path, and if invalid data is passed, the result is undefined.
+</P>
+<P>
+Bypassing the sanity checks and the <b>pcre_exec()</b> wrapping can give
+speedups of more than 10%.
+</P>
+<br><a name="SEC12" href="#TOC1">SEE ALSO</a><br>
 <P>
 <b>pcreapi</b>(3)
 </P>
-<br><a name="SEC12" href="#TOC1">AUTHOR</a><br>
+<br><a name="SEC13" href="#TOC1">AUTHOR</a><br>
 <P>
 Philip Hazel (FAQ by Zoltan Herczeg)
 <br>
@@ -411,11 +441,11 @@ University Computing Service
 Cambridge CB2 3QH, England.
 <br>
 </P>
-<br><a name="SEC13" href="#TOC1">REVISION</a><br>
+<br><a name="SEC14" href="#TOC1">REVISION</a><br>
 <P>
-Last updated: 04 May 2012
+Last updated: 17 March 2013
 <br>
-Copyright &copy; 1997-2012 University of Cambridge.
+Copyright &copy; 1997-2013 University of Cambridge.
 <br>
 <p>
 Return to the <a href="index.html">PCRE index page</a>.

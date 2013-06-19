@@ -28,12 +28,17 @@ SYNOPSIS
 <b>const char **<i>errptr</i>, int *<i>erroffset</i>,</b>
 <b>const unsigned char *<i>tableptr</i>);</b>
 </P>
+<P>
+<b>pcre32 *pcre32_compile(PCRE_SPTR32 <i>pattern</i>, int <i>options</i>,</b>
+<b>const char **<i>errptr</i>, int *<i>erroffset</i>,</b>
+<b>const unsigned char *<i>tableptr</i>);</b>
+</P>
 <br><b>
 DESCRIPTION
 </b><br>
 <P>
 This function compiles a regular expression into an internal form. It is the
-same as <b>pcre[16]_compile2()</b>, except for the absence of the
+same as <b>pcre[16|32]_compile2()</b>, except for the absence of the
 <i>errorcodeptr</i> argument. Its arguments are:
 <pre>
   <i>pattern</i>       A zero-terminated string containing the
@@ -71,16 +76,20 @@ The option bits are:
   PCRE_NO_UTF16_CHECK     Do not check the pattern for UTF-16
                             validity (only relevant if
                             PCRE_UTF16 is set)
+  PCRE_NO_UTF32_CHECK     Do not check the pattern for UTF-32
+                            validity (only relevant if
+                            PCRE_UTF32 is set)
   PCRE_NO_UTF8_CHECK      Do not check the pattern for UTF-8
                             validity (only relevant if
                             PCRE_UTF8 is set)
   PCRE_UCP                Use Unicode properties for \d, \w, etc.
   PCRE_UNGREEDY           Invert greediness of quantifiers
   PCRE_UTF16              Run in <b>pcre16_compile()</b> UTF-16 mode
+  PCRE_UTF32              Run in <b>pcre32_compile()</b> UTF-32 mode
   PCRE_UTF8               Run in <b>pcre_compile()</b> UTF-8 mode
 </pre>
-PCRE must be built with UTF support in order to use PCRE_UTF8/16 and
-PCRE_NO_UTF8/16_CHECK, and with UCP support if PCRE_UCP is used.
+PCRE must be built with UTF support in order to use PCRE_UTF8/16/32 and
+PCRE_NO_UTF8/16/32_CHECK, and with UCP support if PCRE_UCP is used.
 </P>
 <P>
 The yield of the function is a pointer to a private data structure that

@@ -1,4 +1,4 @@
-.TH PCRE 3 "10 January 2012" "PCRE 8.30"
+.TH PCRE 3 "13 May 2013" "PCRE 8.33"
 .SH NAME
 PCRE - Perl-compatible regular expressions
 .SH INTRODUCTION
@@ -18,22 +18,33 @@ UTF-8 strings), and a second library that supports 16-bit character strings
 built. The majority of the work to make this possible was done by Zoltan
 Herczeg.
 .P
-The two libraries contain identical sets of functions, except that the names in
-the 16-bit library start with \fBpcre16_\fP instead of \fBpcre_\fP. To avoid
-over-complication and reduce the documentation maintenance load, most of the
-documentation describes the 8-bit library, with the differences for the 16-bit
-library described separately in the
+Starting with release 8.32 it is possible to compile a third separate PCRE
+library that supports 32-bit character strings (including UTF-32 strings). The
+build process allows any combination of the 8-, 16- and 32-bit libraries. The
+work to make this possible was done by Christian Persch.
+.P
+The three libraries contain identical sets of functions, except that the names
+in the 16-bit library start with \fBpcre16_\fP instead of \fBpcre_\fP, and the
+names in the 32-bit library start with \fBpcre32_\fP instead of \fBpcre_\fP. To
+avoid over-complication and reduce the documentation maintenance load, most of
+the documentation describes the 8-bit library, with the differences for the
+16-bit and 32-bit libraries described separately in the
 .\" HREF
 \fBpcre16\fP
+and
+.\" HREF
+\fBpcre32\fP
 .\"
-page. References to functions or structures of the form \fIpcre[16]_xxx\fP
-should be read as meaning "\fIpcre_xxx\fP when using the 8-bit library and
-\fIpcre16_xxx\fP when using the 16-bit library".
+pages. References to functions or structures of the form \fIpcre[16|32]_xxx\fP
+should be read as meaning "\fIpcre_xxx\fP when using the 8-bit library,
+\fIpcre16_xxx\fP when using the 16-bit library, or \fIpcre32_xxx\fP when using
+the 32-bit library".
 .P
 The current implementation of PCRE corresponds approximately with Perl 5.12,
-including support for UTF-8/16 encoded strings and Unicode general category
-properties. However, UTF-8/16 and Unicode support has to be explicitly enabled;
-it is not the default. The Unicode tables correspond to Unicode release 6.0.0.
+including support for UTF-8/16/32 encoded strings and Unicode general category
+properties. However, UTF-8/16/32 and Unicode support has to be explicitly
+enabled; it is not the default. The Unicode tables correspond to Unicode
+release 6.2.0.
 .P
 In addition to the Perl-compatible matching function, PCRE contains an
 alternative function that matches the same compiled patterns in a different
@@ -57,6 +68,7 @@ in the \fIContrib\fP directory at the primary FTP site, which is:
 .\" HTML <a href="ftp://ftp.csx.cam.ac.uk/pub/software/programming/pcre">
 .\" </a>
 ftp://ftp.csx.cam.ac.uk/pub/software/programming/pcre
+.\"
 .P
 Details of exactly which Perl regular expression features are and are not
 supported by PCRE are given in separate documents. See the
@@ -84,16 +96,60 @@ available. The features themselves are described in the
 \fBpcrebuild\fP
 .\"
 page. Documentation about building PCRE for various operating systems can be
-found in the \fBREADME\fP and \fBNON-UNIX-USE\fP files in the source
-distribution.
+found in the
+.\" HTML <a href="README.txt">
+.\" </a>
+\fBREADME\fP
+.\"
+and
+.\" HTML <a href="NON-AUTOTOOLS-BUILD.txt">
+.\" </a>
+\fBNON-AUTOTOOLS_BUILD\fP
+.\"
+files in the source distribution.
 .P
 The libraries contains a number of undocumented internal functions and data
 tables that are used by more than one of the exported external functions, but
 which are not intended for use by external callers. Their names all begin with
-"_pcre_" or "_pcre16_", which hopefully will not provoke any name clashes. In
-some environments, it is possible to control which external symbols are
-exported when a shared library is built, and in these cases the undocumented
-symbols are not exported.
+"_pcre_" or "_pcre16_" or "_pcre32_", which hopefully will not provoke any name
+clashes. In some environments, it is possible to control which external symbols
+are exported when a shared library is built, and in these cases the
+undocumented symbols are not exported.
+.
+.
+.SH "SECURITY CONSIDERATIONS"
+.rs
+.sp
+If you are using PCRE in a non-UTF application that permits users to supply
+arbitrary patterns for compilation, you should be aware of a feature that
+allows users to turn on UTF support from within a pattern, provided that PCRE
+was built with UTF support. For example, an 8-bit pattern that begins with
+"(*UTF8)" or "(*UTF)" turns on UTF-8 mode, which interprets patterns and
+subjects as strings of UTF-8 characters instead of individual 8-bit characters.
+This causes both the pattern and any data against which it is matched to be
+checked for UTF-8 validity. If the data string is very long, such a check might
+use sufficiently many resources as to cause your application to lose
+performance.
+.P
+One way of guarding against this possibility is to use the
+\fBpcre_fullinfo()\fP function to check the compiled pattern's options for UTF.
+Alternatively, from release 8.33, you can set the PCRE_NEVER_UTF option at
+compile time. This causes an compile time error if a pattern contains a
+UTF-setting sequence.
+.P
+If your application is one that supports UTF, be aware that validity checking
+can take time. If the same data string is to be matched many times, you can use
+the PCRE_NO_UTF[8|16|32]_CHECK option for the second and subsequent matches to
+save redundant checks.
+.P
+Another way that performance can be hit is by running a pattern that has a very
+large search tree against a string that will never match. Nested unlimited
+repeats in a pattern are a common example. PCRE provides some protection
+against this: see the PCRE_EXTRA_MATCH_LIMIT feature in the
+.\" HREF
+\fBpcreapi\fP
+.\"
+page.
 .
 .
 .SH "USER DOCUMENTATION"
@@ -106,10 +162,11 @@ all the sections, except the \fBpcredemo\fP section, are concatenated, for ease
 of searching. The sections are as follows:
 .sp
   pcre              this document
-  pcre16            details of the 16-bit library
   pcre-config       show PCRE installation configuration information
+  pcre16            details of the 16-bit library
+  pcre32            details of the 32-bit library
   pcreapi           details of PCRE's native C API
-  pcrebuild         options for building PCRE
+  pcrebuild         building PCRE
   pcrecallout       details of the callout feature
   pcrecompat        discussion of Perl compatibility
   pcrecpp           details of the C++ wrapper for the 8-bit library
@@ -129,10 +186,10 @@ of searching. The sections are as follows:
   pcrestack         discussion of stack usage
   pcresyntax        quick syntax reference
   pcretest          description of the \fBpcretest\fP testing command
-  pcreunicode       discussion of Unicode and UTF-8/16 support
+  pcreunicode       discussion of Unicode and UTF-8/16/32 support
 .sp
 In addition, in the "man" and HTML formats, there is a short page for each
-8-bit C library function, listing its arguments and results.
+C library function, listing its arguments and results.
 .
 .
 .SH AUTHOR
@@ -153,6 +210,6 @@ two digits 10, at the domain cam.ac.uk.
 .rs
 .sp
 .nf
-Last updated: 10 January 2012
-Copyright (c) 1997-2012 University of Cambridge.
+Last updated: 13 May 2013
+Copyright (c) 1997-2013 University of Cambridge.
 .fi

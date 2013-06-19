@@ -16,6 +16,10 @@ if test @enable_pcre16@ = yes ; then
   libs="[--libs16] $libs"
 fi
 
+if test @enable_pcre32@ = yes ; then
+  libs="[--libs32] $libs"
+fi
+
 if test @enable_pcre8@ = yes ; then
   libs="[--libs] [--libs-posix] $libs"
   cflags="$cflags [--cflags-posix]"
@@ -102,6 +106,13 @@ while test $# -gt 0; do
     --libs16)
       if test @enable_pcre16@ = yes ; then
         echo $libS$libR -lpcre16
+      else
+        echo "${usage}" 1>&2
+      fi
+      ;;
+    --libs32)
+      if test @enable_pcre32@ = yes ; then
+        echo $libS$libR -lpcre32
       else
         echo "${usage}" 1>&2
       fi

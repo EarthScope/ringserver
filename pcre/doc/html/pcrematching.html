@@ -26,18 +26,19 @@ man page, in case the conversion went wrong.
 <P>
 This document describes the two different algorithms that are available in PCRE
 for matching a compiled regular expression against a given subject string. The
-"standard" algorithm is the one provided by the <b>pcre_exec()</b> and
-<b>pcre16_exec()</b> functions. These work in the same was as Perl's matching
-function, and provide a Perl-compatible matching operation. The just-in-time
-(JIT) optimization that is described in the
+"standard" algorithm is the one provided by the <b>pcre_exec()</b>,
+<b>pcre16_exec()</b> and <b>pcre32_exec()</b> functions. These work in the same
+as as Perl's matching function, and provide a Perl-compatible matching operation.
+The just-in-time (JIT) optimization that is described in the
 <a href="pcrejit.html"><b>pcrejit</b></a>
 documentation is compatible with these functions.
 </P>
 <P>
-An alternative algorithm is provided by the <b>pcre_dfa_exec()</b> and
-<b>pcre16_dfa_exec()</b> functions; they operate in a different way, and are not
-Perl-compatible. This alternative has advantages and disadvantages compared
-with the standard algorithm, and these are described below.
+An alternative algorithm is provided by the <b>pcre_dfa_exec()</b>,
+<b>pcre16_dfa_exec()</b> and <b>pcre32_dfa_exec()</b> functions; they operate in
+a different way, and are not Perl-compatible. This alternative has advantages
+and disadvantages compared with the standard algorithm, and these are described
+below.
 </P>
 <P>
 When there is only one possible way in which a given subject string can match a
@@ -167,9 +168,9 @@ always 1, and the value of the <i>capture_last</i> field is always -1.
 </P>
 <P>
 7. The \C escape sequence, which (in the standard algorithm) always matches a
-single data unit, even in UTF-8 or UTF-16 modes, is not supported in these
-modes, because the alternative algorithm moves through the subject string one
-character (not data unit) at a time, for all active paths through the tree.
+single data unit, even in UTF-8, UTF-16 or UTF-32 modes, is not supported in
+these modes, because the alternative algorithm moves through the subject string
+one character (not data unit) at a time, for all active paths through the tree.
 </P>
 <P>
 8. Except for (*FAIL), the backtracking control verbs such as (*PRUNE) are not

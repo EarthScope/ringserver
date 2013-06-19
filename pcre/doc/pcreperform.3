@@ -68,7 +68,7 @@ that PCRE cannot otherwise handle.
 .SH "STACK USAGE AT RUN TIME"
 .rs
 .sp
-When \fBpcre_exec()\fP or \fBpcre16_exec()\fP is used for matching, certain
+When \fBpcre_exec()\fP or \fBpcre[16|32]_exec()\fP is used for matching, certain
 kinds of pattern can cause it to use large amounts of the process stack. In
 some environments the default process stack is quite small, and if it runs out
 the result is often SIGSEGV. This issue is probably the most frequently raised
@@ -91,10 +91,9 @@ about optimizing regular expressions for efficient performance. This document
 contains a few observations about PCRE.
 .P
 Using Unicode character properties (the \ep, \eP, and \eX escapes) is slow,
-because PCRE has to scan a structure that contains data for over fifteen
-thousand characters whenever it needs a character's property. If you can find
-an alternative pattern that does not use character properties, it will probably
-be faster.
+because PCRE has to use a multi-stage table lookup whenever it needs a
+character's property. If you can find an alternative pattern that does not use
+character properties, it will probably be faster.
 .P
 By default, the escape sequences \eb, \ed, \es, and \ew, and the POSIX
 character classes such as [:alpha:] do not use Unicode properties, partly for
@@ -173,6 +172,6 @@ Cambridge CB2 3QH, England.
 .rs
 .sp
 .nf
-Last updated: 09 January 2012
+Last updated: 25 August 2012
 Copyright (c) 1997-2012 University of Cambridge.
 .fi

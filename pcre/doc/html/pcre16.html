@@ -187,7 +187,7 @@ library. For example, if you want to study a pattern that was compiled with
 <br><a name="SEC7" href="#TOC1">THE HEADER FILE</a><br>
 <P>
 There is only one header file, <b>pcre.h</b>. It contains prototypes for all the
-functions in both libraries, as well as definitions of flags, structures, error
+functions in all libraries, as well as definitions of flags, structures, error
 codes, etc.
 </P>
 <br><a name="SEC8" href="#TOC1">THE LIBRARY NAME</a><br>
@@ -203,9 +203,9 @@ of bytes with the C type "char *". In the 16-bit library, strings are passed as
 vectors of unsigned 16-bit quantities. The macro PCRE_UCHAR16 specifies an
 appropriate data type, and PCRE_SPTR16 is defined as "const PCRE_UCHAR16 *". In
 very many environments, "short int" is a 16-bit data type. When PCRE is built,
-it defines PCRE_UCHAR16 as "short int", but checks that it really is a 16-bit
-data type. If it is not, the build fails with an error message telling the
-maintainer to modify the definition appropriately.
+it defines PCRE_UCHAR16 as "unsigned short int", but checks that it really is a
+16-bit data type. If it is not, the build fails with an error message telling
+the maintainer to modify the definition appropriately.
 </P>
 <br><a name="SEC10" href="#TOC1">STRUCTURE TYPES</a><br>
 <P>
@@ -259,8 +259,9 @@ buffer, including the zero terminator if the string was zero-terminated.
 </P>
 <br><a name="SEC12" href="#TOC1">SUBJECT STRING OFFSETS</a><br>
 <P>
-The offsets within subject strings that are returned by the matching functions
-are in 16-bit units rather than bytes.
+The lengths and starting offsets of subject strings must be specified in 16-bit
+data units, and the offsets within subject strings that are returned by the
+matching functions are in also 16-bit units rather than bytes.
 </P>
 <br><a name="SEC13" href="#TOC1">NAMED SUBPATTERNS</a><br>
 <P>
@@ -283,8 +284,9 @@ page.
 <P>
 For the <b>pcre16_config()</b> function there is an option PCRE_CONFIG_UTF16
 that returns 1 if UTF-16 support is configured, otherwise 0. If this option is
-given to <b>pcre_config()</b>, or if the PCRE_CONFIG_UTF8 option is given to
-<b>pcre16_config()</b>, the result is the PCRE_ERROR_BADOPTION error.
+given to <b>pcre_config()</b> or <b>pcre32_config()</b>, or if the
+PCRE_CONFIG_UTF8 or PCRE_CONFIG_UTF32 option is given to <b>pcre16_config()</b>,
+the result is the PCRE_ERROR_BADOPTION error.
 </P>
 <br><a name="SEC15" href="#TOC1">CHARACTER CODES</a><br>
 <P>
@@ -327,7 +329,7 @@ page. The UTF-16 errors are:
   PCRE_UTF16_ERR1  Missing low surrogate at end of string
   PCRE_UTF16_ERR2  Invalid low surrogate follows high surrogate
   PCRE_UTF16_ERR3  Isolated low surrogate
-  PCRE_UTF16_ERR4  Invalid character 0xfffe
+  PCRE_UTF16_ERR4  Non-character
 </PRE>
 </P>
 <br><a name="SEC17" href="#TOC1">ERROR TEXTS</a><br>
@@ -348,13 +350,13 @@ files, but it can be used for testing the 16-bit library. If it is run with the
 command line option <b>-16</b>, patterns and subject strings are converted from
 8-bit to 16-bit before being passed to PCRE, and the 16-bit library functions
 are used instead of the 8-bit ones. Returned 16-bit strings are converted to
-8-bit for output. If the 8-bit library was not compiled, <b>pcretest</b>
-defaults to 16-bit and the <b>-16</b> option is ignored.
+8-bit for output. If both the 8-bit and the 32-bit libraries were not compiled,
+<b>pcretest</b> defaults to 16-bit and the <b>-16</b> option is ignored.
 </P>
 <P>
 When PCRE is being built, the <b>RunTest</b> script that is called by "make
-check" uses the <b>pcretest</b> <b>-C</b> option to discover which of the 8-bit
-and 16-bit libraries has been built, and runs the tests appropriately.
+check" uses the <b>pcretest</b> <b>-C</b> option to discover which of the 8-bit,
+16-bit and 32-bit libraries has been built, and runs the tests appropriately.
 </P>
 <br><a name="SEC20" href="#TOC1">NOT SUPPORTED IN 16-BIT MODE</a><br>
 <P>
@@ -373,9 +375,9 @@ Cambridge CB2 3QH, England.
 </P>
 <br><a name="SEC22" href="#TOC1">REVISION</a><br>
 <P>
-Last updated: 14 April 2012
+Last updated: 12 May 2013
 <br>
-Copyright &copy; 1997-2012 University of Cambridge.
+Copyright &copy; 1997-2013 University of Cambridge.
 <br>
 <p>
 Return to the <a href="index.html">PCRE index page</a>.

@@ -1,10 +1,10 @@
-.TH PCRESTACK 3 "21 January 2012" "PCRE 8.30"
+.TH PCRESTACK 3 "24 June 2012" "PCRE 8.30"
 .SH NAME
 PCRE - Perl-compatible regular expressions
 .SH "PCRE DISCUSSION OF STACK USAGE"
 .rs
 .sp
-When you call \fBpcre[16]_exec()\fP, it makes use of an internal function
+When you call \fBpcre[16|32]_exec()\fP, it makes use of an internal function
 called \fBmatch()\fP. This calls itself recursively at branch points in the
 pattern, in order to remember the state of the match so that it can back up and
 try a different alternative if the first one fails. As matching proceeds deeper
@@ -19,10 +19,10 @@ different numbers of a's. Furthermore, in a number of cases where the result of
 the recursive call would immediately be passed back as the result of the
 current call (a "tail recursion"), the function is just restarted instead.
 .P
-The above comments apply when \fBpcre[16]_exec()\fP is run in its normal
+The above comments apply when \fBpcre[16|32]_exec()\fP is run in its normal
 interpretive manner. If the pattern was studied with the
 PCRE_STUDY_JIT_COMPILE option, and just-in-time compiling was successful, and
-the options passed to \fBpcre[16]_exec()\fP were not incompatible, the matching
+the options passed to \fBpcre[16|32]_exec()\fP were not incompatible, the matching
 process uses the JIT-compiled code instead of the \fBmatch()\fP function. In
 this case, the memory requirements are handled entirely differently. See the
 .\" HREF
@@ -30,21 +30,21 @@ this case, the memory requirements are handled entirely differently. See the
 .\"
 documentation for details.
 .P
-The \fBpcre[16]_dfa_exec()\fP function operates in an entirely different way,
+The \fBpcre[16|32]_dfa_exec()\fP function operates in an entirely different way,
 and uses recursion only when there is a regular expression recursion or
 subroutine call in the pattern. This includes the processing of assertion and
 "once-only" subpatterns, which are handled like subroutine calls. Normally,
 these are never very deep, and the limit on the complexity of
-\fBpcre[16]_dfa_exec()\fP is controlled by the amount of workspace it is given.
+\fBpcre[16|32]_dfa_exec()\fP is controlled by the amount of workspace it is given.
 However, it is possible to write patterns with runaway infinite recursions;
-such patterns will cause \fBpcre[16]_dfa_exec()\fP to run out of stack. At
+such patterns will cause \fBpcre[16|32]_dfa_exec()\fP to run out of stack. At
 present, there is no protection against this.
 .P
-The comments that follow do NOT apply to \fBpcre[16]_dfa_exec()\fP; they are
-relevant only for \fBpcre[16]_exec()\fP without the JIT optimization.
+The comments that follow do NOT apply to \fBpcre[16|32]_dfa_exec()\fP; they are
+relevant only for \fBpcre[16|32]_exec()\fP without the JIT optimization.
 .
 .
-.SS "Reducing \fBpcre[16]_exec()\fP's stack usage"
+.SS "Reducing \fBpcre[16|32]_exec()\fP's stack usage"
 .rs
 .sp
 Each time that \fBmatch()\fP is actually called recursively, it uses memory
@@ -79,19 +79,19 @@ subject strings is to write repeated parenthesized subpatterns to match more
 than one character whenever possible.
 .
 .
-.SS "Compiling PCRE to use heap instead of stack for \fBpcre[16]_exec()\fP"
+.SS "Compiling PCRE to use heap instead of stack for \fBpcre[16|32]_exec()\fP"
 .rs
 .sp
 In environments where stack memory is constrained, you might want to compile
 PCRE to use heap memory instead of stack for remembering back-up points when
-\fBpcre[16]_exec()\fP is running. This makes it run a lot more slowly, however.
+\fBpcre[16|32]_exec()\fP is running. This makes it run a lot more slowly, however.
 Details of how to do this are given in the
 .\" HREF
 \fBpcrebuild\fP
 .\"
 documentation. When built in this way, instead of using the stack, PCRE obtains
 and frees memory by calling the functions that are pointed to by the
-\fBpcre[16]_stack_malloc\fP and \fBpcre[16]_stack_free\fP variables. By
+\fBpcre[16|32]_stack_malloc\fP and \fBpcre[16|32]_stack_free\fP variables. By
 default, these point to \fBmalloc()\fP and \fBfree()\fP, but you can replace
 the pointers to cause PCRE to use your own functions. Since the block sizes are
 always the same, and are always freed in reverse order, it may be possible to
@@ -99,22 +99,22 @@ implement customized memory handlers that are more efficient than the standard
 functions.
 .
 .
-.SS "Limiting \fBpcre[16]_exec()\fP's stack usage"
+.SS "Limiting \fBpcre[16|32]_exec()\fP's stack usage"
 .rs
 .sp
 You can set limits on the number of times that \fBmatch()\fP is called, both in
-total and recursively. If a limit is exceeded, \fBpcre[16]_exec()\fP returns an
+total and recursively. If a limit is exceeded, \fBpcre[16|32]_exec()\fP returns an
 error code. Setting suitable limits should prevent it from running out of
 stack. The default values of the limits are very large, and unlikely ever to
 operate. They can be changed when PCRE is built, and they can also be set when
-\fBpcre[16]_exec()\fP is called. For details of these interfaces, see the
+\fBpcre[16|32]_exec()\fP is called. For details of these interfaces, see the
 .\" HREF
 \fBpcrebuild\fP
 .\"
 documentation and the
 .\" HTML <a href="pcreapi.html#extradata">
 .\" </a>
-section on extra data for \fBpcre[16]_exec()\fP
+section on extra data for \fBpcre[16|32]_exec()\fP
 .\"
 in the
 .\" HREF
@@ -131,7 +131,7 @@ In Unix-like environments, the \fBpcretest\fP test program has a command line
 option (\fB-S\fP) that can be used to increase the size of its stack. As long
 as the stack is large enough, another option (\fB-M\fP) can be used to find the
 smallest limits that allow a particular pattern to match a given subject
-string. This is done by calling \fBpcre[16]_exec()\fP repeatedly with different
+string. This is done by calling \fBpcre[16|32]_exec()\fP repeatedly with different
 limits.
 .
 .
@@ -181,7 +181,7 @@ limit on stack size by code such as this:
 .sp
 This reads the current limits (soft and hard) using \fBgetrlimit()\fP, then
 attempts to increase the soft limit to 100Mb using \fBsetrlimit()\fP. You must
-do this before calling \fBpcre[16]_exec()\fP.
+do this before calling \fBpcre[16|32]_exec()\fP.
 .
 .
 .SS "Changing stack size in Mac OS X"
@@ -210,6 +210,6 @@ Cambridge CB2 3QH, England.
 .rs
 .sp
 .nf
-Last updated: 21 January 2012
+Last updated: 24 June 2012
 Copyright (c) 1997-2012 University of Cambridge.
 .fi

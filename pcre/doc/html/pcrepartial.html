@@ -14,13 +14,13 @@ man page, in case the conversion went wrong.
 <br>
 <ul>
 <li><a name="TOC1" href="#SEC1">PARTIAL MATCHING IN PCRE</a>
-<li><a name="TOC2" href="#SEC2">PARTIAL MATCHING USING pcre_exec() OR pcre16_exec()</a>
-<li><a name="TOC3" href="#SEC3">PARTIAL MATCHING USING pcre_dfa_exec() OR pcre16_dfa_exec()</a>
+<li><a name="TOC2" href="#SEC2">PARTIAL MATCHING USING pcre_exec() OR pcre[16|32]_exec()</a>
+<li><a name="TOC3" href="#SEC3">PARTIAL MATCHING USING pcre_dfa_exec() OR pcre[16|32]_dfa_exec()</a>
 <li><a name="TOC4" href="#SEC4">PARTIAL MATCHING AND WORD BOUNDARIES</a>
 <li><a name="TOC5" href="#SEC5">FORMERLY RESTRICTED PATTERNS</a>
 <li><a name="TOC6" href="#SEC6">EXAMPLE OF PARTIAL MATCHING USING PCRETEST</a>
-<li><a name="TOC7" href="#SEC7">MULTI-SEGMENT MATCHING WITH pcre_dfa_exec() OR pcre16_dfa_exec()</a>
-<li><a name="TOC8" href="#SEC8">MULTI-SEGMENT MATCHING WITH pcre_exec() OR pcre16_exec()</a>
+<li><a name="TOC7" href="#SEC7">MULTI-SEGMENT MATCHING WITH pcre_dfa_exec() OR pcre[16|32]_dfa_exec()</a>
+<li><a name="TOC8" href="#SEC8">MULTI-SEGMENT MATCHING WITH pcre_exec() OR pcre[16|32]_exec()</a>
 <li><a name="TOC9" href="#SEC9">ISSUES WITH MULTI-SEGMENT MATCHING</a>
 <li><a name="TOC10" href="#SEC10">AUTHOR</a>
 <li><a name="TOC11" href="#SEC11">REVISION</a>
@@ -59,8 +59,8 @@ are set, PCRE_PARTIAL_HARD takes precedence.
 </P>
 <P>
 If you want to use partial matching with just-in-time optimized code, you must
-call <b>pcre_study()</b> or <b>pcre16_study()</b> with one or both of these
-options:
+call <b>pcre_study()</b>, <b>pcre16_study()</b> or  <b>pcre32_study()</b> with one
+or both of these options:
 <pre>
   PCRE_STUDY_JIT_PARTIAL_SOFT_COMPILE
   PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE
@@ -78,46 +78,49 @@ partially. If the pattern was studied, PCRE knows the minimum length of a
 matching string, and does not bother to run the matching function on shorter
 strings. This optimization is also disabled for partial matching.
 </P>
-<br><a name="SEC2" href="#TOC1">PARTIAL MATCHING USING pcre_exec() OR pcre16_exec()</a><br>
+<br><a name="SEC2" href="#TOC1">PARTIAL MATCHING USING pcre_exec() OR pcre[16|32]_exec()</a><br>
 <P>
 A partial match occurs during a call to <b>pcre_exec()</b> or
-<b>pcre16_exec()</b> when the end of the subject string is reached successfully,
-but matching cannot continue because more characters are needed. However, at
-least one character in the subject must have been inspected. This character
-need not form part of the final matched string; lookbehind assertions and the
-\K escape sequence provide ways of inspecting characters before the start of a
-matched substring. The requirement for inspecting at least one character exists
-because an empty string can always be matched; without such a restriction there
-would always be a partial match of an empty string at the end of the subject.
+<b>pcre[16|32]_exec()</b> when the end of the subject string is reached
+successfully, but matching cannot continue because more characters are needed.
+However, at least one character in the subject must have been inspected. This
+character need not form part of the final matched string; lookbehind assertions
+and the \K escape sequence provide ways of inspecting characters before the
+start of a matched substring. The requirement for inspecting at least one
+character exists because an empty string can always be matched; without such a
+restriction there would always be a partial match of an empty string at the end
+of the subject.
 </P>
 <P>
 If there are at least two slots in the offsets vector when a partial match is
 returned, the first slot is set to the offset of the earliest character that
 was inspected. For convenience, the second offset points to the end of the
-subject so that a substring can easily be identified.
+subject so that a substring can easily be identified. If there are at least
+three slots in the offsets vector, the third slot is set to the offset of the
+character where matching started.
 </P>
 <P>
-For the majority of patterns, the first offset identifies the start of the
-partially matched string. However, for patterns that contain lookbehind
-assertions, or \K, or begin with \b or \B, earlier characters have been
-inspected while carrying out the match. For example:
+For the majority of patterns, the contents of the first and third slots will be
+the same. However, for patterns that contain lookbehind assertions, or begin
+with \b or \B, characters before the one where matching started may have been
+inspected while carrying out the match. For example, consider this pattern:
 <pre>
   /(?&#60;=abc)123/
 </pre>
 This pattern matches "123", but only if it is preceded by "abc". If the subject
-string is "xyzabc12", the offsets after a partial match are for the substring
-"abc12", because all these characters are needed if another match is tried
-with extra characters added to the subject.
+string is "xyzabc12", the first two offsets after a partial match are for the
+substring "abc12", because all these characters were inspected. However, the
+third offset is set to 6, because that is the offset where matching began.
 </P>
 <P>
 What happens when a partial match is identified depends on which of the two
 partial matching options are set.
 </P>
 <br><b>
-PCRE_PARTIAL_SOFT WITH pcre_exec() OR pcre16_exec()
+PCRE_PARTIAL_SOFT WITH pcre_exec() OR pcre[16|32]_exec()
 </b><br>
 <P>
-If PCRE_PARTIAL_SOFT is set when <b>pcre_exec()</b> or <b>pcre16_exec()</b>
+If PCRE_PARTIAL_SOFT is set when <b>pcre_exec()</b> or <b>pcre[16|32]_exec()</b>
 identifies a partial match, the partial match is remembered, but matching
 continues as normal, and other alternatives in the pattern are tried. If no
 complete match can be found, PCRE_ERROR_PARTIAL is returned instead of
@@ -144,10 +147,10 @@ example, there are two partial matches, because "dog" on its own partially
 matches the second alternative.)
 </P>
 <br><b>
-PCRE_PARTIAL_HARD WITH pcre_exec() OR pcre16_exec()
+PCRE_PARTIAL_HARD WITH pcre_exec() OR pcre[16|32]_exec()
 </b><br>
 <P>
-If PCRE_PARTIAL_HARD is set for <b>pcre_exec()</b> or <b>pcre16_exec()</b>,
+If PCRE_PARTIAL_HARD is set for <b>pcre_exec()</b> or <b>pcre[16|32]_exec()</b>,
 PCRE_ERROR_PARTIAL is returned as soon as a partial match is found, without
 continuing to search for possible complete matches. This option is "hard"
 because it prefers an earlier partial match over a later complete match. For
@@ -192,7 +195,7 @@ to follow this explanation by thinking of the two patterns like this:
 The second pattern will never match "dogsbody", because it will always find the
 shorter match first.
 </P>
-<br><a name="SEC3" href="#TOC1">PARTIAL MATCHING USING pcre_dfa_exec() OR pcre16_dfa_exec()</a><br>
+<br><a name="SEC3" href="#TOC1">PARTIAL MATCHING USING pcre_dfa_exec() OR pcre[16|32]_dfa_exec()</a><br>
 <P>
 The DFA functions move along the subject string character by character, without
 backtracking, searching for all possible matches simultaneously. If the end of
@@ -280,7 +283,7 @@ if DFA matching is used.
 If the escape sequence \P is present more than once in a <b>pcretest</b> data
 line, the PCRE_PARTIAL_HARD option is set for the match.
 </P>
-<br><a name="SEC7" href="#TOC1">MULTI-SEGMENT MATCHING WITH pcre_dfa_exec() OR pcre16_dfa_exec()</a><br>
+<br><a name="SEC7" href="#TOC1">MULTI-SEGMENT MATCHING WITH pcre_dfa_exec() OR pcre[16|32]_dfa_exec()</a><br>
 <P>
 When a partial match has been found using a DFA matching function, it is
 possible to continue the match by providing additional subject data and calling
@@ -308,7 +311,7 @@ PCRE_DFA_RESTART to continue partial matching over multiple segments. This
 facility can be used to pass very long subject strings to the DFA matching
 functions.
 </P>
-<br><a name="SEC8" href="#TOC1">MULTI-SEGMENT MATCHING WITH pcre_exec() OR pcre16_exec()</a><br>
+<br><a name="SEC8" href="#TOC1">MULTI-SEGMENT MATCHING WITH pcre_exec() OR pcre[16|32]_exec()</a><br>
 <P>
 From release 8.00, the standard matching functions can also be used to do
 multi-segment matching. Unlike the DFA functions, it is not possible to
@@ -334,10 +337,9 @@ processing time is needed.
 <P>
 <b>Note:</b> If the pattern contains lookbehind assertions, or \K, or starts
 with \b or \B, the string that is returned for a partial match includes
-characters that precede the partially matched string itself, because these must
-be retained when adding on more characters for a subsequent matching attempt.
-However, in some cases you may need to retain even earlier characters, as
-discussed in the next section.
+characters that precede the start of what would be returned for a complete
+match, because it contains all the characters that were inspected during the
+partial match.
 </P>
 <br><a name="SEC9" href="#TOC1">ISSUES WITH MULTI-SEGMENT MATCHING</a><br>
 <P>
@@ -356,12 +358,35 @@ includes the effect of PCRE_NOTEOL.
 offsets that are returned for a partial match. However a lookbehind assertion
 later in the pattern could require even earlier characters to be inspected. You
 can handle this case by using the PCRE_INFO_MAXLOOKBEHIND option of the
-<b>pcre_fullinfo()</b> or <b>pcre16_fullinfo()</b> functions to obtain the length
-of the largest lookbehind in the pattern. This length is given in characters,
-not bytes. If you always retain at least that many characters before the
-partially matched string, all should be well. (Of course, near the start of the
-subject, fewer characters may be present; in that case all characters should be
-retained.)
+<b>pcre_fullinfo()</b> or <b>pcre[16|32]_fullinfo()</b> functions to obtain the
+length of the longest lookbehind in the pattern. This length is given in
+characters, not bytes. If you always retain at least that many characters
+before the partially matched string, all should be well. (Of course, near the
+start of the subject, fewer characters may be present; in that case all
+characters should be retained.)
+</P>
+<P>
+From release 8.33, there is a more accurate way of deciding which characters to
+retain. Instead of subtracting the length of the longest lookbehind from the
+earliest inspected character (<i>offsets[0]</i>), the match start position
+(<i>offsets[2]</i>) should be used, and the next match attempt started at the
+<i>offsets[2]</i> character by setting the <i>startoffset</i> argument of
+<b>pcre_exec()</b> or <b>pcre_dfa_exec()</b>.
+</P>
+<P>
+For example, if the pattern "(?&#60;=123)abc" is partially
+matched against the string "xx123a", the three offset values returned are 2, 6,
+and 5. This indicates that the matching process that gave a partial match
+started at offset 5, but the characters "123a" were all inspected. The maximum
+lookbehind for that pattern is 3, so taking that away from 5 shows that we need
+only keep "123a", and the next match attempt can be started at offset 3 (that
+is, at "a") when further characters have been added. When the match start is
+not the earliest inspected character, <b>pcretest</b> shows it explicitly:
+<pre>
+    re&#62; "(?&#60;=123)abc"
+  data&#62; xx123a\P\P
+  Partial match at offset 5: 123a
+</PRE>
 </P>
 <P>
 3. Because a partial match must always contain at least one character, what
@@ -465,9 +490,9 @@ Cambridge CB2 3QH, England.
 </P>
 <br><a name="SEC11" href="#TOC1">REVISION</a><br>
 <P>
-Last updated: 24 February 2012
+Last updated: 20 February 2013
 <br>
-Copyright &copy; 1997-2012 University of Cambridge.
+Copyright &copy; 1997-2013 University of Cambridge.
 <br>
 <p>
 Return to the <a href="index.html">PCRE index page</a>.

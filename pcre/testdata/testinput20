@@ -1,5 +1,5 @@
-/-- These tests are for the handling of characters greater than 255 in 16-bit,
-    non-UTF-16 mode. --/
+/-- These DFA tests are for the handling of characters greater than 255 in
+    16- or 32-bit, non-UTF mode. --/
 
 /^\x{ffff}+/i
     \x{ffff}

@@ -1,4 +1,4 @@
-.TH PCREJIT 3 "04 May 2012" "PCRE 8.31"
+.TH PCREJIT 3 "17 March 2013" "PCRE 8.33"
 .SH NAME
 PCRE - Perl-compatible regular expressions
 .SH "PCRE JUST-IN-TIME COMPILER SUPPORT"
@@ -18,14 +18,16 @@ It does not apply when the DFA matching function is being used. The code for
 this support was written by Zoltan Herczeg.
 .
 .
-.SH "8-BIT and 16-BIT SUPPORT"
+.SH "8-BIT, 16-BIT AND 32-BIT SUPPORT"
 .rs
 .sp
-JIT support is available for both the 8-bit and 16-bit PCRE libraries. To keep
-this documentation simple, only the 8-bit interface is described in what
-follows. If you are using the 16-bit library, substitute the 16-bit functions
-and 16-bit structures (for example, \fIpcre16_jit_stack\fP instead of
-\fIpcre_jit_stack\fP).
+JIT support is available for all of the 8-bit, 16-bit and 32-bit PCRE
+libraries. To keep this documentation simple, only the 8-bit interface is
+described in what follows. If you are using the 16-bit library, substitute the
+16-bit functions and 16-bit structures (for example, \fIpcre16_jit_stack\fP
+instead of \fIpcre_jit_stack\fP). If you are using the 32-bit library,
+substitute the 32-bit functions and 32-bit structures (for example,
+\fIpcre32_jit_stack\fP instead of \fIpcre_jit_stack\fP).
 .
 .
 .SH "AVAILABILITY OF JIT SUPPORT"
@@ -39,14 +41,17 @@ JIT. The support is limited to the following hardware platforms:
   Intel x86 32-bit and 64-bit
   MIPS 32-bit
   Power PC 32-bit and 64-bit
+  SPARC 32-bit (experimental)
 .sp
 If --enable-jit is set on an unsupported platform, compilation fails.
 .P
 A program that is linked with PCRE 8.20 or later can tell if JIT support is
 available by calling \fBpcre_config()\fP with the PCRE_CONFIG_JIT option. The
 result is 1 when JIT is available, and 0 otherwise. However, a simple program
-does not need to check this in order to use JIT. The API is implemented in a
-way that falls back to the interpretive code if JIT is not available.
+does not need to check this in order to use JIT. The normal API is implemented
+in a way that falls back to the interpretive code if JIT is not available. For
+programs that need the best possible performance, there is also a "fast path"
+API that is JIT-specific.
 .P
 If your program may sometimes be linked with versions of PCRE that are older
 than 8.20, but you want to use JIT when it is available, you can test
@@ -64,8 +69,8 @@ You have to do two things to make use of the JIT support in the simplest way:
       \fBpcre_exec()\fP.
 .sp
   (2) Use \fBpcre_free_study()\fP to free the \fBpcre_extra\fP block when it is
-      no longer needed, instead of just freeing it yourself. This
-      ensures that any JIT data is also freed.
+      no longer needed, instead of just freeing it yourself. This ensures that
+      any JIT data is also freed.
 .sp
 For a program that may be linked with pre-8.20 versions of PCRE, you can insert
 .sp
@@ -142,18 +147,13 @@ times as you like for matching different subject strings.
 .rs
 .sp
 The only \fBpcre_exec()\fP options that are supported for JIT execution are
-PCRE_NO_UTF8_CHECK, PCRE_NO_UTF16_CHECK, PCRE_NOTBOL, PCRE_NOTEOL,
-PCRE_NOTEMPTY, PCRE_NOTEMPTY_ATSTART, PCRE_PARTIAL_HARD, and PCRE_PARTIAL_SOFT.
+PCRE_NO_UTF8_CHECK, PCRE_NO_UTF16_CHECK, PCRE_NO_UTF32_CHECK, PCRE_NOTBOL,
+PCRE_NOTEOL, PCRE_NOTEMPTY, PCRE_NOTEMPTY_ATSTART, PCRE_PARTIAL_HARD, and
+PCRE_PARTIAL_SOFT.
 .P
-The unsupported pattern items are:
-.sp
-  \eC             match a single byte; not supported in UTF-8 mode
-  (?Cn)          callouts
-  (*PRUNE)       )
-  (*SKIP)        ) backtracking control verbs
-  (*THEN)        )
-.sp
-Support for some of these may be added in future.
+The only unsupported pattern items are \eC (match a single data unit) when
+running in a UTF mode, and a callout immediately before an assertion condition
+in a conditional group.
 .
 .
 .SH "RETURN VALUES FROM JIT EXECUTION"
@@ -332,7 +332,7 @@ replacement.
 .sp
 No, because this is too costly in terms of resources. However, you could
 implement some clever idea which release the stack if it is not used in let's
-say two minutes. The JIT callback can help to achive this without keeping a
+say two minutes. The JIT callback can help to achieve this without keeping a
 list of the currently JIT studied patterns.
 .P
 (6) OK, the stack is for long term memory allocation. But what happens if a
@@ -378,6 +378,34 @@ callback.
 .sp
 .
 .
+.SH "JIT FAST PATH API"
+.rs
+.sp
+Because the API described above falls back to interpreted execution when JIT is
+not available, it is convenient for programs that are written for general use
+in many environments. However, calling JIT via \fBpcre_exec()\fP does have a
+performance impact. Programs that are written for use where JIT is known to be
+available, and which need the best possible performance, can instead use a
+"fast path" API to call JIT execution directly instead of calling
+\fBpcre_exec()\fP (obviously only for patterns that have been successfully
+studied by JIT).
+.P
+The fast path function is called \fBpcre_jit_exec()\fP, and it takes exactly
+the same arguments as \fBpcre_exec()\fP, plus one additional argument that
+must point to a JIT stack. The JIT stack arrangements described above do not
+apply. The return values are the same as for \fBpcre_exec()\fP.
+.P
+When you call \fBpcre_exec()\fP, as well as testing for invalid options, a
+number of other sanity checks are performed on the arguments. For example, if
+the subject pointer is NULL, or its length is negative, an immediate error is
+given. Also, unless PCRE_NO_UTF[8|16|32] is set, a UTF subject string is tested
+for validity. In the interests of speed, these checks do not happen on the JIT
+fast path, and if invalid data is passed, the result is undefined.
+.P
+Bypassing the sanity checks and the \fBpcre_exec()\fP wrapping can give
+speedups of more than 10%.
+.
+.
 .SH "SEE ALSO"
 .rs
 .sp
@@ -398,6 +426,6 @@ Cambridge CB2 3QH, England.
 .rs
 .sp
 .nf
-Last updated: 04 May 2012
-Copyright (c) 1997-2012 University of Cambridge.
+Last updated: 17 March 2013
+Copyright (c) 1997-2013 University of Cambridge.
 .fi

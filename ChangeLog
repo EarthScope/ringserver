@@ -1,3 +1,6 @@
+2013.170:
+	- Update pcre to 8.33.
+
 2013.161:
 	- Log server port number with client connection message.
 

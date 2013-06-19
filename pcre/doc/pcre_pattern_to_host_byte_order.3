@@ -1,4 +1,4 @@
-.TH PCRE_PATTERN_TO_HOST_BYTE_ORDER 3 "21 January 2012" "PCRE 8.30"
+.TH PCRE_PATTERN_TO_HOST_BYTE_ORDER 3 "24 June 2012" "PCRE 8.30"
 .SH NAME
 PCRE - Perl-compatible regular expressions
 .SH SYNOPSIS
@@ -14,7 +14,10 @@ PCRE - Perl-compatible regular expressions
 .B int pcre16_pattern_to_host_byte_order(pcre16 *\fIcode\fP,
 .ti +5n
 .B pcre16_extra *\fIextra\fP, const unsigned char *\fItables\fP);
-.
+.PP
+.B int pcre32_pattern_to_host_byte_order(pcre32 *\fIcode\fP,
+.ti +5n
+.B pcre32_extra *\fIextra\fP, const unsigned char *\fItables\fP);
 .
 .SH DESCRIPTION
 .rs
@@ -25,7 +28,7 @@ pattern that has been compiled on one host is transferred to another that might
 have different endianness. The arguments are:
 .sp
   \fIcode\fP         A compiled regular expression
-  \fIextra\fP        Points to an associated \fBpcre[16]_extra\fP structure,
+  \fIextra\fP        Points to an associated \fBpcre[16|32]_extra\fP structure,
                  or is NULL
   \fItables\fP       Pointer to character tables, or NULL to
                  set the built-in default

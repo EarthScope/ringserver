@@ -1,4 +1,4 @@
-.TH PCRETEST 1 "21 February 2012" "PCRE 8.31"
+.TH PCRETEST 1 "26 April 2013" "PCRE 8.33"
 .SH NAME
 pcretest - a program for testing Perl-compatible regular expressions.
 .SH SYNOPSIS
@@ -18,41 +18,77 @@ options, see the
 .\" HREF
 \fBpcreapi\fP
 .\"
-and
+,
 .\" HREF
 \fBpcre16\fP
+and
+.\" HREF
+\fBpcre32\fP
 .\"
-documentation. The input for \fBpcretest\fP is a sequence of regular expression
-patterns and strings to be matched, as described below. The output shows the
-result of each match. Options on the command line and the patterns control PCRE
-options and exactly what is output.
+documentation.
+.P
+The input for \fBpcretest\fP is a sequence of regular expression patterns and
+strings to be matched, as described below. The output shows the result of each
+match. Options on the command line and the patterns control PCRE options and
+exactly what is output.
+.P
+As PCRE has evolved, it has acquired many different features, and as a result,
+\fBpcretest\fP now has rather a lot of obscure options for testing every
+possible feature. Some of these options are specifically designed for use in
+conjunction with the test script and data files that are distributed as part of
+PCRE, and are unlikely to be of use otherwise. They are all documented here,
+but without much justification.
 .
 .
-.SH "PCRE's 8-BIT and 16-BIT LIBRARIES"
+.SH "INPUT DATA FORMAT"
+.rs
+.sp
+Input to \fBpcretest\fP is processed line by line, either by calling the C
+library's \fBfgets()\fP function, or via the \fBlibreadline\fP library (see
+below). In Unix-like environments, \fBfgets()\fP treats any bytes other than
+newline as data characters. However, in some Windows environments character 26
+(hex 1A) causes an immediate end of file, and no further data is read. For
+maximum portability, therefore, it is safest to use only ASCII characters in
+\fBpcretest\fP input files.
+.
+.
+.SH "PCRE's 8-BIT, 16-BIT AND 32-BIT LIBRARIES"
 .rs
 .sp
 From release 8.30, two separate PCRE libraries can be built. The original one
 supports 8-bit character strings, whereas the newer 16-bit library supports
-character strings encoded in 16-bit units. The \fBpcretest\fP program can be
-used to test both libraries. However, it is itself still an 8-bit program,
-reading 8-bit input and writing 8-bit output. When testing the 16-bit library,
-the patterns and data strings are converted to 16-bit format before being
-passed to the PCRE library functions. Results are converted to 8-bit for
-output.
+character strings encoded in 16-bit units. From release 8.32, a third library
+can be built, supporting character strings encoded in 32-bit units. The
+\fBpcretest\fP program can be used to test all three libraries. However, it is
+itself still an 8-bit program, reading 8-bit input and writing 8-bit output.
+When testing the 16-bit or 32-bit library, the patterns and data strings are
+converted to 16- or 32-bit format before being passed to the PCRE library
+functions. Results are converted to 8-bit for output.
 .P
-References to functions and structures of the form \fBpcre[16]_xx\fP below
-mean "\fBpcre_xx\fP when using the 8-bit library or \fBpcre16_xx\fP when using
-the 16-bit library".
+References to functions and structures of the form \fBpcre[16|32]_xx\fP below
+mean "\fBpcre_xx\fP when using the 8-bit library, \fBpcre16_xx\fP when using
+the 16-bit library, or \fBpcre32_xx\fP when using the 32-bit library".
 .
 .
 .SH "COMMAND LINE OPTIONS"
 .rs
 .TP 10
-\fB-16\fP
-If both the 8-bit and the 16-bit libraries have been built, this option causes
-the 16-bit library to be used. If only the 16-bit library has been built, this
-is the default (so has no effect). If only the 8-bit library has been built,
+\fB-8\fP
+If both the 8-bit library has been built, this option causes the 8-bit library
+to be used (which is the default); if the 8-bit library has not been built,
 this option causes an error.
+.TP 10
+\fB-16\fP
+If both the 8-bit or the 32-bit, and the 16-bit libraries have been built, this
+option causes the 16-bit library to be used. If only the 16-bit library has been
+built, this is the default (so has no effect). If only the 8-bit or the 32-bit
+library has been built, this option causes an error.
+.TP 10
+\fB-32\fP
+If both the 8-bit or the 16-bit, and the 32-bit libraries have been built, this
+option causes the 32-bit library to be used. If only the 32-bit library has been
+built, this is the default (so has no effect). If only the 8-bit or the 16-bit
+library has been built, this option causes an error.
 .TP 10
 \fB-b\fP
 Behave as if each pattern has the \fB/B\fP (show byte code) modifier; the
@@ -60,25 +96,37 @@ internal form is output after compilation.
 .TP 10
 \fB-C\fP
 Output the version number of the PCRE library, and all available information
-about the optional features that are included, and then exit. All other options
-are ignored.
+about the optional features that are included, and then exit with zero exit
+code. All other options are ignored.
 .TP 10
 \fB-C\fP \fIoption\fP
 Output information about a specific build-time option, then exit. This
 functionality is intended for use in scripts such as \fBRunTest\fP. The
-following options output the value indicated:
+following options output the value and set the exit code as indicated:
 .sp
-  linksize   the internal link size (2, 3, or 4)
+  ebcdic-nl  the code for LF (= NL) in an EBCDIC environment:
+               0x15 or 0x25
+               0 if used in an ASCII environment
+               exit code is always 0
+  linksize   the configured internal link size (2, 3, or 4)
+               exit code is set to the link size
   newline    the default newline setting:
                CR, LF, CRLF, ANYCRLF, or ANY
+               exit code is always 0
 .sp
-The following options output 1 for true or zero for false:
+The following options output 1 for true or 0 for false, and set the exit code
+to the same value:
 .sp
+  ebcdic     compiled for an EBCDIC environment
   jit        just-in-time support is available
   pcre16     the 16-bit library was built
+  pcre32     the 32-bit library was built
   pcre8      the 8-bit library was built
   ucp        Unicode property support is available
-  utf        UTF-8 and/or UTF-16 support is available
+  utf        UTF-8 and/or UTF-16 and/or UTF-32 support
+               is available
+.sp
+If an unknown option is given, an error message is output; the exit code is 0.
 .TP 10
 \fB-d\fP
 Behave as if each pattern has the \fB/D\fP (debug) modifier; the internal
@@ -87,8 +135,8 @@ form and information about the compiled pattern is output after compilation;
 .TP 10
 \fB-dfa\fP
 Behave as if each data line contains the \eD escape sequence; this causes the
-alternative matching function, \fBpcre[16]_dfa_exec()\fP, to be used instead of
-the standard \fBpcre[16]_exec()\fP function (more detail is given below).
+alternative matching function, \fBpcre[16|32]_dfa_exec()\fP, to be used instead
+of the standard \fBpcre[16|32]_exec()\fP function (more detail is given below).
 .TP 10
 \fB-help\fP
 Output a brief summary these options and then exit.
@@ -100,7 +148,7 @@ compiled pattern is given after compilation.
 \fB-M\fP
 Behave as if each data line contains the \eM escape sequence; this causes
 PCRE to discover the minimum MATCH_LIMIT and MATCH_LIMIT_RECURSION settings by
-calling \fBpcre[16]_exec()\fP repeatedly with different limits.
+calling \fBpcre[16|32]_exec()\fP repeatedly with different limits.
 .TP 10
 \fB-m\fP
 Output the size of each compiled pattern after it has been compiled. This is
@@ -109,9 +157,10 @@ bytes for both libraries.
 .TP 10
 \fB-o\fP \fIosize\fP
 Set the number of elements in the output vector that is used when calling
-\fBpcre[16]_exec()\fP or \fBpcre[16]_dfa_exec()\fP to be \fIosize\fP. The
+\fBpcre[16|32]_exec()\fP or \fBpcre[16|32]_dfa_exec()\fP to be \fIosize\fP. The
 default value is 45, which is enough for 14 capturing subexpressions for
-\fBpcre[16]_exec()\fP or 22 different matches for \fBpcre[16]_dfa_exec()\fP.
+\fBpcre[16|32]_exec()\fP or 22 different matches for
+\fBpcre[16|32]_dfa_exec()\fP.
 The vector size can be changed for individual matching calls by including \eO
 in the data line (see below).
 .TP 10
@@ -130,7 +179,7 @@ megabytes.
 \fB-s\fP or \fB-s+\fP
 Behave as if each pattern has the \fB/S\fP modifier; in other words, force each
 pattern to be studied. If \fB-s+\fP is used, all the JIT compile options are
-passed to \fBpcre[16]_study()\fP, causing just-in-time optimization to be set
+passed to \fBpcre[16|32]_study()\fP, causing just-in-time optimization to be set
 up if it is available, for both full and partial matching. Specific JIT compile
 options can be selected by following \fB-s+\fP with a digit in the range 1 to
 7, which selects the JIT compile modes as follows:
@@ -145,7 +194,10 @@ options can be selected by following \fB-s+\fP with a digit in the range 1 to
 If \fB-s++\fP is used instead of \fB-s+\fP (with or without a following digit),
 the text "(JIT)" is added to the first output line after a match or no match
 when JIT-compiled code was actually used.
-.P
+.sp
+Note that there are pattern options that can override \fB-s\fP, either
+specifying no studying at all, or suppressing JIT compilation.
+.sp
 If the \fB/I\fP or \fB/D\fP option is present on a pattern (requesting output
 about the compiled pattern), information about the result of studying is not
 included when studying is caused only by \fB-s\fP and neither \fB-i\fP nor
@@ -236,18 +288,74 @@ pcretest to read the next line as a continuation of the regular expression.
 .rs
 .sp
 A pattern may be followed by any number of modifiers, which are mostly single
-characters. Following Perl usage, these are referred to below as, for example,
-"the \fB/i\fP modifier", even though the delimiter of the pattern need not
-always be a slash, and no slash is used when writing modifiers. White space may
-appear between the final pattern delimiter and the first modifier, and between
-the modifiers themselves.
-.P
+characters, though some of these can be qualified by further characters.
+Following Perl usage, these are referred to below as, for example, "the
+\fB/i\fP modifier", even though the delimiter of the pattern need not always be
+a slash, and no slash is used when writing modifiers. White space may appear
+between the final pattern delimiter and the first modifier, and between the
+modifiers themselves. For reference, here is a complete list of modifiers. They
+fall into several groups that are described in detail in the following
+sections.
+.sp
+  \fB/8\fP              set UTF mode
+  \fB/9\fP              set PCRE_NEVER_UTF (locks out UTF mode)
+  \fB/?\fP              disable UTF validity check
+  \fB/+\fP              show remainder of subject after match
+  \fB/=\fP              show all captures (not just those that are set)
+.sp
+  \fB/A\fP              set PCRE_ANCHORED
+  \fB/B\fP              show compiled code
+  \fB/C\fP              set PCRE_AUTO_CALLOUT
+  \fB/D\fP              same as \fB/B\fP plus \fB/I\fP
+  \fB/E\fP              set PCRE_DOLLAR_ENDONLY
+  \fB/F\fP              flip byte order in compiled pattern
+  \fB/f\fP              set PCRE_FIRSTLINE
+  \fB/G\fP              find all matches (shorten string)
+  \fB/g\fP              find all matches (use startoffset)
+  \fB/I\fP              show information about pattern
+  \fB/i\fP              set PCRE_CASELESS
+  \fB/J\fP              set PCRE_DUPNAMES
+  \fB/K\fP              show backtracking control names
+  \fB/L\fP              set locale
+  \fB/M\fP              show compiled memory size
+  \fB/m\fP              set PCRE_MULTILINE
+  \fB/N\fP              set PCRE_NO_AUTO_CAPTURE
+  \fB/P\fP              use the POSIX wrapper
+  \fB/S\fP              study the pattern after compilation
+  \fB/s\fP              set PCRE_DOTALL
+  \fB/T\fP              select character tables
+  \fB/U\fP              set PCRE_UNGREEDY
+  \fB/W\fP              set PCRE_UCP
+  \fB/X\fP              set PCRE_EXTRA
+  \fB/x\fP              set PCRE_EXTENDED
+  \fB/Y\fP              set PCRE_NO_START_OPTIMIZE
+  \fB/Z\fP              don't show lengths in \fB/B\fP output
+.sp
+  \fB/<any>\fP          set PCRE_NEWLINE_ANY
+  \fB/<anycrlf>\fP      set PCRE_NEWLINE_ANYCRLF
+  \fB/<cr>\fP           set PCRE_NEWLINE_CR
+  \fB/<crlf>\fP         set PCRE_NEWLINE_CRLF
+  \fB/<lf>\fP           set PCRE_NEWLINE_LF
+  \fB/<bsr_anycrlf>\fP  set PCRE_BSR_ANYCRLF
+  \fB/<bsr_unicode>\fP  set PCRE_BSR_UNICODE
+  \fB/<JS>\fP           set PCRE_JAVASCRIPT_COMPAT
+.sp
+.
+.
+.SS "Perl-compatible modifiers"
+.rs
+.sp
 The \fB/i\fP, \fB/m\fP, \fB/s\fP, and \fB/x\fP modifiers set the PCRE_CASELESS,
 PCRE_MULTILINE, PCRE_DOTALL, or PCRE_EXTENDED options, respectively, when
-\fBpcre[16]_compile()\fP is called. These four modifier letters have the same
+\fBpcre[16|32]_compile()\fP is called. These four modifier letters have the same
 effect as they do in Perl. For example:
 .sp
   /caseless/i
+.sp
+.
+.
+.SS "Modifiers for other PCRE options"
+.rs
 .sp
 The following table shows additional modifiers for setting PCRE compile-time
 options that do not correspond to anything in Perl:
@@ -258,6 +366,10 @@ options that do not correspond to anything in Perl:
   \fB/8\fP              PCRE_UTF16          ) when using the 16-bit
   \fB/?\fP              PCRE_NO_UTF16_CHECK )   library
 .sp
+  \fB/8\fP              PCRE_UTF32          ) when using the 32-bit
+  \fB/?\fP              PCRE_NO_UTF32_CHECK )   library
+.sp
+  \fB/9\fP              PCRE_NEVER_UTF
   \fB/A\fP              PCRE_ANCHORED
   \fB/C\fP              PCRE_AUTO_CALLOUT
   \fB/E\fP              PCRE_DOLLAR_ENDONLY
@@ -268,14 +380,14 @@ options that do not correspond to anything in Perl:
   \fB/W\fP              PCRE_UCP
   \fB/X\fP              PCRE_EXTRA
   \fB/Y\fP              PCRE_NO_START_OPTIMIZE
-  \fB/<JS>\fP           PCRE_JAVASCRIPT_COMPAT
-  \fB/<cr>\fP           PCRE_NEWLINE_CR
-  \fB/<lf>\fP           PCRE_NEWLINE_LF
-  \fB/<crlf>\fP         PCRE_NEWLINE_CRLF
-  \fB/<anycrlf>\fP      PCRE_NEWLINE_ANYCRLF
   \fB/<any>\fP          PCRE_NEWLINE_ANY
+  \fB/<anycrlf>\fP      PCRE_NEWLINE_ANYCRLF
+  \fB/<cr>\fP           PCRE_NEWLINE_CR
+  \fB/<crlf>\fP         PCRE_NEWLINE_CRLF
+  \fB/<lf>\fP           PCRE_NEWLINE_LF
   \fB/<bsr_anycrlf>\fP  PCRE_BSR_ANYCRLF
   \fB/<bsr_unicode>\fP  PCRE_BSR_UNICODE
+  \fB/<JS>\fP           PCRE_JAVASCRIPT_COMPAT
 .sp
 The modifiers that are enclosed in angle brackets are literal strings as shown,
 including the angle brackets, but the letters within can be in either case.
@@ -283,7 +395,7 @@ This example sets multiline matching with CRLF as the line ending sequence:
 .sp
   /^abc/m<CRLF>
 .sp
-As well as turning on the PCRE_UTF8/16 option, the \fB/8\fP modifier causes
+As well as turning on the PCRE_UTF8/16/32 option, the \fB/8\fP modifier causes
 all non-printing characters in output strings to be printed using the
 \ex{hh...} notation. Otherwise, those less than 0x100 are output in hex without
 the curly brackets.
@@ -302,12 +414,12 @@ Searching for all possible matches within each subject string can be requested
 by the \fB/g\fP or \fB/G\fP modifier. After finding a match, PCRE is called
 again to search the remainder of the subject string. The difference between
 \fB/g\fP and \fB/G\fP is that the former uses the \fIstartoffset\fP argument to
-\fBpcre[16]_exec()\fP to start searching at a new point within the entire
+\fBpcre[16|32]_exec()\fP to start searching at a new point within the entire
 string (which is in effect what Perl does), whereas the latter passes over a
 shortened substring. This makes a difference to the matching process if the
 pattern begins with a lookbehind assertion (including \eb or \eB).
 .P
-If any call to \fBpcre[16]_exec()\fP in a \fB/g\fP or \fB/G\fP sequence matches
+If any call to \fBpcre[16|32]_exec()\fP in a \fB/g\fP or \fB/G\fP sequence matches
 an empty string, the next call is done with the PCRE_NOTEMPTY_ATSTART and
 PCRE_ANCHORED flags set in order to search for another, non-empty, match at the
 same point. If this second match fails, the start offset is advanced, and the
@@ -336,7 +448,7 @@ modifier because /S+ and /S++ have other meanings.
 The \fB/=\fP modifier requests that the values of all potential captured
 parentheses be output after a match. By default, only those up to the highest
 one actually used in the match are output (corresponding to the return code
-from \fBpcre[16]_exec()\fP). Values in the offsets vector corresponding to
+from \fBpcre[16|32]_exec()\fP). Values in the offsets vector corresponding to
 higher numbers should be set to -1, and these are output as "<unset>". This
 modifier gives a way of checking that this is happening.
 .P
@@ -360,15 +472,15 @@ below.
 .P
 The \fB/I\fP modifier requests that \fBpcretest\fP output information about the
 compiled pattern (whether it is anchored, has a fixed first character, and
-so on). It does this by calling \fBpcre[16]_fullinfo()\fP after compiling a
+so on). It does this by calling \fBpcre[16|32]_fullinfo()\fP after compiling a
 pattern. If the pattern is studied, the results of that are also output.
 .P
 The \fB/K\fP modifier requests \fBpcretest\fP to show names from backtracking
-control verbs that are returned from calls to \fBpcre[16]_exec()\fP. It causes
-\fBpcretest\fP to create a \fBpcre[16]_extra\fP block if one has not already
-been created by a call to \fBpcre[16]_study()\fP, and to set the
+control verbs that are returned from calls to \fBpcre[16|32]_exec()\fP. It causes
+\fBpcretest\fP to create a \fBpcre[16|32]_extra\fP block if one has not already
+been created by a call to \fBpcre[16|32]_study()\fP, and to set the
 PCRE_EXTRA_MARK flag and the \fBmark\fP field within it, every time that
-\fBpcre[16]_exec()\fP is called. If the variable that the \fBmark\fP field
+\fBpcre[16|32]_exec()\fP is called. If the variable that the \fBmark\fP field
 points to is non-NULL for a match, non-match, or partial match, \fBpcretest\fP
 prints the string to which it points. For a match, this is shown on a line by
 itself, tagged with "MK:". For a non-match it is added to the message.
@@ -379,28 +491,35 @@ example,
   /pattern/Lfr_FR
 .sp
 For this reason, it must be the last modifier. The given locale is set,
-\fBpcre[16]_maketables()\fP is called to build a set of character tables for
-the locale, and this is then passed to \fBpcre[16]_compile()\fP when compiling
+\fBpcre[16|32]_maketables()\fP is called to build a set of character tables for
+the locale, and this is then passed to \fBpcre[16|32]_compile()\fP when compiling
 the regular expression. Without an \fB/L\fP (or \fB/T\fP) modifier, NULL is
 passed as the tables pointer; that is, \fB/L\fP applies only to the expression
 on which it appears.
 .P
 The \fB/M\fP modifier causes the size in bytes of the memory block used to hold
 the compiled pattern to be output. This does not include the size of the
-\fBpcre[16]\fP block; it is just the actual compiled data. If the pattern is
+\fBpcre[16|32]\fP block; it is just the actual compiled data. If the pattern is
 successfully studied with the PCRE_STUDY_JIT_COMPILE option, the size of the
 JIT compiled code is also output.
 .P
-If the \fB/S\fP modifier appears once, it causes \fBpcre[16]_study()\fP to be
-called after the expression has been compiled, and the results used when the
-expression is matched. If \fB/S\fP appears twice, it suppresses studying, even
+The \fB/S\fP modifier causes \fBpcre[16|32]_study()\fP to be called after the
+expression has been compiled, and the results used when the expression is
+matched. There are a number of qualifying characters that may follow \fB/S\fP.
+They may appear in any order.
+.P
+If \fBS\fP is followed by an exclamation mark, \fBpcre[16|32]_study()\fP is called
+with the PCRE_STUDY_EXTRA_NEEDED option, causing it always to return a
+\fBpcre_extra\fP block, even when studying discovers no useful information.
+.P
+If \fB/S\fP is followed by a second S character, it suppresses studying, even
 if it was requested externally by the \fB-s\fP command line option. This makes
 it possible to specify that certain patterns are always studied, and others are
 never studied, independently of \fB-s\fP. This feature is used in the test
 files in a few cases where the output is different when the pattern is studied.
 .P
-If the \fB/S\fP modifier is immediately followed by a + character, the call to
-\fBpcre[16]_study()\fP is made with all the JIT study options, requesting
+If the \fB/S\fP modifier is followed by a + character, the call to
+\fBpcre[16|32]_study()\fP is made with all the JIT study options, requesting
 just-in-time optimization support if it is available, for both normal and
 partial matching. If you want to restrict the JIT compiling modes, you can
 follow \fB/S+\fP with a digit in the range 1 to 7:
@@ -420,7 +539,7 @@ Note that there is also an independent \fB/+\fP modifier; it must not be given
 immediately after \fB/S\fP or \fB/S+\fP because this will be misinterpreted.
 .P
 If JIT studying is successful, the compiled JIT code will automatically be used
-when \fBpcre[16]_exec()\fP is run, except when incompatible run-time options
+when \fBpcre[16|32]_exec()\fP is run, except when incompatible run-time options
 are specified. For more details, see the
 .\" HREF
 \fBpcrejit\fP
@@ -428,8 +547,13 @@ are specified. For more details, see the
 documentation. See also the \fB\eJ\fP escape sequence below for a way of
 setting the size of the JIT stack.
 .P
+Finally, if \fB/S\fP is followed by a minus character, JIT compilation is
+suppressed, even if it was requested externally by the \fB-s\fP command line
+option. This makes it possible to specify that JIT is never to be used for
+certain patterns.
+.P
 The \fB/T\fP modifier must be followed by a single digit. It causes a specific
-set of built-in character tables to be passed to \fBpcre[16]_compile()\fP. It
+set of built-in character tables to be passed to \fBpcre[16|32]_compile()\fP. It
 is used in the standard PCRE tests to check behaviour with different character
 tables. The digit specifies the tables as follows:
 .sp
@@ -464,7 +588,7 @@ ignored.
 .SH "DATA LINES"
 .rs
 .sp
-Before each data line is passed to \fBpcre[16]_exec()\fP, leading and trailing
+Before each data line is passed to \fBpcre[16|32]_exec()\fP, leading and trailing
 white space is removed, and it is then scanned for \e escapes. Some of these
 are pretty esoteric features, intended for checking out some of the more
 complicated features of PCRE. If you are just testing "ordinary" regular
@@ -483,20 +607,20 @@ recognized:
   \et         tab (\ex09)
   \ev         vertical tab (\ex0b)
   \ennn       octal character (up to 3 octal digits); always
-               a byte unless > 255 in UTF-8 or 16-bit mode
+               a byte unless > 255 in UTF-8 or 16-bit or 32-bit mode
   \exhh       hexadecimal byte (up to 2 hex digits)
   \ex{hh...}  hexadecimal character (any number of hex digits)
 .\" JOIN
-  \eA         pass the PCRE_ANCHORED option to \fBpcre[16]_exec()\fP
-               or \fBpcre[16]_dfa_exec()\fP
+  \eA         pass the PCRE_ANCHORED option to \fBpcre[16|32]_exec()\fP
+               or \fBpcre[16|32]_dfa_exec()\fP
 .\" JOIN
-  \eB         pass the PCRE_NOTBOL option to \fBpcre[16]_exec()\fP
-               or \fBpcre[16]_dfa_exec()\fP
+  \eB         pass the PCRE_NOTBOL option to \fBpcre[16|32]_exec()\fP
+               or \fBpcre[16|32]_dfa_exec()\fP
 .\" JOIN
-  \eCdd       call pcre[16]_copy_substring() for substring dd
+  \eCdd       call pcre[16|32]_copy_substring() for substring dd
                after a successful match (number less than 32)
 .\" JOIN
-  \eCname     call pcre[16]_copy_named_substring() for substring
+  \eCname     call pcre[16|32]_copy_named_substring() for substring
                "name" after a successful match (name termin-
                ated by next non alphanumeric character)
 .\" JOIN
@@ -512,68 +636,68 @@ recognized:
 .\" JOIN
   \eC*n       pass the number n (may be negative) as callout
                data; this is used as the callout return value
-  \eD         use the \fBpcre[16]_dfa_exec()\fP match function
-  \eF         only shortest match for \fBpcre[16]_dfa_exec()\fP
+  \eD         use the \fBpcre[16|32]_dfa_exec()\fP match function
+  \eF         only shortest match for \fBpcre[16|32]_dfa_exec()\fP
 .\" JOIN
-  \eGdd       call pcre[16]_get_substring() for substring dd
+  \eGdd       call pcre[16|32]_get_substring() for substring dd
                after a successful match (number less than 32)
 .\" JOIN
-  \eGname     call pcre[16]_get_named_substring() for substring
+  \eGname     call pcre[16|32]_get_named_substring() for substring
                "name" after a successful match (name termin-
                ated by next non-alphanumeric character)
 .\" JOIN
   \eJdd       set up a JIT stack of dd kilobytes maximum (any
                number of digits)
 .\" JOIN
-  \eL         call pcre[16]_get_substringlist() after a
+  \eL         call pcre[16|32]_get_substringlist() after a
                successful match
 .\" JOIN
   \eM         discover the minimum MATCH_LIMIT and
                MATCH_LIMIT_RECURSION settings
 .\" JOIN
-  \eN         pass the PCRE_NOTEMPTY option to \fBpcre[16]_exec()\fP
-               or \fBpcre[16]_dfa_exec()\fP; if used twice, pass the
+  \eN         pass the PCRE_NOTEMPTY option to \fBpcre[16|32]_exec()\fP
+               or \fBpcre[16|32]_dfa_exec()\fP; if used twice, pass the
                PCRE_NOTEMPTY_ATSTART option
 .\" JOIN
   \eOdd       set the size of the output vector passed to
-               \fBpcre[16]_exec()\fP to dd (any number of digits)
+               \fBpcre[16|32]_exec()\fP to dd (any number of digits)
 .\" JOIN
-  \eP         pass the PCRE_PARTIAL_SOFT option to \fBpcre[16]_exec()\fP
-               or \fBpcre[16]_dfa_exec()\fP; if used twice, pass the
+  \eP         pass the PCRE_PARTIAL_SOFT option to \fBpcre[16|32]_exec()\fP
+               or \fBpcre[16|32]_dfa_exec()\fP; if used twice, pass the
                PCRE_PARTIAL_HARD option
 .\" JOIN
   \eQdd       set the PCRE_MATCH_LIMIT_RECURSION limit to dd
                (any number of digits)
-  \eR         pass the PCRE_DFA_RESTART option to \fBpcre[16]_dfa_exec()\fP
+  \eR         pass the PCRE_DFA_RESTART option to \fBpcre[16|32]_dfa_exec()\fP
   \eS         output details of memory get/free calls during matching
 .\" JOIN
-  \eY         pass the PCRE_NO_START_OPTIMIZE option to \fBpcre[16]_exec()\fP
-               or \fBpcre[16]_dfa_exec()\fP
+  \eY         pass the PCRE_NO_START_OPTIMIZE option to \fBpcre[16|32]_exec()\fP
+               or \fBpcre[16|32]_dfa_exec()\fP
 .\" JOIN
-  \eZ         pass the PCRE_NOTEOL option to \fBpcre[16]_exec()\fP
-               or \fBpcre[16]_dfa_exec()\fP
+  \eZ         pass the PCRE_NOTEOL option to \fBpcre[16|32]_exec()\fP
+               or \fBpcre[16|32]_dfa_exec()\fP
 .\" JOIN
-  \e?         pass the PCRE_NO_UTF[8|16]_CHECK option to
-               \fBpcre[16]_exec()\fP or \fBpcre[16]_dfa_exec()\fP
+  \e?         pass the PCRE_NO_UTF[8|16|32]_CHECK option to
+               \fBpcre[16|32]_exec()\fP or \fBpcre[16|32]_dfa_exec()\fP
 .\" JOIN
   \e>dd       start the match at offset dd (optional "-"; then
                any number of digits); this sets the \fIstartoffset\fP
-               argument for \fBpcre[16]_exec()\fP or \fBpcre[16]_dfa_exec()\fP
+               argument for \fBpcre[16|32]_exec()\fP or \fBpcre[16|32]_dfa_exec()\fP
 .\" JOIN
-  \e<cr>      pass the PCRE_NEWLINE_CR option to \fBpcre[16]_exec()\fP
-               or \fBpcre[16]_dfa_exec()\fP
+  \e<cr>      pass the PCRE_NEWLINE_CR option to \fBpcre[16|32]_exec()\fP
+               or \fBpcre[16|32]_dfa_exec()\fP
 .\" JOIN
-  \e<lf>      pass the PCRE_NEWLINE_LF option to \fBpcre[16]_exec()\fP
-               or \fBpcre[16]_dfa_exec()\fP
+  \e<lf>      pass the PCRE_NEWLINE_LF option to \fBpcre[16|32]_exec()\fP
+               or \fBpcre[16|32]_dfa_exec()\fP
 .\" JOIN
-  \e<crlf>    pass the PCRE_NEWLINE_CRLF option to \fBpcre[16]_exec()\fP
-               or \fBpcre[16]_dfa_exec()\fP
+  \e<crlf>    pass the PCRE_NEWLINE_CRLF option to \fBpcre[16|32]_exec()\fP
+               or \fBpcre[16|32]_dfa_exec()\fP
 .\" JOIN
-  \e<anycrlf> pass the PCRE_NEWLINE_ANYCRLF option to \fBpcre[16]_exec()\fP
-               or \fBpcre[16]_dfa_exec()\fP
+  \e<anycrlf> pass the PCRE_NEWLINE_ANYCRLF option to \fBpcre[16|32]_exec()\fP
+               or \fBpcre[16|32]_dfa_exec()\fP
 .\" JOIN
-  \e<any>     pass the PCRE_NEWLINE_ANY option to \fBpcre[16]_exec()\fP
-               or \fBpcre[16]_dfa_exec()\fP
+  \e<any>     pass the PCRE_NEWLINE_ANY option to \fBpcre[16|32]_exec()\fP
+               or \fBpcre[16|32]_dfa_exec()\fP
 .sp
 The use of \ex{hh...} is not dependent on the use of the \fB/8\fP modifier on
 the pattern. It is recognized always. There may be any number of hexadecimal
@@ -589,6 +713,9 @@ for values less than 256, and causes an error for greater values.
 In UTF-16 mode, all 4-digit \ex{hhhh} values are accepted. This makes it
 possible to construct invalid UTF-16 sequences for testing purposes.
 .P
+In UTF-32 mode, all 4- to 8-digit \ex{...} values are accepted. This makes it
+possible to construct invalid UTF-32 sequences for testing purposes.
+.P
 The escapes that specify line ending sequences are literal strings, exactly as
 shown. No more than one newline setting should be present in any data line.
 .P
@@ -602,12 +729,12 @@ used by the just-in-time optimization code. It is ignored if JIT optimization
 is not being used. Providing a stack that is larger than the default 32K is
 necessary only for very complicated patterns.
 .P
-If \eM is present, \fBpcretest\fP calls \fBpcre[16]_exec()\fP several times,
+If \eM is present, \fBpcretest\fP calls \fBpcre[16|32]_exec()\fP several times,
 with different values in the \fImatch_limit\fP and \fImatch_limit_recursion\fP
-fields of the \fBpcre[16]_extra\fP data structure, until it finds the minimum
-numbers for each parameter that allow \fBpcre[16]_exec()\fP to complete without
+fields of the \fBpcre[16|32]_extra\fP data structure, until it finds the minimum
+numbers for each parameter that allow \fBpcre[16|32]_exec()\fP to complete without
 error. Because this is testing a specific feature of the normal interpretive
-\fBpcre[16]_exec()\fP execution, the use of any JIT optimization that might
+\fBpcre[16|32]_exec()\fP execution, the use of any JIT optimization that might
 have been set up by the \fB/S+\fP qualifier of \fB-s+\fP option is disabled.
 .P
 The \fImatch_limit\fP number is a measure of the amount of backtracking
@@ -620,7 +747,7 @@ needed to complete the match attempt.
 .P
 When \eO is used, the value specified may be higher or lower than the size set
 by the \fB-O\fP command line option (or defaulted to 45); \eO applies only to
-the call of \fBpcre[16]_exec()\fP for the line in which it appears.
+the call of \fBpcre[16|32]_exec()\fP for the line in which it appears.
 .P
 If the \fB/P\fP modifier was present on the pattern, causing the POSIX wrapper
 API to be used, the only option-setting sequences that have any effect are \eB,
@@ -632,8 +759,8 @@ to be passed to \fBregexec()\fP.
 .rs
 .sp
 By default, \fBpcretest\fP uses the standard PCRE matching function,
-\fBpcre[16]_exec()\fP to match each data line. PCRE also supports an
-alternative matching function, \fBpcre[16]_dfa_test()\fP, which operates in a
+\fBpcre[16|32]_exec()\fP to match each data line. PCRE also supports an
+alternative matching function, \fBpcre[16|32]_dfa_test()\fP, which operates in a
 different way, and has some restrictions. The differences between the two
 functions are described in the
 .\" HREF
@@ -652,13 +779,13 @@ found. This is always the shortest possible match.
 .rs
 .sp
 This section describes the output when the normal matching function,
-\fBpcre[16]_exec()\fP, is being used.
+\fBpcre[16|32]_exec()\fP, is being used.
 .P
 When a match succeeds, \fBpcretest\fP outputs the list of captured substrings
-that \fBpcre[16]_exec()\fP returns, starting with number 0 for the string that
+that \fBpcre[16|32]_exec()\fP returns, starting with number 0 for the string that
 matched the whole pattern. Otherwise, it outputs "No match" when the return is
 PCRE_ERROR_NOMATCH, and "Partial match:" followed by the partially matching
-substring when \fBpcre[16]_exec()\fP returns PCRE_ERROR_PARTIAL. (Note that
+substring when \fBpcre[16|32]_exec()\fP returns PCRE_ERROR_PARTIAL. (Note that
 this is the entire substring that was inspected during the partial match; it
 may include characters before the actual match start if a lookbehind assertion,
 \eK, \eb, or \eB was involved.) For any other return, \fBpcretest\fP outputs
@@ -678,7 +805,7 @@ at least two. Here is an example of an interactive \fBpcretest\fP run.
   No match
 .sp
 Unset capturing substrings that are not followed by one that is set are not
-returned by \fBpcre[16]_exec()\fP, and are not shown by \fBpcretest\fP. In the
+returned by \fBpcre[16|32]_exec()\fP, and are not shown by \fBpcretest\fP. In the
 following example, there are two capturing substrings, but when the first data
 line is matched, the second, unset substring is not shown. An "internal" unset
 substring is shown as "<unset>", as for the second data line.
@@ -741,7 +868,7 @@ the newline sequence setting).
 .SH "OUTPUT FROM THE ALTERNATIVE MATCHING FUNCTION"
 .rs
 .sp
-When the alternative matching function, \fBpcre[16]_dfa_exec()\fP, is used (by
+When the alternative matching function, \fBpcre[16|32]_dfa_exec()\fP, is used (by
 means of the \eD escape sequence or the \fB-dfa\fP command line option), the
 output consists of a list of all the matches that start at the first point in
 the subject where there is at least one match. For example:
@@ -947,7 +1074,8 @@ result is undefined.
 .SH "SEE ALSO"
 .rs
 .sp
-\fBpcre\fP(3), \fBpcre16\fP(3), \fBpcreapi\fP(3), \fBpcrecallout\fP(3),
+\fBpcre\fP(3), \fBpcre16\fP(3), \fBpcre32\fP(3), \fBpcreapi\fP(3),
+\fBpcrecallout\fP(3),
 \fBpcrejit\fP, \fBpcrematching\fP(3), \fBpcrepartial\fP(d),
 \fBpcrepattern\fP(3), \fBpcreprecompile\fP(3).
 .
@@ -966,6 +1094,6 @@ Cambridge CB2 3QH, England.
 .rs
 .sp
 .nf
-Last updated: 21 February 2012
-Copyright (c) 1997-2012 University of Cambridge.
+Last updated: 26 April 2013
+Copyright (c) 1997-2013 University of Cambridge.
 .fi

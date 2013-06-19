@@ -4798,4 +4798,7 @@
     xxxxxxxxabcd
     xx\xa0xxxxxabcd 
 
+/abcd/
+    abcd\O0
+
 /-- End of testinput8 --/

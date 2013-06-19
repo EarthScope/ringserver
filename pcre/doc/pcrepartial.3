@@ -1,4 +1,4 @@
-.TH PCREPARTIAL 3 "24 February 2012" "PCRE 8.31"
+.TH PCREPARTIAL 3 "20 February 2013" "PCRE 8.33"
 .SH NAME
 PCRE - Perl-compatible regular expressions
 .SH "PARTIAL MATCHING IN PCRE"
@@ -33,8 +33,8 @@ the details differ between the two types of matching function. If both options
 are set, PCRE_PARTIAL_HARD takes precedence.
 .P
 If you want to use partial matching with just-in-time optimized code, you must
-call \fBpcre_study()\fP or \fBpcre16_study()\fP with one or both of these
-options:
+call \fBpcre_study()\fP, \fBpcre16_study()\fP or  \fBpcre32_study()\fP with one
+or both of these options:
 .sp
   PCRE_STUDY_JIT_PARTIAL_SOFT_COMPILE
   PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE
@@ -52,44 +52,47 @@ matching string, and does not bother to run the matching function on shorter
 strings. This optimization is also disabled for partial matching.
 .
 .
-.SH "PARTIAL MATCHING USING pcre_exec() OR pcre16_exec()"
+.SH "PARTIAL MATCHING USING pcre_exec() OR pcre[16|32]_exec()"
 .rs
 .sp
 A partial match occurs during a call to \fBpcre_exec()\fP or
-\fBpcre16_exec()\fP when the end of the subject string is reached successfully,
-but matching cannot continue because more characters are needed. However, at
-least one character in the subject must have been inspected. This character
-need not form part of the final matched string; lookbehind assertions and the
-\eK escape sequence provide ways of inspecting characters before the start of a
-matched substring. The requirement for inspecting at least one character exists
-because an empty string can always be matched; without such a restriction there
-would always be a partial match of an empty string at the end of the subject.
+\fBpcre[16|32]_exec()\fP when the end of the subject string is reached
+successfully, but matching cannot continue because more characters are needed.
+However, at least one character in the subject must have been inspected. This
+character need not form part of the final matched string; lookbehind assertions
+and the \eK escape sequence provide ways of inspecting characters before the
+start of a matched substring. The requirement for inspecting at least one
+character exists because an empty string can always be matched; without such a
+restriction there would always be a partial match of an empty string at the end
+of the subject.
 .P
 If there are at least two slots in the offsets vector when a partial match is
 returned, the first slot is set to the offset of the earliest character that
 was inspected. For convenience, the second offset points to the end of the
-subject so that a substring can easily be identified.
+subject so that a substring can easily be identified. If there are at least
+three slots in the offsets vector, the third slot is set to the offset of the
+character where matching started.
 .P
-For the majority of patterns, the first offset identifies the start of the
-partially matched string. However, for patterns that contain lookbehind
-assertions, or \eK, or begin with \eb or \eB, earlier characters have been
-inspected while carrying out the match. For example:
+For the majority of patterns, the contents of the first and third slots will be
+the same. However, for patterns that contain lookbehind assertions, or begin
+with \eb or \eB, characters before the one where matching started may have been
+inspected while carrying out the match. For example, consider this pattern:
 .sp
   /(?<=abc)123/
 .sp
 This pattern matches "123", but only if it is preceded by "abc". If the subject
-string is "xyzabc12", the offsets after a partial match are for the substring
-"abc12", because all these characters are needed if another match is tried
-with extra characters added to the subject.
+string is "xyzabc12", the first two offsets after a partial match are for the
+substring "abc12", because all these characters were inspected. However, the
+third offset is set to 6, because that is the offset where matching began.
 .P
 What happens when a partial match is identified depends on which of the two
 partial matching options are set.
 .
 .
-.SS "PCRE_PARTIAL_SOFT WITH pcre_exec() OR pcre16_exec()"
+.SS "PCRE_PARTIAL_SOFT WITH pcre_exec() OR pcre[16|32]_exec()"
 .rs
 .sp
-If PCRE_PARTIAL_SOFT is set when \fBpcre_exec()\fP or \fBpcre16_exec()\fP
+If PCRE_PARTIAL_SOFT is set when \fBpcre_exec()\fP or \fBpcre[16|32]_exec()\fP
 identifies a partial match, the partial match is remembered, but matching
 continues as normal, and other alternatives in the pattern are tried. If no
 complete match can be found, PCRE_ERROR_PARTIAL is returned instead of
@@ -114,10 +117,10 @@ example, there are two partial matches, because "dog" on its own partially
 matches the second alternative.)
 .
 .
-.SS "PCRE_PARTIAL_HARD WITH pcre_exec() OR pcre16_exec()"
+.SS "PCRE_PARTIAL_HARD WITH pcre_exec() OR pcre[16|32]_exec()"
 .rs
 .sp
-If PCRE_PARTIAL_HARD is set for \fBpcre_exec()\fP or \fBpcre16_exec()\fP,
+If PCRE_PARTIAL_HARD is set for \fBpcre_exec()\fP or \fBpcre[16|32]_exec()\fP,
 PCRE_ERROR_PARTIAL is returned as soon as a partial match is found, without
 continuing to search for possible complete matches. This option is "hard"
 because it prefers an earlier partial match over a later complete match. For
@@ -162,7 +165,7 @@ The second pattern will never match "dogsbody", because it will always find the
 shorter match first.
 .
 .
-.SH "PARTIAL MATCHING USING pcre_dfa_exec() OR pcre16_dfa_exec()"
+.SH "PARTIAL MATCHING USING pcre_dfa_exec() OR pcre[16|32]_dfa_exec()"
 .rs
 .sp
 The DFA functions move along the subject string character by character, without
@@ -254,7 +257,7 @@ If the escape sequence \eP is present more than once in a \fBpcretest\fP data
 line, the PCRE_PARTIAL_HARD option is set for the match.
 .
 .
-.SH "MULTI-SEGMENT MATCHING WITH pcre_dfa_exec() OR pcre16_dfa_exec()"
+.SH "MULTI-SEGMENT MATCHING WITH pcre_dfa_exec() OR pcre[16|32]_dfa_exec()"
 .rs
 .sp
 When a partial match has been found using a DFA matching function, it is
@@ -283,7 +286,7 @@ facility can be used to pass very long subject strings to the DFA matching
 functions.
 .
 .
-.SH "MULTI-SEGMENT MATCHING WITH pcre_exec() OR pcre16_exec()"
+.SH "MULTI-SEGMENT MATCHING WITH pcre_exec() OR pcre[16|32]_exec()"
 .rs
 .sp
 From release 8.00, the standard matching functions can also be used to do
@@ -308,10 +311,9 @@ processing time is needed.
 .P
 \fBNote:\fP If the pattern contains lookbehind assertions, or \eK, or starts
 with \eb or \eB, the string that is returned for a partial match includes
-characters that precede the partially matched string itself, because these must
-be retained when adding on more characters for a subsequent matching attempt.
-However, in some cases you may need to retain even earlier characters, as
-discussed in the next section.
+characters that precede the start of what would be returned for a complete
+match, because it contains all the characters that were inspected during the
+partial match.
 .
 .
 .SH "ISSUES WITH MULTI-SEGMENT MATCHING"
@@ -330,12 +332,32 @@ includes the effect of PCRE_NOTEOL.
 offsets that are returned for a partial match. However a lookbehind assertion
 later in the pattern could require even earlier characters to be inspected. You
 can handle this case by using the PCRE_INFO_MAXLOOKBEHIND option of the
-\fBpcre_fullinfo()\fP or \fBpcre16_fullinfo()\fP functions to obtain the length
-of the largest lookbehind in the pattern. This length is given in characters,
-not bytes. If you always retain at least that many characters before the
-partially matched string, all should be well. (Of course, near the start of the
-subject, fewer characters may be present; in that case all characters should be
-retained.)
+\fBpcre_fullinfo()\fP or \fBpcre[16|32]_fullinfo()\fP functions to obtain the
+length of the longest lookbehind in the pattern. This length is given in
+characters, not bytes. If you always retain at least that many characters
+before the partially matched string, all should be well. (Of course, near the
+start of the subject, fewer characters may be present; in that case all
+characters should be retained.)
+.P
+From release 8.33, there is a more accurate way of deciding which characters to
+retain. Instead of subtracting the length of the longest lookbehind from the
+earliest inspected character (\fIoffsets[0]\fP), the match start position
+(\fIoffsets[2]\fP) should be used, and the next match attempt started at the
+\fIoffsets[2]\fP character by setting the \fIstartoffset\fP argument of
+\fBpcre_exec()\fP or \fBpcre_dfa_exec()\fP.
+.P
+For example, if the pattern "(?<=123)abc" is partially
+matched against the string "xx123a", the three offset values returned are 2, 6,
+and 5. This indicates that the matching process that gave a partial match
+started at offset 5, but the characters "123a" were all inspected. The maximum
+lookbehind for that pattern is 3, so taking that away from 5 shows that we need
+only keep "123a", and the next match attempt can be started at offset 3 (that
+is, at "a") when further characters have been added. When the match start is
+not the earliest inspected character, \fBpcretest\fP shows it explicitly:
+.sp
+    re> "(?<=123)abc"
+  data> xx123a\eP\eP
+  Partial match at offset 5: 123a
 .P
 3. Because a partial match must always contain at least one character, what
 might be considered a partial match of an empty string actually gives a "no
@@ -440,6 +462,6 @@ Cambridge CB2 3QH, England.
 .rs
 .sp
 .nf
-Last updated: 24 February 2012
-Copyright (c) 1997-2012 University of Cambridge.
+Last updated: 20 February 2013
+Copyright (c) 1997-2013 University of Cambridge.
 .fi
