@@ -24,7 +24,7 @@
 	modern architectures guarantee that reading and writing integer
 	primatives is atomic.  This means locking is not needed for readers
 	of the ring parameters.  Good thing, it was a performance killer.
-	- Add checking to ring positioning routines to gaurantee that the
+	- Add checking to ring positioning routines to guarantee that the
 	reader position is only updated with consistent packet details.
 
 2012.125:

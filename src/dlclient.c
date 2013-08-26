@@ -1559,7 +1559,7 @@ RecvCmd (ClientInfo *cinfo)
   /* Sanity check the receive buffer length */
   if ( cinfo->recvbuflen < 10 )
     {
-      lprintf (0, "[%s] Client receving buffer is too small", cinfo->hostname);
+      lprintf (0, "[%s] Client receiving buffer is too small", cinfo->hostname);
       return -2;
     }
   
@@ -1573,7 +1573,7 @@ RecvCmd (ClientInfo *cinfo)
 	  /* The only acceptable error is EAGAIN (no data on non-blocking) */
 	  if ( nrecv == -1 && errno != EAGAIN )
 	    {
-	      lprintf (0, "[%s] Error recving data from client: %s",
+	      lprintf (0, "[%s] Error recv'ing data from client: %s",
 		       cinfo->hostname, strerror(errno));
 	      cinfo->socketerr = 1;
 	      return -2;
