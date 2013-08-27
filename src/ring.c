@@ -12,7 +12,9 @@
  * shutdown only.  If the packet buffer is to be memory mapped the
  * packet buffer file will be used directly.  The stream index file is
  * read on startup and written on shutdown existing only in memory
- * during operation.
+ * during operation. The packet buffer (and related stream index) can
+ * also be volatile, created in memory on initialization and lost on
+ * program or ring shutdown.
  *
  * Ring writing is governed by a mutex to avoid writers colliding,
  * only one writer may modify the ring at a time.  Ring reading is
@@ -38,7 +40,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2012.126
+ * Modified: 2013.208
  **************************************************************************/
 
 #include <errno.h>
@@ -1063,7 +1065,7 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
 	    {
 	      return 0;
 	    }
-	}
+ 	}
       else
 	{
 	  lprintf (0, "RingReadNext(): unsupported position value: %lld",
