@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2011/03/07
+.TH RINGSERVER 1 2013/10/05
 .SH NAME
 ringserver \- Generic packet ring buffer
 .SH SYNOPSIS
@@ -127,6 +127,12 @@ cover hours 0 through 2, the next 2 through 4, etc.
 .IP "-Tp \fIprefix\fR"
 Transfer log file prefix, by default no prefix is added to the fixed
 section of the log file name.
+
+.IP "-STDERR"
+Send all diagnostic output to stderr instead of stdout.  This is
+useful in situations where logging output is captured by another
+program on stderr and to separate ringserver diagnostics from other
+output on the console.
 
 .IP "-MSWRITE \fIformat\fR"
 A special mode of ringserver is to write all Mini-SEED data records

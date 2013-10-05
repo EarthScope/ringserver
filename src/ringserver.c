@@ -21,7 +21,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2011.143
+ * Modified: 2013.278
  **************************************************************************/
 
 #include <fcntl.h>
@@ -1322,6 +1322,15 @@ ProcessParam (int argcount, char **argvec)
         {
           TLogParams.tlogprefix = GetOptVal(argcount, argvec, optind++);
         }
+      else if (strcmp (argvec[optind], "-STDERR") == 0)
+        {
+	  /* Redirect all output destined for stdout to stderr */
+	  if ( dup2 (fileno(stderr),fileno(stdout)) < 0 )
+	    {
+	      lprintf (0, "Error redirecting stdout to stderr: %s", strerror(errno));
+	      exit (1);
+	    }
+        }
       else if (strcmp (argvec[optind], "-MSWRITE") == 0)
         {
 	  ConfigMSWrite ( GetOptVal(argcount, argvec, optind++) );
@@ -2610,6 +2619,7 @@ Usage (int level)
           " -T logdir      Directory to write transfer logs (default is no logs)\n"
 	  " -Ti hours      Transfer log writing interval (default 24 hours)\n"
 	  " -Tp prefix     Prefix to add to transfer log files (default is none)\n"
+	  " -STDERR        Send all console output to stderr instead of stdout\n"
 	  "\n",
           maxclients, maxpktid, (int)(pktsize - sizeof(RingPacket)));
   
@@ -2618,7 +2628,7 @@ Usage (int level)
       fprintf (stderr,
 	       " -MSWRITE format  Write all received Mini-SEED to an archive\n"
 	       " -MSSCAN dir      Scan directory for files containing Mini-SEED\n"
-	       " -VOLATILE        Create volatile ring, contents not saved to files \n"
+	       " -VOLATILE        Create volatile ring, contents not saved to files\n"
 	       "\n");
       
       fprintf (stderr,
