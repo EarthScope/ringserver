@@ -4,7 +4,8 @@
 	of the buffer by repositioning the search to the earliest packet when
 	the target packet is not found.  If the target packet is not the next
 	expected packet and does not exist in the ring it is very likely that
-	read position has fallen behind, off the trailing edge.
+	read position has fallen behind, off the trailing edge.  Thanks to 
+	Doug Neuhauser for raising this issue and suggesting a fix.
 	- Add command line option -STDERR to send all console output to stderr
 	instead of stdout.
 
