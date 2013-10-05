@@ -1,3 +1,11 @@
+2013.278:
+	- Update to libmseed 2.12.
+	- In RingReadNext(), avoid a reader from falling off the trailing edge
+	of the buffer by repositioning the search to the earliest packet when
+	the target packet is not found.  If the target packet is not the next
+	expected packet and does not exist in the ring it is very likely that
+	read position has fallen behind, off the trailing edge.
+
 2013.192:
 	- Increase SLMAXREGEXLEN and DLMAXREGEXLEN from 16384 to 65536 to
 	support larger request selections.

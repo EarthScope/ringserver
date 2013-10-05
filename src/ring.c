@@ -23,7 +23,7 @@
  * In general, non-existent packets are represented with a packet ID
  * of 0 and an offset of -1.
  *
- * Copyright 2012 Chad Trabant, IRIS Data Management Center
+ * Copyright 2013 Chad Trabant, IRIS Data Management Center
  *
  * This file is part of ringserver.
  *
@@ -40,7 +40,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2013.208
+ * Modified: 2013.278
  **************************************************************************/
 
 #include <errno.h>
@@ -988,6 +988,11 @@ RingRead (RingReader *reader, int64_t reqid,
  * will only be returned if the packetdata pointer is not 0 and points
  * to already allocated memory.
  *
+ * If the packet being searched for does not exist and is not the next
+ * expected packet that will enter the ring, assume that the read
+ * position has fallen off the trailing edge of the ring and
+ * reposition the search at the earliest packet.
+ *
  * Returns positive packet ID on success, 0 when the packet was not
  * found and -1 on error.
  ***************************************************************************/
@@ -999,6 +1004,7 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
   hptime_t pkttime;
   int64_t pktid = 0;
   uint8_t skip;
+  uint32_t skipped;
   
   int64_t latestoffset;
   int64_t earliestid;
@@ -1087,9 +1093,11 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
 	      reader->datastart = latestdstime;
 	      reader->dataend = latestdetime;
 	    }
+	  
 	  return 0;
 	}
-      /* If current packet is the latest in the ring return immediately */
+      /* If current packet is the latest in the ring return immediately,
+       * this means we will never search for the next expected packet number. */
       else if ( reader->pktid == latestid && 
 		reader->pkttime == latestptime )
 	{
@@ -1108,6 +1116,7 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
   
   /* Loop until we have a matching packet or no next */
   skip = 1;
+  skipped = 0;
   while ( skip )
     {
       skip = 0;
@@ -1115,8 +1124,25 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
       /* Get packet header from index */
       if ( ! (pkt = GetPacket(ringparams, pktid, &pkttime)) )
 	{
-	  return 0;
+	  /* If packet was not found, and it is already known to not be the next
+	   * expected packet, then assume the reader has been lapped (fallen off 
+	   * the trailing edge of the buffer) and reposition to the earliest packet */
+	  
+	  pktid = ringparams->earliestid;
+	  skipped++;
+	  
+	  /* Safety value to avoid skipping off the trailing edge of the buffer forever */
+	  if ( skipped > 100 )
+	    {
+	      lprintf (0, "RingReadNext(): skipped off trailing edge of buffer %d times", skipped);
+	      return 0;
+	    }
+	  
+	  skip = 1;
+	  continue;
 	}
+      
+      skipped = 0;
       
       /* Update reader position */
       reader->pktid = pktid;
