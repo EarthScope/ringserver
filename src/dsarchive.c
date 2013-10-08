@@ -26,7 +26,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * modified: 2010.103
+ * modified: 2013.280
  ***************************************************************************/
 
 #include <sys/types.h>
@@ -458,8 +458,7 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
 	      if ( errno == ENOENT )
 		{
 		  lprintf (2, "Creating directory: %s", hostname, filename);
-		  if (mkdir
-		      (filename, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH))
+		  if ( mkdir (filename, S_IRWXU | S_IRWXG | S_IRWXO ) ) /* Mode 0777 */
 		    {
 		      lprintf (0, "[%s] ds_streamproc: mkdir(%s) %s",
 			       hostname, filename, strerror (errno));
@@ -818,7 +817,7 @@ ds_openfile (DataStream *datastream, const char *filename, char *ident)
   int idletimeout = datastream->idletimeout;
   int oret = 0;
   int flags = (O_RDWR | O_CREAT | O_APPEND);
-  mode_t mode = (S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH); /* Mode 0644 */
+  mode_t mode = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH); /* Mode 0666 */
   
   if ( ! datastream )
     return -1;

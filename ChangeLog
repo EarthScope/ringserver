@@ -1,3 +1,8 @@
+2013.280:
+	- Change permissions of miniSEED writing mode to 777 for directories
+	and 666 for files.  An operator can control the final permissions of
+	the files and directories by setting the umask.
+
 2013.278:
 	- Update to libmseed 2.12.
 	- In RingReadNext(), avoid a reader from falling off the trailing edge
