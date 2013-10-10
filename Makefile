@@ -11,7 +11,7 @@ all clean static install gcc gcc32 gcc64 debug gccdebug gcc32debug gcc64debug ::
 	  if [ ! -f $$d/Makefile -a ! -f $$d/makefile ] ; then \
 	    if [ -x $$d/configure -a "$$d" = "pcre" ] ; then \
 	      echo "Running configure in $$d" ; \
-	      ( cd $$d && ./configure --disable-shared --enable-static ) ; \
+	      ( cd $$d && ./configure --disable-shared --enable-static --disable-cpp ) ; \
 	    elif [ -x $$d/configure -a "$$d" = "mxml" ] ; then \
 	       echo "Running configure in $$d" ; \
 	      ( cd $$d && ./configure --disable-shared --enable-threads ) ; \
