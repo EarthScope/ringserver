@@ -545,7 +545,7 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
       
       /* Update mod time for this entry */
       foundgroup->modtime = time (NULL);
-            
+      
       return 0;
     }
   
@@ -572,13 +572,13 @@ ds_closeidle (DataStream *datastream, int idletimeout, char *ident)
   
   searchgroup = datastream->grouproot;
   curtime = time (NULL);
-
+  
   /* Traverse the stream chain */
   while (searchgroup != NULL)
     {
       nextgroup = searchgroup->next;
       
-      if ( searchgroup->modtime > 0 && (curtime - searchgroup->modtime) > idletimeout )
+      if ( searchgroup->modtime > 0 && (curtime - searchgroup->modtime) >= idletimeout )
 	{
 	  lprintf (2, "[%s] Closing idle stream with key %s",
 		   ident, searchgroup->defkey);
@@ -586,17 +586,11 @@ ds_closeidle (DataStream *datastream, int idletimeout, char *ident)
 	  /* Re-link the stream chain */
 	  if ( prevgroup != NULL )
 	    {
-	      if ( searchgroup->next != NULL )
-		prevgroup->next = searchgroup->next;
-	      else
-		prevgroup->next = NULL;
+	      prevgroup->next = searchgroup->next;
 	    }
 	  else
 	    {
-	      if ( searchgroup->next != NULL )
-		datastream->grouproot = searchgroup->next;
-	      else
-		datastream->grouproot = NULL;
+	      datastream->grouproot = searchgroup->next;
 	    }
 	  
 	  /* Close the associated file */
@@ -606,7 +600,7 @@ ds_closeidle (DataStream *datastream, int idletimeout, char *ident)
 	  else
 	    count++;
 	  
-	  free (searchgroup->defkey); 
+	  free (searchgroup->defkey);
 	  free (searchgroup);
 	}
       else
@@ -667,12 +661,6 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
 	  
 	  foundgroup = searchgroup;
 	  
-	  /* Keep ds_closeidle from closing this stream */
-	  if ( foundgroup->modtime > 0 )
-	    {
-	      foundgroup->modtime *= -1;
-	    }
-	  
 	  break;
 	}
       
@@ -714,8 +702,8 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
 		   ident, matchedfilename);
 	  
 	  /* Now that we have a match use it instead of filename */
-          strncpy (filename, matchedfilename, MAX_FILENAME_LEN-2);
-          filename[MAX_FILENAME_LEN-1] = '\0';
+	  strncpy (filename, matchedfilename, MAX_FILENAME_LEN-2);
+	  filename[MAX_FILENAME_LEN-1] = '\0';
 	}
       
       globfree (&pglob);
@@ -756,6 +744,12 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
 	  lprintf (0, "[%s] stream chain is broken!", ident);
 	  return NULL;
 	}
+    }
+  
+  /* Keep ds_closeidle() from closing this stream */
+  if ( foundgroup->modtime > 0 )
+    {
+      foundgroup->modtime *= -1;
     }
   
   /* Close idle stream files */

@@ -4,7 +4,7 @@
  * Multi-threaded TCP generic ring buffer data server with interfaces
  * for SeedLink and DataLink protocols.
  *
- * Copyright 2011 Chad Trabant, IRIS Data Management Center
+ * Copyright 2013 Chad Trabant, IRIS Data Management Center
  *
  * This file is part of ringserver.
  *
@@ -21,7 +21,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2013.278
+ * Modified: 2013.283
  **************************************************************************/
 
 #include <fcntl.h>
@@ -182,7 +182,7 @@ main (int argc, char* argv[])
       return 1;
     }
   
-  /* Look up store the system TCP protocol entry */
+  /* Look up & store the system TCP protocol entry */
   if ( ! (pe_tcp = getprotobyname("tcp")) )
     {
       lprintf (0, "Error: cannot determine the system protocol number for TCP");
@@ -664,6 +664,19 @@ main (int argc, char* argv[])
 	}
     }
   
+  /* Cancel and re-joing the signal handling thread */
+  if ( (errno=pthread_cancel (sigtid)) )
+    {
+      lprintf (0, "Error cancelling signal handling thread: %s", strerror(errno));
+      return 1;
+    }
+  
+  if ( (errno=pthread_join (sigtid, NULL)) )
+    {
+      lprintf (0, "Error joining signal handling thread: %s", strerror(errno));
+      return 1;
+    }
+  
   return 0;
 }  /* End of main() */
 
@@ -809,7 +822,7 @@ DL_ListenThread (void *arg)
 	  close (clientsocket);
 	  break;
 	}
-            
+      
       cinfo->socket = clientsocket;
       cinfo->ringparams = ringparams;
       
@@ -1219,6 +1232,8 @@ InitServerSocket (char *portstr)
       close (fd);
       return -1;
     }
+  
+  freeaddrinfo (addr);
   
   return fd;
 }  /* End of InitServerSocket() */

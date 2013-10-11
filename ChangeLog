@@ -1,3 +1,12 @@
+2013.284:
+	- When writing miniSEED, properly handle the case where all files
+	associated with a DataStream would be closed because the idle time
+	out reached 0 by making sure the current entry does not get closed.
+	This can happen when all currently open files (max of ~40) have been
+	opened within the last second.
+	- Cleanup getaddrinfo related memory and re-join signal handling thread on 
+	shutdown for completeness (and to make valgrind happy).
+
 2013.280:
 	- Change permissions of miniSEED writing mode to 777 for directories
 	and 666 for files.  An operator can control the final permissions of
