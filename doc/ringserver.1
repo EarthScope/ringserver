@@ -1,11 +1,12 @@
-.TH RINGSERVER 1 2013/10/07
+.TH RINGSERVER 1 2014/01/07
 .SH NAME
 ringserver \- Generic packet ring buffer
+
 .SH SYNOPSIS
 .nf
 ringserver [options] [configfile]
-
 .fi
+
 .SH DESCRIPTION
 \fBringserver\fP is a TCP-based ring buffer designed for packetized
 streaming data.  The primary implementation criteria are scalability
@@ -65,20 +66,20 @@ Print an extended help/usage and exit.
 Be more verbose.  This flag can be used multiple times ("-v -v" or 
 "-vv") for more verbosity.
 
-.IP "-I \fIServerID\fR"
+.IP "-I \fIServerID\fP"
 Server ID reported to the clients.  The value may be a quoted string
 containing spaces.  The default value is "Ring Server".
 
-.IP "-m \fImaxclients\fR"
+.IP "-m \fImaxclients\fP"
 Maximum number of concurrently connected clients.  The default maximum
 is 600.
 
-.IP "-Rd \fIringdir\fR"
+.IP "-Rd \fIringdir\fP"
 Base directory for the server to store the packet buffer data files.
 This option must be specified on the command line or in the config
 file, there is no default.
 
-.IP "-Rs \fIbytes\fR"
+.IP "-Rs \fIbytes\fP"
 Size of the packet buffer in bytes, default size is 1 GB.  The size of
 the ring, in combination with the ring packet size, determine how much
 past data is available in the buffer.  If the server is configured to
@@ -87,12 +88,12 @@ limited to how large a file the host system can support.  If the
 server is configured to maintain the ring in system memory the size is
 limited to system memory.
 
-.IP "-Rm \fImaxID\fR"
+.IP "-Rm \fImaxID\fP"
 Maximum ring packet ID used to uniquely identify a packet.  Default is
 16,777,215 which the maximum supported by the SeedLink protocol, if
 SeedLink is not being used it can be much higher.
 
-.IP "-Rp \fIpacketsize\fR"
+.IP "-Rp \fIpacketsize\fP"
 Maximum ring packet data size (not including packet buffer header),
 default is 512 bytes.
 
@@ -103,28 +104,28 @@ the memory buffers will be written back to the files.  This option
 might be useful in environments where memory-mapping of files is not
 possbile or is unreliable (e.g. NFS).
 
-.IP "-DL \fIport\fR"
+.IP "-DL \fIport\fP"
 Network port to listen for DataLink connections on, by default the
 server will not listen for DataLink connections.
 16000.
 
-.IP "-SL \fIport\fR"
+.IP "-SL \fIport\fP"
 Network port to listen for SeedLink connections on, by default the
 server will not listen for SeedLink connections.
 
-.IP "-T \fIlogdir\fR"
+.IP "-T \fIlogdir\fP"
 Transfer log file base directory, by default the server does not write
 transfer logs.  If a directory is specified both transmission and
 reception logs will be written, these two logs can be toggled
 individually in the server config file.
 
-.IP "-Ti \fIhours\fR"
+.IP "-Ti \fIhours\fP"
 Transfer log writing interval in hours, default interval is 24 hours.
 The interval always starts at day boundaries, for example if the
 interval is set to 2 hours then the first interval in a given day will
 cover hours 0 through 2, the next 2 through 4, etc.
 
-.IP "-Tp \fIprefix\fR"
+.IP "-Tp \fIprefix\fP"
 Transfer log file prefix, by default no prefix is added to the fixed
 section of the log file name.
 
@@ -134,13 +135,13 @@ useful in situations where logging output is captured by another
 program on stderr and to separate ringserver diagnostics from other
 output on the console.
 
-.IP "-MSWRITE \fIformat\fR"
+.IP "-MSWRITE \fIformat\fP"
 A special mode of ringserver is to write all Mini-SEED data records
 received via DataLink (ring packets ending with the /MSEED suffix) to
 a user defined directory and file structure.  See \fBMini-SEED
 Archiving\fP for more details.
 
-.IP "-MSSCAN \fIdirectory\fR [suboptions]"
+.IP "-MSSCAN \fIdirectory\fP [suboptions]"
 A special mode of ringserver is to recursively scan a directory for
 files containing Mini-SEED formatted data records and insert them into
 the ring as packets with a /MSEED suffix.  Optional suboptions control
