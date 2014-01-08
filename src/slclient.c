@@ -37,7 +37,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2013.161
+ * Modified: 2014.007
  **************************************************************************/
 
 /* Unsupported protocol features:
@@ -608,8 +608,9 @@ SL_ClientThread (void *arg)
 		      break;
 		    }
 		  
-		  /* Update StreamNode byte count */
+		  /* Update StreamNode packet and byte count */
 		  pthread_mutex_lock (&(cinfo->streams_lock));
+		  stream->txpackets++;
 		  stream->txbytes += packet.datasize;
 		  pthread_mutex_unlock (&(cinfo->streams_lock));
 		  

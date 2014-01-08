@@ -1,3 +1,8 @@
+2014.007:
+	- Increment transmission packet count per stream for SeedLink clients;
+	for transmission logging, packet counts were previously zero, byte
+	counts were (and remain) correct.
+
 2013.284:
 	- When writing miniSEED, properly handle the case where all files
 	associated with a DataStream would be closed because the idle time
