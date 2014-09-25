@@ -40,7 +40,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2013.278
+ * Modified: 2014.268
  **************************************************************************/
 
 #include <errno.h>
@@ -1592,7 +1592,7 @@ RingLimit (RingReader *reader, char *pattern)
       reader->limit = pcre_compile (pattern, 0, &errptr, &erroffset, NULL);
       if ( errptr )
 	{
-	  lprintf (0, "RingLimit(): Error with pcre_compile: %s", errptr);
+	  lprintf (0, "RingLimit(): Error with pcre_compile: %s (offset: %d)", errptr, erroffset);
 	  return -1;
 	}
       
@@ -1608,11 +1608,11 @@ RingLimit (RingReader *reader, char *pattern)
 	  return -1;
 	}
       
-      /* Set low limits on the backtracking and recursion allowed */
+      /* Set limits on total matches and backtracking/recursion allowed */
       if ( reader->limit_extra )
 	{
 	  reader->limit_extra->flags = PCRE_EXTRA_MATCH_LIMIT | PCRE_EXTRA_MATCH_LIMIT_RECURSION;
-	  reader->limit_extra->match_limit = 1000;
+	  reader->limit_extra->match_limit = 10000;
 	  reader->limit_extra->match_limit_recursion = 1000;
 	}
     }
@@ -1658,7 +1658,7 @@ RingMatch (RingReader *reader, char *pattern)
       reader->match = pcre_compile (pattern, 0, &errptr, &erroffset, NULL);
       if ( errptr )
 	{
-	  lprintf (0, "RingMatch(): Error with pcre_compile: %s", errptr);
+	  lprintf (0, "RingMatch(): Error with pcre_compile: %s (offset: %d)", errptr, erroffset);
 	  return -1;
 	}
       
@@ -1674,11 +1674,11 @@ RingMatch (RingReader *reader, char *pattern)
 	  return -1;
 	}
       
-      /* Set low limits on the backtracking and recursion allowed */
+      /* Set limits on total matches and backtracking/recursion allowed */
       if ( reader->match_extra )
 	{
 	  reader->match_extra->flags = PCRE_EXTRA_MATCH_LIMIT | PCRE_EXTRA_MATCH_LIMIT_RECURSION;
-	  reader->match_extra->match_limit = 1000;
+	  reader->match_extra->match_limit = 10000;
 	  reader->match_extra->match_limit_recursion = 1000;
 	}
     }
@@ -1724,7 +1724,7 @@ RingReject (RingReader *reader, char *pattern)
       reader->reject = pcre_compile (pattern, 0, &errptr, &erroffset, NULL);
       if ( errptr )
 	{
-	  lprintf (0, "RingReject(): Error with pcre_compile: %s", errptr);
+	  lprintf (0, "RingReject(): Error with pcre_compile: %s (offset: %d)", errptr, erroffset);
 	  return -1;
 	}
       
@@ -1740,11 +1740,11 @@ RingReject (RingReader *reader, char *pattern)
 	  return -1;
 	}
 
-      /* Set low limits on the backtracking and recursion allowed */
+      /* Set limits on total matches and backtracking/recursion allowed */
       if ( reader->reject_extra )
 	{
 	  reader->reject_extra->flags = PCRE_EXTRA_MATCH_LIMIT | PCRE_EXTRA_MATCH_LIMIT_RECURSION;
-	  reader->reject_extra->match_limit = 1000;
+	  reader->reject_extra->match_limit = 10000;
 	  reader->reject_extra->match_limit_recursion = 1000;
 	}
     }
