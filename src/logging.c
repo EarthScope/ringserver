@@ -3,7 +3,7 @@
  *
  * Generic logging routines.
  *
- * Copyright 2011 Chad Trabant, IRIS Data Management Center
+ * Copyright 2014 Chad Trabant, IRIS Data Management Center
  *
  * This file is part of ringserver.
  *
@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2008.326
+ * Modified: 2014.268
  **************************************************************************/
 
 #include <errno.h>
@@ -47,6 +47,7 @@ struct TLogParams_s TLogParams = {0,0,1,1,86400,0,0,0};
 
 /* Lock mutex for transmission log file writing */
 static pthread_mutex_t tlogfile_lock = PTHREAD_MUTEX_INITIALIZER;
+
 
 /***************************************************************************
  * lprintf:
@@ -80,10 +81,10 @@ lprintf (int level, char *fmt, ...)
     rv = vsnprintf (message, sizeof(message), fmt, argptr);
     va_end (argptr);
     
-    printf ("%3.3s %3.3s %2.2d %2.2d:%2.2d:%2.2d %4.4d - %s\n",
+    printf ("%3.3s %3.3s %2.2d %2.2d:%2.2d:%2.2d %4.4d - %s%s\n",
             day[tp->tm_wday], month[tp->tm_mon], tp->tm_mday,
             tp->tm_hour, tp->tm_min, tp->tm_sec, tp->tm_year + 1900,
-            message);
+            message, (rv > sizeof(message))?" ...":"");
     
     fflush (stdout);
   }
