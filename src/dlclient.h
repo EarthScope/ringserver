@@ -18,7 +18,7 @@ extern "C" {
 /* DataLink server capability flags */
 #define DLCAPFLAGS "DLPROTO:1.0"
 
-#define DLMAXREGEXLEN       65536    /* Maximum regex pattern size */
+#define DLMAXREGEXLEN       1048576  /* Maximum regex pattern size */
 
 extern void *DL_ClientThread (void *arg);
 

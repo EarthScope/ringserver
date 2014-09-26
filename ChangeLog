@@ -1,15 +1,13 @@
-2014.268:
+2014.269: Dudes!
 	- Update mxml to 2.8.
 	- Update pcre to 8.35.
 	- Update libmseed to 2.13.
-	- Increase the PCRE total regex matching limit from 1,000 to 100,000 
-	to handle larger selections from clients.
-	* A fundamental limit is imposed by the pcre library wherein the
-	regular expression can not exceed a certain limit of elements.
-	The limit is not precisely expressable in terms of selectors,
-	on the order of 900 selections.
-
-	- Include offset in regex in the error message printed when
+	- Changes to support much larger SeedLink requests:
+	a) Increase max internal regex buffer size from 65,536 to 1,048,576 by
+	changing SLMAXREGEXLEN and DLMAXREGEXLEN.
+	b) Increase max buffer for per-station/global selectors from 400 to 2,048.
+	c) Configure the PCRE to use an internal link size of 4 instead of 2.
+	- Include offset in the regex pattern in the error message printed when
 	pcre_compile() returns an error.
 	- Improve error messasges in sliclient.c when RingMatch() or
 	RingReject() return failures.
@@ -41,7 +39,7 @@
 	of the buffer by repositioning the search to the earliest packet when
 	the target packet is not found.  If the target packet is not the next
 	expected packet and does not exist in the ring it is very likely that
-	read position has fallen behind, off the trailing edge.  Thanks to 
+	read position has fallen behind, off the trailing edge.  Thanks to
 	Doug Neuhauser for raising this issue and suggesting a fix.
 	- Add command line option -STDERR to send all console output to stderr
 	instead of stdout.

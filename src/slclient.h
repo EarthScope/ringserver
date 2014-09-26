@@ -1,7 +1,7 @@
 /**************************************************************************
  * slclient.h
  *
- * Modified: 2013.192
+ * Modified: 2014.269
  **************************************************************************/
 
 #ifndef SLCLIENT_H
@@ -23,7 +23,8 @@ extern "C" {
 #define SIGNATURE           "SL"     /* SeedLink header signature */
 #define INFOSIGNATURE       "SLINFO" /* SeedLink INFO packet signature */
 
-#define SLMAXREGEXLEN       65536    /* Maximum length of match/reject regex */
+#define SLMAXREGEXLEN       1048576  /* Maximum length of match/reject regex pattern */
+#define SLMAXSELECTLEN      2048     /* Maximum length of per-station/global selector buffer */
 
 #define SLINFO_ID           1
 #define SLINFO_CAPABILITIES 2

@@ -20,7 +20,7 @@
  * the most recent packet ID requested by the client and setting the
  * ring to that position.
  *
- * Copyright 2011 Chad Trabant, IRIS Data Management Center
+ * Copyright 2014 Chad Trabant, IRIS Data Management Center
  *
  * This file is part of ringserver.
  *
@@ -37,11 +37,11 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2014.007
+ * Modified: 2014.269
  **************************************************************************/
 
 /* Unsupported protocol features:
- * CAT listing
+ * CAT listing (oh the irony)
  * INFO GAPS
  * INFO ALL
  */
@@ -927,13 +927,14 @@ HandleNegotiation (char *recvbuffer, int recvlength, ClientInfo *cinfo,
 	    }
 	  else
 	    {
-	      /* Add selector to the StaNode.selectors, maximum of 400 bytes */
+	      /* Add selector to the StaNode.selectors, maximum of SLMAXSELECTLEN bytes */
 	      /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
-	      if ( AddToString (&(stanode->selectors), pattern, ",", (pattern[0]=='!')?0:1, 400) )
+	      if ( AddToString (&(stanode->selectors), pattern, ",", (pattern[0]=='!')?0:1, SLMAXSELECTLEN) )
 		{
-		  lprintf (0, "[%s] Error in AddToString for command SELECT", cinfo->hostname);
+		  lprintf (0, "[%s] Error for command SELECT (cannot AddToString), too many selectors for %s.%s",
+			   cinfo->hostname, reqnet, reqsta);
 		  
-		  if ( ! slinfo->batch && SendReply (cinfo, "ERROR", "Error in AddToString") )
+		  if ( ! slinfo->batch && SendReply (cinfo, "ERROR", "Too many selectors for this station") )
 		    return -1;
 		}
 	      else
@@ -946,13 +947,14 @@ HandleNegotiation (char *recvbuffer, int recvlength, ClientInfo *cinfo,
       /* Otherwise add selector to global list */
       else if ( OKGO )
 	{
-	  /* Add selector to the SLStaNode.selectors, maximum of 400 bytes */
+	  /* Add selector to the SLStaNode.selectors, maximum of SLMAXSELECTLEN bytes */
 	  /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
-	  if ( AddToString (&(slinfo->selectors), pattern, ",", (pattern[0]=='!')?0:1, 400) )
+	  if ( AddToString (&(slinfo->selectors), pattern, ",", (pattern[0]=='!')?0:1, SLMAXSELECTLEN) )
 	    {
-	      lprintf (0, "[%s] Error in AddToString for command SELECT", cinfo->hostname);
+	      lprintf (0, "[%s] Error for command SELECT (cannot AddToString), too many global selectors",
+		       cinfo->hostname);
 	      
-	      if ( ! slinfo->batch && SendReply (cinfo, "ERROR", "Error in AddToString") )
+	      if ( ! slinfo->batch && SendReply (cinfo, "ERROR", "Too many global selectors") )
 		return -1;
 	    }
 	  else
