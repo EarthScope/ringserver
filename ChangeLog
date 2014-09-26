@@ -11,6 +11,7 @@
 	- Improve error messasges in sliclient.c when RingMatch() or
 	RingReject() return failures.
 	- Add " ..." to log messages that were truncated at 200 characters.
+	- Add example of using Match with the MSeedScan option to the man page.
 
 2014.007:
 	- Increment transmission packet count per stream for SeedLink clients;
