@@ -1612,7 +1612,7 @@ RingLimit (RingReader *reader, char *pattern)
       if ( reader->limit_extra )
 	{
 	  reader->limit_extra->flags = PCRE_EXTRA_MATCH_LIMIT | PCRE_EXTRA_MATCH_LIMIT_RECURSION;
-	  reader->limit_extra->match_limit = 10000;
+	  reader->limit_extra->match_limit = 100000;
 	  reader->limit_extra->match_limit_recursion = 1000;
 	}
     }
@@ -1678,7 +1678,7 @@ RingMatch (RingReader *reader, char *pattern)
       if ( reader->match_extra )
 	{
 	  reader->match_extra->flags = PCRE_EXTRA_MATCH_LIMIT | PCRE_EXTRA_MATCH_LIMIT_RECURSION;
-	  reader->match_extra->match_limit = 10000;
+	  reader->match_extra->match_limit = 100000;
 	  reader->match_extra->match_limit_recursion = 1000;
 	}
     }
@@ -1744,7 +1744,7 @@ RingReject (RingReader *reader, char *pattern)
       if ( reader->reject_extra )
 	{
 	  reader->reject_extra->flags = PCRE_EXTRA_MATCH_LIMIT | PCRE_EXTRA_MATCH_LIMIT_RECURSION;
-	  reader->reject_extra->match_limit = 10000;
+	  reader->reject_extra->match_limit = 100000;
 	  reader->reject_extra->match_limit_recursion = 1000;
 	}
     }

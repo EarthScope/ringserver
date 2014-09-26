@@ -1,7 +1,7 @@
 2014.268:
 	- Update mxml to 2.8.
 	- Update pcre to 8.35.
-	- Increase the PCRE total regex matching limit from 1,000 to 10,000 
+	- Increase the PCRE total regex matching limit from 1,000 to 100,000 
 	to handle larger selections from clients.
 	* A fundamental limit is imposed by the pcre library wherein the
 	regular expression can not exceed a certain limit of elements.
