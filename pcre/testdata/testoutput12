@@ -8,24 +8,26 @@ No options
 First char = 'a'
 Need char = 'c'
 Subject length lower bound = 3
-No set of starting bytes
+No starting char list
 JIT study was successful
 
 /(?(?C1)(?=a)a)/S+I
 Capturing subpattern count = 0
+May match empty string
 No options
-First char = 'a'
+No first char
 No need char
 Study returned NULL
 JIT study was not successful
 
 /(?(?C1)(?=a)a)/S!+I
 Capturing subpattern count = 0
+May match empty string
 No options
-First char = 'a'
+No first char
 No need char
 Subject length lower bound = -1
-No set of starting bytes
+No starting char list
 JIT study was not successful
 
 /abc/S+I>testsavedregex
@@ -34,7 +36,7 @@ No options
 First char = 'a'
 Need char = 'c'
 Subject length lower bound = 3
-No set of starting bytes
+No starting char list
 JIT study was successful
 Compiled pattern written to testsavedregex
 Study data written to testsavedregex
@@ -47,6 +49,7 @@ Study data loaded from testsavedregex
 
 /a*/SI
 Capturing subpattern count = 0
+May match empty string
 No options
 No first char
 No need char
@@ -162,7 +165,7 @@ No options
 First char = 'a'
 Need char = 'd'
 Subject length lower bound = 4
-No set of starting bytes
+No starting char list
 JIT study was successful
 
 /(*NO_START_OPT)a(*:m)b/KS++

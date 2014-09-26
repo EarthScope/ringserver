@@ -202,9 +202,6 @@ sure both macros are undefined; an emulation function will then be used. */
    or -2 (ANYCRLF). */
 #undef NEWLINE
 
-/* Define to 1 if your C compiler doesn't accept -c and -o together. */
-#undef NO_MINUS_C_MINUS_O
-
 /* PCRE uses recursive function calls to handle backtracking while matching.
    This can sometimes be a problem on systems that have stacks of limited
    size. Define NO_RECURSE to any value to get a version that doesn't use
@@ -234,6 +231,11 @@ sure both macros are undefined; an emulation function will then be used. */
 
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
+
+/* The value of PARENS_NEST_LIMIT specifies the maximum depth of nested
+   parentheses (of any kind) in a pattern. This limits the amount of system
+   stack that is used while compiling a pattern. */
+#undef PARENS_NEST_LIMIT
 
 /* to make a symbol visible */
 #undef PCRECPP_EXP_DECL
@@ -290,10 +292,6 @@ sure both macros are undefined; an emulation function will then be used. */
 
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
-
-/* Define to allow pcretest and pcregrep to be linked with gcov, so that they
-   are able to generate code coverage reports. */
-#undef SUPPORT_GCOV
 
 /* Define to any value to enable support for Just-In-Time compiling. */
 #undef SUPPORT_JIT
