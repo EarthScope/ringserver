@@ -7,6 +7,10 @@
 	changing SLMAXREGEXLEN and DLMAXREGEXLEN.
 	b) Increase max buffer for per-station/global selectors from 400 to 2,048.
 	c) Configure the PCRE to use an internal link size of 4 instead of 2.
+	The effective limit depends on the composite selection, e.g. number of
+	STATIONs and number SELECTions per STATION.  With 6 selections each,
+	over 10,000 stations may be requested.  Over 200 selectors for a
+	request with fewer stations.
 	- Include offset in the regex pattern in the error message printed when
 	pcre_compile() returns an error.
 	- Improve error messasges in sliclient.c when RingMatch() or
