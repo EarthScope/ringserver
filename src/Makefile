@@ -1,4 +1,15 @@
 
+# Build environment can be configured the following
+# environment variables:
+#   CC : Specify the C compiler to use
+#   CFLAGS : Specify compiler options to use
+
+BIN = ringserver
+
+SRCS = stack.c rbtree.c logging.c clients.c slclient.c dlclient.c \
+       dsarchive.c mseedscan.c generic.c ring.c ringserver.c
+OBJS = $(SRCS:.c=.o)
+
 # Standard compiler parameters
 CFLAGS += -D_REENTRANT -D_POSIX_PTHREAD_SEMANTICS -I../libmseed -I../mxml -I../pcre 
 
@@ -7,27 +18,13 @@ LDLIBS  = ../pcre/.libs/libpcre.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpth
 # For SunOS/Solaris uncomment the following line
 #LDLIBS = ../pcre/.libs/libpcre.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread -lsocket -lnsl -lrt
 
-BIN  = ../ringserver
-
-OBJS = stack.o rbtree.o logging.o clients.o slclient.o dlclient.o \
-       dsarchive.o mseedscan.o generic.o ring.o ringserver.o
-
 all: $(BIN)
 
 $(BIN): $(OBJS)
-	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS) $(LDLIBS)
-
-static: $(OBJS)
-	$(CC) $(CFLAGS) -static -o $(BIN) $(OBJS) $(LDFLAGS) $(LDLIBS)
-
-cc:
-	@$(MAKE) "CC=$(CC)" "CFLAGS=$(CFLAGS)"
-
-debug:
-	@$(MAKE) "CC=$(CC)" "CFLAGS=-g $(CFLAGS)"
+	$(CC) $(CFLAGS) -o ../$(BIN) $(OBJS) $(LDFLAGS) $(LDLIBS)
 
 clean:
-	rm -f $(OBJS) $(BIN)
+	rm -f $(OBJS) ../$(BIN)
 
 install:
 	@echo

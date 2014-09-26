@@ -40,7 +40,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2014.268
+ * Modified: 2014.269
  **************************************************************************/
 
 #include <errno.h>
@@ -1353,8 +1353,13 @@ RingAfter (RingReader *reader, hptime_t reftime, int whence)
 	    }
 	}
       
+      /* Test if packet is earlier than reference time, this will avoid the
+       * regex tests for packets that we will eventually skip anyway */ 
+      if ( pkt1->dataend < reftime )
+	skip = 1;
+
       /* Test limit expression if available */
-      if ( reader->limit )
+      if ( reader->limit && ! skip )
 	if ( pcre_exec(reader->limit, reader->limit_extra, pkt1->streamid,
 		       strlen(pkt1->streamid), 0, 0, NULL, 0) )
 	  skip = 1;
@@ -1478,7 +1483,7 @@ RingAfterRev (RingReader *reader, hptime_t reftime, int64_t pktlimit,
   pktid = ringparams->latestid;
   spktid = pktid;
   
-  /* Loop through packets in forward order */
+  /* Loop through packets in reverse order */
   while ( count < pktlimit )
     {
       skip = 0;
@@ -1489,6 +1494,11 @@ RingAfterRev (RingReader *reader, hptime_t reftime, int64_t pktlimit,
 	  return 0;
 	}
       
+      /* Test if packet is later than reference time, this will avoid the
+       * regex tests for packets that we will eventually skip anyway */ 
+      if ( spkt->dataend > reftime )
+	skip = 1;
+
       /* Test limit expression if available */
       if ( reader->limit )
 	if ( pcre_exec(reader->limit, reader->limit_extra, spkt->streamid,

@@ -6,7 +6,7 @@ DIRS = pcre mxml libmseed src
 
 # As a special case for pcre do not pass targets except "clean".
 
-all clean static install gcc gcc32 gcc64 debug gccdebug gcc32debug gcc64debug ::
+all clean install ::
 	@for d in $(DIRS) ; do \
 	  if [ ! -f $$d/Makefile -a ! -f $$d/makefile ] ; then \
 	    if [ -x $$d/configure -a "$$d" = "pcre" ] ; then \
