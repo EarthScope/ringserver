@@ -8,6 +8,8 @@
 
 	- Include offset in regex in the error message printed when
 	pcre_compile() returns an error.
+	- Improve error messasges in sliclient.c when RingMatch() or
+	RingReject() return failures.
 	- Add " ..." to log messages that were truncated at 200 characters.
 
 2014.007:

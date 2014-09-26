@@ -447,7 +447,9 @@ SL_ClientThread (void *arg)
 	    {
 	      if ( RingMatch(&reader, cinfo->matchstr) < 0 )
 		{
-		  lprintf (0, "[%s] Error with RingMatch for '%s'", cinfo->hostname, cinfo->matchstr);
+		  lprintf (0, "[%s] Error with RingMatch for (%lu bytes) '%s'",
+			   cinfo->hostname, (unsigned long)strlen(cinfo->matchstr), cinfo->matchstr);
+		  SendReply (cinfo, "ERROR", "cannot compile matches (combined matches too large?)");
 		  break;
 		}
 	    }
@@ -457,7 +459,9 @@ SL_ClientThread (void *arg)
 	    {
 	      if ( RingReject(&reader, cinfo->rejectstr) < 0 )
 		{
-		  lprintf (0, "[%s] Error with RingReject for '%s'", cinfo->hostname, cinfo->rejectstr);
+		  lprintf (0, "[%s] Error with RingReject for (%lu bytes) '%s'",
+			   cinfo->hostname, (unsigned long)strlen(cinfo->rejectstr), cinfo->rejectstr);
+		  SendReply (cinfo, "ERROR", "cannot compile rejections (combined rejection too large?)");
 		  break;
 		}
 	    }
