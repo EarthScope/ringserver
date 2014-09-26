@@ -331,10 +331,10 @@ respectively:
 
 \fB-MSScan "/data/miniseed/ StateFile=/opt/ringserver/scan.state"\fP
 
-To limit the scanning to files matching a certain pattern use the
-Match option:
+To limit the scanning to file names matching a certain pattern use
+the Match option, e.g. files ending in ".mseed":
 
-\fBMSeedScan /data/miniseed/ StateFile=/data/scan.state Match=.*\\.mseed\fP
+\fBMSeedScan /data/miniseed/ StateFile=/data/scan.state Match=.*\\.mseed$\fP
 
 .SH AUTHOR
 .nf
