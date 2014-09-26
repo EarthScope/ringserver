@@ -1,11 +1,11 @@
 /*#define DEBUG 1*/
 /*
- * "$Id: mxmldoc.c 440 2011-08-11 18:51:26Z mike $"
+ * "$Id: mxmldoc.c 451 2014-01-04 21:50:06Z msweet $"
  *
  * Documentation generator using Mini-XML, a small XML-like file parsing
  * library.
  *
- * Copyright 2003-2011 by Michael R Sweet.
+ * Copyright 2003-2014 by Michael R Sweet.
  *
  * These coded instructions, statements, and computer programs are the
  * property of Michael R Sweet and are protected by Federal copyright
@@ -14,34 +14,6 @@
  * missing or damaged, see the license at:
  *
  *     http://www.minixml.org/
- *
- * Contents:
- *
- *   main()              - Main entry for test program.
- *   add_variable()      - Add a variable or argument.
- *   find_public()       - Find a public function, type, etc.
- *   get_comment_info()  - Get info from comment.
- *   get_text()          - Get the text for a node.
- *   load_cb()           - Set the type of child nodes.
- *   new_documentation() - Create a new documentation tree.
- *   remove_directory()  - Remove a directory.
- *   safe_strcpy()       - Copy a string allowing for overlapping strings.
- *   scan_file()         - Scan a source file.
- *   sort_node()         - Insert a node sorted into a tree.
- *   update_comment()    - Update a comment node.
- *   usage()             - Show program usage...
- *   write_description() - Write the description text.
- *   write_element()     - Write an element's text nodes.
- *   write_file()        - Copy a file to the output.
- *   write_function()    - Write documentation for a function.
- *   write_html()        - Write HTML documentation.
- *   write_html_head()   - Write the standard HTML header.
- *   write_man()         - Write manpage documentation.
- *   write_scu()         - Write a structure, class, or union.
- *   write_string()      - Write a string, quoting HTML special chars as needed.
- *   write_toc()         - Write a table-of-contents.
- *   write_tokens()      - Write <Token> nodes for all APIs.
- *   ws_cb()             - Whitespace callback for saving.
  */
 
 /*
@@ -2824,7 +2796,21 @@ write_description(
         ptr --;
 
       if (element && *element)
-        fprintf(out, "<code>%s</code>", start);
+      {
+        fputs("<code>", out);
+        for (; *start; start ++)
+        {
+          if (*start == '<')
+            fputs("&lt;", out);
+          else if (*start == '>')
+            fputs("&gt;", out);
+          else if (*start == '&')
+            fputs("&amp;", out);
+          else
+            putc(*start, out);
+        }
+        fputs("</code>", out);
+      }
       else if (element)
         fputs(start, out);
       else
@@ -3778,15 +3764,17 @@ write_html(const char  *section,	/* I - Section */
 
   if (docset)
   {
-    const char	*args[4];		/* Argument array */
+    int		argc = 0;		/* Argument count */
+    const char	*args[5];		/* Argument array */
     pid_t	pid;			/* Process ID */
     int		status;			/* Exit status */
 
 
-    args[0] = "/Developer/usr/bin/docsetutil";
-    args[1] = "index";
-    args[2] = docset;
-    args[3] = NULL;
+    args[argc++] = "/usr/bin/xcrun";
+    args[argc++] = "docsetutil";
+    args[argc++] = "index";
+    args[argc++] = docset;
+    args[argc  ] = NULL;
 
     if (posix_spawn(&pid, args[0], NULL, NULL, (char **)args, environ))
     {
@@ -5805,5 +5793,5 @@ ws_cb(mxml_node_t *node,		/* I - Element node */
 
 
 /*
- * End of "$Id: mxmldoc.c 440 2011-08-11 18:51:26Z mike $".
+ * End of "$Id: mxmldoc.c 451 2014-01-04 21:50:06Z msweet $".
  */
