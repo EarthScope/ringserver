@@ -452,7 +452,7 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
       /* Unmap the ring file */
       if ( munmap ((void *)(*ringparams), ringsize) )
 	{
-	  lprintf (0, "RingInitialize(): error unmaping ring file: %s", strerror(errno));
+	  lprintf (0, "RingInitialize(): error unmapping ring file: %s", strerror(errno));
 	  return -1;
 	}
       
