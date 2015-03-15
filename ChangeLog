@@ -1,4 +1,5 @@
 2015.074:
+	- Update libmseed to 2.15.
 	- mseedscan.c: rearrange stored directory entry listing details to avoid
 	needing to copy potentially variable length struct dirent.  This code now
 	works on platforms without dirent.d_reclen support, e.g. Cygwin.  Thanks
