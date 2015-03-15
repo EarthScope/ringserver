@@ -3,7 +3,7 @@
  *
  * Declarations for fundamental ring routines and data structures.
  *
- * Modified: 2012.126
+ * Modified: 2015.074
  **************************************************************************/
 
 #ifndef RING_H
@@ -45,6 +45,7 @@ typedef struct RingParams_s
   int64_t   maxpackets;       /* Maximum number of packets */
   int64_t   maxoffset;        /* Maximum packet offset */
   uint32_t  headersize;       /* Size of ring header */
+  uint8_t   corruptflag;      /* Flag indicating the ring is corrupt */
   uint8_t   fluxflag;         /* Flag indicating the ring is in flux */
   uint8_t   mmapflag;         /* Memory mapped flag */
   uint8_t   volatileflag;     /* Volatile ring flag */

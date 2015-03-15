@@ -23,7 +23,7 @@
  * In general, non-existent packets are represented with a packet ID
  * of 0 and an offset of -1.
  *
- * Copyright 2013 Chad Trabant, IRIS Data Management Center
+ * Copyright 2015 Chad Trabant, IRIS Data Management Center
  *
  * This file is part of ringserver.
  *
@@ -40,7 +40,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2014.269
+ * Modified: 2015.074
  **************************************************************************/
 
 #include <errno.h>
@@ -262,6 +262,13 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
 	}
     }
   
+  /* Check ring corruption flag, if set the ring was earlier determined to be corrupt */
+  if ( (*ringparams)->corruptflag && ! volatileflag )
+    {
+      lprintf (0, "** Packet buffer is marked as corrupt");
+      return -1;
+    }
+  
   /* Check ring flux flag, if set the ring should be considered corrupt */
   if ( (*ringparams)->fluxflag && ! volatileflag )
     {
@@ -333,6 +340,7 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
       (*ringparams)->maxpackets = maxpackets;
       (*ringparams)->maxoffset = maxoffset;
       (*ringparams)->headersize = headersize;
+      (*ringparams)->corruptflag = 0;
       (*ringparams)->fluxflag = 0;
       (*ringparams)->earliestid = 0;
       (*ringparams)->earliestptime = HPTERROR;
@@ -658,6 +666,9 @@ RingShutdown (int ringfd, char *streamfilename, RingParams *ringparams)
  * ring will almost certainly be out of sync and should be considered
  * corrupt, this is indicated with a return value of -2.
  *
+ * If ring corruption is detected the corruptflag ring parameter will
+ * be set in order to trigger auto recovery on the next start.
+ *
  * Returns 0 on success, -1 on non-corruption error and -2 on corrupt
  * ring error.
  ***************************************************************************/
@@ -699,18 +710,20 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
     if ( ! (earliest = GetPacket (ringparams, ringparams->earliestid, 0)) )
       {
 	lprintf (0, "RingWrite(): Error getting earliest packet index");
+	ringparams->corruptflag = 1;
+	ringparams->fluxflag = 0;
 	pthread_mutex_unlock (ringparams->writelock);
 	pthread_mutex_unlock (ringparams->streamlock);
-	ringparams->fluxflag = 0;
 	return -2;
       }
   if ( ringparams->latestid > 0 )
     if ( ! (latest = GetPacket (ringparams, ringparams->latestid, 0)) )
       {
 	lprintf (0, "RingWrite(): Error getting latest packet index");
+	ringparams->corruptflag = 1;
+	ringparams->fluxflag = 0;
 	pthread_mutex_unlock (ringparams->writelock);
 	pthread_mutex_unlock (ringparams->streamlock);
-	ringparams->fluxflag = 0;
 	return -2;
       }
   
@@ -751,26 +764,29 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
 	    {
 	      lprintf (0, "RingWrite(): Error getting next earliest ID: %lld, current earliest: %lld",
 		       nextid, earliest->pktid);
+              ringparams->corruptflag = 1;
+              ringparams->fluxflag = 0;
 	      pthread_mutex_unlock (ringparams->writelock);
 	      pthread_mutex_unlock (ringparams->streamlock);
-	      ringparams->fluxflag = 0;
 	      return -2;
 	    }
 	  if ( earliest->nextinstream )
 	    if ( ! (nextInStream = GetPacket (ringparams, earliest->nextinstream, 0)) )
 	      {
 		lprintf (0, "RingWrite(): Error getting new earliest stream packet index");
+                ringparams->corruptflag = 1;
+                ringparams->fluxflag = 0;
 		pthread_mutex_unlock (ringparams->writelock);
 		pthread_mutex_unlock (ringparams->streamlock);
-		ringparams->fluxflag = 0;
 		return -2;
 	      }
 	  if ( ! (streamOfEarliest = GetStreamIdx (ringparams->streamidx, earliest->streamid)) )
 	    {
 	      lprintf (0, "RingWrite(): Error getting earliest packet stream");
+              ringparams->corruptflag = 1;
+              ringparams->fluxflag = 0;
 	      pthread_mutex_unlock (ringparams->writelock);
 	      pthread_mutex_unlock (ringparams->streamlock);
-	      ringparams->fluxflag = 0;
 	      return -2;
 	    }
 	  
@@ -823,9 +839,10 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
 	{
 	  lprintf (0, "RingWrite(): Error adding new stream index");
 	  if ( node ) { free (node->key); free (node->data); free (node); }
-	  pthread_mutex_unlock (ringparams->writelock);
+          ringparams->corruptflag = 1;
+          ringparams->fluxflag = 0;
+          pthread_mutex_unlock (ringparams->writelock);
 	  pthread_mutex_unlock (ringparams->streamlock);
-	  ringparams->fluxflag = 0;
 	  return -2;
 	}
       else
@@ -865,9 +882,10 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
       if ( ! (prevlatest = GetPacket (ringparams, stream->latestid, 0)) )
 	{
 	  lprintf (0, "RingWrite(): Error getting next packet in stream (id: %lld)", stream->latestid);
+          ringparams->corruptflag = 1;
+          ringparams->fluxflag = 0;
 	  pthread_mutex_unlock (ringparams->writelock);
 	  pthread_mutex_unlock (ringparams->streamlock);
-	  ringparams->fluxflag = 0;
 	  return -2;
 	}
       

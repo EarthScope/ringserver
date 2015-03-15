@@ -1,7 +1,11 @@
 2015.074:
 	- Update libmseed to 2.15.
-	- Update pcre to 8.36.  Note: new development of pcre has moved to pcre2.
+	- Update pcre to 8.36.  Note: development of pcre has moved to pcre2.
 	- Update mxml to 2.9.
+	- Improve detection of ring corruption by adding a 'corruptflag' to the
+	ring parameters, setting it in RingWrite() and checking it on initialization.
+	This will trigger consistent corruption detection on initialization
+	whenever the previous execution ended when RingWrite() detected an error.
 	- mseedscan.c: rearrange stored directory entry listing details to avoid
 	needing to copy potentially variable length struct dirent.  This code now
 	works on platforms without dirent.d_reclen support, e.g. Cygwin.  Thanks
