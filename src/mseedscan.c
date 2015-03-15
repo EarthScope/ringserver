@@ -36,7 +36,7 @@
  * If the signal SIGUSR1 is recieved the program will print the
  * current file list to standard error.
  *
- * Copyright 2011 Chad Trabant, IRIS Data Management Center
+ * Copyright 2015 Chad Trabant, IRIS Data Management Center
  *
  * This file is part of ringserver.
  *
@@ -53,7 +53,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2011.049
+ * Modified: 2015.074
  ***************************************************************************/
 
 /* _GNU_SOURCE needed to get pread() under Linux */
@@ -110,7 +110,8 @@ typedef struct EDIR_s {
 struct edirent {
   struct edirent *prev;
   struct edirent *next;
-  struct dirent *de;
+  ino_t d_ino;
+  char d_name[1024];
 };
 
 static int ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime);
@@ -130,7 +131,7 @@ static time_t BudFileDayTime (char *filename);
 
 static int SortEDirEntries (EDIR *edirp);
 static EDIR *EOpenDir (const char *dirname);
-static struct dirent *EReadDir (EDIR *edirp);
+static struct edirent *EReadDir (EDIR *edirp);
 static int ECloseDir (EDIR *edirp);
 
 
@@ -371,7 +372,7 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
   FileKey *fkey;
   char filekeybuf[sizeof(FileKey)+MSSCAN_MAXFILENAME]; /* Room for fkey */
   struct stat st;
-  struct dirent *de;
+  struct edirent *ede;
   time_t currentday = 0;
   EDIR *dir;
   
@@ -393,39 +394,39 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
       currentday = CalcDayTime (cday.tm_year + 1900, cday.tm_yday + 1);
     }
   
-  while ( shutdownsig == 0 && (de = EReadDir(dir)) != NULL )
+  while ( shutdownsig == 0 && (ede = EReadDir(dir)) != NULL )
     {
       int filenamelen;
       
       /* Skip "." and ".." entries */
-      if ( !strcmp(de->d_name, ".") || !strcmp(de->d_name, "..") )
+      if ( !strcmp(ede->d_name, ".") || !strcmp(ede->d_name, "..") )
 	continue;
       
       /* BUD file name latency check */
       if ( mssinfo->budlatency )
 	{
-	  time_t budfiletime = BudFileDayTime (de->d_name);
+	  time_t budfiletime = BudFileDayTime (ede->d_name);
 	  
 	  /* Skip this file if the BUD file name is more than budlatency days old */
 	  if ( budfiletime && ((currentday-budfiletime) > (mssinfo->budlatency * 86400)) )
 	    {
 	      if ( verbose > 1 )
-		lprintf (0, "[MSeedScan] Skipping due to BUD file name latency: %s", de->d_name);
+		lprintf (0, "[MSeedScan] Skipping due to BUD file name latency: %s", ede->d_name);
 	      continue;
 	    }
 	}
       
       /* Build a FileKey for this file */
-      fkey->inode = de->d_ino;
+      fkey->inode = ede->d_ino;
       filenamelen = snprintf (fkey->filename, sizeof(filekeybuf) - sizeof(FileKey),
-			      "%s/%s", targetdir, de->d_name);
+			      "%s/%s", targetdir, ede->d_name);
       
       /* Make sure the filename was not truncated */
       if ( filenamelen >= (sizeof(filekeybuf) - sizeof(FileKey) - 1) )
 	{
 	  lprintf (0, "[MSeedScan] Directory entry name beyond maximum of %d characters, skipping:",
 		   (sizeof(filekeybuf) - sizeof(FileKey) - 1));
-	  lprintf (0, "  %s", de->d_name);
+	  lprintf (0, "  %s", ede->d_name);
 	  continue;
 	}
       
@@ -494,12 +495,12 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
       
       /* Do regex matching if an expression was specified */
       if ( mssinfo->fnmatch != 0 )
-	if ( pcre_exec(mssinfo->fnmatch, NULL, de->d_name, strlen(de->d_name), 0, 0, NULL, 0) != 0 )
+	if ( pcre_exec(mssinfo->fnmatch, NULL, ede->d_name, strlen(ede->d_name), 0, 0, NULL, 0) != 0 )
 	  continue;
       
       /* Do regex rejecting if an expression was specified */
       if ( mssinfo->fnreject != 0 )
-	if ( pcre_exec(mssinfo->fnreject, NULL, de->d_name, strlen(de->d_name), 0, 0, NULL, 0) == 0 )
+	if ( pcre_exec(mssinfo->fnreject, NULL, ede->d_name, strlen(ede->d_name), 0, 0, NULL, 0) == 0 )
 	  continue;
       
       /* Sanity check for a regular file */
@@ -510,11 +511,11 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
 	}
       
       /* Sanity check that the dirent inode and stat inode are the same */
-      if ( st.st_ino != de->d_ino )
+      if ( st.st_ino != ede->d_ino )
 	{
 	  lprintf (0, "[MSeedScan] Inode numbers from dirent and stat do not match for %s\n", fkey->filename);
 	  lprintf (0, "  dirent: %llu  VS  stat: %llu\n",
-		   (unsigned long long int) de->d_ino, (unsigned long long int) st.st_ino);
+		   (unsigned long long int) ede->d_ino, (unsigned long long int) st.st_ino);
 	  continue;
 	}
       
@@ -1263,7 +1264,7 @@ SortEDirEntries (EDIR *edirp)
                 {  /* q is empty; e must come from p. */
                   e = p; p = p->next; psize--;
                 }
-              else if ( strcmp (p->de->d_name, q->de->d_name) <= 0 )
+              else if ( strcmp (p->d_name, q->d_name) <= 0 )
                 {  /* First element of p is lower (or same), e must come from p. */
                   e = p; p = p->next; psize--;
                 }
@@ -1317,9 +1318,10 @@ EOpenDir (const char *dirname)
 {
   DIR *dirp;
   EDIR *edirp;
-  struct dirent *de, *decopy;
+  struct dirent *de;
   struct edirent *ede;
   struct edirent *prevede = 0;
+  int namelen;
   
   if ( ! dirname )
     return NULL;
@@ -1339,26 +1341,27 @@ EOpenDir (const char *dirname)
   /* Read all directory entries */
   while ( (de = readdir (dirp)) )
     {
-      /* Allocate space for directory entry copy */
-      if ( ! (decopy = (struct dirent *) malloc (de->d_reclen)) )
-	{
-	  closedir (dirp);
-	  ECloseDir (edirp);
-	  return NULL;
-	}
-      
-      /* Copy directory entry */
-      memcpy (decopy, de, de->d_reclen);
-      
       /* Allocate space for enhanced directory entry */
       if ( ! (ede = (struct edirent *) calloc (1, sizeof(struct edirent))) )
 	{
+          lprintf (0, "[MSeedScan] Cannot allocate directory memory");
 	  closedir (dirp);
 	  ECloseDir (edirp);
 	  return NULL;
 	}
       
-      ede->de = decopy;
+      namelen = strlen (de->d_name);
+      
+      if ( namelen > sizeof(ede->d_name) )
+        {
+          lprintf (0, "[MSeedScan] directory entry name too long (%d): '%s'", namelen, de->d_name);
+	  closedir (dirp);
+	  ECloseDir (edirp);
+	  return NULL;
+	}
+      
+      strncpy (ede->d_name, de->d_name, sizeof(ede->d_name));
+      ede->d_ino = de->d_ino;
       ede->prev = prevede;
       
       /* Add new enhanced directory entry to the list */
@@ -1396,7 +1399,7 @@ EOpenDir (const char *dirname)
  * Return the next directory entry from the list associated with the
  * EDIR and NULL if no more entries.
  ***************************************************************************/
-static struct dirent *
+static struct edirent *
 EReadDir (EDIR *edirp)
 {
   struct edirent *ede;
@@ -1409,7 +1412,7 @@ EReadDir (EDIR *edirp)
   if ( edirp->current )
     edirp->current = ede->next;
   
-  return (ede) ? ede->de : NULL;
+  return ede;
 }  /* End of EReadDir() */
 
 
@@ -1434,9 +1437,6 @@ ECloseDir (EDIR *edirp)
   while ( ede )
     {
       nede = ede->next;
-      
-      if ( ede->de )
-	free (ede->de);
       
       free (ede);
       

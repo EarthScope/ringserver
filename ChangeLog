@@ -1,3 +1,9 @@
+2015.074:
+	- mseedscan.c: rearrange stored directory entry listing details to avoid
+	needing to copy potentially variable length struct dirent.  This code now
+	works on platforms without dirent.d_reclen support, e.g. Cygwin.  Thanks
+	to Eric Thomas for reporting this.
+
 2014.269: Dudes!
 	- Update mxml to 2.8.
 	- Update pcre to 8.35.
