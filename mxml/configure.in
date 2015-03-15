@@ -1,5 +1,5 @@
 dnl
-dnl "$Id: configure.in 452 2014-01-05 03:12:18Z msweet $"
+dnl "$Id: configure.in 459 2014-10-19 17:21:48Z msweet $"
 dnl
 dnl Configuration script for Mini-XML, a small XML-like file parsing library.
 dnl
@@ -21,7 +21,7 @@ dnl Set the name of the config header file...
 AC_CONFIG_HEADER(config.h)
 
 dnl Version number...
-VERSION=2.8
+VERSION=2.9
 AC_SUBST(VERSION)
 AC_DEFINE_UNQUOTED(MXML_VERSION, "Mini-XML v$VERSION")
 
@@ -334,5 +334,5 @@ dnl Output the makefile, etc...
 AC_OUTPUT(Makefile mxml.list mxml.pc)
 
 dnl
-dnl End of "$Id: configure.in 452 2014-01-05 03:12:18Z msweet $".
+dnl End of "$Id: configure.in 459 2014-10-19 17:21:48Z msweet $".
 dnl
