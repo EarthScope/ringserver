@@ -1,5 +1,6 @@
 2015.074:
 	- Update libmseed to 2.15.
+	- Update pcre to 8.36.  New development of pcre has moved to pcre2.
 	- mseedscan.c: rearrange stored directory entry listing details to avoid
 	needing to copy potentially variable length struct dirent.  This code now
 	works on platforms without dirent.d_reclen support, e.g. Cygwin.  Thanks
@@ -13,7 +14,7 @@
 	a) Increase max internal regex buffer size from 65,536 to 1,048,576 by
 	changing SLMAXREGEXLEN and DLMAXREGEXLEN.
 	b) Increase max buffer for per-station/global selectors from 400 to 2,048.
-	c) Configure the PCRE to use an internal link size of 4 instead of 2.
+	c) Configure the PCRE lib to use an internal link size of 4 instead of 2.
 	The effective limit depends on the composite selection, e.g. number of
 	STATIONs and number SELECTions per STATION.  With 6 selections each,
 	over 10,000 stations may be requested.  Over 200 selectors for a
@@ -23,7 +24,7 @@
 	regex tests when possible. Suggested code by Mark Chadwick.
 	- Include offset in the regex pattern in the error message printed when
 	pcre_compile() returns an error.
-	- Improve error messasges in sliclient.c when RingMatch() or
+	- Improve error messasges in slclient.c when RingMatch() or
 	RingReject() return failures.
 	- Add " ..." to log messages that were truncated at 200 characters.
 	- Add example of using Match with the MSeedScan option to the man page.
