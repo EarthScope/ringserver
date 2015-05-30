@@ -40,7 +40,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2015.074
+ * Modified: 2015.149
  **************************************************************************/
 
 #include <errno.h>
@@ -464,12 +464,13 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
 	  return -1;
 	}
       
-      /* Close the ring file */ 
+      /* Close the ring file and re-init the descriptor */ 
       if ( close (*ringfd) )
 	{
 	  lprintf (0, "RingInitialize(): error closing ring file: %s", strerror(errno));
 	  return -1;
 	}
+      *ringfd = -1;
       
       return -1;
     }

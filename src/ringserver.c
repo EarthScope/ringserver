@@ -225,9 +225,17 @@ main (int argc, char* argv[])
 	      lprintf (0, "Error initializing ring buffer (%d)", ringinit);
 	      return 1;
 	    }
-	  
+          
+          if ( ringfd > 0 )
+            {
+              if ( close (ringfd) )
+                {
+                  lprintf (0, "Error closing ring buffer file: %s", strerror(errno));
+                }
+            }
+          
 	  lprintf (0, "Auto recovery, moving packet buffer and stream index files");
-	  
+
 	  /* Create .corrupt ring and stream file names */
 	  snprintf (ringfilecorr, sizeof(ringfilecorr), "%s.corrupt", ringfilename);
 	  snprintf (streamfilecorr, sizeof(streamfilecorr), "%s.corrupt", streamfilename);

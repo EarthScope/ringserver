@@ -7,6 +7,8 @@
 	- InitServerSocket(): close socket on error return from setsockopt() to
 	avoid leaving an open socket in that error condition.
 	Thanks to Doug Neuhauser for reporting and suggesting above fixes.
+	- Close corrupt ring buffer file when performing autorecovery in 
+	all cases.
 
 2015.074:
 	- Update libmseed to 2.15.
