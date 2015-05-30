@@ -1,4 +1,5 @@
 2015.149:
+	- Update libmseed to 2.16m.
 	- Restart listening server threads (SeedLink and DataLink) without
 	initializing the server socket when the socket is already set up.
 	- Continue accept()ing new connections and do not exit if the accept()
