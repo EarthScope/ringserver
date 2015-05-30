@@ -54,6 +54,7 @@
 #include <time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netdb.h>
 
 #include <libmseed.h>
 #include <mxml.h>
