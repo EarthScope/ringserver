@@ -1,3 +1,13 @@
+2015.149:
+	- Restart listening server threads (SeedLink and DataLink) without
+	initializing the server socket when the socket is already set up.
+	- Continue accept()ing new connections and do not exit if the accept()
+	returns an error of ECONNABORTED or EINTR.  These errors are
+	non-critical and should not cause the listening thread to exit.
+	- InitServerSocket(): close socket on error return from setsockopt() to
+	avoid leaving an open socket in that error condition.
+	Thanks to Doug Neuhauser for reporting and suggesting above fixes.
+
 2015.074:
 	- Update libmseed to 2.15.
 	- Update pcre to 8.36.  Note: development of pcre has moved to pcre2.

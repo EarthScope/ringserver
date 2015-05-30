@@ -4,7 +4,7 @@
  * Multi-threaded TCP generic ring buffer data server with interfaces
  * for SeedLink and DataLink protocols.
  *
- * Copyright 2013 Chad Trabant, IRIS Data Management Center
+ * Copyright 2015 Chad Trabant, IRIS Data Management Center
  *
  * This file is part of ringserver.
  *
@@ -21,7 +21,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2013.283
+ * Modified: 2015.149
  **************************************************************************/
 
 #include <fcntl.h>
@@ -439,7 +439,7 @@ main (int argc, char* argv[])
 	      if ( stp->td == 0 && ! shutdownsig )
 		{
 		  /* Initialize server socket, thread data and create thread */
-		  if ( (lpp->socket = InitServerSocket (lpp->portstr)) == -1 )
+		  if ( lpp->socket <= 0 && (lpp->socket = InitServerSocket (lpp->portstr)) == -1 )
 		    {
 		      lprintf (0, "Error initializing %s server socket for port %s", threadtype, lpp->portstr);
 		    }
@@ -760,6 +760,10 @@ DL_ListenThread (void *arg)
       /* Check for accept errors */
       if ( clientsocket == -1 )
 	{
+          /* Continue listening on these non-fatal errors */
+          if ( errno == ECONNABORTED || errno == EINTR )
+            continue;
+          
 	  /* If not shutting down this is a connection error */
 	  if ( ! shutdownsig )
 	    lprintf (0, "Could not accept incoming connection: %s", strerror(errno));
@@ -1002,6 +1006,10 @@ SL_ListenThread (void *arg)
       /* Check for accept errors */
       if ( clientsocket == -1 )
 	{
+          /* Continue listening on these non-fatal errors */
+          if ( errno == ECONNABORTED || errno == EINTR )
+            continue;
+          
 	  /* If not shutting down this is a connection error */
 	  if ( ! shutdownsig )
 	    lprintf (0, "Could not accept incoming connection: %s", strerror(errno));
@@ -1216,6 +1224,7 @@ InitServerSocket (char *portstr)
   if ( setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) )
     {
       lprintf (0, "Error with setsockopt(): %s", strerror(errno));
+      close (fd);
       return -1;
     }
   
