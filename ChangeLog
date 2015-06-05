@@ -3,6 +3,8 @@
 	- Add 'MaxClientsPerIP' config parameter and -M command line option to
 	enforce a maximum number of connections per IP address.  The limit does
 	not apply to addresses with write permission.  Default is no per-IP maximum.
+	- Copy pcre/pcre_chartables.c.dist to pcre/pcre_chartables.c to avoid
+	symbolic link problems on for example Cygwin.
 
 2015.149:
 	- Update libmseed to 2.16m.
