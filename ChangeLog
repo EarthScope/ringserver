@@ -1,7 +1,7 @@
-2014.155:
+2014.156:
 	- Add 'MaxClientsPerIP' config parameter and -M command line option to
-	enforce a maximum number of connections per IP address.  By default there
-	is no maximum.
+	enforce a maximum number of connections per IP address.  The limit does
+	not apply to addresses with write permission.  Default is no per-IP maximum.
 
 2015.149:
 	- Update libmseed to 2.16m.

@@ -21,7 +21,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2015.155
+ * Modified: 2015.156
  **************************************************************************/
 
 #include <fcntl.h>
@@ -821,14 +821,17 @@ DL_ListenThread (void *arg)
 	    }
 	}
       
-      /* Enforce per-address connection limit */
+      /* Enforce per-address connection limit for non write permission addresses */
       if ( maxclientsperip )
         {
-          if ( ClientIPCount(&addr) >= maxclientsperip )
+          if ( ! (writeips && MatchIP (writeips, &addr)) )
             {
-	      lprintf (1, "Too many connections from: %s:%s", ipstr, portstr);
-	      close (clientsocket);
-	      continue;
+              if ( ClientIPCount(&addr) >= maxclientsperip )
+                {
+                  lprintf (1, "Too many connections from: %s:%s", ipstr, portstr);
+                  close (clientsocket);
+                  continue;
+                }
             }
         }
       
@@ -1078,14 +1081,17 @@ SL_ListenThread (void *arg)
 	    }
 	}
       
-      /* Enforce per-address connection limit */
+      /* Enforce per-address connection limit for non write permission addresses */
       if ( maxclientsperip )
         {
-          if ( ClientIPCount(&addr) >= maxclientsperip )
+          if ( ! (writeips && MatchIP (writeips, &addr)) )
             {
-	      lprintf (1, "Too many connections from: %s:%s", ipstr, portstr);
-	      close (clientsocket);
-	      continue;
+              if ( ClientIPCount(&addr) >= maxclientsperip )
+                {
+                  lprintf (1, "Too many connections from: %s:%s", ipstr, portstr);
+                  close (clientsocket);
+                  continue;
+                }
             }
         }
       
