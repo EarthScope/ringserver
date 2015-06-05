@@ -21,7 +21,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2015.149
+ * Modified: 2015.155
  **************************************************************************/
 
 #include <fcntl.h>
@@ -90,6 +90,7 @@ static uint64_t CalcSize (char *sizestr);
 static int      CalcStats (ClientInfo *cinfo);
 static int      AddIPNet (IPNet **pplist, char *network, char *limitstr);
 static IPNet   *MatchIP (IPNet *list, struct sockaddr *addr);
+static int      ClientIPCount (struct sockaddr *addr);
 static void    *SignalThread (void *arg);
 static void     PrintHandler();
 static void     Usage (int level);
@@ -97,6 +98,7 @@ static void     Usage (int level);
 static char    *configfile    = 0;          /* Configuration file */
 static time_t   configfilemtime = 0;        /* Modification time of configuration file */
 static uint32_t maxclients    = 600;        /* Enforce maximum number of clients */
+static uint32_t maxclientsperip = 0;        /* Enforce maximum number of clients per IP */
 static uint32_t clienttimeout = 3600;       /* Drop clients if no exchange within this limit */
 static char    *ringdir       = 0;          /* Directory for ring files */
 static uint64_t ringsize      = 1073741824; /* Size of ring buffer file (1 gigabyte) */
@@ -819,6 +821,17 @@ DL_ListenThread (void *arg)
 	    }
 	}
       
+      /* Enforce per-address connection limit */
+      if ( maxclientsperip )
+        {
+          if ( ClientIPCount(&addr) >= maxclientsperip )
+            {
+	      lprintf (1, "Too many connections from: %s:%s", ipstr, portstr);
+	      close (clientsocket);
+	      continue;
+            }
+        }
+      
       /* Enforce maximum number of clients if specified */
       if ( maxclients && clientcount >= maxclients )
 	{
@@ -1065,6 +1078,17 @@ SL_ListenThread (void *arg)
 	    }
 	}
       
+      /* Enforce per-address connection limit */
+      if ( maxclientsperip )
+        {
+          if ( ClientIPCount(&addr) >= maxclientsperip )
+            {
+	      lprintf (1, "Too many connections from: %s:%s", ipstr, portstr);
+	      close (clientsocket);
+	      continue;
+            }
+        }
+      
       /* Enforce maximum number of clients if specified */
       if ( maxclients && clientcount >= maxclients )
 	{
@@ -1298,6 +1322,10 @@ ProcessParam (int argcount, char **argvec)
         {
 	  maxclients = strtoul (GetOptVal(argcount, argvec, optind++), NULL, 10);
         }
+      else if (strcmp (argvec[optind], "-M") == 0)
+        {
+	  maxclientsperip = strtoul (GetOptVal(argcount, argvec, optind++), NULL, 10);
+        }
       else if (strcmp (argvec[optind], "-Rd") == 0)
         {
 	  ringdir = GetOptVal(argcount, argvec, optind++);
@@ -1504,6 +1532,7 @@ GetOptVal (int argcount, char **argvec, int argopt)
  * [D] ServerID <server id>
  * [D] Verbosity <level>
  * [D] MaxClients <max>
+ * [D] MaxClientsPerIP <max>
  * [D] ClientTimeout <timeout>
  * [D] ResolveHostnames <1|0>
  * [D] TimeWindowLimit <percent>
@@ -1783,12 +1812,21 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
 	  
 	  maxclients = uvalue;
 	}
+      else if ( ! strncasecmp ("MaxClientsPerIP", ptr, 15) )
+	{
+	  if ( sscanf (ptr, "%*s %u", &uvalue) != 1 )
+	    {
+	      lprintf (0, "Error with MaxClientsPerIP config file line: %s", ptr);
+	      return -1;
+	    }
+          
+	  maxclientsperip = uvalue;
+	}
       else if ( ! strncasecmp ("ClientTimeout", ptr, 13) )
 	{
 	  if ( sscanf (ptr, "%*s %u", &uvalue) != 1 )
 	    {
-	      lprintf (0, "Error with ClientTimeout config file line: %s",
-		       ptr);
+	      lprintf (0, "Error with ClientTimeout config file line: %s", ptr);
 	      return -1;
 	    }
 	  
@@ -2548,6 +2586,61 @@ MatchIP (IPNet *list, struct sockaddr *addr)
 }  /* End of MatchIP() */
 
 
+/***************************************************************************
+ * ClientIPCount:
+ *
+ * Search the global client list and return a count of the connected
+ * clients that match the specified address.
+ * 
+ * Returns count of the client connections with a matching address.
+ ***************************************************************************/
+static int
+ClientIPCount (struct sockaddr *addr)
+{
+  struct cthread *ctp;
+  struct sockaddr_in *tsin[2];
+  struct sockaddr_in6 *tsin6[2];
+  int addrcount = 0;
+  
+  pthread_mutex_lock (&cthreads_lock);
+  ctp = cthreads;
+  while ( ctp )
+    {
+      /* If the same protocol family */
+      if ( ((ClientInfo *)ctp->td->td_prvtptr)->addr->sa_family == addr->sa_family )
+        {
+          /* Compare IPv4 addresses */
+          if ( addr->sa_family == AF_INET )
+            {
+              tsin[0] = (struct sockaddr_in *) ((ClientInfo *)ctp->td->td_prvtptr)->addr;
+              tsin[1] = (struct sockaddr_in *) addr;
+              
+              if ( 0 == memcmp(&tsin[0]->sin_addr.s_addr, &tsin[1]->sin_addr.s_addr, sizeof(tsin[0]->sin_addr.s_addr)) )
+                {
+                  addrcount++;
+                }
+            }
+          /* Compare IPv6 addresses */
+          else if ( addr->sa_family == AF_INET6 )
+            {
+              tsin6[0] = (struct sockaddr_in6 *) ((ClientInfo *)ctp->td->td_prvtptr)->addr;
+              tsin6[1] = (struct sockaddr_in6 *) addr;
+              
+              if ( 0 == memcmp(&tsin6[0]->sin6_addr.s6_addr, &tsin6[1]->sin6_addr.s6_addr, sizeof(tsin6[0]->sin6_addr.s6_addr)) )
+                {
+                  addrcount++;
+                }
+            }
+        }
+      
+      ctp = ctp->next;
+    }
+  pthread_mutex_unlock (&cthreads_lock);
+  
+  return addrcount;
+}  /* End of ClientIPCount() */
+
+
 /***********************************************************************
  * SignalThread:
  *
@@ -2642,6 +2735,7 @@ Usage (int level)
           " -v             Be more verbose, multiple flags can be used\n"
 	  " -I serverID    Server ID (default 'Ring Server')\n"
 	  " -m maxclnt     Maximum number of concurrent clients (currently %d)\n"
+	  " -M maxperIP    Maximum number of concurrent clients per address (currently %d)\n"
 	  " -Rd ringdir    Directory for ring buffer files, required\n"
 	  " -Rs bytes      Ring packet buffer file size in bytes (default 1 Gigabyte)\n"
 	  " -Rm maxid      Maximum ring packet ID (currently %"PRId64")\n"
@@ -2654,7 +2748,7 @@ Usage (int level)
 	  " -Tp prefix     Prefix to add to transfer log files (default is none)\n"
 	  " -STDERR        Send all console output to stderr instead of stdout\n"
 	  "\n",
-          maxclients, maxpktid, (int)(pktsize - sizeof(RingPacket)));
+          maxclients, maxclientsperip, maxpktid, (int)(pktsize - sizeof(RingPacket)));
   
   if ( level >= 1 )
     {
