@@ -1,4 +1,5 @@
 2014.156:
+	- Update pcre to 8.37.
 	- Add 'MaxClientsPerIP' config parameter and -M command line option to
 	enforce a maximum number of connections per IP address.  The limit does
 	not apply to addresses with write permission.  Default is no per-IP maximum.
