@@ -37,7 +37,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2014.269
+ * Modified: 2015.182
  **************************************************************************/
 
 /* Unsupported protocol features:
@@ -1212,7 +1212,7 @@ HandleInfo (char *recvbuffer, ClientInfo *cinfo, char state)
   int    infolevel = 0;
   char   errflag = 0;
 
-  char record[SLRECSIZE];
+  char *record = 0;
   struct fsdh_s *fsdh;
   struct blkt_1000_s *b1000;
   uint16_t ushort;
@@ -1237,10 +1237,19 @@ HandleInfo (char *recvbuffer, ClientInfo *cinfo, char state)
       return -1;
     }
   
+  /* Allocate miniSEED record buffer */
+  if ( (record = calloc (1, SLRECSIZE)) == NULL )
+    {
+      lprintf (0, "[%s] Error allocating receive buffer", cinfo->hostname);
+      return -1;
+    }
+  
   /* Initialize the XML response structure */
   if ( ! (xmldoc = mxmlNewXML ("1.0")) )
     {
       lprintf (0, "[%s] Error creating XML document", cinfo->hostname);
+      if ( record )
+        free (record);
       return -1;
     }
   
@@ -1248,6 +1257,10 @@ HandleInfo (char *recvbuffer, ClientInfo *cinfo, char state)
   if ( ! (seedlink = mxmlNewElement (xmldoc, "seedlink")) )
     {
       lprintf (0, "[%s] Error creating seedlink XML element", cinfo->hostname);
+      if ( xmldoc )
+        mxmlRelease (xmldoc);
+      if ( record )
+        free (record);
       return -1;
     }
   
@@ -1700,6 +1713,8 @@ HandleInfo (char *recvbuffer, ClientInfo *cinfo, char state)
 	  lprintf (0, "[%s] Error with mxmlSaveAllocString()", cinfo->hostname);
 	  if ( xmldoc )
 	    mxmlRelease (xmldoc);
+          if ( record )
+            free (record);
 	  return -1;
 	}
       
@@ -1816,6 +1831,9 @@ HandleInfo (char *recvbuffer, ClientInfo *cinfo, char state)
   
   if ( xmlstr )
     free (xmlstr);
+  
+  if ( record )
+    free (record);
   
   return (cinfo->socketerr) ? -1 : 0;
 } /* End of HandleInfo */
