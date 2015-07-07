@@ -1,4 +1,6 @@
 2015.188:
+	- Fix parsing of MaxClientsPerIP configuration parameter when the
+	MaxClients parameter is also being specified.
 	- Clarify in documentation that clients connecting from the localhost
 	loopback address (127.0.0.1) is only granted write permission if no
 	other addresses are explicitly granted write permission.

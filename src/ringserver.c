@@ -21,7 +21,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2015.156
+ * Modified: 2015.188
  **************************************************************************/
 
 #include <fcntl.h>
@@ -1537,8 +1537,8 @@ GetOptVal (int argcount, char **argvec, int argopt)
  * DataLinkPort <port>
  * [D] ServerID <server id>
  * [D] Verbosity <level>
- * [D] MaxClients <max>
  * [D] MaxClientsPerIP <max>
+ * [D] MaxClients <max>
  * [D] ClientTimeout <timeout>
  * [D] ResolveHostnames <1|0>
  * [D] TimeWindowLimit <percent>
@@ -1808,16 +1808,6 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
 	  
 	  verbose = uvalue;
 	}
-      else if ( ! strncasecmp ("MaxClients", ptr, 10) )
-	{
-	  if ( sscanf (ptr, "%*s %u", &uvalue) != 1 )
-	    {
-	      lprintf (0, "Error with MaxClients config file line: %s", ptr);
-	      return -1;
-	    }
-	  
-	  maxclients = uvalue;
-	}
       else if ( ! strncasecmp ("MaxClientsPerIP", ptr, 15) )
 	{
 	  if ( sscanf (ptr, "%*s %u", &uvalue) != 1 )
@@ -1827,6 +1817,16 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
 	    }
           
 	  maxclientsperip = uvalue;
+	}
+      else if ( ! strncasecmp ("MaxClients", ptr, 10) )
+	{
+	  if ( sscanf (ptr, "%*s %u", &uvalue) != 1 )
+	    {
+	      lprintf (0, "Error with MaxClients config file line: %s", ptr);
+	      return -1;
+	    }
+	  
+	  maxclients = uvalue;
 	}
       else if ( ! strncasecmp ("ClientTimeout", ptr, 13) )
 	{
