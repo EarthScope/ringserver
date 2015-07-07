@@ -54,6 +54,10 @@
 #include "mseedscan.h"
 #include "ringserver.h"
 
+/* Reserve connection count, allows connections from addresses with write
+ * permission even when the maximum connection count has been reached. */
+#define RESERVECONNECTIONS 10
+
 /* A structure to list IP addresses ranges */
 typedef struct IPNet_s
 {
@@ -838,11 +842,18 @@ DL_ListenThread (void *arg)
       /* Enforce maximum number of clients if specified */
       if ( maxclients && clientcount >= maxclients )
 	{
-	  lprintf (1, "Maximum number of clients exceeded: %d", maxclients);
-	  lprintf (1, "  Rejecting connection from: %s:%s", ipstr, portstr);
-	  close (clientsocket);
-	  continue;
-	}
+          if ( (writeips && MatchIP (writeips, &addr)) && clientcount <= (maxclients + RESERVECONNECTIONS) )
+            {
+              lprintf (1, "Allowing connection in reserve space from %s:%s", ipstr, portstr);
+            }
+          else
+            {
+              lprintf (1, "Maximum number of clients exceeded: %d", maxclients);
+              lprintf (1, "  Rejecting connection from: %s:%s", ipstr, portstr);
+              close (clientsocket);
+              continue;
+            }
+        }
       
       /* Allocate and initialize connection info struct */
       if ( (cinfo = (ClientInfo *) calloc (1, sizeof(ClientInfo))) == NULL )
@@ -1098,11 +1109,18 @@ SL_ListenThread (void *arg)
       /* Enforce maximum number of clients if specified */
       if ( maxclients && clientcount >= maxclients )
 	{
-	  lprintf (1, "Maximum number of clients exceeded: %d", maxclients);
-	  lprintf (1, "  Rejecting connection from: %s:%s", ipstr, portstr);
-	  close (clientsocket);
-	  continue;
-	}
+          if ( (writeips && MatchIP (writeips, &addr)) && clientcount <= (maxclients + RESERVECONNECTIONS) )
+            {
+              lprintf (1, "Allowing connection in reserve space from %s:%s", ipstr, portstr);
+            }
+          else
+            {
+              lprintf (1, "Maximum number of clients exceeded: %d", maxclients);
+              lprintf (1, "  Rejecting connection from: %s:%s", ipstr, portstr);
+              close (clientsocket);
+              continue;
+            }
+        }
       
       /* Allocate and initialize connection info struct */
       if ( (cinfo = (ClientInfo *) calloc (1, sizeof(ClientInfo))) == NULL )

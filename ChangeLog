@@ -1,6 +1,9 @@
 2015.188:
 	- Fix parsing of MaxClientsPerIP configuration parameter when the
 	MaxClients parameter is also being specified.
+	- Allow connections from addresses that have write permission even
+	when the maximum number of connections has been reached.  The reserve
+	space is currently 10 connections.
 	- Clarify in documentation that clients connecting from the localhost
 	loopback address (127.0.0.1) is only granted write permission if no
 	other addresses are explicitly granted write permission.
