@@ -1,3 +1,8 @@
+2015.188:
+	- Clarify in documentation that clients connecting from the localhost
+	loopback address (127.0.0.1) is only granted write permission if no
+	other addresses are explicitly granted write permission.
+
 2015.182:
 	- Dynamically allocate record buffer for use in slclient.c:HandleInfo()
 	in order guarantee that it is properly aligned for the host architecture.
