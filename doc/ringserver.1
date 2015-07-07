@@ -70,14 +70,14 @@ Be more verbose.  This flag can be used multiple times ("-v -v" or
 Server ID reported to the clients.  The value may be a quoted string
 containing spaces.  The default value is "Ring Server".
 
-.IP "-m \fImaxclients\fP"
-Maximum number of concurrently connected clients.  The default maximum
-is 600.
-
 .IP "-M \fImaxclientsperIP\fP"
 Maximum number of concurrently connected clients per IP address.  This
 limit does not apply to addresses with write permission.  There is no
 default maximum.
+
+.IP "-m \fImaxclients\fP"
+Maximum number of concurrently connected clients.  The default maximum
+is 600.
 
 .IP "-Rd \fIringdir\fP"
 Base directory for the server to store the packet buffer data files.
