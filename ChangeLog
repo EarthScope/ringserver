@@ -1,5 +1,6 @@
 2016.304:
 	- Update libmseed to 2.18.
+	- Update Mini-XML (mxml) to 2.10.
 
 2015.188:
 	- Fix parsing of MaxClientsPerIP configuration parameter when the

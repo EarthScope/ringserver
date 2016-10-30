@@ -1,9 +1,9 @@
 /*
- * "$Id: config.h 451 2014-01-04 21:50:06Z msweet $"
+ * "$Id: config.h 468 2016-06-13 01:02:37Z msweet $"
  *
  * Configuration file for Mini-XML, a small XML-like file parsing library.
  *
- * Copyright 2003-2014 by Michael R Sweet.
+ * Copyright 2003-2016 by Michael R Sweet.
  *
  * These coded instructions, statements, and computer programs are the
  * property of Michael R Sweet and are protected by Federal copyright
@@ -64,7 +64,7 @@
  * Version number...
  */
 
-#define MXML_VERSION "Mini-XML v2.8"
+#define MXML_VERSION "Mini-XML v2.10"
 
 
 /*
@@ -119,5 +119,5 @@ extern int	_mxml_vsnprintf(char *, size_t, const char *, va_list);
 #  endif /* !HAVE_VSNPRINTF */
 
 /*
- * End of "$Id: config.h 451 2014-01-04 21:50:06Z msweet $".
+ * End of "$Id: config.h 468 2016-06-13 01:02:37Z msweet $".
  */
