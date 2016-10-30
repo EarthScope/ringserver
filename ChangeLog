@@ -1,3 +1,6 @@
+2016.304:
+	- Update libmseed to 2.18.
+
 2015.188:
 	- Fix parsing of MaxClientsPerIP configuration parameter when the
 	MaxClients parameter is also being specified.
