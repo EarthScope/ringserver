@@ -1,7 +1,20 @@
-2016.304:
+2016.352:
+	- Network listening threads can now optionally respond to any supported 
+	protocol (DataLink, SeedLink and HTTP).  This major refactor of client
+	code reduces redundancy and adds flexibility.  A new config file
+	parameter 'ListenPort' and command line option '-L' are used to specify
+	such a listening port.
+	- Add minimalistic HTTP server support, an optional directory can be
+	specified from which files will be returned by HTTP when requested
+	with an HTTP GET request.
+	- Add WebSocket support for both DataLink and SeedLink.
+	- Reformat source code using included clang-format profile.
+
+2016.306:
 	- Update libmseed to 2.18.
-	- Update Mini-XML (mxml) to 2.10.
+	- Update Mini-XML (mxml) to 2.10, apply patch to fix memory leak.
 	- Update pcre to 8.39.
+	- Reorganize common RecvData() and SendData() and improve.
 
 2015.188:
 	- Fix parsing of MaxClientsPerIP configuration parameter when the

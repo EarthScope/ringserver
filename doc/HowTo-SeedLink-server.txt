@@ -101,7 +101,7 @@ DataLinkPort - Listen for DataLink connections on TCP port 16000
 SeedLinkPort - Listen for SeedLink connections on TCP port 18000
   (default).
 
-ServerID - Server identification sent to clients, set appropriately. 
+ServerID - Server identification sent to clients, set appropriately.
 
 TransferLogDirectory - Specify directory where transfer logs are to be
   written.  By default they are written daily and both transmission

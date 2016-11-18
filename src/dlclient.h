@@ -1,7 +1,7 @@
 /**************************************************************************
  * dlclient.h
  *
- * Modified: 2013.192
+ * Modified: 2016.342
  **************************************************************************/
 
 #ifndef DLCLIENT_H
@@ -18,9 +18,10 @@ extern "C" {
 /* DataLink server capability flags */
 #define DLCAPFLAGS "DLPROTO:1.0"
 
-#define DLMAXREGEXLEN       1048576  /* Maximum regex pattern size */
+#define DLMAXREGEXLEN  1048576  /* Maximum regex pattern size */
 
-extern void *DL_ClientThread (void *arg);
+extern int DLHandleCmd (ClientInfo *cinfo);
+extern int DLStreamPackets (ClientInfo *cinfo);
 
 #ifdef __cplusplus
 }

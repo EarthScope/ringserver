@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2015/07/07
+.TH RINGSERVER 1 2016/12/11
 .SH NAME
 ringserver \- Generic packet ring buffer
 
@@ -9,8 +9,7 @@ ringserver [options] [configfile]
 
 .SH DESCRIPTION
 \fBringserver\fP is a TCP-based ring buffer designed for packetized
-streaming data.  The primary implementation criteria are scalability
-and stability.  The ring buffer is implemented as a FIFO with newly
+streaming data.  The ring buffer is implemented as a FIFO with newly
 arriving packets pushing older packets out of the buffer.  The ring
 packets are not format specific and may contain any type of data.  All
 communications are performed via TCP interfaces.  Data is available to
@@ -45,6 +44,15 @@ reception of data packets to and from the server.  This tracking is
 stream-based and identifies the number of packet bytes of each unique
 stream transfered to or from each client connection.
 
+The server supports multiple protocols (SeedLink, DataLink and HTTP)
+on the same listening port.  Support can be limited to certain
+protocols on a by-port basis.  See \fBMulti-protocol support\fP for
+more information.
+
+The server also has limited support for HTTP requests.  When support is
+enabled, server status, stream lists and other details can be accessed
+with simple HTTP requests.  See \fBHTTP Support\fP for more details.
+
 The slinktool(1) and dalitool(1) programs can be used to query the
 ringserver for various information via the SeedLink and DataLink
 interfaces respectively.  The dalitool program was developed in
@@ -63,7 +71,7 @@ Print the program help/usage and exit.
 Print an extended help/usage and exit.
 
 .IP "-v"
-Be more verbose.  This flag can be used multiple times ("-v -v" or 
+Be more verbose.  This flag can be used multiple times ("-v -v" or
 "-vv") for more verbosity.
 
 .IP "-I \fIServerID\fP"
@@ -109,14 +117,21 @@ the memory buffers will be written back to the files.  This option
 might be useful in environments where memory-mapping of files is not
 possbile or is unreliable (e.g. NFS).
 
+.IP "-L \fIport\fP"
+Network port to listen for incoming connections on.  By default the
+server will not listen for connections, setting at least one listen
+port is needed to communiate with the server.  By default a listening
+port will accept all supported protocols.  Restricting a port to only
+allow specific protocols can be done using a configuration file, see
+\fBMulti-protocol Support\fP for more information.
+
 .IP "-DL \fIport\fP"
-Network port to listen for DataLink connections on, by default the
-server will not listen for DataLink connections.
-16000.
+Network port to listen for DataLink connections on.  This is a special
+case listening port limited to DataLink.
 
 .IP "-SL \fIport\fP"
-Network port to listen for SeedLink connections on, by default the
-server will not listen for SeedLink connections.
+Network port to listen for SeedLink connections on.  This is a special
+case listening port limited to SeedLink.
 
 .IP "-T \fIlogdir\fP"
 Transfer log file base directory, by default the server does not write
@@ -205,6 +220,46 @@ This server supports the wildcarding of network and station codes
 during SeedLink negotiation using the '?' and '*' characters for
 single or multiple character matches respectively.  Not all SeedLink
 clients support wildcarded network and station codes.
+
+.SH "Multi-protocol Support"
+
+Network listening ports can respond to all supported protocols
+(SeedLink, DataLink and HTTP).  The first command received by the
+server is used to determine which protocol is being used by the
+client, all subsequent communication is expected in this protocol.
+
+The protocols allowed by any given listening port can be set to any
+combination of the supported protocols by adding flags to the
+\fIListen\fP parameter of the server configuration file.
+
+.SH "HTTP Support"
+
+The server will respond to HTTP requests for a few fixed resources.
+If the \fBWebRoot\fP config parameter is set to a directory, the files
+under that directory will also be served when requesed through the
+HTTP GET method.  Except for the fixed resources, the HTTP server
+implementation is limited to returning existing files and returning
+"index.html" files when a directory is requested.
+
+The following fixed resources are supported:
+
+.nf
+  \fB/id\fP           - Return server identification
+  \fB/streams\fP      - Return list of available streams
+  \fB/status\fP       - Return server status, limited access*
+  \fB/connections\fP  - Return list of connections, limited access*
+  \fB/seedlink\fP     - Initiate WebSocket connection for Seedlink
+  \fB/datalink\fP     - Initiate WebSocket connection for DataLink
+.fi
+
+Access to the \fBstatus\fP and \fBconnections\fP information is
+limited to clients that have write permission.
+
+After a WebSocket connection has been initiated with either the
+\fBseedlink\fP or \fBdatalink\fP end points, the requested protocol is
+supported exactly as it would be normally except with WebSocket
+framing.  Each server command should be contained in a single
+WebSocket frame, independent of other commands.
 
 .SH "Mini-SEED Archiving"
 Using either the \fB-MSWRITE\fP command line option or the

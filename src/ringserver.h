@@ -1,7 +1,7 @@
 /**************************************************************************
  * ringserver.h
  *
- * Modified: 2010.016
+ * Modified: 2016.339
  **************************************************************************/
 
 #ifndef RINGSERVER_H
@@ -15,18 +15,14 @@ extern "C" {
 #endif
 
 #define PACKAGE   "ringserver"
-#define VERSION   "2016.304dev"
+#define VERSION   "2016.345dev"
 
-/* Thread data flags */ 
+/* Thread data flags */
 #define TDF_SPAWNING    (1<<0)          /* Thread is now spawning   */
 #define TDF_ACTIVE      (1<<1)          /* If set, thread is active */
 #define TDF_CLOSE       (1<<2)          /* If set, thread closes    */
 #define TDF_CLOSING     (1<<3)          /* Thread in close process  */
 #define TDF_CLOSED      (1<<4)          /* Thread is closed         */
-
-/* Connection mode flags */
-#define SEEDLINK_MODE   1
-#define DATALINK_MODE   2
 
 /* Thread data associated with most threads */
 struct thread_data {
@@ -38,9 +34,14 @@ struct thread_data {
 };
 
 /* Server thread types */
-#define DATALINK_LISTEN_THREAD 1
-#define SEEDLINK_LISTEN_THREAD 2
-#define MSEEDSCAN_THREAD       3
+#define LISTEN_THREAD     1
+#define MSEEDSCAN_THREAD  2
+
+/* Listen thread protocols */
+#define PROTO_DATALINK  0x01
+#define PROTO_SEEDLINK  0x02
+#define PROTO_HTTP      0x04
+#define PROTO_ALL       0xFF
 
 /* Doubly-linkable structure to list server threads */
 struct sthread {
@@ -62,7 +63,8 @@ struct cthread {
 typedef struct ListenPortParams_s
 {
   char portstr[11];      /* Port number to listen on as string */
-  int  socket;           /* Socket descriptor or -1 when not connected */
+  uint8_t protocols;     /* Protocol flags for this connection */
+  int socket;            /* Socket descriptor or -1 when not connected */
 } ListenPortParams;
 
 /* Global variables declared in ringserver.c */
@@ -71,6 +73,7 @@ extern struct sthread *sthreads;
 extern pthread_mutex_t cthreads_lock;
 extern struct cthread *cthreads;
 extern char *serverid;
+extern char *webroot;
 extern hptime_t serverstarttime;
 extern int clientcount;
 extern int resolvehosts;

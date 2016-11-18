@@ -1,7 +1,7 @@
 /**************************************************************************
  * slclient.h
  *
- * Modified: 2014.269
+ * Modified: 2016.345
  **************************************************************************/
 
 #ifndef SLCLIENT_H
@@ -43,7 +43,10 @@ typedef struct SLInfo_s {
   int64_t     startid;      /* Starting packet ID */
   char       *selectors;    /* List of SeedLink selectors */
   int         stationcount; /* Number of stations requested with STATION */
+  int         timewinchannels; /* Count of channels for time window completion check */
   RBTree     *stations;     /* Binary tree of stations requested */
+  char        reqnet[10];   /* Requested network, used during negotiation */
+  char        reqsta[10];   /* Requested station, used during negotiation */
 } SLInfo;
 
 /* The StaKey and StaNode structures form the key and data elements
@@ -76,8 +79,9 @@ typedef struct SLNetStaNode_s {
   Stack    *streams;         /* Stack of associated streams */
 } SLNetStaNode;
 
-
-extern void *SL_ClientThread (void *arg);
+extern int SLHandleCmd (ClientInfo *cinfo);
+extern int SLStreamPackets (ClientInfo *cinfo);
+extern void SLFree (ClientInfo *cinfo);
 
 #ifdef __cplusplus
 }

@@ -232,10 +232,9 @@ mxmlDelete(mxml_node_t *node)		/* I - Node to delete */
 
         next = NULL;
       }
-      else if ((next = temp->next) == NULL)
+      else
       {
-	if ((next = temp->parent) == node)
-	  next = NULL;
+	 next = temp;
       }
     }
 
