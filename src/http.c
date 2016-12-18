@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.347
+ * Modified: 2016.353
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -150,8 +150,13 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       return -1;
     }
 
-    /* Store values of needed headers */
-    if (!strcasecmp (cinfo->recvbuf, "Upgrade"))
+    /* Store values of selected headers */
+    if (!strcasecmp (cinfo->recvbuf, "User-Agent"))
+    {
+      strncpy (cinfo->clientid, value, sizeof (cinfo->clientid) - 1);
+      cinfo->clientid[sizeof (cinfo->clientid) - 1] = '\0';
+    }
+    else if (!strcasecmp (cinfo->recvbuf, "Upgrade"))
     {
       strncpy (upgradeHeader, value, sizeof (upgradeHeader) - 1);
       upgradeHeader[sizeof (upgradeHeader) - 1] = '\0';
