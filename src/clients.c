@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.352
+ * Modified: 2016.353
  **************************************************************************/
 
 #include <errno.h>
@@ -61,7 +61,7 @@ ClientThread (void *arg)
   ClientInfo *cinfo;
   RingReader reader;
   struct thread_data *mytdp;
-  int64_t retval;
+  int sentbytes;
   int sockflags;
   int setuperr = 0;
   ssize_t nrecv;
@@ -314,18 +314,18 @@ ClientThread (void *arg)
     {
       if (cinfo->type == CLIENT_DATALINK)
       {
-        retval = DLStreamPackets (cinfo);
+        sentbytes = DLStreamPackets (cinfo);
       }
       else if (cinfo->type == CLIENT_SEEDLINK)
       {
-        retval = SLStreamPackets (cinfo);
+        sentbytes = SLStreamPackets (cinfo);
       }
 
-      if (retval < 0) /* Bail on error */
+      if (sentbytes < 0) /* Bail on error */
       {
         break;
       }
-      if (retval == 0) /* No packet sent, throttle immediately */
+      if (sentbytes == 0) /* No packet sent, throttle immediately */
       {
         throttle = THROTTLE_TRIGGER;
       }

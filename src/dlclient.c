@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.352
+ * Modified: 2016.353
  **************************************************************************/
 
 #include <errno.h>
@@ -166,6 +166,7 @@ int
 DLStreamPackets (ClientInfo *cinfo)
 {
   int64_t readid;
+  int unsent = 0;
 
   if (!cinfo)
     return -1;
@@ -185,7 +186,7 @@ DLStreamPackets (ClientInfo *cinfo)
              cinfo->packet.datasize, cinfo->packet.pktid);
 
     /* Send packet to client */
-    if (SendRingPacket (cinfo))
+    if ((unsent = SendRingPacket (cinfo)))
     {
       if (cinfo->socketerr != 2)
         lprintf (1, "[%s] Error sending packet to client", cinfo->hostname);
@@ -201,7 +202,7 @@ DLStreamPackets (ClientInfo *cinfo)
     return 0;
   }
 
-  return cinfo->packet.datasize;
+  return (unsent) ? 0 : cinfo->packet.datasize;
 } /* End of DLStreamPackets() */
 
 /***************************************************************************

@@ -37,7 +37,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.352
+ * Modified: 2016.353
  **************************************************************************/
 
 /* Unsupported protocol features:
@@ -369,10 +369,11 @@ int
 SLStreamPackets (ClientInfo *cinfo)
 {
   SLInfo *slinfo;
+  StreamNode *stream;
   int64_t readid;
+  int unsent = 0;
   int skiprecord = 0;
   int newstream;
-  StreamNode *stream;
 
   if (!cinfo || !cinfo->extinfo)
     return -1;
@@ -453,7 +454,7 @@ SLStreamPackets (ClientInfo *cinfo)
     if (!skiprecord)
     {
       /* Send Mini-SEED record to client */
-      if (SendRecord (&cinfo->packet, cinfo->packetdata, SLRECSIZE, cinfo))
+      if ((unsent = SendRecord (&cinfo->packet, cinfo->packetdata, SLRECSIZE, cinfo)))
       {
         if (cinfo->socketerr != 2)
           lprintf (0, "[%s] Error sending record to client", cinfo->hostname);
@@ -482,7 +483,7 @@ SLStreamPackets (ClientInfo *cinfo)
     return -1;
   }
 
-  return cinfo->packet.datasize;
+  return (unsent) ? 0 : cinfo->packet.datasize;
 } /* End of SLStreamPackets() */
 
 /***********************************************************************
