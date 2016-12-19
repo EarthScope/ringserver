@@ -408,12 +408,13 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     if (NegotiateWebSocket (cinfo, version, upgradeHeader, connectionHeader,
                             secWebSocketKeyHeader, secWebSocketVersionHeader))
     {
-      lprintf (1, "[%s] Error negotiating SeedLink WebSocket", cinfo->hostname);
+      lprintf (0, "[%s] Error negotiating SeedLink WebSocket", cinfo->hostname);
       return -1;
     }
 
-    cinfo->type = CLIENT_SEEDLINK; /* This is now a SeedLink client */
-  }                                /* Done with /seedlink request */
+    /* This is now a SeedLink client */
+    cinfo->type = CLIENT_SEEDLINK;
+  } /* Done with /seedlink request */
   else if (!strncasecmp (path, "/datalink", 9))
   {
     if ((cinfo->protocols & PROTO_DATALINK) == 0)
@@ -444,12 +445,13 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     if (NegotiateWebSocket (cinfo, version, upgradeHeader, connectionHeader,
                             secWebSocketKeyHeader, secWebSocketVersionHeader))
     {
-      lprintf (1, "[%s] Error negotiating DataLink WebSocket", cinfo->hostname);
+      lprintf (0, "[%s] Error negotiating DataLink WebSocket", cinfo->hostname);
       return -1;
     }
 
-    cinfo->type = CLIENT_DATALINK; /* This is now a DataLink client */
-  }                                /* Done with /datalink request */
+    /* This is now a DataLink client */
+    cinfo->type = CLIENT_DATALINK;
+  } /* Done with /datalink request */
   else
   {
     lprintf (1, "[%s] Received HTTP request for %s", cinfo->hostname, path);
@@ -457,8 +459,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     /* If WebRoot is configured send file */
     if (webroot && (rv = SendFileHTTP (cinfo, path)) >= 0)
     {
-      if (verbose >= 2)
-        lprintf (1, "[%s] Sent %s (%d bytes)", cinfo->hostname, path, rv);
+      lprintf (2, "[%s] Sent %s (%d bytes)", cinfo->hostname, path, rv);
     }
     else
     {
@@ -1101,11 +1102,23 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
 
     /* Determine connection type */
     if (tcinfo->type == CLIENT_DATALINK)
-      conntype = "DataLink";
+    {
+      if (tcinfo->websocket)
+        conntype = "WebSocket DataLink";
+      else
+        conntype = "DataLink";
+    }
     else if (tcinfo->type == CLIENT_SEEDLINK)
-      conntype = "SeedLink";
+    {
+      if (tcinfo->websocket)
+        conntype = "WebSocket SeedLink";
+      else
+        conntype = "SeedLink";
+    }
     else
+    {
       conntype = "Unknown";
+    }
 
     ms_hptime2mdtimestr (tcinfo->conntime, conntime, 1);
     ms_hptime2mdtimestr (tcinfo->reader->pkttime, packettime, 1);
@@ -1119,7 +1132,7 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
 
     snprintf (conninfo, sizeof (conninfo),
               "%s [%s:%s]\n"
-              "  [%s%s] %s  %s\n"
+              "  [%s] %s  %s\n"
               "  Packet %" PRId64 " (%s)  Lag %s, %.1f\n"
               "  TX %" PRId64 " packets, %.1f packets/sec  %" PRId64 " bytes, %.1f bytes/sec\n"
               "  RX %" PRId64 " packets, %.1f packets/sec  %" PRId64 " bytes, %.1f bytes/sec\n"
@@ -1127,7 +1140,7 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
               "  Match: %.50s\n"
               "  Reject: %.50s\n\n",
               tcinfo->hostname, tcinfo->ipstr, tcinfo->portstr,
-              (cinfo->websocket) ? "WebSocket " : "", conntype, tcinfo->clientid, conntime,
+              conntype, tcinfo->clientid, conntime,
               tcinfo->reader->pktid, packettime, lagstr,
               (double)MS_HPTIME2EPOCH ((hpnow - tcinfo->lastxchange)),
               tcinfo->txpackets[0], tcinfo->txpacketrate, tcinfo->txbytes[0], tcinfo->txbyterate,

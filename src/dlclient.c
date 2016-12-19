@@ -1139,14 +1139,14 @@ HandleInfo (ClientInfo *cinfo, int socket)
         /* Determine connection type */
         if (tcinfo->type == CLIENT_DATALINK)
         {
-          if (cinfo->websocket)
+          if (tcinfo->websocket)
             conntype = "WebSocket DataLink";
           else
             conntype = "DataLink";
         }
         else if (tcinfo->type == CLIENT_SEEDLINK)
         {
-          if (cinfo->websocket)
+          if (tcinfo->websocket)
             conntype = "WebSocket SeedLink";
           else
             conntype = "SeedLink";
@@ -1157,7 +1157,6 @@ HandleInfo (ClientInfo *cinfo, int socket)
         }
 
         mxmlElementSetAttr (conn, "Type", conntype);
-
         mxmlElementSetAttr (conn, "Host", tcinfo->hostname);
         mxmlElementSetAttr (conn, "IP", tcinfo->ipstr);
         mxmlElementSetAttr (conn, "Port", tcinfo->portstr);
