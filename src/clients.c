@@ -347,9 +347,9 @@ ClientThread (void *arg)
       FD_ZERO (&readset);
       FD_SET (cinfo->socket, &readset);
 
-      /* Timeout (throttle when no data) is 1/10 of a second */
+      /* Timeout (throttle when no data) is 2/10 of a second */
       timeout.tv_sec = 0;
-      timeout.tv_usec = 100000;
+      timeout.tv_usec = 200000;
 
       select (cinfo->socket + 1, &readset, NULL, NULL, &timeout);
     }
