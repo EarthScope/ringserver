@@ -371,7 +371,6 @@ SLStreamPackets (ClientInfo *cinfo)
   SLInfo *slinfo;
   StreamNode *stream;
   int64_t readid;
-  int unsent = 0;
   int skiprecord = 0;
   int newstream;
 
@@ -454,10 +453,11 @@ SLStreamPackets (ClientInfo *cinfo)
     if (!skiprecord)
     {
       /* Send Mini-SEED record to client */
-      if ((unsent = SendRecord (&cinfo->packet, cinfo->packetdata, SLRECSIZE, cinfo)))
+      if (SendRecord (&cinfo->packet, cinfo->packetdata, SLRECSIZE, cinfo))
       {
         if (cinfo->socketerr != 2)
           lprintf (0, "[%s] Error sending record to client", cinfo->hostname);
+
         return -1;
       }
 
@@ -474,6 +474,10 @@ SLStreamPackets (ClientInfo *cinfo)
       /* Update last sent packet ID */
       cinfo->lastid = cinfo->packet.pktid;
     }
+    else
+    {
+      readid = 0;
+    }
   }
   /* If in dial-up mode check if we are at the end of the ring */
   else if (readid == 0 && slinfo->dialup)
@@ -483,7 +487,7 @@ SLStreamPackets (ClientInfo *cinfo)
     return -1;
   }
 
-  return (unsent) ? 0 : cinfo->packet.datasize;
+  return (readid) ? cinfo->packet.datasize : 0;
 } /* End of SLStreamPackets() */
 
 /***********************************************************************

@@ -166,7 +166,6 @@ int
 DLStreamPackets (ClientInfo *cinfo)
 {
   int64_t readid;
-  int unsent = 0;
 
   if (!cinfo)
     return -1;
@@ -186,10 +185,12 @@ DLStreamPackets (ClientInfo *cinfo)
              cinfo->packet.datasize, cinfo->packet.pktid);
 
     /* Send packet to client */
-    if ((unsent = SendRingPacket (cinfo)))
+    if (SendRingPacket (cinfo))
     {
       if (cinfo->socketerr != 2)
         lprintf (1, "[%s] Error sending packet to client", cinfo->hostname);
+
+      return -1;
     }
 
     /* Socket errors are fatal */
@@ -202,7 +203,7 @@ DLStreamPackets (ClientInfo *cinfo)
     return 0;
   }
 
-  return (unsent) ? 0 : cinfo->packet.datasize;
+  return (readid) ? cinfo->packet.datasize : 0;
 } /* End of DLStreamPackets() */
 
 /***************************************************************************

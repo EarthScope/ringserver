@@ -312,6 +312,8 @@ ClientThread (void *arg)
     /* Regular data flow */
     if (cinfo->state == STATE_STREAM)
     {
+      sentbytes = 0;
+
       if (cinfo->type == CLIENT_DATALINK)
       {
         sentbytes = DLStreamPackets (cinfo);
