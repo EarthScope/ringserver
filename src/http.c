@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.353
+ * Modified: 2016.354
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -73,8 +73,8 @@ static void sha1 (unsigned char hval[], const unsigned char data[], unsigned lon
  * The following end points are handled:
  *   /id          - return server ID and version
  *   /streams     - return list of server streams
- *   /status      - return server status, limited via write-permissions
- *   /connections - return list of connections, limited via write-permissions
+ *   /status      - return server status, limited via trust-permissions
+ *   /connections - return list of connections, limited via trust-permissions
  *   /seedlink    - initiate WebSocket connection for SeedLink
  *   /datalink    - initiate WebSocket connection for SeedLink
  *
@@ -264,10 +264,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
   } /* Done with /streams request */
   else if (!strcasecmp (path, "/status"))
   {
-    /* Check for write permission, required to access this resource */
-    if (!cinfo->writeperm)
+    /* Check for trusted flag, required to access this resource */
+    if (!cinfo->trusted)
     {
-      lprintf (1, "[%s] HTTP STATUS request from client without write permission",
+      lprintf (1, "[%s] HTTP STATUS request from un-trusted client",
                cinfo->hostname);
 
       response =
@@ -322,10 +322,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
   } /* Done with /status request */
   else if (!strncasecmp (path, "/connections", 12))
   {
-    /* Check for write permission, required to access this resource */
-    if (!cinfo->writeperm)
+    /* Check for trusted flag, required to access this resource */
+    if (!cinfo->trusted)
     {
-      lprintf (1, "[%s] HTTP CONNECTIONS request from client without write permission",
+      lprintf (1, "[%s] HTTP CONNECTIONS request from un-trusted client",
                cinfo->hostname);
 
       response =

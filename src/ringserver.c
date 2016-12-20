@@ -21,7 +21,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.346
+ * Modified: 2016.354
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -72,9 +72,9 @@ typedef struct IPNet_s
 
 /* Global variables defined here */
 pthread_mutex_t sthreads_lock = PTHREAD_MUTEX_INITIALIZER;
-struct sthread *sthreads = 0; /* Server threads list */
+struct sthread *sthreads = NULL; /* Server threads list */
 pthread_mutex_t cthreads_lock = PTHREAD_MUTEX_INITIALIZER;
-struct cthread *cthreads = 0; /* Client threads list */
+struct cthread *cthreads = NULL; /* Client threads list */
 
 char *serverid = NULL;    /* Server ID */
 char *webroot = NULL;     /* Web content root directory */
@@ -102,12 +102,12 @@ static void *SignalThread (void *arg);
 static void PrintHandler ();
 static void Usage (int level);
 
-static char *configfile = 0;                         /* Configuration file */
+static char *configfile = NULL;                      /* Configuration file */
 static time_t configfilemtime = 0;                   /* Modification time of configuration file */
 static uint32_t maxclients = 600;                    /* Enforce maximum number of clients */
 static uint32_t maxclientsperip = 0;                 /* Enforce maximum number of clients per IP */
 static uint32_t clienttimeout = 3600;                /* Drop clients if no exchange within this limit */
-static char *ringdir = 0;                            /* Directory for ring files */
+static char *ringdir = NULL;                         /* Directory for ring files */
 static uint64_t ringsize = 1073741824;               /* Size of ring buffer file (1 gigabyte) */
 static uint64_t maxpktid = 0xFFFFFF;                 /* Maximum packet ID (2^16 = 16,777,215) */
 static uint32_t pktsize = sizeof (RingPacket) + 512; /* Ring packet size */
@@ -115,18 +115,19 @@ static uint8_t memorymapring = 1;                    /* Flag to control mmap'ing
 static uint8_t volatilering = 0;                     /* Flag to control if ring is volatile or not */
 static uint8_t autorecovery = 1;                     /* Flag to control auto recovery from corruption */
 static float timewinlimit = 1.0;                     /* Time window search limit in percent */
-static char *mseedarchive = 0;                       /* Mini-SEED archive definition */
+static char *mseedarchive = NULL;                    /* Mini-SEED archive definition */
 static int mseedidleto = 300;                        /* Mini-SEED idle file timeout */
 static sigset_t globalsigset;                        /* Signal set for signal handling */
 
 static int tcpprotonumber = -1;
 
-static RingParams *ringparams = 0;
+static RingParams *ringparams = NULL;
 
-static IPNet *limitips = 0;
-static IPNet *matchips = 0;
-static IPNet *rejectips = 0;
-static IPNet *writeips = 0;
+static IPNet *limitips = NULL;
+static IPNet *matchips = NULL;
+static IPNet *rejectips = NULL;
+static IPNet *writeips = NULL;
+static IPNet *trustedips = NULL;
 
 int
 main (int argc, char *argv[])
@@ -925,6 +926,15 @@ ListenThread (void *arg)
       }
     }
 
+    /* Set trusted flag if address is in the trusted list */
+    if (trustedips)
+    {
+      if (MatchIP (trustedips, &addr))
+      {
+        cinfo->trusted = 1;
+      }
+    }
+
     /* Set time window search limit */
     cinfo->timewinlimit = timewinlimit;
 
@@ -1277,6 +1287,16 @@ ProcessParam (int argcount, char **argvec)
     }
   }
 
+  /* Add 127.0.0.1 (loopback) to trusted list if list empty */
+  if (!trustedips)
+  {
+    if (AddIPNet (&trustedips, "127.0.0.1/32", NULL))
+    {
+      lprintf (0, "Error adding 127.0.0.1/32 to trusted list");
+      return -1;
+    }
+  }
+
   /* Check for specified ring directory */
   if (!ringsize)
   {
@@ -1415,7 +1435,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
   /* Reset the configuration file mtime */
   configfilemtime = mtime;
 
-  /* Clear the write, limit, match and reject IPs lists */
+  /* Clear the write, trusted, limit, match and reject IPs lists */
   ipnet = nextipnet = writeips;
   while (ipnet)
   {
@@ -1423,7 +1443,15 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     free (ipnet);
     ipnet = nextipnet;
   }
-  writeips = 0;
+  writeips = NULL;
+  ipnet = nextipnet = trustedips;
+  while (ipnet)
+  {
+    nextipnet = ipnet->next;
+    free (ipnet);
+    ipnet = nextipnet;
+  }
+  trustedips = NULL;
   ipnet = nextipnet = limitips;
   while (ipnet)
   {
@@ -1433,7 +1461,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     free (ipnet);
     ipnet = nextipnet;
   }
-  limitips = 0;
+  limitips = NULL;
   ipnet = nextipnet = matchips;
   while (ipnet)
   {
@@ -1441,7 +1469,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     free (ipnet);
     ipnet = nextipnet;
   }
-  matchips = 0;
+  matchips = NULL;
   ipnet = nextipnet = rejectips;
   while (ipnet)
   {
@@ -1449,7 +1477,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     free (ipnet);
     ipnet = nextipnet;
   }
-  rejectips = 0;
+  rejectips = NULL;
 
   /* Read and process all lines */
   while (fgets (line, sizeof (line), cfile))
@@ -1779,6 +1807,21 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
         return -1;
       }
     }
+    else if (!strncasecmp ("TrustedIP", ptr, 9))
+    {
+      if (sscanf (ptr, "%*s %512s", svalue) != 1)
+      {
+        lprintf (0, "Error with TrustedIP config file line: %s", ptr);
+        return -1;
+      }
+      svalue[sizeof (svalue) - 1] = '\0';
+
+      if (AddIPNet (&trustedips, svalue, NULL))
+      {
+        lprintf (0, "Error with TrustedIP config file line: %s", ptr);
+        return -1;
+      }
+    }
     else if (!strncasecmp ("LimitIP", ptr, 7))
     {
       char limitstr[512];
@@ -1901,11 +1944,24 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     }
   } /* Done reading config file lines */
 
-  /* Add 127.0.0.1 (loopback) to write permission list */
-  if (AddIPNet (&writeips, "127.0.0.1/32", NULL))
+  /* Add 127.0.0.1 (loopback) to write permission list if list empty */
+  if (!writeips)
   {
-    lprintf (0, "Error adding 127.0.0.1/32 to write permission list");
-    return -1;
+    if (AddIPNet (&writeips, "127.0.0.1/32", NULL))
+    {
+      lprintf (0, "Error adding 127.0.0.1/32 to write permission list");
+      return -1;
+    }
+  }
+
+  /* Add 127.0.0.1 (loopback) to trusted list if list empty */
+  if (!trustedips)
+  {
+    if (AddIPNet (&trustedips, "127.0.0.1/32", NULL))
+    {
+      lprintf (0, "Error adding 127.0.0.1/32 to trusted list");
+      return -1;
+    }
   }
 
   /* Close config file */

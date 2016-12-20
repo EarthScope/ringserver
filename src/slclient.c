@@ -37,7 +37,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.353
+ * Modified: 2016.354
  **************************************************************************/
 
 /* Unsupported protocol features:
@@ -1108,6 +1108,18 @@ HandleInfo (ClientInfo *cinfo)
   }
   else if (!strncasecmp (level, "CONNECTIONS", 11))
   {
+    /* Limit access to connections to trusted clients */
+    if (!cinfo->trusted)
+    {
+      lprintf (1, "[%s] Refusing INFO CONNECTIONS request from un-trusted client",
+               cinfo->hostname);
+      if (xmldoc)
+        mxmlRelease (xmldoc);
+      if (record)
+        free (record);
+      return -1;
+    }
+
     lprintf (1, "[%s] Received INFO CONNECTIONS request", cinfo->hostname);
     infolevel = SLINFO_CONNECTIONS;
   }

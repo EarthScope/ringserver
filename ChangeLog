@@ -1,3 +1,7 @@
+2016.354:
+	- Add TrustedIP config file parameter to control access to server 
+	connection list and detailed status.
+
 2016.352:
 	- Network listening threads can now optionally respond to any supported 
 	protocol (DataLink, SeedLink and HTTP).  This major refactor of client

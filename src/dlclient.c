@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.353
+ * Modified: 2016.354
  **************************************************************************/
 
 #include <errno.h>
@@ -925,78 +925,81 @@ HandleInfo (ClientInfo *cinfo, int socket)
     lprintf (1, "[%s] Received INFO STATUS request", cinfo->hostname);
     type = "INFO STATUS";
 
-    /* Create "ServerThreads" element */
-    if (!(stlist = mxmlNewElement (xmldoc, "ServerThreads")))
+    /* Only add server threads if client is trusted */
+    if (cinfo->trusted)
     {
-      lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-      errflag = 1;
-    }
-
-    /* Create a Thread element for each thread, lock thread list while looping */
-    pthread_mutex_lock (&sthreads_lock);
-    loopstp = sthreads;
-    while (loopstp)
-    {
-      totalcount++;
-
-      if (!(st = mxmlNewElement (stlist, "Thread")))
+      /* Create "ServerThreads" element */
+      if (!(stlist = mxmlNewElement (xmldoc, "ServerThreads")))
       {
         lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
         errflag = 1;
       }
-      else
+
+      /* Create a Thread element for each thread, lock thread list while looping */
+      pthread_mutex_lock (&sthreads_lock);
+      loopstp = sthreads;
+      while (loopstp)
       {
-        /* Add thread status flags to Thread element */
-        string[0] = '\0';
-        if (loopstp->td->td_flags & TDF_SPAWNING)
-          strcat (string, " SPAWNING");
-        if (loopstp->td->td_flags & TDF_ACTIVE)
-          strcat (string, " ACTIVE");
-        if (loopstp->td->td_flags & TDF_CLOSE)
-          strcat (string, " CLOSE");
-        if (loopstp->td->td_flags & TDF_CLOSING)
-          strcat (string, " CLOSING");
-        if (loopstp->td->td_flags & TDF_CLOSED)
-          strcat (string, " CLOSED");
-        mxmlElementSetAttr (st, "Flags", string);
+        totalcount++;
 
-        /* Determine server thread type and add specifics */
-        if (loopstp->type == LISTEN_THREAD)
+        if (!(st = mxmlNewElement (stlist, "Thread")))
         {
-          ListenPortParams *lpp = loopstp->params;
-          char protocolstr[100];
-
-          if (GenProtocolString (lpp->protocols, protocolstr, sizeof (protocolstr)) > 0)
-            mxmlElementSetAttr (st, "Type", protocolstr);
-          mxmlElementSetAttr (st, "Port", lpp->portstr);
-        }
-        else if (loopstp->type == MSEEDSCAN_THREAD)
-        {
-          MSScanInfo *mssinfo = loopstp->params;
-
-          mxmlElementSetAttr (st, "Type", "Mini-SEED Scanner");
-          mxmlElementSetAttr (st, "Directory", mssinfo->dirname);
-          mxmlElementSetAttrf (st, "MaxRecursion", "%d", mssinfo->maxrecur);
-          mxmlElementSetAttr (st, "StateFile", mssinfo->statefile);
-          mxmlElementSetAttr (st, "Match", mssinfo->matchstr);
-          mxmlElementSetAttr (st, "Reject", mssinfo->rejectstr);
-          mxmlElementSetAttrf (st, "ScanTime", "%g", mssinfo->scantime);
-          mxmlElementSetAttrf (st, "PacketRate", "%g", mssinfo->rxpacketrate);
-          mxmlElementSetAttrf (st, "ByteRate", "%g", mssinfo->rxbyterate);
+          lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
+          errflag = 1;
         }
         else
         {
-          mxmlElementSetAttr (st, "Type", "Unknown Thread");
+          /* Add thread status flags to Thread element */
+          string[0] = '\0';
+          if (loopstp->td->td_flags & TDF_SPAWNING)
+            strcat (string, " SPAWNING");
+          if (loopstp->td->td_flags & TDF_ACTIVE)
+            strcat (string, " ACTIVE");
+          if (loopstp->td->td_flags & TDF_CLOSE)
+            strcat (string, " CLOSE");
+          if (loopstp->td->td_flags & TDF_CLOSING)
+            strcat (string, " CLOSING");
+          if (loopstp->td->td_flags & TDF_CLOSED)
+            strcat (string, " CLOSED");
+          mxmlElementSetAttr (st, "Flags", string);
+
+          /* Determine server thread type and add specifics */
+          if (loopstp->type == LISTEN_THREAD)
+          {
+            ListenPortParams *lpp = loopstp->params;
+            char protocolstr[100];
+
+            if (GenProtocolString (lpp->protocols, protocolstr, sizeof (protocolstr)) > 0)
+              mxmlElementSetAttr (st, "Type", protocolstr);
+            mxmlElementSetAttr (st, "Port", lpp->portstr);
+          }
+          else if (loopstp->type == MSEEDSCAN_THREAD)
+          {
+            MSScanInfo *mssinfo = loopstp->params;
+
+            mxmlElementSetAttr (st, "Type", "Mini-SEED Scanner");
+            mxmlElementSetAttr (st, "Directory", mssinfo->dirname);
+            mxmlElementSetAttrf (st, "MaxRecursion", "%d", mssinfo->maxrecur);
+            mxmlElementSetAttr (st, "StateFile", mssinfo->statefile);
+            mxmlElementSetAttr (st, "Match", mssinfo->matchstr);
+            mxmlElementSetAttr (st, "Reject", mssinfo->rejectstr);
+            mxmlElementSetAttrf (st, "ScanTime", "%g", mssinfo->scantime);
+            mxmlElementSetAttrf (st, "PacketRate", "%g", mssinfo->rxpacketrate);
+            mxmlElementSetAttrf (st, "ByteRate", "%g", mssinfo->rxbyterate);
+          }
+          else
+          {
+            mxmlElementSetAttr (st, "Type", "Unknown Thread");
+          }
         }
+
+        loopstp = loopstp->next;
       }
+      pthread_mutex_unlock (&sthreads_lock);
 
-      loopstp = loopstp->next;
+      /* Add thread count attribute to ServerThreads element */
+      mxmlElementSetAttrf (stlist, "TotalServerThreads", "%d", totalcount);
     }
-    pthread_mutex_unlock (&sthreads_lock);
-
-    /* Add thread count attribute to ServerThreads element */
-    mxmlElementSetAttrf (stlist, "TotalServerThreads", "%d", totalcount);
-
   } /* End of STATUS */
   else if (!strncasecmp (type, "STREAMS", 7))
   {
@@ -1078,6 +1081,19 @@ HandleInfo (ClientInfo *cinfo, int socket)
     pcre *match = 0;
     const char *errptr;
     int erroffset;
+
+    /* Check for trusted flag, required to access this resource */
+    if (!cinfo->trusted)
+    {
+      lprintf (1, "[%s] INFO CONNECTIONS request from un-trusted client",
+               cinfo->hostname);
+      SendPacket (cinfo, "ERROR", "Access to CONNECTIONS denied", 0, 1, 1);
+
+      if (xmldoc)
+        mxmlRelease (xmldoc);
+
+      return -1;
+    }
 
     lprintf (1, "[%s] Received INFO CONNECTIONS request", cinfo->hostname);
     type = "INFO CONNECTIONS";

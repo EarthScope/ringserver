@@ -1,7 +1,7 @@
 /**************************************************************************
  * clients.h
  *
- * Modified: 2016.345
+ * Modified: 2016.354
  **************************************************************************/
 
 #ifndef CLIENTS_H
@@ -57,6 +57,7 @@ typedef struct ClientInfo_s {
   } wsmask;                 /* Masking key for WebSocket message */
   size_t      wsmaskidx;    /* Index for unmasking WebSocket message */
   uint8_t     writeperm;    /* Write permission flag */
+  uint8_t     trusted;      /* Trusted client flag */
   float       timewinlimit; /* Time window ring search limit in percent */
   RingParams *ringparams;   /* Ring buffer parameters */
   RingReader *reader;       /* Ring reader parameters */
