@@ -1108,20 +1108,16 @@ HandleInfo (ClientInfo *cinfo)
   }
   else if (!strncasecmp (level, "CONNECTIONS", 11))
   {
-    /* Limit access to connections to trusted clients */
     if (!cinfo->trusted)
     {
-      lprintf (1, "[%s] Refusing INFO CONNECTIONS request from un-trusted client",
-               cinfo->hostname);
-      if (xmldoc)
-        mxmlRelease (xmldoc);
-      if (record)
-        free (record);
-      return -1;
+      lprintf (1, "[%s] Refusing INFO CONNECTIONS request from un-trusted client", cinfo->hostname);
+      errflag = 1;
     }
-
-    lprintf (1, "[%s] Received INFO CONNECTIONS request", cinfo->hostname);
-    infolevel = SLINFO_CONNECTIONS;
+    else
+    {
+      lprintf (1, "[%s] Received INFO CONNECTIONS request", cinfo->hostname);
+      infolevel = SLINFO_CONNECTIONS;
+    }
   }
   else if (!strncasecmp (level, "ALL", 3))
   {
