@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.354
+ * Modified: 2016.357
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -73,8 +73,11 @@ static void sha1 (unsigned char hval[], const unsigned char data[], unsigned lon
  * The following end points are handled:
  *   /id          - return server ID and version
  *   /streams     - return list of server streams
+ *                    match=<pattern> supported to limit streams
+ *                    limit=<1-6> specified level of ID
  *   /status      - return server status, limited via trust-permissions
  *   /connections - return list of connections, limited via trust-permissions
+ *                    match=<pattern> supported to limit connections
  *   /seedlink    - initiate WebSocket connection for SeedLink
  *   /datalink    - initiate WebSocket connection for SeedLink
  *
@@ -744,6 +747,20 @@ ParseHeader (char *header, char **value)
 } /* End of ParseHeader() */
 
 /***************************************************************************
+ * LevelKeyCompare:
+ *
+ * Compare two strings using strcmp for binary tree keys passed as
+ * void pointers.
+ *
+ * Return value of strcmp.
+ ***************************************************************************/
+static int
+LevelKeyCompare (const void *a, const void *b)
+{
+  return strcmp ((const char *)a, (const char *)b);
+} /* End of LevelKeyCompare() */
+
+/***************************************************************************
  * GenerateStreams:
  *
  * Generate stream list and place into buffer, which will be allocated
@@ -752,7 +769,7 @@ ParseHeader (char *header, char **value)
  * Check for 'match' parameter in 'path' and use value as a regular
  * expression to match against stream identifiers.
  *
- * Returns length of status in bytes on sucess and -1 on error.
+ * Returns length of status in bytes on success and -1 on error.
  ***************************************************************************/
 static int
 GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
@@ -767,6 +784,18 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
   char *cp;
   int matchlen = 0;
 
+  int level = 0;
+  int splitcount;
+  RBTree *levelkeys = NULL;
+  char delim = '_';
+  char *key;
+  char id1[16];
+  char id2[16];
+  char id3[16];
+  char id4[16];
+  char id5[16];
+  char id6[16];
+
   if (!cinfo || !streamlist || !path)
     return -1;
 
@@ -776,7 +805,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
     cp += 6; /* Advance to character after '=' */
 
     /* Copy parameter value into matchstr, stop at terminator, '&' or max length */
-    for (matchlen = 0; *cp && *cp != '&' && matchlen < sizeof (matchstr); cp++, matchlen++)
+    for (matchlen = 0; *cp != '\0' && *cp != '&' && matchlen < sizeof (matchstr); cp++, matchlen++)
     {
       matchstr[matchlen] = *cp;
     }
@@ -784,8 +813,58 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
 
     if (matchlen > 0 && cinfo->reader)
     {
-      RingMatch (cinfo->reader, matchstr);
+      if (RingMatch (cinfo->reader, matchstr))
+      {
+        /* Create and send error response */
+        headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
+                            "HTTP/1.1 400 Invalid match expression\r\n"
+                            "Connection: close\r\n"
+                            "\r\n"
+                            "Invalid match expression");
+
+        if (headlen > 0)
+        {
+          SendData (cinfo, cinfo->sendbuf, strlen (cinfo->sendbuf));
+        }
+        else
+        {
+          lprintf (0, "Error creating response (unexpected level value: %d)", level);
+        }
+
+        return -1;
+      }
     }
+  }
+
+  /* If level parameter is supplied, parse and validate */
+  if ((cp = strstr (path, "level=")))
+  {
+    cp += 6; /* Advance to character after '=' */
+
+    level = strtoul (cp, NULL, 10);
+
+    if (level < 1 || level > 6)
+    {
+      /* Create and send error response */
+      headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
+                          "HTTP/1.1 400 Unsupported value for level: %d\r\n"
+                          "Connection: close\r\n"
+                          "\r\n"
+                          "Unsupported value for level: %d", level, level);
+
+      if (headlen > 0)
+      {
+        SendData (cinfo, cinfo->sendbuf, strlen (cinfo->sendbuf));
+      }
+      else
+      {
+        lprintf (0, "Error creating response (unexpected level value: %d)", level);
+      }
+
+      return -1;
+    }
+
+    levelkeys = RBTreeCreate (LevelKeyCompare, free, NULL);
   }
 
   /* Collect stream list and send a line for each stream */
@@ -796,9 +875,55 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
       ms_hptime2isotimestr (ringstream->earliestdstime, earliest, 1);
       ms_hptime2isotimestr (ringstream->latestdetime, latest, 1);
 
-      snprintf (streaminfo, sizeof (streaminfo), "%s  %s  %s\n",
-                ringstream->streamid, earliest, latest);
-      streaminfo[sizeof (streaminfo) - 1] = '\0';
+      /* If a specific level has been specified, split the stream ID into components
+         and generate a list of unique entries for the specified level. */
+      if (levelkeys)
+      {
+        splitcount = SplitStreamID (ringstream->streamid, delim, 16, id1, id2, id3, id4, id5, id6, NULL);
+
+        if (splitcount <= 0)
+        {
+          lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, ringstream->streamid);
+          return -1;
+        }
+
+        if (level >= 6 && splitcount >= 6)
+          asprintf (&key, "%s%c%s%c%s%c%s%c%s%c%s\n", id1, delim, id2, delim, id3, delim, id4, delim, id5, delim, id6);
+        else if (level >= 5 && splitcount >= 5)
+          asprintf (&key, "%s%c%s%c%s%c%s%c%s\n", id1, delim, id2, delim, id3, delim, id4, delim, id5);
+        else if (level >= 4 && splitcount >= 4)
+          asprintf (&key, "%s%c%s%c%s%c%s\n", id1, delim, id2, delim, id3, delim, id4);
+        else if (level >= 3 && splitcount >= 3)
+          asprintf (&key, "%s%c%s%c%s\n", id1, delim, id2, delim, id3);
+        else if (level >= 2 && splitcount >= 2)
+          asprintf (&key, "%s%c%s\n", id1, delim, id2);
+        else if (level >= 1 && splitcount >= 1)
+          asprintf (&key, "%s\n", id1);
+
+        /* If key has not been included yet, copy to streaminfo buffer and add to tree */
+        if (!RBFind (levelkeys, key))
+        {
+          strncpy (streaminfo, key, sizeof (streaminfo));
+          streaminfo[sizeof (streaminfo) - 1] = '\0';
+
+          RBTreeInsert (levelkeys, key, NULL, NULL);
+        }
+        /* Otherwise, skip this entry */
+        else
+        {
+          free (key);
+          free (ringstream);
+          continue;
+        }
+
+      }
+      /* Otherwise include the full stream ID and the earliest and latest data times */
+      else
+      {
+        snprintf (streaminfo, sizeof (streaminfo), "%s  %s  %s\n",
+                  ringstream->streamid, earliest, latest);
+        streaminfo[sizeof (streaminfo) - 1] = '\0';
+      }
 
       /* Add a line to the response body for each stream, 8 MB maximum */
       if (AddToString (streamlist, streaminfo, "", 0, 8388608))
@@ -806,6 +931,8 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
         lprintf (0, "[%s] Error for HTTP STREAMS (cannot AddToString), too many streams",
                  cinfo->hostname);
 
+        if (levelkeys)
+          RBTreeDestroy (levelkeys);
         free (ringstream);
         StackDestroy (streams, free);
 
@@ -833,6 +960,11 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
 
     /* Cleanup stream stack */
     StackDestroy (streams, free);
+  }
+
+  if (levelkeys)
+  {
+    RBTreeDestroy (levelkeys);
   }
 
   /* Clear match expression if set for this request */
