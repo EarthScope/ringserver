@@ -772,10 +772,10 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
   int matchlen = 0;
 
   int level = 0;
+  char levelstream[100] = {0};
+  char prevlevelstream[100] = {0};
   int splitcount;
-  RBTree *levelkeys = NULL;
   char delim = '_';
-  char *key;
   char id1[16];
   char id2[16];
   char id3[16];
@@ -815,7 +815,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
         }
         else
         {
-          lprintf (0, "Error creating response (unexpected level value: %d)", level);
+          lprintf (0, "Error creating response (invalid match expression)");
         }
 
         return -1;
@@ -850,8 +850,6 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
 
       return -1;
     }
-
-    levelkeys = RBTreeCreate (LevelKeyCompare, free, NULL);
   }
 
   /* Collect stream list and send a line for each stream */
@@ -859,12 +857,9 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
   {
     while ((ringstream = (RingStream *)StackPop (streams)))
     {
-      ms_hptime2isotimestr (ringstream->earliestdstime, earliest, 1);
-      ms_hptime2isotimestr (ringstream->latestdetime, latest, 1);
-
       /* If a specific level has been specified, split the stream ID into components
          and generate a list of unique entries for the specified level. */
-      if (levelkeys)
+      if (level > 0)
       {
         splitcount = SplitStreamID (ringstream->streamid, delim, 16, id1, id2, id3, id4, id5, id6, NULL);
 
@@ -875,38 +870,46 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
         }
 
         if (level >= 6 && splitcount >= 6)
-          asprintf (&key, "%s%c%s%c%s%c%s%c%s%c%s\n", id1, delim, id2, delim, id3, delim, id4, delim, id5, delim, id6);
+          snprintf (levelstream, sizeof(levelstream),
+                    "%s%c%s%c%s%c%s%c%s%c%s\n", id1, delim, id2, delim, id3, delim, id4, delim, id5, delim, id6);
         else if (level >= 5 && splitcount >= 5)
-          asprintf (&key, "%s%c%s%c%s%c%s%c%s\n", id1, delim, id2, delim, id3, delim, id4, delim, id5);
+          snprintf (levelstream, sizeof(levelstream),
+                    "%s%c%s%c%s%c%s%c%s\n", id1, delim, id2, delim, id3, delim, id4, delim, id5);
         else if (level >= 4 && splitcount >= 4)
-          asprintf (&key, "%s%c%s%c%s%c%s\n", id1, delim, id2, delim, id3, delim, id4);
+          snprintf (levelstream, sizeof(levelstream),
+                    "%s%c%s%c%s%c%s\n", id1, delim, id2, delim, id3, delim, id4);
         else if (level >= 3 && splitcount >= 3)
-          asprintf (&key, "%s%c%s%c%s\n", id1, delim, id2, delim, id3);
+          snprintf (levelstream, sizeof(levelstream),
+                    "%s%c%s%c%s\n", id1, delim, id2, delim, id3);
         else if (level >= 2 && splitcount >= 2)
-          asprintf (&key, "%s%c%s\n", id1, delim, id2);
+          snprintf (levelstream, sizeof(levelstream),
+                    "%s%c%s\n", id1, delim, id2);
         else if (level >= 1 && splitcount >= 1)
-          asprintf (&key, "%s\n", id1);
+          snprintf (levelstream, sizeof(levelstream),
+                    "%s\n", id1);
 
-        /* If key has not been included yet, copy to streaminfo buffer and add to tree */
-        if (!RBFind (levelkeys, key))
+        /* Determine if this level of stream information has been included yet by comparing
+           to the previous entry (the Stack is sorted), if not copy to the streaminfo buffer */
+        if (strcmp (levelstream, prevlevelstream))
         {
-          strncpy (streaminfo, key, sizeof (streaminfo));
+          strncpy (streaminfo, levelstream, sizeof (streaminfo));
           streaminfo[sizeof (streaminfo) - 1] = '\0';
 
-          RBTreeInsert (levelkeys, key, NULL, NULL);
+          strcpy (prevlevelstream, levelstream);
         }
         /* Otherwise, skip this entry */
         else
         {
-          free (key);
           free (ringstream);
           continue;
         }
-
       }
       /* Otherwise include the full stream ID and the earliest and latest data times */
       else
       {
+        ms_hptime2isotimestr (ringstream->earliestdstime, earliest, 1);
+        ms_hptime2isotimestr (ringstream->latestdetime, latest, 1);
+
         snprintf (streaminfo, sizeof (streaminfo), "%s  %s  %s\n",
                   ringstream->streamid, earliest, latest);
         streaminfo[sizeof (streaminfo) - 1] = '\0';
@@ -918,8 +921,6 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
         lprintf (0, "[%s] Error for HTTP STREAMS (cannot AddToString), too many streams",
                  cinfo->hostname);
 
-        if (levelkeys)
-          RBTreeDestroy (levelkeys);
         free (ringstream);
         StackDestroy (streams, free);
 
@@ -947,11 +948,6 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
 
     /* Cleanup stream stack */
     StackDestroy (streams, free);
-  }
-
-  if (levelkeys)
-  {
-    RBTreeDestroy (levelkeys);
   }
 
   /* Clear match expression if set for this request */
