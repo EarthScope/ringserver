@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.354
+ * Modified: 2016.363
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -40,16 +40,6 @@
 #include "ringserver.h"
 #include "slclient.h"
 
-#define SHA1_DIGEST_SIZE 20
-
-/* type to hold the SHA1 */
-typedef struct
-{
-  uint32_t count[2];
-  uint32_t hash[5];
-  uint32_t wbuf[16];
-} sha1_ctx;
-
 static int ParseHeader (char *header, char **value);
 static int GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path);
 static int GenerateStatus (ClientInfo *cinfo, char **status);
@@ -58,11 +48,8 @@ static int SendFileHTTP (ClientInfo *cinfo, char *path);
 static int NegotiateWebSocket (ClientInfo *cinfo, char *version,
                                char *upgradeHeader, char *connectionHeader,
                                char *secWebSocketKeyHeader, char *secWebSocketVersionHeader);
-static int Base64encode (char *encoded, const char *string, int len);
-static void sha1_begin (sha1_ctx ctx[1]);
-static void sha1_hash (const unsigned char data[], unsigned long len, sha1_ctx ctx[1]);
-static void sha1_end (unsigned char hval[], sha1_ctx ctx[1]);
-static void sha1 (unsigned char hval[], const unsigned char data[], unsigned long len);
+static int apr_base64_encode_binary (char *encoded, const unsigned char *string, int len);
+static int sha1digest(uint8_t *digest, char *hexdigest, const uint8_t *data, size_t databytes);
 
 /***************************************************************************
  * HandleHTTP:
@@ -1303,7 +1290,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 {
   char *response = NULL;
   unsigned char *keybuf = NULL;
-  unsigned char sha1digest[SHA1_DIGEST_SIZE];
+  uint8_t digest[20];
 
   int keybufsize;
   int keylength;
@@ -1439,9 +1426,9 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   memcpy (keybuf, secWebSocketKeyHeader, keylength);
   memcpy (keybuf + keylength, "258EAFA5-E914-47DA-95CA-C5AB0DC85B11", 36);
 
-  /* Calculate SHA-1 hash and then Base64 encode the combined value */
-  sha1 (sha1digest, keybuf, keybufsize);
-  Base64encode ((char *)keybuf, (char *)sha1digest, SHA1_DIGEST_SIZE);
+  /* Calculate SHA-1 and then Base64 encode the digest */
+  sha1digest (digest, NULL, keybuf, keybufsize);
+  apr_base64_encode_binary ((char *)keybuf, (const unsigned char *)digest, 20);
 
   /* Generate response completing the upgrade to WebSocket connection */
   asprintf (&response,
@@ -1471,101 +1458,16 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   return 0;
 } /* End of NegotiateWebSocket() */
 
-/* The Base64encode() below were retrieved from
- * www.opensource.apple.com in November 2016.  All headers/licenses
- * remain intact, some code was removed and formatted. */
-
-/*
- * Copyright (c) 2003 Apple Computer, Inc. All rights reserved.
- *
- * @APPLE_LICENSE_HEADER_START@
- *
- * Copyright (c) 1999-2003 Apple Computer, Inc.  All Rights Reserved.
- *
- * This file contains Original Code and/or Modifications of Original Code
- * as defined in and that are subject to the Apple Public Source License
- * Version 2.0 (the 'License'). You may not use this file except in
- * compliance with the License. Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this
- * file.
- *
- * The Original Code and all software distributed under the License are
- * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
- * Please see the License for the specific language governing rights and
- * limitations under the License.
- *
- * @APPLE_LICENSE_HEADER_END@
- */
-/* ====================================================================
- * Copyright (c) 1995-1999 The Apache Group.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *
- * 3. All advertising materials mentioning features or use of this
- *    software must display the following acknowledgment:
- *    "This product includes software developed by the Apache Group
- *    for use in the Apache HTTP server project (http://www.apache.org/)."
- *
- * 4. The names "Apache Server" and "Apache Group" must not be used to
- *    endorse or promote products derived from this software without
- *    prior written permission. For written permission, please contact
- *    apache@apache.org.
- *
- * 5. Products derived from this software may not be called "Apache"
- *    nor may "Apache" appear in their names without prior written
- *    permission of the Apache Group.
- *
- * 6. Redistributions of any form whatsoever must retain the following
- *    acknowledgment:
- *    "This product includes software developed by the Apache Group
- *    for use in the Apache HTTP server project (http://www.apache.org/)."
- *
- * THIS SOFTWARE IS PROVIDED BY THE APACHE GROUP ``AS IS'' AND ANY
- * EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE APACHE GROUP OR
- * ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- * OF THE POSSIBILITY OF SUCH DAMAGE.
- * ====================================================================
- *
- * This software consists of voluntary contributions made by many
- * individuals on behalf of the Apache Group and was originally based
- * on public domain software written at the National Center for
- * Supercomputing Applications, University of Illinois, Urbana-Champaign.
- * For more information on the Apache Group and the Apache HTTP server
- * project, please see <http://www.apache.org/>.
- *
- */
-
-/* Base64 encoder/decoder. Originally Apache file ap_base64.c
- */
+/* The apr_base64_encode_binary() below was extracted from the Apache
+   APR-util release 1.5.4 from file encoding/apr_base64.c.  The
+   original code falls under the Apache License 2.0.
+   Minor formatting applied. */
 
 static const char basis_64[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-/* Base64 encode specified string.
- * Return: length of encoded data. */
-int
-Base64encode (char *encoded, const char *string, int len)
+static int
+apr_base64_encode_binary (char *encoded, const unsigned char *string, int len)
 {
   int i;
   char *p;
@@ -1598,251 +1500,182 @@ Base64encode (char *encoded, const char *string, int len)
   }
 
   *p++ = '\0';
-  return p - encoded;
-}
 
-/* The sha1*() routines below were retrieved from
- * https://github.com/dottedmag/libsha1 in November 2016.  All
- * headers/licenses remain intact, some code was removed and
- * formatted. */
+  return (int)(p - encoded);
+} /* End of apr_base64_encode_binary() */
 
-/*
-  ---------------------------------------------------------------------------
-  Copyright (c) 2002, Dr Brian Gladman, Worcester, UK.   All rights reserved.
-  LICENSE TERMS
-  The free distribution and use of this software in both source and binary
-  form is allowed (with or without changes) provided that:
-  1. distributions of this source code include the above copyright
-  notice, this list of conditions and the following disclaimer;
-  2. distributions in binary form include the above copyright
-  notice, this list of conditions and the following disclaimer
-  in the documentation and/or other associated materials;
-  3. the copyright holder's name is not used to endorse products
-  built using this software without specific written permission.
-  ALTERNATIVELY, provided that this notice is retained in full, this product
-  may be distributed under the terms of the GNU General Public License (GPL),
-  in which case the provisions of the GPL apply INSTEAD OF those given above.
-  DISCLAIMER
-  This software is provided 'as is' with no explicit or implied warranties
-  in respect of its properties, including, but not limited to, correctness
-  and/or fitness for purpose.
-  ---------------------------------------------------------------------------
-  Issue Date: 01/08/2005
-  This is a byte oriented version of SHA1 that operates on arrays of bytes
-  stored in memory.
-*/
-
-#define SHA1_BLOCK_SIZE 64
-
-#define rotl32(x, n) (((x) << n) | ((x) >> (32 - n)))
-#define rotr32(x, n) (((x) >> n) | ((x) << (32 - n)))
-
-#define bswap_32(x) ((rotr32 ((x), 24) & 0x00ff00ff) | (rotr32 ((x), 8) & 0xff00ff00))
-
-#define bsw_32(p, n)                                        \
-  {                                                         \
-    int _i = (n);                                           \
-    while (_i--)                                            \
-      ((uint32_t *)p)[_i] = bswap_32 (((uint32_t *)p)[_i]); \
-  }
-
-#define SHA1_MASK (SHA1_BLOCK_SIZE - 1)
-
-#if 0
-#define ch(x, y, z) (((x) & (y)) ^ (~(x) & (z)))
-#define parity(x, y, z) ((x) ^ (y) ^ (z))
-#define maj(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
-#else /* Discovered by Rich Schroeppel and Colin Plumb   */
-
-#define ch(x, y, z) ((z) ^ ((x) & ((y) ^ (z))))
-#define parity(x, y, z) ((x) ^ (y) ^ (z))
-#define maj(x, y, z) (((x) & (y)) | ((z) & ((x) ^ (y))))
-
-#endif
-
-/* Compile 64 bytes of hash data into SHA1 context. Note    */
-/* that this routine assumes that the byte order in the     */
-/* ctx->wbuf[] at this point is in such an order that low   */
-/* address bytes in the ORIGINAL byte stream will go in     */
-/* this buffer to the high end of 32-bit words on BOTH big  */
-/* and little endian systems                                */
-
-#ifdef ARRAY
-#define q(v, n) v[n]
-#else
-#define q(v, n) v##n
-#endif
-
-#define one_cycle(v, a, b, c, d, e, f, k, h)            \
-  q (v, e) += rotr32 (q (v, a), 27) +                   \
-              f (q (v, b), q (v, c), q (v, d)) + k + h; \
-  q (v, b) = rotr32 (q (v, b), 2)
-
-#define five_cycle(v, f, k, i)                    \
-  one_cycle (v, 0, 1, 2, 3, 4, f, k, hf (i));     \
-  one_cycle (v, 4, 0, 1, 2, 3, f, k, hf (i + 1)); \
-  one_cycle (v, 3, 4, 0, 1, 2, f, k, hf (i + 2)); \
-  one_cycle (v, 2, 3, 4, 0, 1, f, k, hf (i + 3)); \
-  one_cycle (v, 1, 2, 3, 4, 0, f, k, hf (i + 4))
-
-static void
-sha1_compile (sha1_ctx ctx[1])
+/*******************************************************************************
+ * sha1digest: https://github.com/CTrabant/teeny-sha1
+ *
+ * Calculate the SHA-1 value for supplied data buffer and generate a
+ * text representation in hexadecimal.
+ *
+ * Based on https://github.com/jinqiangshou/EncryptionLibrary, credit
+ * goes to @jinqiangshou, all new bugs are mine.
+ *
+ * @input:
+ *    data      -- data to be hashed
+ *    databytes -- bytes in data buffer to be hashed
+ *
+ * @output:
+ *    digest    -- the result, MUST be at least 20 bytes
+ *    hexdigest -- the result in hex, MUST be at least 41 bytes
+ *
+ * At least one of the output buffers must be supplied.  The other, if not
+ * desired, may be set to NULL.
+ *
+ * @return: 0 on success and non-zero on error.
+ ******************************************************************************/
+static int
+sha1digest (uint8_t *digest, char *hexdigest, const uint8_t *data, size_t databytes)
 {
-  uint32_t *w = ctx->wbuf;
+#define SHA1ROTATELEFT(value, bits) (((value) << (bits)) | ((value) >> (32 - (bits))))
 
-#ifdef ARRAY
-  uint32_t v[5];
-  memcpy (v, ctx->hash, 5 * sizeof (uint32_t));
-#else
-  uint32_t v0, v1, v2, v3, v4;
-  v0 = ctx->hash[0];
-  v1 = ctx->hash[1];
-  v2 = ctx->hash[2];
-  v3 = ctx->hash[3];
-  v4 = ctx->hash[4];
-#endif
+  uint32_t W[80];
+  uint32_t H[] = {0x67452301,
+                  0xEFCDAB89,
+                  0x98BADCFE,
+                  0x10325476,
+                  0xC3D2E1F0};
+  uint32_t a;
+  uint32_t b;
+  uint32_t c;
+  uint32_t d;
+  uint32_t e;
+  uint32_t f = 0;
+  uint32_t k = 0;
 
-#define hf(i) w[i]
+  uint32_t idx;
+  uint32_t lidx;
+  uint32_t widx;
+  uint32_t didx = 0;
 
-  five_cycle (v, ch, 0x5a827999, 0);
-  five_cycle (v, ch, 0x5a827999, 5);
-  five_cycle (v, ch, 0x5a827999, 10);
-  one_cycle (v, 0, 1, 2, 3, 4, ch, 0x5a827999, hf (15));
+  int32_t wcount;
+  uint32_t temp;
+  uint64_t databits = ((uint64_t)databytes) * 8;
+  uint32_t loopcount = (databytes + 8) / 64 + 1;
+  uint32_t tailbytes = 64 * loopcount - databytes;
+  uint8_t datatail[128] = {0};
 
-#undef hf
-#define hf(i) (w[(i)&15] = rotl32 ( \
-                   w[((i) + 13) & 15] ^ w[((i) + 8) & 15] ^ w[((i) + 2) & 15] ^ w[(i)&15], 1))
+  if (!digest && !hexdigest)
+    return -1;
 
-  one_cycle (v, 4, 0, 1, 2, 3, ch, 0x5a827999, hf (16));
-  one_cycle (v, 3, 4, 0, 1, 2, ch, 0x5a827999, hf (17));
-  one_cycle (v, 2, 3, 4, 0, 1, ch, 0x5a827999, hf (18));
-  one_cycle (v, 1, 2, 3, 4, 0, ch, 0x5a827999, hf (19));
+  if (!data)
+    return -1;
 
-  five_cycle (v, parity, 0x6ed9eba1, 20);
-  five_cycle (v, parity, 0x6ed9eba1, 25);
-  five_cycle (v, parity, 0x6ed9eba1, 30);
-  five_cycle (v, parity, 0x6ed9eba1, 35);
+  /* Pre-processing of data tail (includes padding to fill out 512-bit chunk):
+     Add bit '1' to end of message (big-endian)
+     Add 64-bit message length in bits at very end (big-endian) */
+  datatail[0] = 0x80;
+  datatail[tailbytes - 8] = (uint8_t) (databits >> 56 & 0xFF);
+  datatail[tailbytes - 7] = (uint8_t) (databits >> 48 & 0xFF);
+  datatail[tailbytes - 6] = (uint8_t) (databits >> 40 & 0xFF);
+  datatail[tailbytes - 5] = (uint8_t) (databits >> 32 & 0xFF);
+  datatail[tailbytes - 4] = (uint8_t) (databits >> 24 & 0xFF);
+  datatail[tailbytes - 3] = (uint8_t) (databits >> 16 & 0xFF);
+  datatail[tailbytes - 2] = (uint8_t) (databits >> 8 & 0xFF);
+  datatail[tailbytes - 1] = (uint8_t) (databits >> 0 & 0xFF);
 
-  five_cycle (v, maj, 0x8f1bbcdc, 40);
-  five_cycle (v, maj, 0x8f1bbcdc, 45);
-  five_cycle (v, maj, 0x8f1bbcdc, 50);
-  five_cycle (v, maj, 0x8f1bbcdc, 55);
-
-  five_cycle (v, parity, 0xca62c1d6, 60);
-  five_cycle (v, parity, 0xca62c1d6, 65);
-  five_cycle (v, parity, 0xca62c1d6, 70);
-  five_cycle (v, parity, 0xca62c1d6, 75);
-
-#ifdef ARRAY
-  ctx->hash[0] += v[0];
-  ctx->hash[1] += v[1];
-  ctx->hash[2] += v[2];
-  ctx->hash[3] += v[3];
-  ctx->hash[4] += v[4];
-#else
-  ctx->hash[0] += v0;
-  ctx->hash[1] += v1;
-  ctx->hash[2] += v2;
-  ctx->hash[3] += v3;
-  ctx->hash[4] += v4;
-#endif
-}
-
-void
-sha1_begin (sha1_ctx ctx[1])
-{
-  ctx->count[0] = ctx->count[1] = 0;
-  ctx->hash[0] = 0x67452301;
-  ctx->hash[1] = 0xefcdab89;
-  ctx->hash[2] = 0x98badcfe;
-  ctx->hash[3] = 0x10325476;
-  ctx->hash[4] = 0xc3d2e1f0;
-}
-
-/* SHA1 hash data in an array of bytes into hash buffer and */
-/* call the hash_compile function as required.              */
-
-void
-sha1_hash (const unsigned char data[], unsigned long len, sha1_ctx ctx[1])
-{
-  uint32_t pos = (uint32_t) (ctx->count[0] & SHA1_MASK),
-           space = SHA1_BLOCK_SIZE - pos;
-  const unsigned char *sp = data;
-
-  if ((ctx->count[0] += len) < len)
-    ++(ctx->count[1]);
-
-  while (len >= space) /* tranfer whole blocks if possible  */
+  /* Process each 512-bit chunk */
+  for (lidx = 0; lidx < loopcount; lidx++)
   {
-    memcpy (((unsigned char *)ctx->wbuf) + pos, sp, space);
-    sp += space;
-    len -= space;
-    space = SHA1_BLOCK_SIZE;
-    pos = 0;
-    if (!ms_bigendianhost ())
-      bsw_32 (ctx->wbuf, SHA1_BLOCK_SIZE >> 2);
-    sha1_compile (ctx);
+    /* Compute all elements in W */
+    memset (W, 0, 80 * sizeof (uint32_t));
+
+    /* Break 512-bit chunk into sixteen 32-bit, big endian words */
+    for (widx = 0; widx <= 15; widx++)
+    {
+      wcount = 24;
+
+      /* Copy byte-per byte from specified buffer */
+      while (didx < databytes && wcount >= 0)
+      {
+        W[widx] += (((uint32_t)data[didx]) << wcount);
+        didx++;
+        wcount -= 8;
+      }
+      /* Fill out W with padding as needed */
+      while (wcount >= 0)
+      {
+        W[widx] += (((uint32_t)datatail[didx - databytes]) << wcount);
+        didx++;
+        wcount -= 8;
+      }
+    }
+
+    /* Extend the sixteen 32-bit words into eighty 32-bit words, with potential optimization from:
+       "Improving the Performance of the Secure Hash Algorithm (SHA-1)" by Max Locktyukhin */
+    for (widx = 16; widx <= 31; widx++)
+    {
+      W[widx] = SHA1ROTATELEFT ((W[widx - 3] ^ W[widx - 8] ^ W[widx - 14] ^ W[widx - 16]), 1);
+    }
+    for (widx = 32; widx <= 79; widx++)
+    {
+      W[widx] = SHA1ROTATELEFT ((W[widx - 6] ^ W[widx - 16] ^ W[widx - 28] ^ W[widx - 32]), 2);
+    }
+
+    /* Main loop */
+    a = H[0];
+    b = H[1];
+    c = H[2];
+    d = H[3];
+    e = H[4];
+
+    for (idx = 0; idx <= 79; idx++)
+    {
+      if (idx <= 19)
+      {
+        f = (b & c) | ((~b) & d);
+        k = 0x5A827999;
+      }
+      else if (idx >= 20 && idx <= 39)
+      {
+        f = b ^ c ^ d;
+        k = 0x6ED9EBA1;
+      }
+      else if (idx >= 40 && idx <= 59)
+      {
+        f = (b & c) | (b & d) | (c & d);
+        k = 0x8F1BBCDC;
+      }
+      else if (idx >= 60 && idx <= 79)
+      {
+        f = b ^ c ^ d;
+        k = 0xCA62C1D6;
+      }
+      temp = SHA1ROTATELEFT (a, 5) + f + e + k + W[idx];
+      e = d;
+      d = c;
+      c = SHA1ROTATELEFT (b, 30);
+      b = a;
+      a = temp;
+    }
+
+    H[0] += a;
+    H[1] += b;
+    H[2] += c;
+    H[3] += d;
+    H[4] += e;
   }
 
-  memcpy (((unsigned char *)ctx->wbuf) + pos, sp, len);
-}
-
-/* SHA1 final padding and digest calculation  */
-
-void
-sha1_end (unsigned char hval[], sha1_ctx ctx[1])
-{
-  uint32_t i = (uint32_t) (ctx->count[0] & SHA1_MASK);
-
-  /* put bytes in the buffer in an order in which references to   */
-  /* 32-bit words will put bytes with lower addresses into the    */
-  /* top of 32 bit words on BOTH big and little endian machines   */
-  if (!ms_bigendianhost ())
-    bsw_32 (ctx->wbuf, (i + 3) >> 2);
-
-  /* we now need to mask valid bytes and add the padding which is */
-  /* a single 1 bit and as many zero bits as necessary. Note that */
-  /* we can always add the first padding byte here because the    */
-  /* buffer always has at least one empty slot                    */
-  ctx->wbuf[i >> 2] &= 0xffffff80 << 8 * (~i & 3);
-  ctx->wbuf[i >> 2] |= 0x00000080 << 8 * (~i & 3);
-
-  /* we need 9 or more empty positions, one for the padding byte  */
-  /* (above) and eight for the length count. If there is not      */
-  /* enough space, pad and empty the buffer                       */
-  if (i > SHA1_BLOCK_SIZE - 9)
+  /* Store binary digest in supplied buffer */
+  if (digest)
   {
-    if (i < 60)
-      ctx->wbuf[15] = 0;
-    sha1_compile (ctx);
-    i = 0;
+    for (idx = 0; idx < 5; idx++)
+    {
+      digest[idx * 4 + 0] = (uint8_t) (H[idx] >> 24);
+      digest[idx * 4 + 1] = (uint8_t) (H[idx] >> 16);
+      digest[idx * 4 + 2] = (uint8_t) (H[idx] >> 8);
+      digest[idx * 4 + 3] = (uint8_t) (H[idx]);
+    }
   }
-  else /* compute a word index for the empty buffer positions  */
-    i = (i >> 2) + 1;
 
-  while (i < 14) /* and zero pad all but last two positions        */
-    ctx->wbuf[i++] = 0;
+  /* Store hex version of digest in supplied buffer */
+  if (hexdigest)
+  {
+    snprintf (hexdigest, 41, "%08x%08x%08x%08x%08x",
+              H[0], H[1], H[2], H[3], H[4]);
+  }
 
-  /* the following 32-bit length fields are assembled in the      */
-  /* wrong byte order on little endian machines but this is       */
-  /* corrected later since they are only ever used as 32-bit      */
-  /* word values.                                                 */
-  ctx->wbuf[14] = (ctx->count[1] << 3) | (ctx->count[0] >> 29);
-  ctx->wbuf[15] = ctx->count[0] << 3;
-  sha1_compile (ctx);
-
-  /* extract the hash value as bytes in case the hash buffer is   */
-  /* misaligned for 32-bit words                                  */
-  for (i = 0; i < SHA1_DIGEST_SIZE; ++i)
-    hval[i] = (unsigned char)(ctx->hash[i >> 2] >> (8 * (~i & 3)));
-}
-
-void
-sha1 (unsigned char hval[], const unsigned char data[], unsigned long len)
-{
-  sha1_ctx cx[1];
-
-  sha1_begin (cx);
-  sha1_hash (data, len, cx);
-  sha1_end (hval, cx);
-}
+  return 0;
+} /* End of sha1digest() */
