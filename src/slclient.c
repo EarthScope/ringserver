@@ -37,7 +37,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.354
+ * Modified: 2016.356
  **************************************************************************/
 
 /* Unsupported protocol features:
@@ -1183,8 +1183,9 @@ HandleInfo (ClientInfo *cinfo)
       /* Loop through the streams and build a network-station tree */
       while ((stream = (RingStream *)StackPop (streams)))
       {
-        /* Split the streamid to get the network and station codes */
-        if (SplitStreamID (stream->streamid, net, sta, 0, 0, 0))
+        /* Split the streamid to get the network and station codes,
+           assumed strream pattern: "NET_STA_LOC_CHAN/MSEED" */
+        if (SplitStreamID (stream->streamid, '_', 10, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
         {
           lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
           return -1;
@@ -1277,8 +1278,9 @@ HandleInfo (ClientInfo *cinfo)
       /* Loop through the streams and build a network-station tree with associated streams */
       while ((stream = (RingStream *)StackPop (streams)))
       {
-        /* Split the streamid to get the network and station codes */
-        if (SplitStreamID (stream->streamid, net, sta, 0, 0, 0))
+        /* Split the streamid to get the network and station codes,
+           assumed strream pattern: "NET_STA_LOC_CHAN/MSEED" */
+        if (SplitStreamID (stream->streamid, '_', 10, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
         {
           lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
           return -1;
@@ -1337,8 +1339,9 @@ HandleInfo (ClientInfo *cinfo)
           /* Traverse associated streams to find locations and channels creating "stream" elements */
           while ((stream = (RingStream *)StackPop (netstanode->streams)))
           {
-            /* Split the streamid to get the network, station, location & channel codes */
-            if (SplitStreamID (stream->streamid, net, sta, loc, chan, 0))
+            /* Split the streamid to get the network, station, location & channel codes
+               assumed strream pattern: "NET_STA_LOC_CHAN/MSEED" */
+            if (SplitStreamID (stream->streamid, '_', 10, net, sta, loc, chan, NULL, NULL, NULL) != 4)
             {
               lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
               return -1;

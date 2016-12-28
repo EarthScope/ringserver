@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2007.355
+ * Modified: 2016.356
  **************************************************************************/
 
 #include <errno.h>
@@ -40,21 +40,41 @@
 /***************************************************************************
  * SplitStreamID:
  *
- * Split stream ID into separate components: "NET_STA_LOC_CHAN/TYPE".
- * Memory for each component must already be allocated.  If a specific
- * component is not desired set the appropriate argument to NULL.
+ * Split stream ID into separate components according to this pattern:
+ * "id1_id2_id3_id4_id5_id6/TYPE"
  *
- * Returns 0 on success and -1 on error.
+ * The delimiter can be set to any character, if specified as 0 (NUL)
+ * the default character of underscore is used.  The TYPE is always
+ * separated from the ID components with a forward slash.
+ *
+ * Memory for each component must already be allocated.  Up to
+ * 'maxlength' characters will be copied to each component including
+ * the terminator.
+ *
+ * If a specific component is not desired set the appropriate argument
+ * to NULL.
+ *
+ * Returns count of identifiers returned (including type) on success
+ * and -1 on error.
  ***************************************************************************/
 int
-SplitStreamID (char *streamid, char *net, char *sta, char *loc, char *chan,
+SplitStreamID (char *streamid, char delim, int maxlength,
+               char *id1, char *id2, char *id3, char *id4, char *id5, char *id6,
                char *type)
 {
+  char *ids[6] = {NULL, NULL, NULL, NULL, NULL, NULL};
   char *id;
-  char *ptr, *top, *next;
+  char *ptr;
+  int idx;
+  int length;
+  int count = 0;
 
   if (!streamid)
     return -1;
+
+  /* Set default delimiter */
+  if (delim == '\0')
+    delim = '_';
 
   /* Duplicate stream ID */
   if (!(id = strdup (streamid)))
@@ -69,55 +89,107 @@ SplitStreamID (char *streamid, char *net, char *sta, char *loc, char *chan,
     *ptr++ = '\0';
 
     /* Copy the type if requested */
-    if (type)
-      strcpy (type, ptr);
+    if (type != NULL)
+    {
+      for (length = 1; *ptr != '\0' && length < maxlength; ptr++, type++, length++)
+        *type = *ptr;
+      *type = '\0';
+      count++;
+    }
+  }
+  else if (type != NULL)
+  {
+    *type = '\0';
   }
 
-  /* Network */
-  top = id;
-  if ((ptr = strchr (top, '_')))
+  /* Find delimeters, convert to terminators and set pointer array */
+  ptr = id;
+  ids[0] = ptr;
+  for (idx = 1; idx < 6 && *ptr != '\0'; ptr++)
   {
-    next = ptr + 1;
-    *ptr = '\0';
-
-    if (net)
-      strcpy (net, top);
-
-    top = next;
+    if (*ptr == delim)
+    {
+      *ptr = '\0';
+      ids[idx] = ptr + 1;
+      idx++;
+    }
   }
-  /* Station */
-  if ((ptr = strchr (top, '_')))
+
+  /* Copy identifiers if they have been requested and parsed.
+     If requested but not parsed, leave as empty strings.
+     Only copy up to 'maxlength' characters including terminator. */
+  if (id1 != NULL)
   {
-    next = ptr + 1;
-    *ptr = '\0';
-
-    if (sta)
-      strcpy (sta, top);
-
-    top = next;
+    *id1 = '\0';
+    if (ids[0] != NULL)
+    {
+      for (ptr = ids[0], length = 1; *ptr != '\0' && length < maxlength; ptr++, id1++, length++)
+        *id1 = *ptr;
+      *id1 = '\0';
+      count++;
+    }
   }
-  /* Location */
-  if ((ptr = strchr (top, '_')))
+  if (id2 != NULL)
   {
-    next = ptr + 1;
-    *ptr = '\0';
-
-    if (loc)
-      strcpy (loc, top);
-
-    top = next;
+    *id2 = '\0';
+    if (ids[1] != NULL)
+    {
+      for (ptr = ids[1], length = 1; *ptr != '\0' && length < maxlength; ptr++, id2++, length++)
+        *id2 = *ptr;
+      *id2 = '\0';
+      count++;
+    }
   }
-  /* Channel */
-  if (*top && chan)
+  if (id3 != NULL)
   {
-    strcpy (chan, top);
+    *id3 = '\0';
+    if (ids[2] != NULL)
+    {
+      for (ptr = ids[2], length = 1; *ptr != '\0' && length < maxlength; ptr++, id3++, length++)
+        *id3 = *ptr;
+      *id3 = '\0';
+      count++;
+    }
+  }
+  if (id4 != NULL)
+  {
+    *id4 = '\0';
+    if (ids[3] != NULL)
+    {
+      for (ptr = ids[3], length = 1; *ptr != '\0' && length < maxlength; ptr++, id4++, length++)
+        *id4 = *ptr;
+      *id4 = '\0';
+      count++;
+    }
+  }
+  if (id5 != NULL)
+  {
+    *id5 = '\0';
+    if (ids[4] != NULL)
+    {
+      for (ptr = ids[4], length = 1; *ptr != '\0' && length < maxlength; ptr++, id5++, length++)
+        *id5 = *ptr;
+      *id5 = '\0';
+      count++;
+    }
+  }
+  if (id6 != NULL)
+  {
+    *id6 = '\0';
+    if (ids[5] != NULL)
+    {
+      for (ptr = ids[5], length = 1; *ptr != '\0' && length < maxlength; ptr++, id6++, length++)
+        *id6 = *ptr;
+      *id6 = '\0';
+      count++;
+    }
   }
 
   /* Free duplicated stream ID */
   if (id)
     free (id);
 
-  return 0;
+  return count;
 } /* End of SplitStreamID() */
 
 /***************************************************************************
