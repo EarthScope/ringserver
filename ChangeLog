@@ -1,3 +1,16 @@
+2016.363:
+	- AutoRecovery value of 2 now instructs the server to delete the
+	packet buffer and stream index files when corruption is detected.
+	- Make sure the MSeedScan config file parameter is not treated as a
+	dynamic parameter to avoid multiple scanning threads when the config
+	file is re-read when changed.
+	- Replace SHA-1 and Base64 routines with simpler versions.
+
+2016.357:
+	- Add multi-level output for HTTP streams request.  The /streams
+	endpoint now recognizes a level=# parameter, where the level can
+	be between 1 and 6, to provide unique lists of stream ID components.
+
 2016.354:
 	- Add TrustedIP config file parameter to control access to server 
 	connection list and detailed status.
