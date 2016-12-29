@@ -21,7 +21,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.354
+ * Modified: 2016.363
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -226,9 +226,6 @@ main (int argc, char *argv[])
     if ((ringinit = RingInitialize (ringfilename, streamfilename, ringsize, pktsize, maxpktid,
                                     memorymapring, volatilering, &ringfd, &ringparams)))
     {
-      char ringfilecorr[1024];
-      char streamfilecorr[1024];
-
       /* Exit on unrecoverable errors and if no auto recovery */
       if (ringinit == -2 || !autorecovery)
       {
@@ -244,23 +241,52 @@ main (int argc, char *argv[])
         }
       }
 
-      lprintf (0, "Auto recovery, moving packet buffer and stream index files");
-
-      /* Create .corrupt ring and stream file names */
-      snprintf (ringfilecorr, sizeof (ringfilecorr), "%s.corrupt", ringfilename);
-      snprintf (streamfilecorr, sizeof (streamfilecorr), "%s.corrupt", streamfilename);
-
-      /* Rename original ring and stream files to the corrupt names */
-      if (rename (ringfilename, ringfilecorr) && errno != ENOENT)
+      /* Move corrupt packet buffer and index to backup (.corrupt) files */
+      if (autorecovery == 1)
       {
-        lprintf (0, "Error renaming %s to %s: %s", ringfilename, ringfilecorr,
-                 strerror (errno));
-        return 1;
+        char ringfilecorr[1024];
+        char streamfilecorr[1024];
+
+        lprintf (0, "Auto recovery, moving packet buffer and stream index files");
+
+        /* Create .corrupt ring and stream file names */
+        snprintf (ringfilecorr, sizeof (ringfilecorr), "%s.corrupt", ringfilename);
+        snprintf (streamfilecorr, sizeof (streamfilecorr), "%s.corrupt", streamfilename);
+
+        /* Rename original ring and stream files to the corrupt names */
+        if (rename (ringfilename, ringfilecorr) && errno != ENOENT)
+        {
+          lprintf (0, "Error renaming %s to %s: %s", ringfilename, ringfilecorr,
+                   strerror (errno));
+          return 1;
+        }
+        if (rename (streamfilename, streamfilecorr) && errno != ENOENT)
+        {
+          lprintf (0, "Error renaming %s to %s: %s", streamfilename, streamfilecorr,
+                   strerror (errno));
+          return 1;
+        }
       }
-      if (rename (streamfilename, streamfilecorr) && errno != ENOENT)
+      /* Removing existing packet buffer and index */
+      else if (autorecovery == 2)
       {
-        lprintf (0, "Error renaming %s to %s: %s", streamfilename, streamfilecorr,
-                 strerror (errno));
+        lprintf (0, "Auto recovery, removing exising packet buffer and stream index files");
+
+        /* Delete existing ring and stream files */
+        if (unlink (ringfilename) && errno != ENOENT)
+        {
+          lprintf (0, "Error removing %s: %s", ringfilename, strerror (errno));
+          return 1;
+        }
+        if (unlink (streamfilename) && errno != ENOENT)
+        {
+          lprintf (0, "Error renaming %s: %s", streamfilename, strerror (errno));
+          return 1;
+        }
+      }
+      else
+      {
+        lprintf (0, "Unrecognized auto recovery value: %u", autorecovery);
         return 1;
       }
 
@@ -1366,7 +1392,7 @@ GetOptVal (int argcount, char **argvec, int argopt)
  * MaxPacketID <id>
  * MaxPacketSize <size>
  * MemoryMapRing <1|0>
- * AutoRecovery <1|0>
+ * AutoRecovery <2|1|0>
  * ListenPort <port>
  * SeedLinkPort <port>
  * DataLinkPort <port>
@@ -1553,7 +1579,13 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
         return -1;
       }
 
-      autorecovery = (uvalue) ? 1 : 0;
+      if (uvalue != 0 && uvalue != 1 && uvalue != 2)
+      {
+        lprintf (0, "Invalid AutoRecovery config file value: %u", uvalue);
+        return -1;
+      }
+
+      autorecovery = uvalue;
     }
     else if (!dynamiconly && !strncasecmp ("MemoryMapRing", ptr, 13))
     {
