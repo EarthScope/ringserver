@@ -1960,7 +1960,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
 
       ConfigMSWrite (svalue);
     }
-    else if (!strncasecmp ("MSeedScan", ptr, 9))
+    else if (!dynamiconly && !strncasecmp ("MSeedScan", ptr, 9))
     {
       if (sscanf (ptr, "%*s %512[^\n]", svalue) != 1)
       {
