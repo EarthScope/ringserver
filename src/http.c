@@ -734,20 +734,6 @@ ParseHeader (char *header, char **value)
 } /* End of ParseHeader() */
 
 /***************************************************************************
- * LevelKeyCompare:
- *
- * Compare two strings using strcmp for binary tree keys passed as
- * void pointers.
- *
- * Return value of strcmp.
- ***************************************************************************/
-static int
-LevelKeyCompare (const void *a, const void *b)
-{
-  return strcmp ((const char *)a, (const char *)b);
-} /* End of LevelKeyCompare() */
-
-/***************************************************************************
  * GenerateStreams:
  *
  * Generate stream list and place into buffer, which will be allocated
