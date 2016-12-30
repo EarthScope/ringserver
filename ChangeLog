@@ -1,3 +1,7 @@
+2016.365:
+	- Optimize HTTP streams response handling by pre-allocating response
+	buffer and avoiding unnecessary system calls.
+
 2016.363:
 	- AutoRecovery value of 2 now instructs the server to delete the
 	packet buffer and stream index files when corruption is detected.

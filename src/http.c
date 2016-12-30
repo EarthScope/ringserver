@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.363
+ * Modified: 2016.365
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -39,6 +39,8 @@
 #include "ring.h"
 #include "ringserver.h"
 #include "slclient.h"
+
+#define MIN(X,Y) (X < Y) ? X : Y
 
 static int ParseHeader (char *header, char **value);
 static int GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path);
@@ -89,6 +91,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
   char *response = NULL;
   char *value = NULL;
+  int responsebytes;
 
   /* Parse HTTP request */
   memset (method, 0, sizeof (method));
@@ -117,7 +120,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     if (headlen > 0)
     {
-      SendData (cinfo, cinfo->sendbuf, strlen (cinfo->sendbuf));
+      SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
     }
     else
     {
@@ -180,24 +183,24 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     /* This may be used to "ping" the server so only log at high verbosity */
     lprintf (2, "[%s] Received HTTP ID request", cinfo->hostname);
 
-    asprintf (&response,
-              "%s/%s\n"
-              "Organization: %s",
-              PACKAGE, VERSION, serverid);
+    responsebytes = asprintf (&response,
+                              "%s/%s\n"
+                              "Organization: %s",
+                              PACKAGE, VERSION, serverid);
 
     /* Create header */
     headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
                         "HTTP/1.1 200\r\n"
-                        "Content-Length: %zu\r\n"
+                        "Content-Length: %d\r\n"
                         "Content-Type: text/plain\r\n"
                         "\r\n",
-                        (response) ? strlen (response) : 0);
+                        (response) ? responsebytes : 0);
 
     if (headlen > 0)
     {
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
-                       (size_t[]){strlen (cinfo->sendbuf), (response) ? strlen (response) : 0},
+                       (size_t[]){MIN(headlen,cinfo->sendbuflen), (response) ? responsebytes : 0},
                        2);
     }
     else
@@ -215,9 +218,9 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
   {
     lprintf (1, "[%s] Received HTTP STREAMS request", cinfo->hostname);
 
-    rv = GenerateStreams (cinfo, &response, path);
+    responsebytes = GenerateStreams (cinfo, &response, path);
 
-    if (rv < 0)
+    if (responsebytes < 0)
     {
       lprintf (0, "[%s] Error generating stream list", cinfo->hostname);
 
@@ -229,16 +232,16 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     /* Create header */
     headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
                         "HTTP/1.1 200\r\n"
-                        "Content-Length: %zu\r\n"
+                        "Content-Length: %d\r\n"
                         "Content-Type: text/plain\r\n"
                         "\r\n",
-                        (response) ? strlen (response) : 0);
+                        (response) ? responsebytes : 0);
 
     if (headlen > 0)
     {
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
-                       (size_t[]){strlen (cinfo->sendbuf), (response) ? strlen (response) : 0},
+                       (size_t[]){MIN(headlen,cinfo->sendbuflen), (response) ? responsebytes : 0},
                        2);
     }
     else
@@ -273,9 +276,9 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     lprintf (1, "[%s] Received HTTP STATUS request", cinfo->hostname);
 
-    rv = GenerateStatus (cinfo, &response);
+    responsebytes = GenerateStatus (cinfo, &response);
 
-    if (rv <= 0)
+    if (responsebytes <= 0)
     {
       lprintf (0, "[%s] Error generating server status", cinfo->hostname);
 
@@ -287,16 +290,16 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     /* Create header */
     headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
                         "HTTP/1.1 200\r\n"
-                        "Content-Length: %zu\r\n"
+                        "Content-Length: %d\r\n"
                         "Content-Type: text/plain\r\n"
                         "\r\n",
-                        (response) ? strlen (response) : 0);
+                        (response) ? responsebytes : 0);
 
     if (headlen > 0)
     {
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
-                       (size_t[]){strlen (cinfo->sendbuf), (response) ? strlen (response) : 0},
+                       (size_t[]){MIN(headlen,cinfo->sendbuflen), (response) ? responsebytes : 0},
                        2);
     }
     else
@@ -331,9 +334,9 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     lprintf (1, "[%s] Received HTTP CONNECTIONS request", cinfo->hostname);
 
-    rv = GenerateConnections (cinfo, &response, path);
+    responsebytes = GenerateConnections (cinfo, &response, path);
 
-    if (rv <= 0)
+    if (responsebytes <= 0)
     {
       lprintf (0, "[%s] Error generating server status", cinfo->hostname);
 
@@ -345,16 +348,16 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     /* Create header */
     headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
                         "HTTP/1.1 200\r\n"
-                        "Content-Length: %zu\r\n"
+                        "Content-Length: %d\r\n"
                         "Content-Type: text/plain\r\n"
                         "\r\n",
-                        (response) ? strlen (response) : 0);
+                        (response) ? responsebytes : 0);
 
     if (headlen > 0)
     {
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
-                       (size_t[]){strlen (cinfo->sendbuf), (response) ? strlen (response) : 0},
+                       (size_t[]){MIN(headlen,cinfo->sendbuflen), (response) ? responsebytes : 0},
                        2);
     }
     else
@@ -383,7 +386,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, strlen (cinfo->sendbuf));
+        SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
       }
       else
       {
@@ -420,7 +423,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, strlen (cinfo->sendbuf));
+        SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
       }
       else
       {
@@ -742,14 +745,18 @@ ParseHeader (char *header, char **value)
  * Check for 'match' parameter in 'path' and use value as a regular
  * expression to match against stream identifiers.
  *
- * Returns length of status in bytes on success and -1 on error.
+ * Returns length of stream list response in bytes on success and -1 on error.
  ***************************************************************************/
 static int
 GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
 {
   Stack *streams;
+  StackNode *streamnode;
   RingStream *ringstream;
+  int streamcount;
+  size_t streamlistsize;
   size_t headlen;
+  size_t streaminfolen;
   char streaminfo[200];
   char earliest[50];
   char latest[50];
@@ -793,11 +800,11 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
                             "HTTP/1.1 400 Invalid match expression\r\n"
                             "Connection: close\r\n"
                             "\r\n"
-                            "Invalid match expression");
+                            "Invalid match expression: '%s'", matchstr);
 
         if (headlen > 0)
         {
-          SendData (cinfo, cinfo->sendbuf, strlen (cinfo->sendbuf));
+          SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
         }
         else
         {
@@ -827,7 +834,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, strlen (cinfo->sendbuf));
+        SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
       }
       else
       {
@@ -841,6 +848,50 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
   /* Collect stream list and send a line for each stream */
   if ((streams = GetStreamsStack (cinfo->ringparams, cinfo->reader)))
   {
+    /* Count streams */
+    streamcount = 0;
+    streamnode = streams->top;
+    while (streamnode)
+    {
+      streamcount++;
+      streamnode = streamnode->next;
+    }
+
+    /* Allocate stream list buffer with maximum expected:
+       for level-specific output, maximum per entry is 60 characters + newline
+       otherwise the maximum per entry is 60 + 2x25 (time strings) plus a few spaces and newline */
+    streamlistsize = (level) ? 61 : 120;
+    streamlistsize *= streamcount;
+
+    if (!(*streamlist = (char *)malloc(streamlistsize)))
+    {
+      lprintf (0, "[%s] Error for HTTP STREAMS (cannot allocate response buffer of size %zu)",
+               cinfo->hostname, streamlistsize);
+
+      StackDestroy (streams, free);
+
+      /* Create and send error response */
+      headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
+                          "HTTP/1.1 500 Internal error, cannot allocate response buffer\r\n"
+                          "Connection: close\r\n"
+                          "\r\n"
+                          "Cannot allocate response buffer of %zu bytes", streamlistsize);
+
+      if (headlen > 0)
+      {
+        SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
+      }
+      else
+      {
+        lprintf (0, "Error creating response (cannot allocate stream list buffer)");
+      }
+
+      return -1;
+    }
+
+    /* Set write pointer to beginning of buffer */
+    cp = *streamlist;
+
     while ((ringstream = (RingStream *)StackPop (streams)))
     {
       /* If a specific level has been specified, split the stream ID into components
@@ -901,29 +952,36 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
         streaminfo[sizeof (streaminfo) - 1] = '\0';
       }
 
-      /* Add a line to the response body for each stream, 8 MB maximum */
-      if (AddToString (streamlist, streaminfo, "", 0, 8388608))
+      /* Add streaminfo entry to buffer */
+      streaminfolen = strlen (streaminfo);
+      if ((streamlistsize - (cp - *streamlist)) > streaminfolen)
       {
-        lprintf (0, "[%s] Error for HTTP STREAMS (cannot AddToString), too many streams",
-                 cinfo->hostname);
+        memcpy (cp, streaminfo, streaminfolen);
+        cp += streaminfolen;
+      }
+      else
+      {
+        lprintf (0, "[%s] Error for HTTP STREAMS (cannot allocate response buffer of size %zu)",
+                 cinfo->hostname, streamlistsize);
 
         free (ringstream);
         StackDestroy (streams, free);
 
         /* Create and send error response */
         headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                            "HTTP/1.1 500 Stream list too large\r\n"
+                            "HTTP/1.1 500 Internal error, stream list buffer too small\r\n"
                             "Connection: close\r\n"
                             "\r\n"
-                            "Stream list too large");
+                            "Stream list buffer too small: %zu bytes for %d streams",
+                            streamlistsize, streamcount);
 
         if (headlen > 0)
         {
-          SendData (cinfo, cinfo->sendbuf, strlen (cinfo->sendbuf));
+          SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
         }
         else
         {
-          lprintf (0, "Error creating response (stream list too large)");
+          lprintf (0, "Error creating response (stream list buffer too small)");
         }
 
         return -1;
@@ -935,6 +993,9 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
     /* Cleanup stream stack */
     StackDestroy (streams, free);
   }
+
+  /* Add a final terminator to stream list buffer */
+  *cp = '\0';
 
   /* Clear match expression if set for this request */
   if (matchlen > 0 && cinfo->reader)
@@ -951,7 +1012,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
  * Generate server status and place into buffer, which will be
  * allocated to the length needed and should be free'd by the caller.
  *
- * Returns length of status in bytes on sucess and -1 on error.
+ * Returns length of status response in bytes on sucess and -1 on error.
  ***************************************************************************/
 static int
 GenerateStatus (ClientInfo *cinfo, char **status)
@@ -1104,7 +1165,7 @@ GenerateStatus (ClientInfo *cinfo, char **status)
   }
   pthread_mutex_unlock (&sthreads_lock);
 
-  return (rv < 0) ? -1 : rv;
+  return (*status) ? strlen (*status) : 0;
 } /* End of GenerateStatus() */
 
 /***************************************************************************
@@ -1116,7 +1177,7 @@ GenerateStatus (ClientInfo *cinfo, char **status)
  * Check for 'match' parameter in 'path' and use value as a regular
  * expression to match against stream identifiers.
  *
- * Returns length of status in bytes on sucess and -1 on error.
+ * Returns length of connection list response in bytes on sucess and -1 on error.
  ***************************************************************************/
 static int
 GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
