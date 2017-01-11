@@ -1,7 +1,7 @@
 /**************************************************************************
  * slclient.h
  *
- * Modified: 2016.354
+ * Modified: 2017.010
  **************************************************************************/
 
 #ifndef SLCLIENT_H
@@ -14,8 +14,10 @@ extern "C" {
 #include <pthread.h>
 #include "rbtree.h"
 
-#define SLCAPABILITIES "SLPROTO:3.1 CAP EXTREPLY NSWILDCARD BATCH WEBSOCKET"
-#define SLSERVERVER "SeedLink v3.1 (" VERSION " Ring Server SeedLink) :: " SLCAPABILITIES
+/* The total length of SLSERVERVER should be <= 98 bytes for compatibility
+   with libslink versions < 2.0. */
+#define SLCAPABILITIES "SLPROTO:3.1 CAP EXTREPLY NSWILDCARD BATCH WS:13"
+#define SLSERVERVER "SeedLink v3.1 (" VERSION " RingServer) :: " SLCAPABILITIES
 
 #define SLRECSIZE           512      /* Mini-SEED record size */
 #define SLHEADSIZE          8        /* SeedLink header size */
