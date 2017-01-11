@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.353
+ * Modified: 2017.010
  **************************************************************************/
 
 #include <errno.h>
@@ -43,10 +43,22 @@
 #include "logging.h"
 #include "rbtree.h"
 
-/* Define the number of no-action loops that trigger the throttle */
-#define THROTTLE_TRIGGER 10
+/* Progressive throttle stepping and maximum in microseconds */
+#define THROTTLE_STEPPING 100000  /* 1/10 second */
+#define THROTTLE_MAXIMUM  500000  /* 1/2 second */
 
 static int ClientRecv (ClientInfo *cinfo);
+
+/* Test first 3 characters of buffer for HTTP methods:
+   GET, HEAD, POST, PUT, DELETE, TRACE and CONNECT */
+#define HTTPMETHOD(X) (                                  \
+    (*X == 'G' && *(X + 1) == 'E' && *(X + 2) == 'T') || \
+    (*X == 'H' && *(X + 1) == 'E' && *(X + 2) == 'A') || \
+    (*X == 'P' && *(X + 1) == 'O' && *(X + 2) == 'S') || \
+    (*X == 'P' && *(X + 1) == 'U' && *(X + 2) == 'T') || \
+    (*X == 'D' && *(X + 1) == 'E' && *(X + 2) == 'L') || \
+    (*X == 'T' && *(X + 1) == 'R' && *(X + 2) == 'A') || \
+    (*X == 'C' && *(X + 1) == 'O' && *(X + 2) == 'N'))
 
 /***********************************************************************
  * ClientThread:
@@ -72,9 +84,10 @@ ClientThread (void *arg)
   int serverport = -1;
 
   /* Throttle related */
-  uint8_t throttle = 0;   /* Controls throttling of main loop */
-  fd_set readset;         /* File descriptor set for select() */
-  struct timeval timeout; /* Timeout throttle for select() */
+  uint32_t throttleusec = 0; /* Throttle time in microseconds */
+  fd_set readset;            /* File descriptor set for select() */
+  struct timeval timeout;    /* Timeout throttle for select() */
+  struct timespec timereq;   /* Throttle for nanosleep() */
 
   if (!arg)
     return NULL;
@@ -226,31 +239,29 @@ ClientThread (void *arg)
   /* Main client loop, delegating processing and data flow */
   while (mytdp->td_flags != TDF_CLOSE)
   {
-    /* Increment throttle trigger count by default */
-    if (throttle < THROTTLE_TRIGGER)
-      throttle++;
+    /* Increment throttle if not at maximum */
+    if (throttleusec < THROTTLE_MAXIMUM)
+      throttleusec += THROTTLE_STEPPING;
 
-    /* Determine client type from request */
+    /* Determine client type from first 3 bytes of request */
     if (cinfo->type == CLIENT_UNDETERMINED)
     {
       if ((nrecv = recv (cinfo->socket, cinfo->recvbuf, 3, MSG_PEEK)) == 3)
       {
+        /* DataLink commands start with 'DL' */
         if (cinfo->protocols & PROTO_DATALINK &&
-            !strncmp (cinfo->recvbuf, "DL", 2))
+            cinfo->recvbuf[0] == 'D' &&
+            cinfo->recvbuf[1] == 'L')
         {
           cinfo->type = CLIENT_DATALINK;
         }
+        /* HTTP requests start with known method */
         else if (cinfo->protocols & PROTO_HTTP &&
-                 (!strncasecmp (cinfo->recvbuf, "GET", 3) ||
-                  !strncasecmp (cinfo->recvbuf, "HEAD", 3) ||
-                  !strncasecmp (cinfo->recvbuf, "POST", 3) ||
-                  !strncasecmp (cinfo->recvbuf, "PUT", 3) ||
-                  !strncasecmp (cinfo->recvbuf, "DELETE", 3) ||
-                  !strncasecmp (cinfo->recvbuf, "TRACE", 3) ||
-                  !strncasecmp (cinfo->recvbuf, "CONNECT", 3)))
+                 HTTPMETHOD (cinfo->recvbuf))
         {
           cinfo->type = CLIENT_HTTP;
         }
+        /* Everything else is SeedLink if it's allowed on this listener */
         else if (cinfo->protocols & PROTO_SEEDLINK)
         {
           cinfo->type = CLIENT_SEEDLINK;
@@ -264,6 +275,11 @@ ClientThread (void *arg)
                    (cinfo->recvbuf[2] < 32 || cinfo->recvbuf[2] > 126) ? '?' : cinfo->recvbuf[2]);
           break;
         }
+      }
+      /* Check for shutdown or errors except EAGAIN (no data on non-blocking) */
+      else if (nrecv == 0 || (nrecv == -1 && errno != EAGAIN))
+      {
+        break;
       }
     }
 
@@ -280,7 +296,7 @@ ClientThread (void *arg)
     if (nread > 0)
     {
       /* If data was received do not throttle */
-      throttle = 0;
+      throttleusec = 0;
 
       /* Update the time of the last packet exchange */
       cinfo->lastxchange = HPnow ();
@@ -309,7 +325,7 @@ ClientThread (void *arg)
       }
     } /* Done handling data from client */
 
-    /* Regular data flow */
+    /* Regular, outbound data flow */
     if (cinfo->state == STATE_STREAM)
     {
       sentbytes = 0;
@@ -327,31 +343,52 @@ ClientThread (void *arg)
       {
         break;
       }
-      if (sentbytes == 0) /* No packet sent, throttle immediately */
+      if (sentbytes == 0) /* No packet sent, maximum throttle immediately */
       {
-        throttle = THROTTLE_TRIGGER;
+        throttleusec = THROTTLE_MAXIMUM;
       }
       else /* If packet sent do not throttle */
       {
-        throttle = 0;
+        throttleusec = 0;
       }
     } /* Done with data streaming */
 
-    /* Throttle loop if THROTTLE_TRIGGER or more loops without action */
-    if (throttle >= THROTTLE_TRIGGER)
+    /* Throttle loop and check for idle connections */
+    if (throttleusec > 0)
     {
-      /* Throttle the loop using select() so that data from the
-         client is never waiting for a timeout */
+      /* Check for connections with no communication and drop if idle
+         for more than 10 seconds */
+      if (cinfo->lastxchange == cinfo->conntime &&
+          (HPnow () - cinfo->conntime) > (HPTMODULUS * 10))
+      {
+        lprintf (0, "[%s] Non-communicating client timeout",
+                 cinfo->hostname);
+        break;
+      }
 
-      /* Configure the read descriptor set with only our client socket */
-      FD_ZERO (&readset);
-      FD_SET (cinfo->socket, &readset);
+      /* For known connection types throttle the loop using select()
+         so that data from the client is never waiting for a timeout. */
+      if (cinfo->type != CLIENT_UNDETERMINED)
+      {
+        /* Configure the read descriptor set with only our client socket */
+        FD_ZERO (&readset);
+        FD_SET (cinfo->socket, &readset);
 
-      /* Timeout (throttle when no data) is 2/10 of a second */
-      timeout.tv_sec = 0;
-      timeout.tv_usec = 200000;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = throttleusec;
 
-      select (cinfo->socket + 1, &readset, NULL, NULL, &timeout);
+        select (cinfo->socket + 1, &readset, NULL, NULL, &timeout);
+      }
+      /* For unknown (undetermined) connection types throttle the loop
+         using nanosleep() as one or two bytes may be available but not
+         enough to determine the type. */
+      else
+      {
+        timereq.tv_sec = 0;
+        timereq.tv_nsec = throttleusec * 1000;
+
+        nanosleep (&timereq, NULL);
+      }
     }
   } /* End of main client loop */
 
@@ -1045,8 +1082,8 @@ RecvLine (ClientInfo *cinfo)
   /* Make sure buffer is NULL terminated */
   *bptr = '\0';
 
-  /* Check for optional '\n' (newline) and consume it if present */
-  if ((nrecv = recv (cinfo->socket, &peek, 1, MSG_PEEK)) > 0)
+  /* If data recevied, check for optional '\n' (newline) and consume it if present */
+  if (nread && (nrecv = recv (cinfo->socket, &peek, 1, MSG_PEEK)) > 0)
   {
     /* Unmask received data (payload) if a mask was supplied as WebSocket */
     if (cinfo->wsmask.one != 0)

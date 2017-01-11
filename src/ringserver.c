@@ -21,7 +21,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.363
+ * Modified: 2017.009
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -497,7 +497,7 @@ main (int argc, char *argv[])
 
             if ((errno = pthread_create (&stid, NULL, threadfunc, (void *)stp->td)))
             {
-              lprintf (0, "Error creating %s listen thread: %s", threadtype, strerror (errno));
+              lprintf (0, "Error creating %s thread: %s", threadtype, strerror (errno));
               if (stp->td)
                 free (stp->td);
               stp->td = 0;
