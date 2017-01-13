@@ -1108,6 +1108,9 @@ GenerateStatus (ClientInfo *cinfo, char **status)
                  latestpacketid,
                  latestpacketcreate, latestpacketstart, latestpacketend);
 
+  if (rv < 0)
+    return -1;
+
   AddToString (status, "\nServer threads:\n", "", 0, 8388608);
 
   /* List server threads, lock thread list while looping */
