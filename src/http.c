@@ -130,13 +130,9 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     return -1;
   }
 
-  /* Consume all request headers */
+  /* Consume all request headers, the empty line '\r\n' terminates */
   while ((nread = RecvLine (cinfo)) > 0)
   {
-    /* If empty line (CRLF) then there are no more headers */
-    if (cinfo->recvbuf[0] == '\r' && cinfo->recvbuf[1] == '\n')
-      break;
-
     if (ParseHeader (cinfo->recvbuf, &value))
     {
       lprintf (0, "Error parsing HTTP header: '%s'", cinfo->recvbuf);

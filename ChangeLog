@@ -1,3 +1,13 @@
+2010.012:
+	- Properly consume receive buffer and cleanly close client connection
+	on errors to avoid TCP connection resets on shutdown.
+
+2017.010:
+	- Optimize client handling & implement progressive main client loop
+	throttle.
+	- Reduce length of SeedLink server version string for compatibility
+	with libslink < 2.0.
+
 2016.365:
 	- Optimize HTTP streams response handling by pre-allocating response
 	buffer and avoiding unnecessary system calls.

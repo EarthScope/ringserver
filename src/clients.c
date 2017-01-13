@@ -198,6 +198,7 @@ ClientThread (void *arg)
     /* Close client socket */
     if (cinfo->socket)
     {
+      shutdown (cinfo->socket, SHUT_RDWR);
       close (cinfo->socket);
       cinfo->socket = 0;
     }
@@ -400,6 +401,7 @@ ClientThread (void *arg)
   /* Close client socket */
   if (cinfo->socket)
   {
+    shutdown (cinfo->socket, SHUT_RDWR);
     close (cinfo->socket);
     cinfo->socket = 0;
   }
@@ -1063,6 +1065,20 @@ RecvLine (ClientInfo *cinfo)
       /* If '\r' is received the line is complete */
       if (*bptr == '\r')
       {
+        /* Check for optional '\n' (newline) and consume it if present */
+        if ((nrecv = recv (cinfo->socket, &peek, 1, MSG_PEEK)) == 1)
+        {
+          /* Unmask received data (payload) if a mask was supplied as WebSocket */
+          if (cinfo->wsmask.one != 0)
+          {
+            peek = peek ^ cinfo->wsmask.four[cinfo->wsmaskidx % 4];
+            cinfo->wsmaskidx++;
+          }
+
+          if (peek == '\n')
+            recv (cinfo->socket, &peek, 1, 0);
+        }
+
         break;
       }
 
@@ -1081,20 +1097,6 @@ RecvLine (ClientInfo *cinfo)
 
   /* Make sure buffer is NULL terminated */
   *bptr = '\0';
-
-  /* If data recevied, check for optional '\n' (newline) and consume it if present */
-  if (nread && (nrecv = recv (cinfo->socket, &peek, 1, MSG_PEEK)) > 0)
-  {
-    /* Unmask received data (payload) if a mask was supplied as WebSocket */
-    if (cinfo->wsmask.one != 0)
-    {
-      peek = peek ^ cinfo->wsmask.four[cinfo->wsmaskidx % 4];
-      cinfo->wsmaskidx++;
-    }
-
-    if (peek == '\n')
-      recv (cinfo->socket, &peek, 1, 0);
-  }
 
   return nread;
 } /* End of RecvLine() */
