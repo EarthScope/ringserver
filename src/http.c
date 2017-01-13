@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.365
+ * Modified: 2017.012
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */

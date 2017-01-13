@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2017.010
+ * Modified: 2017.012
  **************************************************************************/
 
 #include <errno.h>
@@ -359,7 +359,8 @@ ClientThread (void *arg)
     {
       /* Check for connections with no communication and drop if idle
          for more than 10 seconds */
-      if (cinfo->lastxchange == cinfo->conntime &&
+      if (throttleusec >= THROTTLE_MAXIMUM &&
+          cinfo->lastxchange == cinfo->conntime &&
           (HPnow () - cinfo->conntime) > (HPTMODULUS * 10))
       {
         lprintf (0, "[%s] Non-communicating client timeout",
