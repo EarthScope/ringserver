@@ -1,4 +1,4 @@
-2010.012:
+2017.012:
 	- Properly consume receive buffer and cleanly close client connection
 	on errors to avoid TCP connection resets on shutdown.
 
