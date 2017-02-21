@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2017.012
+ * Modified: 2017.052
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -49,7 +49,8 @@ static int GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *
 static int SendFileHTTP (ClientInfo *cinfo, char *path);
 static int NegotiateWebSocket (ClientInfo *cinfo, char *version,
                                char *upgradeHeader, char *connectionHeader,
-                               char *secWebSocketKeyHeader, char *secWebSocketVersionHeader);
+                               char *secWebSocketKeyHeader, char *secWebSocketVersionHeader,
+                               char *secWebSocketProtocolHeader);
 static int apr_base64_encode_binary (char *encoded, const unsigned char *string, int len);
 static int sha1digest(uint8_t *digest, char *hexdigest, const uint8_t *data, size_t databytes);
 
@@ -68,7 +69,7 @@ static int sha1digest(uint8_t *digest, char *hexdigest, const uint8_t *data, siz
  *   /connections - return list of connections, limited via trust-permissions
  *                    match=<pattern> supported to limit connections
  *   /seedlink    - initiate WebSocket connection for SeedLink
- *   /datalink    - initiate WebSocket connection for SeedLink
+ *   /datalink    - initiate WebSocket connection for DataLink
  *
  * Returns 1 on success and should disconnect, 0 on success and -1 on
  * error which should disconnect.
@@ -88,6 +89,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
   char connectionHeader[100] = "";
   char secWebSocketKeyHeader[100] = "";
   char secWebSocketVersionHeader[100] = "";
+  char secWebSocketProtocolHeader[100] = "";
 
   char *response = NULL;
   char *value = NULL;
@@ -164,6 +166,11 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     {
       strncpy (secWebSocketVersionHeader, value, sizeof (secWebSocketVersionHeader) - 1);
       secWebSocketVersionHeader[sizeof (secWebSocketVersionHeader) - 1] = '\0';
+    }
+    else if (!strcasecmp (cinfo->recvbuf, "Sec-WebSocket-Protocol"))
+    {
+      strncpy (secWebSocketProtocolHeader, value, sizeof (secWebSocketProtocolHeader) - 1);
+      secWebSocketProtocolHeader[sizeof (secWebSocketProtocolHeader) - 1] = '\0';
     }
   }
 
@@ -392,10 +399,21 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       return -1;
     }
 
+    /* Check subprotocol header for acceptable values, rewrite to echo in response */
+    if (*secWebSocketProtocolHeader)
+    {
+      if (strstr (secWebSocketProtocolHeader, "SeedLink3.1"))
+        snprintf (secWebSocketProtocolHeader, sizeof(secWebSocketProtocolHeader),
+                  "SeedLink3.1");
+      else
+        *secWebSocketProtocolHeader = '\0';
+    }
+
     lprintf (1, "[%s] Received WebSocket SeedLink request", cinfo->hostname);
 
     if (NegotiateWebSocket (cinfo, version, upgradeHeader, connectionHeader,
-                            secWebSocketKeyHeader, secWebSocketVersionHeader))
+                            secWebSocketKeyHeader, secWebSocketVersionHeader,
+                            secWebSocketProtocolHeader))
     {
       lprintf (0, "[%s] Error negotiating SeedLink WebSocket", cinfo->hostname);
       return -1;
@@ -418,7 +436,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                           "Cannot request DataLink WebSocket on non-DataLink port");
 
       if (headlen > 0)
-      {
+       {
         SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
       }
       else
@@ -429,10 +447,21 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       return -1;
     }
 
+    /* Check subprotocol header for acceptable values, rewrite to echo in response */
+    if (*secWebSocketProtocolHeader)
+    {
+      if (strstr (secWebSocketProtocolHeader, "DataLink1.0"))
+        snprintf (secWebSocketProtocolHeader, sizeof(secWebSocketProtocolHeader),
+                  "DataLink1.0");
+      else
+        *secWebSocketProtocolHeader = '\0';
+    }
+
     lprintf (1, "[%s] Received WebSocket DataLink request", cinfo->hostname);
 
     if (NegotiateWebSocket (cinfo, version, upgradeHeader, connectionHeader,
-                            secWebSocketKeyHeader, secWebSocketVersionHeader))
+                            secWebSocketKeyHeader, secWebSocketVersionHeader,
+                            secWebSocketProtocolHeader))
     {
       lprintf (0, "[%s] Error negotiating DataLink WebSocket", cinfo->hostname);
       return -1;
@@ -1460,9 +1489,12 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
 static int
 NegotiateWebSocket (ClientInfo *cinfo, char *version,
                     char *upgradeHeader, char *connectionHeader,
-                    char *secWebSocketKeyHeader, char *secWebSocketVersionHeader)
+                    char *secWebSocketKeyHeader,
+                    char *secWebSocketVersionHeader,
+                    char *secWebSocketProtocolHeader)
 {
   char *response = NULL;
+  char subprotocolheader[100] = "";
   unsigned char *keybuf = NULL;
   uint8_t digest[20];
 
@@ -1477,7 +1509,8 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
    *   Connection: Upgrade
    *   Upgrade: websocket
    *   Sec-WebSocket-Version: 13
-   *   Sec-WebSocket-Key: <something> */
+   *   Sec-WebSocket-Key: <value>
+   *   Sec-WebSocket-Protocol: <value> */
 
   if (!version || strcasecmp (version, "HTTP/1.1"))
   {
@@ -1604,14 +1637,22 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   sha1digest (digest, NULL, keybuf, keybufsize);
   apr_base64_encode_binary ((char *)keybuf, (const unsigned char *)digest, 20);
 
+  /* Generate subprotocol header if provided */
+  if (secWebSocketProtocolHeader && *secWebSocketProtocolHeader)
+  {
+    snprintf (subprotocolheader, sizeof(subprotocolheader),
+              "Sec-WebSocket-Protocol: %s\r\n", secWebSocketProtocolHeader);
+  }
+
   /* Generate response completing the upgrade to WebSocket connection */
   asprintf (&response,
             "HTTP/1.1 101 Switching Protocols\r\n"
             "Upgrade: websocket\r\n"
             "Connection: Upgrade\r\n"
+            "%s"
             "Sec-WebSocket-Accept: %s\r\n"
             "\r\n",
-            keybuf);
+            subprotocolheader, keybuf);
 
   if (response)
   {
