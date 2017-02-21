@@ -40,7 +40,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.338
+ * Modified: 2017.051
  **************************************************************************/
 
 #include <errno.h>
@@ -1502,16 +1502,11 @@ RingAfterRev (RingReader *reader, hptime_t reftime, int64_t pktlimit,
   {
     skip = 0;
 
-    /* Get pointer RingPacket */
+    /* Get pointer to RingPacket */
     if (!(spkt = GetPacket (ringparams, spktid, &spkttime)))
     {
       return 0;
     }
-
-    /* Test if packet is later than reference time, this will avoid the
-     * regex tests for packets that we will eventually skip anyway */
-    if (spkt->dataend > reftime)
-      skip = 1;
 
     /* Test limit expression if available */
     if (reader->limit)
@@ -1531,12 +1526,21 @@ RingAfterRev (RingReader *reader, hptime_t reftime, int64_t pktlimit,
                       strlen (spkt->streamid), 0, 0, NULL, 0))
         skip = 1;
 
-    /* Set ID and time if this matching packet has a data end time after that specified */
-    if (!skip && spkt->dataend > reftime)
+    if (!skip)
     {
-      pkt = spkt;
-      pktid = spktid;
-      pkttime = spkttime;
+      /* Set ID and time if this matching packet has a data end time after that specified */
+      if (spkt->dataend > reftime)
+      {
+        pkt = spkt;
+        pktid = spktid;
+        pkttime = spkttime;
+      }
+
+      /* Done if we reach a matching packet with earlier start time */
+      if (spkt->datastart < reftime)
+      {
+        break;
+      }
     }
 
     /* Done if we reach the earliest packet */
