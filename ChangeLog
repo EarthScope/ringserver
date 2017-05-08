@@ -2,7 +2,7 @@
 	- Fix time windowing when TimeWindowLimit is set by fixing RingAfterRev().
 	- Check for and echo WebSocket sub-protocols:
 	  SeedLink: 'SeedLink3.1'
-	  DataLink: 'Datalink1.0'
+	  DataLink: 'DataLink1.0'
 
 2017.012:
 	- Properly consume receive buffer and cleanly close client connection
