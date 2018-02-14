@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2017.052
+ * Modified: 2018.044
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -117,8 +117,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                         "HTTP/1.1 501 Method %s Not Implemented\r\n"
                         "Content-Length: 0\r\n"
                         "Connection: close\r\n"
+                        "%s"
                         "\r\n",
-                        method);
+                        method,
+                        (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
     if (headlen > 0)
     {
@@ -196,8 +198,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                         "HTTP/1.1 200\r\n"
                         "Content-Length: %d\r\n"
                         "Content-Type: text/plain\r\n"
+                        "%s"
                         "\r\n",
-                        (response) ? responsebytes : 0);
+                        (response) ? responsebytes : 0,
+                        (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
     if (headlen > 0)
     {
@@ -237,8 +241,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                         "HTTP/1.1 200\r\n"
                         "Content-Length: %d\r\n"
                         "Content-Type: text/plain\r\n"
+                        "%s"
                         "\r\n",
-                        (response) ? responsebytes : 0);
+                        (response) ? responsebytes : 0,
+                        (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
     if (headlen > 0)
     {
@@ -266,13 +272,15 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       lprintf (1, "[%s] HTTP STATUS request from un-trusted client",
                cinfo->hostname);
 
-      response =
-          "HTTP/1.1 403 Forbidden, no soup for you!\r\n"
-          "Connection: close\r\n"
-          "\r\n"
-          "Forbidden, no soup for you!\r\n";
+      /* Create header */
+      headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
+                          "HTTP/1.1 403 Forbidden, no soup for you!\r\n"
+                          "Connection: close\r\n"
+                          "%s"
+                          "\r\n",
+                          (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
-      rv = SendData (cinfo, response, strlen (response));
+      rv = SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
 
       return (rv) ? -1 : 1;
     }
@@ -295,8 +303,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                         "HTTP/1.1 200\r\n"
                         "Content-Length: %d\r\n"
                         "Content-Type: text/plain\r\n"
+                        "%s"
                         "\r\n",
-                        (response) ? responsebytes : 0);
+                        (response) ? responsebytes : 0,
+                        (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
     if (headlen > 0)
     {
@@ -324,13 +334,15 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       lprintf (1, "[%s] HTTP CONNECTIONS request from un-trusted client",
                cinfo->hostname);
 
-      response =
-          "HTTP/1.1 403 Forbidden, no soup for you!\r\n"
-          "Connection: close\r\n"
-          "\r\n"
-          "Forbidden, no soup for you!\r\n";
+      /* Create header */
+      headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
+                          "HTTP/1.1 403 Forbidden, no soup for you!\r\n"
+                          "Connection: close\r\n"
+                          "%s"
+                          "\r\n",
+                          (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
-      rv = SendData (cinfo, response, strlen (response));
+      rv = SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
 
       return (rv) ? -1 : 1;
     }
@@ -353,8 +365,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                         "HTTP/1.1 200\r\n"
                         "Content-Length: %d\r\n"
                         "Content-Type: text/plain\r\n"
+                        "%s"
                         "\r\n",
-                        (response) ? responsebytes : 0);
+                        (response) ? responsebytes : 0,
+                        (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
     if (headlen > 0)
     {
@@ -384,8 +398,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
                           "HTTP/1.1 400 Cannot request SeedLink WebSocket on non-SeedLink port\r\n"
                           "Connection: close\r\n"
+                          "%s"
                           "\r\n"
-                          "Cannot request SeedLink WebSocket on non-SeedLink port");
+                          "Cannot request SeedLink WebSocket on non-SeedLink port",
+                          (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
       if (headlen > 0)
       {
@@ -432,8 +448,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
                           "HTTP/1.1 400 Cannot request DataLink WebSocket on non-DataLink port\r\n"
                           "Connection: close\r\n"
+                          "%s"
                           "\r\n"
-                          "Cannot request DataLink WebSocket on non-DataLink port");
+                          "Cannot request DataLink WebSocket on non-DataLink port",
+                          (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
       if (headlen > 0)
        {

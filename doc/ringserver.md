@@ -189,6 +189,8 @@ ringserver [options] [configfile]
 
 <p >After a WebSocket connection has been initiated with either the <b>seedlink</b> or <b>datalink</b> end points, the requested protocol is supported exactly as it would be normally with the addition of WebSocket framing.  Each server command should be contained in a single WebSocket frame, independent of other commands.</p>
 
+<p >Custom HTTP headers may be included in HTTP responses using the <b>HTTPHeader</b> config file parameter.  This can be used, for example, to enable cross-site HTTP requests via Cross-Origin Resource Sharing (CORS).</p>
+
 ## <a id='mini-seed-archiving'>Mini-Seed Archiving</a>
 
 <p >Using either the <b>-MSWRITE</b> command line option or the <b>MSeedWrite</b> config file parameter the server can be configured to write all Mini-SEED data records received via DataLink to a user defined directory and file structure.  The archive <i>format</i> argument is expanded for each packet processed using the following flags:</p>
@@ -298,4 +300,4 @@ IRIS Data Management Center
 </pre>
 
 
-(man page 2016/12/28)
+(man page 2018/02/13)

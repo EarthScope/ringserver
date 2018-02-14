@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2016/12/28
+.TH RINGSERVER 1 2018/02/13
 .SH NAME
 ringserver \- Generic packet ring buffer
 
@@ -277,6 +277,10 @@ After a WebSocket connection has been initiated with either the
 supported exactly as it would be normally with the addition of
 WebSocket framing.  Each server command should be contained in a
 single WebSocket frame, independent of other commands.
+
+Custom HTTP headers may be included in HTTP responses using the
+\fBHTTPHeader\fP config file parameter.  This can be used, for example,
+to enable cross-site HTTP requests via Cross-Origin Resource Sharing (CORS).
 
 .SH "Mini-SEED Archiving"
 Using either the \fB-MSWRITE\fP command line option or the

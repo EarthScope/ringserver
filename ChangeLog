@@ -1,4 +1,8 @@
-2017.052
+2018.044:
+	- Add HTTPHeader config file parameter that specifies custom HTTP headers
+	that will be added to HTTP responses.
+	
+2017.052:
 	- Fix time windowing when TimeWindowLimit is set by fixing RingAfterRev().
 	- Check for and echo WebSocket sub-protocols:
 	  SeedLink: 'SeedLink3.1'

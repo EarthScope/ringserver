@@ -21,7 +21,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2017.009
+ * Modified: 2018.044
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -128,6 +128,8 @@ static IPNet *matchips = NULL;
 static IPNet *rejectips = NULL;
 static IPNet *writeips = NULL;
 static IPNet *trustedips = NULL;
+
+static char *httpheaders = NULL;
 
 int
 main (int argc, char *argv[])
@@ -961,6 +963,9 @@ ListenThread (void *arg)
       }
     }
 
+    /* Set configured fixed HTTP headers */
+    cinfo->httpheaders = httpheaders;
+
     /* Set time window search limit */
     cinfo->timewinlimit = timewinlimit;
 
@@ -1413,6 +1418,7 @@ GetOptVal (int argcount, char **argvec, int argopt)
  * [D] MatchIP <IP[/netmask]
  * [D] RejectIP <IP[/netmask]
  * [D] WebRoot <web content root>
+ * [D] HTTPHeader <HTTP header>
  * [D] MSeedWrite <format>
  * MSeedScan <directory>
  *
@@ -1504,6 +1510,13 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     ipnet = nextipnet;
   }
   rejectips = NULL;
+
+  /* Clear existing HTTP headers */
+  if (httpheaders)
+  {
+    free (httpheaders);
+    httpheaders = NULL;
+  }
 
   /* Read and process all lines */
   while (fgets (line, sizeof (line), cfile))
@@ -1948,6 +1961,47 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
         lprintf (0, "Error with WebRoot value: %s", value);
         return -1;
       }
+    }
+    else if (!strncasecmp ("HTTPHeader", ptr, 10))
+    {
+      char *value;
+      char *tptr;
+      char dchar;
+
+      if (strlen (ptr) < 12)
+      {
+        lprintf (0, "Error with HTTPHeader config file line: %s", ptr);
+        return -1;
+      }
+
+      /* Find beginning of non-white-space value */
+      value = ptr + 10;
+      while (isspace ((int)*value))
+        value++;
+
+      /* If single or double quotes are detected eliminate them */
+      if (*value == '"' || *value == '\'')
+      {
+        dchar = *value;
+        value++;
+
+        if ((tptr = strchr (value, dchar)))
+        {
+          /* Truncate string at matching quote */
+          *tptr = '\0';
+        }
+        else
+        {
+          lprintf (0, "Mismatching quotes for HTTPHeader config file line: %s", ptr);
+          return -1;
+        }
+      }
+
+      /* Append multiple headers to composite string */
+      asprintf (&tptr, "%s%s\r\n", (httpheaders) ? httpheaders : "", value);
+      if (httpheaders)
+        free (httpheaders);
+      httpheaders = tptr;
     }
     else if (!strncasecmp ("MSeedWrite", ptr, 10))
     {

@@ -1,7 +1,7 @@
 /**************************************************************************
  * clients.h
  *
- * Modified: 2016.354
+ * Modified: 2018.044
  **************************************************************************/
 
 #ifndef CLIENTS_H
@@ -65,6 +65,7 @@ typedef struct ClientInfo_s {
   char       *limitstr;     /* Regular expression string to limit streams */
   char       *matchstr;     /* Regular expression string to match streams */
   char       *rejectstr;    /* Regular expression string to reject streams */
+  char       *httpheaders;  /* Fixed headers to add to HTTP responses */
   int64_t     lastid;       /* Last packet ID sent to client */
   hptime_t    starttime;    /* Requested start time */
   hptime_t    endtime;      /* Requested end time */
