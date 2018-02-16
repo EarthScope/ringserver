@@ -1,40 +1,24 @@
 <html>
 <body>
 
-<h1 align='right'><a name='BASICS'><img src="2.gif" align="right"
-hspace="10" width="100" height="100" alt="2"></a>Getting Started
-with Mini-XML</h1>
+<h1 align='right'><a name='BASICS'>Chapter 2 - Getting Started
+with Mini-XML</a></h1>
 
 <p>This chapter describes how to write programs that use Mini-XML to
 access data in an XML file. Mini-XML provides the following
 functionality:</p>
 
 <ul>
-
-	<li>Functions for creating and managing XML documents
-	in memory.</li>
-
-	<li>Reading of UTF-8 and UTF-16 encoded XML files and
-	strings.</li>
-
-	<li>Writing of UTF-8 encoded XML files and strings.</li>
-
-	<li>Support for arbitrary element names, attributes, and
-	attribute values with no preset limits, just available
-	memory.</li>
-
-	<li>Support for integer, real, opaque ("CDATA"), and text
-	data types in "leaf" nodes.</li>
-
-	<li>"Find", "index", and "walk" functions for easily
-	accessing data in an XML document.</li>
-
+  <li>Reading of UTF-8 and UTF-16 and writing of UTF-8 encoded XML files and strings.</li>
+  <li>Data is stored in a linked-list tree structure, preserving the XML data hierarchy.</li>
+  <li>SAX (streamed) reading of XML files and strings to minimize memory usage.</li>
+  <li>Supports arbitrary element names, attributes, and attribute values with no preset limits, just available memory.</li>
+  <li>Supports integer, real, opaque ("cdata"), and text data types in "leaf" nodes.</li>
+  <li>Functions for creating and managing trees of data.</li>
+  <li>"Find" and "walk" functions for easily locating and navigating trees of data.</li>
 </ul>
 
-<p>Mini-XML doesn't do validation or other types of processing
-on the data based upon schema files or other sources of
-definition information, nor does it support character entities
-other than those required by the XML specification.</p>
+<p>Mini-XML doesn't do validation or other types of processing on the data based upon schema files or other sources of definition information.</p>
 
 
 <h2>The Basics</h2>
@@ -333,7 +317,7 @@ the <tt>MXML_TEXT_CALLBACK</tt> constant which specifies that all
 data nodes in the document contain whitespace-separated text
 values. Other standard callbacks include
 <tt>MXML_IGNORE_CALLBACK</tt>, <tt>MXML_INTEGER_CALLBACK</tt>,
-<tt>MXML_OPAQUE_CALLBACK</tt>, and 
+<tt>MXML_OPAQUE_CALLBACK</tt>, and
 <tt>MXML_REAL_CALLBACK</tt>.</p>
 
 <p>The <a href='#mxmlLoadString'><tt>mxmlLoadString</tt></a>
@@ -459,7 +443,7 @@ can be used to iterate through the XML node tree:</p>
 
 <pre>
     mxml_node_t *node;
-    
+
     node = mxmlWalkPrev(current, tree,
                         MXML_DESCEND);
 
@@ -473,7 +457,7 @@ function:</p>
 
 <pre>
     mxml_node_t *node;
-    
+
     node = mxmlFindElement(tree, tree, "name",
                            "attr", "value",
                            MXML_DESCEND);

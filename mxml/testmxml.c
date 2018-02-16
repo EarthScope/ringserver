@@ -1,14 +1,12 @@
 /*
- * "$Id: testmxml.c 466 2016-06-13 00:27:11Z msweet $"
- *
- * Test program for Mini-XML, a small XML-like file parsing library.
+ * Test program for Mini-XML, a small XML file parsing library.
  *
  * Usage:
  *
  *   ./testmxml input.xml [string-output.xml] >stdio-output.xml
  *   ./testmxml "<?xml ..." [string-output.xml] >stdio-output.xml
  *
- * Copyright 2003-2016 by Michael R Sweet.
+ * Copyright 2003-2017 by Michael R Sweet.
  *
  * These coded instructions, statements, and computer programs are the
  * property of Michael R Sweet and are protected by Federal copyright
@@ -16,7 +14,7 @@
  * which should have been included with this file.  If this file is
  * missing or damaged, see the license at:
  *
- *     http://www.msweet.org/projects.php/Mini-XML
+ *     https://michaelrsweet.github.io/mxml
  */
 
 /*
@@ -710,6 +708,25 @@ main(int  argc,				/* I - Number of command-line args */
     }
   }
 
+#ifndef WIN32
+ /*
+  * Debug hooks...
+  */
+
+  if (getenv("TEST_DELAY") != NULL)
+    sleep(atoi(getenv("TEST_DELAY")));
+#  ifdef __APPLE__
+  if (getenv("TEST_LEAKS") != NULL)
+  {
+    char command[1024];
+
+    snprintf(command, sizeof(command), "leaks %d", (int)getpid());
+    if (system(command))
+      puts("Unable to check for leaks.");
+  }
+#  endif /* __APPLE__ */
+#endif /* !WIN32 */
+
  /*
   * Return...
   */
@@ -737,6 +754,8 @@ sax_cb(mxml_node_t      *node,		/* I - Current node */
     "MXML_SAX_ELEMENT_OPEN"		/* Element opened */
   };
 
+
+  (void)data;
 
  /*
   * This SAX callback just counts the different events.
@@ -867,8 +886,3 @@ whitespace_cb(mxml_node_t *node,	/* I - Element node */
 
   return (NULL);
 }
-
-
-/*
- * End of "$Id: testmxml.c 466 2016-06-13 00:27:11Z msweet $".
- */

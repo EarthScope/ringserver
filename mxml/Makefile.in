@@ -1,9 +1,7 @@
 #
-# "$Id: Makefile.in 459 2014-10-19 17:21:48Z msweet $"
-#
 # Makefile for Mini-XML, a small XML-like file parsing library.
 #
-# Copyright 2003-2014 by Michael R Sweet.
+# Copyright 2003-2017 by Michael R Sweet.
 #
 # These coded instructions, statements, and computer programs are the
 # property of Michael R Sweet and are protected by Federal copyright
@@ -11,7 +9,7 @@
 # which should have been included with this file.  If this file is
 # missing or damaged, see the license at:
 #
-#     http://www.msweet.org/projects.php/Mini-XML
+#     https://michaelrsweet.github.io/mxml
 #
 
 #
@@ -57,7 +55,7 @@ BUILDROOT	=	$(DSTROOT)
 # Install commands...
 #
 
-INSTALL_BIN	=	$(LIBTOOL) $(INSTALL) -m 755 -s
+INSTALL_BIN	=	$(LIBTOOL) $(INSTALL) -m 755
 INSTALL_DATA	=	$(INSTALL) -m 644
 INSTALL_DIR	=	$(INSTALL) -d
 INSTALL_LIB	=	$(LIBTOOL) $(INSTALL) -m 755
@@ -80,22 +78,21 @@ INSTALL_SCRIPT	=	$(INSTALL) -m 755
 # Targets...
 #
 
-DOCFILES	=	doc/0.gif doc/1.gif doc/2.gif doc/3.gif doc/4.gif \
-			doc/A.gif doc/B.gif doc/C.gif doc/D.gif \
-			doc/mxml.html doc/mxmldoc.xsd \
-			README COPYING CHANGES
+DOCFILES	=	doc/mxml.html doc/mxmldoc.xsd README.md COPYING CHANGES.md
 PUBLIBOBJS	=	mxml-attr.o mxml-entity.o mxml-file.o mxml-get.o \
 			mxml-index.o mxml-node.o mxml-search.o mxml-set.o
 LIBOBJS		=	$(PUBLIBOBJS) mxml-private.o mxml-string.o
-OBJS		=	mxmldoc.o testmxml.o $(LIBOBJS)
-TARGETS		=	$(LIBMXML) mxmldoc testmxml mxml.xml doc/mxml.man
+OBJS		=	mmd.o mxmldoc.o testmxml.o zipc.o $(LIBOBJS)
+ALLTARGETS	=	$(LIBMXML) mxmldoc testmxml mxml.xml @MXML_EPUB@
+CROSSTARGETS	=	$(LIBMXML) mxmldoc
+TARGETS		=	$(@TARGETS@)
 
 
 #
 # Make everything...
 #
 
-all:		Makefile config.h $(TARGETS)
+all:		$(TARGETS)
 
 
 #
@@ -104,8 +101,13 @@ all:		Makefile config.h $(TARGETS)
 
 clean:
 	echo Cleaning build files...
-	$(RM) $(OBJS) $(TARGETS)
-	$(RM) mxmldoc-static libmxml.a libmxml.so.1.5 libmxml.sl.1 libmxml.1.dylib
+	$(RM) $(OBJS) $(ALLTARGETS)
+	$(RM) mxmldoc-static
+	$(RM) mxml1.dll
+	$(RM) libmxml.a
+	$(RM) libmxml.so.1.6
+	$(RM) libmxml.sl.1
+	$(RM) libmxml.1.dylib
 
 
 #
@@ -146,7 +148,7 @@ install:	$(TARGETS) install-$(LIBMXML) install-libmxml.a
 	echo Installing documentation in $(BUILDROOT)$(docdir)...
 	$(INSTALL_DIR) $(BUILDROOT)$(docdir)
 	for file in $(DOCFILES); do \
-		$(INSTALL_MAN) $$file $(BUILDROOT)$(docdir); \
+		$(INSTALL_MAN) $$file $(BUILDROOT)$(docdir)/`basename $$file .md`; \
 	done
 	echo Installing header files in $(BUILDROOT)$(includedir)...
 	$(INSTALL_DIR) $(BUILDROOT)$(includedir)
@@ -166,14 +168,14 @@ install-libmxml.a:
 	$(INSTALL_LIB) libmxml.a $(BUILDROOT)$(libdir)
 	$(RANLIB) $(BUILDROOT)$(libdir)/libmxml.a
 
-install-libmxml.so.1.5:
+install-libmxml.so.1.6:
 	echo Installing libmxml.so to $(BUILDROOT)$(libdir)...
 	$(INSTALL_DIR) $(BUILDROOT)$(libdir)
-	$(INSTALL_LIB) libmxml.so.1.5 $(BUILDROOT)$(libdir)
+	$(INSTALL_LIB) libmxml.so.1.6 $(BUILDROOT)$(libdir)
 	$(RM) $(BUILDROOT)$(libdir)/libmxml.so
-	$(LN) libmxml.so.1.5 $(BUILDROOT)$(libdir)/libmxml.so
+	$(LN) libmxml.so.1.6 $(BUILDROOT)$(libdir)/libmxml.so
 	$(RM) $(BUILDROOT)$(libdir)/libmxml.so.1
-	$(LN) libmxml.so.1.5 $(BUILDROOT)$(libdir)/libmxml.so.1
+	$(LN) libmxml.so.1.6 $(BUILDROOT)$(libdir)/libmxml.so.1
 
 install-libmxml.sl.1:
 	echo Installing libmxml.sl to $(BUILDROOT)$(libdir)...
@@ -211,7 +213,7 @@ uninstall-libmxml.a:
 	echo Uninstalling libmxml.a from $(BUILDROOT)$(libdir)...
 	$(RM) $(BUILDROOT)$(libdir)/libmxml.a
 
-uninstall-libmxml.so.1.5:
+uninstall-libmxml.so.1.6:
 	echo Uninstalling libmxml.so from $(BUILDROOT)$(libdir)...
 	$(RM) $(BUILDROOT)$(libdir)/libmxml.so
 	$(RM) $(BUILDROOT)$(libdir)/libmxml.so.1
@@ -226,43 +228,6 @@ uninstall-libmxml.1.dylib:
 	echo Uninstalling libmxml.dylib from $(BUILDROOT)$(libdir)...
 	$(RM) $(BUILDROOT)$(libdir)/libmxml.dylib
 	$(RM) $(BUILDROOT)$(libdir)/libmxml.1.dylib
-
-
-#
-# Make packages using EPM (http://www.epmhome.org/)
-#
-
-epm:	all
-	echo Creating distribution packages...
-	epm --output-dir dist -v -f native mxml
-	epm --output-dir dist -v -f portable mxml
-
-
-#
-# autoconf stuff...
-#
-
-Makefile:	configure Makefile.in
-	echo Updating makefile...
-	if test -f config.status; then \
-		./config.status --recheck; \
-		./config.status; \
-	else \
-		./configure; \
-	fi
-	touch config.h
-
-
-config.h:	configure config.h.in
-	echo Updating config.h...
-	autoconf
-	if test -f config.status; then \
-		./config.status --recheck; \
-		./config.status; \
-	else \
-		./configure; \
-	fi
-	touch config.h
 
 
 #
@@ -292,15 +257,24 @@ mxml-entity.o mxml-file.o mxml-private.o: mxml-private.h
 
 
 #
-# libmxml.so.1.5
+# mxml1.dll
 #
 
-libmxml.so.1.5:	$(LIBOBJS)
+mxml1.dll:	$(LIBOBJS)
 	echo Creating $@...
-	$(DSO) $(DSOFLAGS) -o libmxml.so.1.5 $(LIBOBJS)
+	$(DSO) $(DSOFLAGS) -o $@ $(LIBOBJS)
+
+
+#
+# libmxml.so.1.6
+#
+
+libmxml.so.1.6:	$(LIBOBJS)
+	echo Creating $@...
+	$(DSO) $(DSOFLAGS) -o libmxml.so.1.6 $(LIBOBJS)
 	$(RM) libmxml.so libmxml.so.1
-	$(LN) libmxml.so.1.5 libmxml.so
-	$(LN) libmxml.so.1.5 libmxml.so.1
+	$(LN) libmxml.so.1.6 libmxml.so
+	$(LN) libmxml.so.1.6 libmxml.so.1
 
 
 #
@@ -322,7 +296,7 @@ libmxml.1.dylib:	$(LIBOBJS)
 	echo Creating $@...
 	$(DSO) $(DSOFLAGS) -o libmxml.1.dylib \
 		-install_name $(libdir)/libmxml.dylib \
-		-current_version 1.5.0 \
+		-current_version 1.6.0 \
 		-compatibility_version 1.0.0 \
 		$(LIBOBJS)
 	$(RM) libmxml.dylib
@@ -333,15 +307,17 @@ libmxml.1.dylib:	$(LIBOBJS)
 # mxmldoc
 #
 
-mxmldoc:	$(LIBMXML) mxmldoc.o
+mxmldoc:	$(LIBMXML) mxmldoc.o mmd.o @ZIPC@
 	echo Linking $@...
-	$(CC) -L. $(LDFLAGS) -o $@ mxmldoc.o -lmxml $(LIBS)
+	$(CC) -L. $(LDFLAGS) -o $@ mxmldoc.o mmd.o @ZIPC@ -lmxml $(LIBS)
 
-mxmldoc-static:	libmxml.a mxmldoc.o
+mxmldoc-static:	libmxml.a mxmldoc.o mmd.o @ZIPC@
 	echo Linking $@...
-	$(CC) $(LDFLAGS) -o $@ mxmldoc.o libmxml.a $(LIBS)
+	$(CC) $(LDFLAGS) -o $@ mxmldoc.o mmd.o @ZIPC@ libmxml.a $(LIBS)
 
-mxmldoc.o:	mxml.h
+mxmldoc.o:	mxml.h zipc.h mmd.h
+zipc.o:		zipc.h
+mmd.o:		mmd.h
 
 
 #
@@ -384,23 +360,49 @@ testmxml.o:	mxml.h
 # mxml.xml
 #
 
-mxml.xml:	mxmldoc-static mxml.h $(PUBLIBOBJS:.o=.c)
+mxml.xml:	mxmldoc-static mxml.h $(PUBLIBOBJS:.o=.c) \
+		doc/body.man doc/body.md \
+		doc/docset.css doc/docset.header \
+		doc/reference.header
 	echo Generating API documentation...
 	$(RM) mxml.xml
-	./mxmldoc-static --header doc/reference.heading mxml.xml mxml.h $(PUBLIBOBJS:.o=.c) >doc/reference.html
+	./mxmldoc-static --header doc/reference.header \
+		--docversion @VERSION@ --author "Michael R Sweet" \
+		--copyright "Copyright 2003-2017, All Rights Reserved." \
+		--title "Mini-XML API Reference" \
+		mxml.xml mxml.h $(PUBLIBOBJS:.o=.c) >doc/reference.html
+	./mxmldoc-static --man mxml --title "Mini-XML API" \
+		--body doc/body.man --footer doc/footer.man \
+		mxml.xml >doc/mxml.man
 	if test "x`uname`" = xDarwin; then \
-		./mxmldoc-static --docset org.minixml.docset \
-			--docversion @VERSION@ --feedname minixml.org \
-			--feedurl http://www.minixml.org/org.minixml.atom \
-			--header doc/docset.header --intro doc/docset.intro \
-			--css doc/docset.css --title "Mini-XML API Reference" \
+		./mxmldoc-static --docset org.msweet.mxml.docset \
+			--docversion @VERSION@ --feedname org.msweet.mxml \
+			--feedurl https://michaelrsweet.github.io/mxml/org.msweet.mxml.atom \
+			--header doc/docset.header --body doc/body.md \
+			--css doc/docset.css \
 			mxml.xml || exit 1; \
-		$(RM) org.minixml.atom; \
-		xcrun docsetutil package --output org.minixml.xar \
-			--atom org.minixml.atom \
-			--download-url http://www.minixml.org/org.minixml.xar \
-			org.minixml.docset || exit 1; \
+		$(RM) org.msweet.mxml.atom; \
+		xcrun docsetutil package --output org.msweet.mxml.xar \
+			--atom org.msweet.mxml.atom \
+			--download-url https://michaelrsweet.github.io/mxml/org.msweet.mxml.xar \
+			org.msweet.mxml.docset || exit 1; \
 	fi
+
+
+#
+# mxml.epub
+#
+
+mxml.epub:	mxml.xml doc/body.md doc/mxml-cover.png
+	echo Generating EPUB API documentation...
+	./mxmldoc-static --body doc/body.md \
+		--coverimage doc/mxml-cover.png \
+		--epub mxml.epub mxml.xml
+
+
+#
+# Use Valgrind (http://valgrind.org) to check for problems in mxmldoc.
+#
 
 valgrind:	mxmldoc-static
 	echo Doing dynamic code analysis using Valgrind...
@@ -411,24 +413,7 @@ valgrind:	mxmldoc-static
 
 
 #
-# doc/mxml.man
-#
-
-doc/mxml.man: mxmldoc-static mxml.xml
-	echo "Generating mxml(3) man page..."
-	$(RM) doc/mxml.man
-	./mxmldoc-static --man mxml --title "Mini-XML API" \
-		--intro doc/intro.man --footer doc/footer.man \
-		mxml.xml >doc/mxml.man
-
-
-#
-# All object files depend on the makefile...
+# All object files depend on the makefile and config header...
 #
 
 $(OBJS):	Makefile config.h
-
-
-#
-# End of "$Id: Makefile.in 459 2014-10-19 17:21:48Z msweet $".
-#
