@@ -1,5 +1,6 @@
 2018.047:
 	- Update mini-XML library to 2.11.
+	- Update pcre library to 8.41.
 
 2018.046:
 	- Decode percent-encoded URLs.
