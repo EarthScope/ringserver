@@ -26,6 +26,7 @@
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
 #define _GNU_SOURCE
 
+#include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
 #include <sys/stat.h>
@@ -40,7 +41,7 @@
 #include "ringserver.h"
 #include "slclient.h"
 
-#define MIN(X,Y) (X < Y) ? X : Y
+#define MIN(X, Y) (X < Y) ? X : Y
 
 static int ParseHeader (char *header, char **value);
 static int GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path);
@@ -52,7 +53,57 @@ static int NegotiateWebSocket (ClientInfo *cinfo, char *version,
                                char *secWebSocketKeyHeader, char *secWebSocketVersionHeader,
                                char *secWebSocketProtocolHeader);
 static int apr_base64_encode_binary (char *encoded, const unsigned char *string, int len);
-static int sha1digest(uint8_t *digest, char *hexdigest, const uint8_t *data, size_t databytes);
+static int sha1digest (uint8_t *digest, char *hexdigest, const uint8_t *data, size_t databytes);
+
+/***************************************************************************
+ * urldecode:
+ *
+ * Decode percent-encoded portions of URL.  The same buffer can be
+ * used for input (src) and output (dst) as the decoded string is
+ * always smaller.
+ *
+ * This function is from: https://stackoverflow.com/a/14530993
+ ***************************************************************************/
+void
+urldecode (char *dst, const char *src)
+{
+  char a;
+  char b;
+
+  while (*src)
+  {
+    if ((*src == '%') &&
+        ((a = src[1]) && (b = src[2])) &&
+        (isxdigit (a) && isxdigit (b)))
+    {
+      if (a >= 'a')
+        a -= 'a' - 'A';
+      if (a >= 'A')
+        a -= ('A' - 10);
+      else
+        a -= '0';
+      if (b >= 'a')
+        b -= 'a' - 'A';
+      if (b >= 'A')
+        b -= ('A' - 10);
+      else
+        b -= '0';
+      *dst++ = 16 * a + b;
+      src += 3;
+    }
+    else if (*src == '+')
+    {
+      *dst++ = ' ';
+      src++;
+    }
+    else
+    {
+      *dst++ = *src++;
+    }
+  }
+
+  *dst++ = '\0';
+} /* End of urldecode() */
 
 /***************************************************************************
  * HandleHTTP:
@@ -95,6 +146,9 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
   char *value = NULL;
   int responsebytes;
 
+  /* Decode percent-encoding in URL */
+  urldecode (recvbuffer, recvbuffer);
+
   /* Parse HTTP request */
   memset (method, 0, sizeof (method));
   memset (path, 0, sizeof (path));
@@ -124,7 +178,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     if (headlen > 0)
     {
-      SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
+      SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
     }
     else
     {
@@ -207,7 +261,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     {
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
-                       (size_t[]){MIN(headlen,cinfo->sendbuflen), (response) ? responsebytes : 0},
+                       (size_t[]){MIN (headlen, cinfo->sendbuflen), (response) ? responsebytes : 0},
                        2);
     }
     else
@@ -250,7 +304,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     {
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
-                       (size_t[]){MIN(headlen,cinfo->sendbuflen), (response) ? responsebytes : 0},
+                       (size_t[]){MIN (headlen, cinfo->sendbuflen), (response) ? responsebytes : 0},
                        2);
     }
     else
@@ -280,7 +334,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                           "\r\n",
                           (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
-      rv = SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
+      rv = SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
 
       return (rv) ? -1 : 1;
     }
@@ -312,7 +366,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     {
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
-                       (size_t[]){MIN(headlen,cinfo->sendbuflen), (response) ? responsebytes : 0},
+                       (size_t[]){MIN (headlen, cinfo->sendbuflen), (response) ? responsebytes : 0},
                        2);
     }
     else
@@ -342,7 +396,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                           "\r\n",
                           (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
-      rv = SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
+      rv = SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
 
       return (rv) ? -1 : 1;
     }
@@ -374,7 +428,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     {
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
-                       (size_t[]){MIN(headlen,cinfo->sendbuflen), (response) ? responsebytes : 0},
+                       (size_t[]){MIN (headlen, cinfo->sendbuflen), (response) ? responsebytes : 0},
                        2);
     }
     else
@@ -405,7 +459,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
+        SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
       }
       else
       {
@@ -419,7 +473,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     if (*secWebSocketProtocolHeader)
     {
       if (strstr (secWebSocketProtocolHeader, "SeedLink3.1"))
-        snprintf (secWebSocketProtocolHeader, sizeof(secWebSocketProtocolHeader),
+        snprintf (secWebSocketProtocolHeader, sizeof (secWebSocketProtocolHeader),
                   "SeedLink3.1");
       else
         *secWebSocketProtocolHeader = '\0';
@@ -454,8 +508,8 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                           (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
       if (headlen > 0)
-       {
-        SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
+      {
+        SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
       }
       else
       {
@@ -469,7 +523,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     if (*secWebSocketProtocolHeader)
     {
       if (strstr (secWebSocketProtocolHeader, "DataLink1.0"))
-        snprintf (secWebSocketProtocolHeader, sizeof(secWebSocketProtocolHeader),
+        snprintf (secWebSocketProtocolHeader, sizeof (secWebSocketProtocolHeader),
                   "DataLink1.0");
       else
         *secWebSocketProtocolHeader = '\0';
@@ -843,11 +897,12 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
                             "HTTP/1.1 400 Invalid match expression\r\n"
                             "Connection: close\r\n"
                             "\r\n"
-                            "Invalid match expression: '%s'", matchstr);
+                            "Invalid match expression: '%s'",
+                            matchstr);
 
         if (headlen > 0)
         {
-          SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
+          SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
         }
         else
         {
@@ -873,11 +928,12 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
                           "HTTP/1.1 400 Unsupported value for level: %d\r\n"
                           "Connection: close\r\n"
                           "\r\n"
-                          "Unsupported value for level: %d", level, level);
+                          "Unsupported value for level: %d",
+                          level, level);
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
+        SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
       }
       else
       {
@@ -906,7 +962,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
     streamlistsize = (level) ? 61 : 120;
     streamlistsize *= streamcount;
 
-    if (!(*streamlist = (char *)malloc(streamlistsize)))
+    if (!(*streamlist = (char *)malloc (streamlistsize)))
     {
       lprintf (0, "[%s] Error for HTTP STREAMS (cannot allocate response buffer of size %zu)",
                cinfo->hostname, streamlistsize);
@@ -918,11 +974,12 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
                           "HTTP/1.1 500 Internal error, cannot allocate response buffer\r\n"
                           "Connection: close\r\n"
                           "\r\n"
-                          "Cannot allocate response buffer of %zu bytes", streamlistsize);
+                          "Cannot allocate response buffer of %zu bytes",
+                          streamlistsize);
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
+        SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
       }
       else
       {
@@ -950,22 +1007,22 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
         }
 
         if (level >= 6 && splitcount >= 6)
-          snprintf (levelstream, sizeof(levelstream),
+          snprintf (levelstream, sizeof (levelstream),
                     "%s%c%s%c%s%c%s%c%s%c%s\n", id1, delim, id2, delim, id3, delim, id4, delim, id5, delim, id6);
         else if (level >= 5 && splitcount >= 5)
-          snprintf (levelstream, sizeof(levelstream),
+          snprintf (levelstream, sizeof (levelstream),
                     "%s%c%s%c%s%c%s%c%s\n", id1, delim, id2, delim, id3, delim, id4, delim, id5);
         else if (level >= 4 && splitcount >= 4)
-          snprintf (levelstream, sizeof(levelstream),
+          snprintf (levelstream, sizeof (levelstream),
                     "%s%c%s%c%s%c%s\n", id1, delim, id2, delim, id3, delim, id4);
         else if (level >= 3 && splitcount >= 3)
-          snprintf (levelstream, sizeof(levelstream),
+          snprintf (levelstream, sizeof (levelstream),
                     "%s%c%s%c%s\n", id1, delim, id2, delim, id3);
         else if (level >= 2 && splitcount >= 2)
-          snprintf (levelstream, sizeof(levelstream),
+          snprintf (levelstream, sizeof (levelstream),
                     "%s%c%s\n", id1, delim, id2);
         else if (level >= 1 && splitcount >= 1)
-          snprintf (levelstream, sizeof(levelstream),
+          snprintf (levelstream, sizeof (levelstream),
                     "%s\n", id1);
 
         /* Determine if this level of stream information has been included yet by comparing
@@ -1020,7 +1077,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
 
         if (headlen > 0)
         {
-          SendData (cinfo, cinfo->sendbuf, MIN(headlen,cinfo->sendbuflen));
+          SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
         }
         else
         {
@@ -1658,7 +1715,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   /* Generate subprotocol header if provided */
   if (secWebSocketProtocolHeader && *secWebSocketProtocolHeader)
   {
-    snprintf (subprotocolheader, sizeof(subprotocolheader),
+    snprintf (subprotocolheader, sizeof (subprotocolheader),
               "Sec-WebSocket-Protocol: %s\r\n", secWebSocketProtocolHeader);
   }
 

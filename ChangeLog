@@ -1,4 +1,5 @@
 2018.046:
+	- Decode percent-encoded URLs.
 	- Append 'Z' to earliest and latest times in HTTP streams output.
 
 2018.044:
