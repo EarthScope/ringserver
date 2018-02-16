@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2018/02/13
+.TH RINGSERVER 1 2018/02/16
 .SH NAME
 ringserver \- Generic packet ring buffer
 
@@ -249,10 +249,11 @@ implementation is limited to returning existing files and returning
 The following fixed resources are supported:
 
 .nf
-  \fB/id\fP           - Return server identification
-  \fB/streams\fP      - Return list of available streams
-  \fB/status\fP       - Return server status, limited access*
-  \fB/connections\fP  - Return list of connections, limited access*
+  \fB/id\fP           - Server identification
+  \fB/streams\fP      - List of available streams with time range
+  \fB/streamids\fP    - List of available streams, variable levels
+  \fB/status\fP       - Server status, limited access*
+  \fB/connections\fP  - List of connections, limited access*
   \fB/seedlink\fP     - Initiate WebSocket connection for Seedlink
   \fB/datalink\fP     - Initiate WebSocket connection for DataLink
 .fi
@@ -260,11 +261,12 @@ The following fixed resources are supported:
 Access to the \fBstatus\fP and \fBconnections\fP information is
 limited to clients that have trusted permission.
 
-The \fBstreams\fP and \fBconnections\fP endpoints accept a \fImatch\fP
-parameter that is a pattern used to limit the returned information.
-For example: http://localhost/streams?match=IU_ANMO
+The \fBstreams\fP, \fBstreamids\fP and \fBconnections\fP endpoints
+accept a \fImatch\fP parameter that is a pattern used to limit the
+returned information.  For example:
+http://localhost/streams?match=IU_ANMO
 
-The \fBstreams\fP endpoint accepts a \fIlevel\fP parameter that limits
+The \fBstreamids\fP endpoint accepts a \fIlevel\fP parameter that limits
 the returned information to a unique list of stream identifiers at the
 specified level.  Valid values are 1 through 6.  Identifier components
 should be delimited with underscore characters.  To illustrate, if a

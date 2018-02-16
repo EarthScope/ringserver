@@ -1,6 +1,9 @@
 2018.047:
 	- Update mini-XML library to 2.11.
 	- Update pcre library to 8.41.
+	- Add /streamids endpoint to HTTP support to return a list of streams.
+	This is similar to the /streams endpoint but without the time extents.
+	The /streamids endpoint is consistent, always and only a list of streams.
 
 2018.046:
 	- Decode percent-encoded URLs.

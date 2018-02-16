@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2018.046
+ * Modified: 2018.047
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -44,7 +44,7 @@
 #define MIN(X, Y) (X < Y) ? X : Y
 
 static int ParseHeader (char *header, char **value);
-static int GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path);
+static int GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int timeextents);
 static int GenerateStatus (ClientInfo *cinfo, char **status);
 static int GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path);
 static int SendFileHTTP (ClientInfo *cinfo, char *path);
@@ -275,11 +275,16 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     return (rv) ? -1 : 0;
   } /* Done with /id request */
-  else if (!strncasecmp (path, "/streams", 8))
+  else if (!strncasecmp (path, "/streams", 8) ||
+           !strncasecmp (path, "/streamids", 10))
   {
-    lprintf (1, "[%s] Received HTTP STREAMS request", cinfo->hostname);
+    lprintf (1, "[%s] Received HTTP STREAM[ID]S request", cinfo->hostname);
 
-    responsebytes = GenerateStreams (cinfo, &response, path);
+    /* Generate stream list with or without time extents for /streams versus /streamids */
+    if (!strncasecmp (path, "/streams", 8))
+      responsebytes = GenerateStreams (cinfo, &response, path, 1);
+    else
+      responsebytes = GenerateStreams (cinfo, &response, path, 0);
 
     if (responsebytes < 0)
     {
@@ -317,7 +322,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       free (response);
 
     return (rv) ? -1 : 0;
-  } /* Done with /streams request */
+  } /* Done with /streams or /streamids request */
   else if (!strcasecmp (path, "/status"))
   {
     /* Check for trusted flag, required to access this resource */
@@ -839,13 +844,16 @@ ParseHeader (char *header, char **value)
  * Generate stream list and place into buffer, which will be allocated
  * to the length needed and should be free'd by the caller.
  *
+ * If 'timeextents' is true the earliest and latest times will be
+ * included in the output.  For now this only works when level > 0.
+ *
  * Check for 'match' parameter in 'path' and use value as a regular
  * expression to match against stream identifiers.
  *
  * Returns length of stream list response in bytes on success and -1 on error.
  ***************************************************************************/
 static int
-GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
+GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int timeextents)
 {
   Stack *streams;
   StackNode *streamnode;
@@ -921,7 +929,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
 
     level = strtoul (cp, NULL, 10);
 
-    if (level < 1 || level > 6)
+    if (level > 6)
     {
       /* Create and send error response */
       headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
@@ -1042,13 +1050,19 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
         }
       }
       /* Otherwise include the full stream ID and the earliest and latest data times */
-      else
+      else if (timeextents)
       {
         ms_hptime2isotimestr (ringstream->earliestdstime, earliest, 1);
         ms_hptime2isotimestr (ringstream->latestdetime, latest, 1);
 
         snprintf (streaminfo, sizeof (streaminfo), "%s  %sZ  %sZ\n",
                   ringstream->streamid, earliest, latest);
+        streaminfo[sizeof (streaminfo) - 1] = '\0';
+      }
+      /* Otherwise include the full stream ID */
+      else
+      {
+        snprintf (streaminfo, sizeof (streaminfo), "%s\n", ringstream->streamid);
         streaminfo[sizeof (streaminfo) - 1] = '\0';
       }
 
