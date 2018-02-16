@@ -558,15 +558,18 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     }
     else
     {
-      response =
-          "HTTP/1.1 404 Not Found\r\n"
-          "Connection: close\r\n"
-          "\r\n"
-          "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">"
-          "<html><head><title>404 Not Found</title></head>"
-          "<body><h1>Not Found</h1></body></html>";
+      /* Create header */
+      headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
+                          "HTTP/1.1 404 Not Found\r\n"
+                          "Connection: close\r\n"
+                          "%s"
+                          "\r\n"
+                          "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">"
+                          "<html><head><title>404 Not Found</title></head>"
+                          "<body><h1>Not Found</h1></body></html>",
+                          (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
-      rv = SendData (cinfo, response, strlen (response));
+      rv = SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
 
       return (rv) ? -1 : 1;
     }
@@ -904,8 +907,10 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int timeexten
         headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
                             "HTTP/1.1 400 Invalid match expression\r\n"
                             "Connection: close\r\n"
+                            "%s"
                             "\r\n"
                             "Invalid match expression: '%s'",
+                            (cinfo->httpheaders) ? cinfo->httpheaders : "",
                             matchstr);
 
         if (headlen > 0)
@@ -935,9 +940,12 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int timeexten
       headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
                           "HTTP/1.1 400 Unsupported value for level: %d\r\n"
                           "Connection: close\r\n"
+                          "%s"
                           "\r\n"
                           "Unsupported value for level: %d",
-                          level, level);
+                          level,
+                          (cinfo->httpheaders) ? cinfo->httpheaders : "",
+                          level);
 
       if (headlen > 0)
       {
@@ -981,8 +989,10 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int timeexten
       headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
                           "HTTP/1.1 500 Internal error, cannot allocate response buffer\r\n"
                           "Connection: close\r\n"
+                          "%s"
                           "\r\n"
                           "Cannot allocate response buffer of %zu bytes",
+                          (cinfo->httpheaders) ? cinfo->httpheaders : "",
                           streamlistsize);
 
       if (headlen > 0)
@@ -1085,9 +1095,12 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int timeexten
         headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
                             "HTTP/1.1 500 Internal error, stream list buffer too small\r\n"
                             "Connection: close\r\n"
+                            "%s"
                             "\r\n"
                             "Stream list buffer too small: %zu bytes for %d streams",
-                            streamlistsize, streamcount);
+                            (cinfo->httpheaders) ? cinfo->httpheaders : "",
+                            streamlistsize,
+                            streamcount);
 
         if (headlen > 0)
         {
@@ -1535,12 +1548,15 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   }
 
   /* Create header */
-  rv = asprintf (&response, "HTTP/1.1 200\r\n"
-                            "Content-Length: %llu\r\n"
-                            "Content-Type: %s\n"
-                            "\r\n",
+  rv = asprintf (&response,
+                 "HTTP/1.1 200\r\n"
+                 "Content-Length: %llu\r\n"
+                 "Content-Type: %s\n"
+                 "%s"
+                 "\r\n",
                  (long long unsigned int)filestat.st_size,
-                 contenttype);
+                 contenttype,
+                 (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
   if (rv < 0)
   {
@@ -1605,9 +1621,11 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   {
     asprintf (&response,
               "HTTP/1.1 400 Protocol Version Must Be 1.1 For WebSocket\r\n"
+              "%s"
               "\r\n"
               "HTTP Version Must Be 1.1 For WebSocket\n"
               "Received: '%s'\n",
+              (cinfo->httpheaders) ? cinfo->httpheaders : "",
               (version) ? version : "");
 
     if (response)
@@ -1627,9 +1645,11 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   {
     asprintf (&response,
               "HTTP/1.1 400 Upgrade Header Not Recognized\r\n"
+              "%s"
               "\r\n"
               "The Upgrade header value must be 'websocket'\n"
               "Received: '%s'\n",
+              (cinfo->httpheaders) ? cinfo->httpheaders : "",
               (upgradeHeader) ? upgradeHeader : "");
 
     if (response)
@@ -1649,9 +1669,11 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   {
     asprintf (&response,
               "HTTP/1.1 400 Connection Header Not Recognized\r\n"
+              "%s"
               "\r\n"
               "The Connection header value must be 'Upgrade'\n"
               "Received: '%s'\n",
+              (cinfo->httpheaders) ? cinfo->httpheaders : "",
               (connectionHeader) ? connectionHeader : "");
 
     if (response)
@@ -1671,9 +1693,11 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   {
     asprintf (&response,
               "HTTP/1.1 400 Sec-WebSocket-Version Must Be 13\r\n"
+              "%s"
               "\r\n"
               "The Sec-WebSocket-Key header is required\n"
               "Received: '%s'\n",
+              (cinfo->httpheaders) ? cinfo->httpheaders : "",
               (secWebSocketVersionHeader) ? secWebSocketVersionHeader : "");
 
     if (response)
@@ -1693,8 +1717,10 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   {
     asprintf (&response,
               "HTTP/1.1 400 Sec-WebSocket-Key Header Must Be Present\r\n"
+              "%s"
               "\r\n"
-              "The Sec-WebSocket-Key header is required\n");
+              "The Sec-WebSocket-Key header is required\n",
+              (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
     if (response)
     {
@@ -1739,9 +1765,12 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
             "Upgrade: websocket\r\n"
             "Connection: Upgrade\r\n"
             "%s"
+            "%s"
             "Sec-WebSocket-Accept: %s\r\n"
             "\r\n",
-            subprotocolheader, keybuf);
+            (cinfo->httpheaders) ? cinfo->httpheaders : "",
+            subprotocolheader,
+            keybuf);
 
   if (response)
   {
