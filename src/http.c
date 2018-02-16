@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2018.044
+ * Modified: 2018.046
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -990,7 +990,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path)
         ms_hptime2isotimestr (ringstream->earliestdstime, earliest, 1);
         ms_hptime2isotimestr (ringstream->latestdetime, latest, 1);
 
-        snprintf (streaminfo, sizeof (streaminfo), "%s  %s  %s\n",
+        snprintf (streaminfo, sizeof (streaminfo), "%s  %sZ  %sZ\n",
                   ringstream->streamid, earliest, latest);
         streaminfo[sizeof (streaminfo) - 1] = '\0';
       }

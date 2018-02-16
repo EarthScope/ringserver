@@ -1,3 +1,6 @@
+2018.046:
+	- Append 'Z' to earliest and latest times in HTTP streams output.
+
 2018.044:
 	- Add HTTPHeader config file parameter that specifies custom HTTP headers
 	that will be added to HTTP responses.
