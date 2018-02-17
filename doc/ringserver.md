@@ -173,19 +173,20 @@ ringserver [options] [configfile]
 <p >The following fixed resources are supported:</p>
 
 <pre >
-  <b>/id</b>           - Return server identification
-  <b>/streams</b>      - Return list of available streams
-  <b>/status</b>       - Return server status, limited access*
-  <b>/connections</b>  - Return list of connections, limited access*
+  <b>/id</b>           - Server identification
+  <b>/streams</b>      - List of available streams with time range
+  <b>/streamids</b>    - List of available streams, variable levels
+  <b>/status</b>       - Server status, limited access*
+  <b>/connections</b>  - List of connections, limited access*
   <b>/seedlink</b>     - Initiate WebSocket connection for Seedlink
   <b>/datalink</b>     - Initiate WebSocket connection for DataLink
 </pre>
 
 <p >Access to the <b>status</b> and <b>connections</b> information is limited to clients that have trusted permission.</p>
 
-<p >The <b>streams</b> and <b>connections</b> endpoints accept a <i>match</i> parameter that is a pattern used to limit the returned information. For example: http://localhost/streams?match=IU_ANMO</p>
+<p >The <b>streams</b>, <b>streamids</b> and <b>connections</b> endpoints accept a <i>match</i> parameter that is a pattern used to limit the returned information.  For example: http://localhost/streams?match=IU_ANMO</p>
 
-<p >The <b>streams</b> endpoint accepts a <i>level</i> parameter that limits the returned information to a unique list of stream identifiers at the specified level.  Valid values are 1 through 6.  Identifier components should be delimited with underscore characters.  To illustrate, if a ringserver contains stream IDs in the pattern of "NET_STA_LOC_CHAN/MSEED" a request for level 2 returns a unique list of "NET_STA" values.  For example: http://localhost/streams?level=2.</p>
+<p >The <b>streamids</b> endpoint accepts a <i>level</i> parameter that limits the returned information to a unique list of stream identifiers at the specified level.  Valid values are 1 through 6.  Identifier components should be delimited with underscore characters.  To illustrate, if a ringserver contains stream IDs in the pattern of "NET_STA_LOC_CHAN/MSEED" a request for level 2 returns a unique list of "NET_STA" values.  For example: http://localhost/streams?level=2.</p>
 
 <p >After a WebSocket connection has been initiated with either the <b>seedlink</b> or <b>datalink</b> end points, the requested protocol is supported exactly as it would be normally with the addition of WebSocket framing.  Each server command should be contained in a single WebSocket frame, independent of other commands.</p>
 
@@ -300,4 +301,4 @@ IRIS Data Management Center
 </pre>
 
 
-(man page 2018/02/13)
+(man page 2018/02/16)
