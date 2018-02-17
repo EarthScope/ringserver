@@ -37,7 +37,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2016.356
+ * Modified: 2018.047
  **************************************************************************/
 
 /* Unsupported protocol features:
@@ -879,10 +879,22 @@ HandleNegotiation (ClientInfo *cinfo)
 
       if ((starttime = ms_timestr2hptime (starttimestr)) == HPTERROR)
       {
-        lprintf (0, "[%s] Error parsing start time in TIME: %s",
+        lprintf (0, "[%s] Error parsing start time for TIME: %s",
                  cinfo->hostname, starttimestr);
 
         if (!slinfo->batch && SendReply (cinfo, "ERROR", "Error parsing start time"))
+          return -1;
+
+        OKGO = 0;
+      }
+
+      /* Sanity check for future start time */
+      if ((time_t)MS_HPTIME2EPOCH(starttime) > time(NULL))
+      {
+        lprintf (0, "[%s] Start cannot be in future for TIME: %s",
+                 cinfo->hostname, starttimestr);
+
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", "Start time cannot be in the future"))
           return -1;
 
         OKGO = 0;
@@ -898,7 +910,7 @@ HandleNegotiation (ClientInfo *cinfo)
 
       if ((endtime = ms_timestr2hptime (endtimestr)) == HPTERROR)
       {
-        lprintf (0, "[%s] Error parsing end time in TIME: %s",
+        lprintf (0, "[%s] Error parsing end time for TIME: %s",
                  cinfo->hostname, endtimestr);
 
         if (!slinfo->batch && SendReply (cinfo, "ERROR", "Error parsing end time"))
