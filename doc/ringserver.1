@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2018/02/16
+.TH RINGSERVER 1 2018/02/20
 .SH NAME
 ringserver \- Generic packet ring buffer
 
@@ -270,9 +270,9 @@ The \fBstreamids\fP endpoint accepts a \fIlevel\fP parameter that limits
 the returned information to a unique list of stream identifiers at the
 specified level.  Valid values are 1 through 6.  Identifier components
 should be delimited with underscore characters.  To illustrate, if a
-ringserver contains stream IDs in the pattern of
+ringserver contains streams in the pattern of
 "NET_STA_LOC_CHAN/MSEED" a request for level 2 returns a unique list
-of "NET_STA" values.  For example: http://localhost/streams?level=2.
+of "NET_STA" values.  For example: http://localhost/streamids?level=2.
 
 After a WebSocket connection has been initiated with either the
 \fBseedlink\fP or \fBdatalink\fP end points, the requested protocol is

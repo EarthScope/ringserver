@@ -186,7 +186,7 @@ ringserver [options] [configfile]
 
 <p >The <b>streams</b>, <b>streamids</b> and <b>connections</b> endpoints accept a <i>match</i> parameter that is a pattern used to limit the returned information.  For example: http://localhost/streams?match=IU_ANMO</p>
 
-<p >The <b>streamids</b> endpoint accepts a <i>level</i> parameter that limits the returned information to a unique list of stream identifiers at the specified level.  Valid values are 1 through 6.  Identifier components should be delimited with underscore characters.  To illustrate, if a ringserver contains stream IDs in the pattern of "NET_STA_LOC_CHAN/MSEED" a request for level 2 returns a unique list of "NET_STA" values.  For example: http://localhost/streams?level=2.</p>
+<p >The <b>streamids</b> endpoint accepts a <i>level</i> parameter that limits the returned information to a unique list of stream identifiers at the specified level.  Valid values are 1 through 6.  Identifier components should be delimited with underscore characters.  To illustrate, if a ringserver contains streams in the pattern of "NET_STA_LOC_CHAN/MSEED" a request for level 2 returns a unique list of "NET_STA" values.  For example: http://localhost/streamids?level=2.</p>
 
 <p >After a WebSocket connection has been initiated with either the <b>seedlink</b> or <b>datalink</b> end points, the requested protocol is supported exactly as it would be normally with the addition of WebSocket framing.  Each server command should be contained in a single WebSocket frame, independent of other commands.</p>
 
@@ -301,4 +301,4 @@ IRIS Data Management Center
 </pre>
 
 
-(man page 2018/02/16)
+(man page 2018/02/20)
