@@ -1,3 +1,6 @@
+2018.050:
+	- Change output of /streamids to always be only stream IDs (no type).
+
 2018.047:
 	- Update mini-XML library to 2.11.
 	- Update pcre library to 8.41.
