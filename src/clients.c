@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2017.012
+ * Modified: 2018.054
  **************************************************************************/
 
 #include <errno.h>
@@ -521,17 +521,6 @@ ClientRecv (ClientInfo *cinfo)
     nread = RecvLine (cinfo);
   }
 
-  /* Check WebSocket payload length against what was recv'ed, accounting for
-     1 or 2 dropped terminators. */
-  if (cinfo->websocket &&
-      nread != wslength &&
-      nread != wslength - 1 &&
-      nread != wslength - 2)
-  {
-    lprintf (1, "[%s] WebSocket payload length (%" PRId64 ") does not match bytes read (%d)",
-             cinfo->hostname, wslength, nread);
-  }
-
   return nread;
 } /* End of ClientRecv() */
 
@@ -732,6 +721,7 @@ RecvData (ClientInfo *cinfo, char *buffer, size_t buflen)
 {
   int nrecv;
   int nread = 0;
+  int idx;
   char *bptr = buffer;
 
   fd_set readset;
@@ -791,8 +781,8 @@ RecvData (ClientInfo *cinfo, char *buffer, size_t buflen)
   /* Unmask received data if a mask was supplied as WebSocket */
   if (cinfo->wsmask.one != 0)
   {
-    bptr = cinfo->recvbuf;
-    for (; cinfo->wsmaskidx < nread; bptr++, cinfo->wsmaskidx++)
+    bptr = buffer;
+    for (idx = 0; idx < nread; idx++, bptr++, cinfo->wsmaskidx++)
       *bptr = *bptr ^ cinfo->wsmask.four[cinfo->wsmaskidx % 4];
   }
 
@@ -826,6 +816,7 @@ RecvCmd (ClientInfo *cinfo)
   int nreadtotal = 0;
   int nrecv;
   int pass;
+  int idx;
   uint8_t nreq;
   char *bptr;
 
@@ -916,7 +907,7 @@ RecvCmd (ClientInfo *cinfo)
       if (cinfo->wsmask.one != 0)
       {
         bptr = cinfo->recvbuf;
-        for (; cinfo->wsmaskidx < nread; bptr++, cinfo->wsmaskidx++)
+        for (idx = 0; idx < nread; idx++, bptr++, cinfo->wsmaskidx++)
           *bptr = *bptr ^ cinfo->wsmask.four[cinfo->wsmaskidx % 4];
       }
 
@@ -940,7 +931,7 @@ RecvCmd (ClientInfo *cinfo)
       }
       else
       {
-        lprintf (2, "[%s] Error verifying DataLink sequence bytes (%c%c) or HTTP",
+        lprintf (2, "[%s] Error verifying DataLink sequence bytes (%c%c)",
                  cinfo->hostname, *(cinfo->recvbuf), *(cinfo->recvbuf + 1));
         return -2;
       }
@@ -957,13 +948,13 @@ RecvCmd (ClientInfo *cinfo)
   if (cinfo->wsmask.one != 0)
   {
     bptr = cinfo->recvbuf;
-    for (; cinfo->wsmaskidx < nread; bptr++, cinfo->wsmaskidx++)
+    for (idx = 0; idx < nreq; idx++, bptr++, cinfo->wsmaskidx++)
       *bptr = *bptr ^ cinfo->wsmask.four[cinfo->wsmaskidx % 4];
   }
 
   /* Make sure buffer is NULL terminated. The command string is
    * allowed to be <= (cinfo->recvbuflen - 1), so this should be safe. */
-  *(cinfo->recvbuf + nread) = '\0';
+  *(cinfo->recvbuf + nreq) = '\0';
 
   return nreadtotal;
 } /* End of RecvCmd() */
