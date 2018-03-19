@@ -20,7 +20,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2018.050
+ * Modified: 2018.078
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -1533,10 +1533,20 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
 
     if (length == 5 && !strcmp (cp, ".html"))
       contenttype = "text/html";
+    else if (length == 4 && !strcmp (cp, ".htm"))
+      contenttype = "text/html";
+    else if (length == 4 && !strcmp (cp, ".css"))
+      contenttype = "text/css";
     else if (length == 3 && !strcmp (cp, ".js"))
       contenttype = "application/javascript";
+    else if (length == 5 && !strcmp (cp, ".json"))
+      contenttype = "application/json";
+    else if (length == 5 && !strcmp (cp, ".text"))
+      contenttype = "text/plain";
     else if (length == 4 && !strcmp (cp, ".txt"))
       contenttype = "text/plain";
+    else if (length == 4 && !strcmp (cp, ".xml"))
+      contenttype = "application/xml";
   }
 
   if ((fp = fopen (filename, "r")) == NULL)

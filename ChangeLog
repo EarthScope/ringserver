@@ -1,3 +1,6 @@
+2018.078:
+	- Add MIME-type mappings for extensions: htm, css, xml, json, text.
+
 2018.054:
 	- Fix unmasking of received data for DataLink over WebSockets.
 
