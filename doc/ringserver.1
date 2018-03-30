@@ -1,4 +1,4 @@
-s.TH RINGSERVER 1 2018/03/30
+.TH RINGSERVER 1 2018/03/30
 .SH NAME
 ringserver \- Generic packet ring buffer
 
@@ -120,7 +120,7 @@ possbile or is unreliable (e.g. NFS).
 .IP "-L \fIport\fP"
 Network port to listen for incoming connections on.  By default the
 server will not listen for connections, setting at least one listen
-port is needed to communiate with the server.  By default a listening
+port is needed to communicate with the server.  By default, a listening
 port will accept all supported protocols.  Restricting a port to only
 allow specific protocols can be done using a configuration file, see
 \fBMulti-protocol Support\fP for more information.
@@ -283,6 +283,39 @@ single WebSocket frame, independent of other commands.
 Custom HTTP headers may be included in HTTP responses using the
 \fBHTTPHeader\fP config file parameter.  This can be used, for example,
 to enable cross-site HTTP requests via Cross-Origin Resource Sharing (CORS).
+
+.SH "Transfer logging"
+The \fB-T\fP command line option or the \fBTransferLogTX\fP or
+\fBTransferLogRX\fP config file parameters turn on logging of data
+either transmitted or received.  The log interval and file name
+prefix can be changed via the \fB-Ti\fP and \fB-Tp\fP command line
+options.
+
+Both the transmission (TX) and reception (RX) log files contain
+entries that following this pattern:
+
+1) A "START CLIENT" line that contains the host name, IP address,
+protocol, client ID, log time, and connection time.
+
+2) One or more data lines of the following form:
+
+.nf
+\fB<Stream ID> <bytes> <packets>\fP
+.fi
+
+3) An "END CLIENT" line including the total bytes or this entry.
+
+Note: the byte counts are the sum of the data payload bytes in each
+packet and do not include the DataLink or SeedLink protcol headers.
+
+An example "TX" file illustrating a transmission entry:
+
+.nf
+START CLIENT host.iris.edu [192.168.255.255] (SeedLink|Client) @ 2018-03-30 07:00:05 (connected 2018-03-30 06:59:36) TX
+IU_SNZO_10_BHZ/MSEED 2560 5
+IU_SNZO_00_BHZ/MSEED 2048 4
+END CLIENT host.iris.edu [192.168.255.255] total TX bytes: 4608
+.fi
 
 .SH "miniSEED Archiving"
 Using either the \fB-MSWRITE\fP command line option or the

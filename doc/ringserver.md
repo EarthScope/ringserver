@@ -1,4 +1,4 @@
-# <p >s.TH RINGSERVER 1 2018/03/30</p><p >ringserver 
+# <p >ringserver 
 ###  Generic packet ring buffer</p>
 
 1. [Name](#)
@@ -10,6 +10,7 @@
 1. [Seedlink Support](#seedlink-support)
 1. [Multi-Protocol Support](#multi-protocol-support)
 1. [Http Support](#http-support)
+1. [Transfer Logging](#transfer-logging)
 1. [Miniseed Archiving](#miniseed-archiving)
 1. [Miniseed Scanning](#miniseed-scanning)
 1. [Author](#author)
@@ -90,7 +91,7 @@ ringserver [options] [configfile]
 
 <b>-L </b><i>port</i>
 
-<p style="padding-left: 30px;">Network port to listen for incoming connections on.  By default the server will not listen for connections, setting at least one listen port is needed to communiate with the server.  By default a listening port will accept all supported protocols.  Restricting a port to only allow specific protocols can be done using a configuration file, see <b>Multi-protocol Support</b> for more information.</p>
+<p style="padding-left: 30px;">Network port to listen for incoming connections on.  By default the server will not listen for connections, setting at least one listen port is needed to communicate with the server.  By default, a listening port will accept all supported protocols.  Restricting a port to only allow specific protocols can be done using a configuration file, see <b>Multi-protocol Support</b> for more information.</p>
 
 <b>-DL </b><i>port</i>
 
@@ -191,6 +192,33 @@ ringserver [options] [configfile]
 <p >After a WebSocket connection has been initiated with either the <b>seedlink</b> or <b>datalink</b> end points, the requested protocol is supported exactly as it would be normally with the addition of WebSocket framing.  Each server command should be contained in a single WebSocket frame, independent of other commands.</p>
 
 <p >Custom HTTP headers may be included in HTTP responses using the <b>HTTPHeader</b> config file parameter.  This can be used, for example, to enable cross-site HTTP requests via Cross-Origin Resource Sharing (CORS).</p>
+
+## <a id='transfer-logging'>Transfer Logging</a>
+
+<p >The <b>-T</b> command line option or the <b>TransferLogTX</b> or <b>TransferLogRX</b> config file parameters turn on logging of data either transmitted or received.  The log interval and file name prefix can be changed via the <b>-Ti</b> and <b>-Tp</b> command line options.</p>
+
+<p >Both the transmission (TX) and reception (RX) log files contain entries that following this pattern:</p>
+
+<p >1) A "START CLIENT" line that contains the host name, IP address, protocol, client ID, log time, and connection time.</p>
+
+<p >2) One or more data lines of the following form:</p>
+
+<pre >
+<b><Stream ID> <bytes> <packets></b>
+</pre>
+
+<p >3) An "END CLIENT" line including the total bytes or this entry.</p>
+
+<p >Note: the byte counts are the sum of the data payload bytes in each packet and do not include the DataLink or SeedLink protcol headers.</p>
+
+<p >An example "TX" file illustrating a transmission entry:</p>
+
+<pre >
+START CLIENT host.iris.edu [192.168.255.255] (SeedLink|Client) @ 2018-03-30 07:00:05 (connected 2018-03-30 06:59:36) TX
+IU_SNZO_10_BHZ/MSEED 2560 5
+IU_SNZO_00_BHZ/MSEED 2048 4
+END CLIENT host.iris.edu [192.168.255.255] total TX bytes: 4608
+</pre>
 
 ## <a id='miniseed-archiving'>Miniseed Archiving</a>
 
@@ -301,4 +329,4 @@ IRIS Data Management Center
 </pre>
 
 
-(man page )
+(man page 2018/03/30)
