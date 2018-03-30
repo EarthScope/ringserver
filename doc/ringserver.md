@@ -204,7 +204,7 @@ ringserver [options] [configfile]
 <p >2) One or more data lines of the following form:</p>
 
 <pre >
-<b><Stream ID> <bytes> <packets></b>
+<b>[Stream ID] [bytes] [packets]</b>
 </pre>
 
 <p >3) An "END CLIENT" line including the total bytes or this entry.</p>
