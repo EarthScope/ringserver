@@ -1,4 +1,4 @@
-# <p >ringserver 
+# <p >s.TH RINGSERVER 1 2018/03/30</p><p >ringserver 
 ###  Generic packet ring buffer</p>
 
 1. [Name](#)
@@ -10,8 +10,8 @@
 1. [Seedlink Support](#seedlink-support)
 1. [Multi-Protocol Support](#multi-protocol-support)
 1. [Http Support](#http-support)
-1. [Mini-Seed Archiving](#mini-seed-archiving)
-1. [Mini-Seed Scanning](#mini-seed-scanning)
+1. [Miniseed Archiving](#miniseed-archiving)
+1. [Miniseed Scanning](#miniseed-scanning)
 1. [Author](#author)
 
 ## <a id='synopsis'>Synopsis</a>
@@ -118,11 +118,11 @@ ringserver [options] [configfile]
 
 <b>-MSWRITE </b><i>format</i>
 
-<p style="padding-left: 30px;">A special mode of ringserver is to write all Mini-SEED data records received via DataLink (ring packets ending with the /MSEED suffix) to a user defined directory and file structure.  See <b>Mini-SEED Archiving</b> for more details.</p>
+<p style="padding-left: 30px;">A special mode of ringserver is to write all miniSEED data records received via DataLink (ring packets ending with the /MSEED suffix) to a user defined directory and file structure.  See <b>miniSEED Archiving</b> for more details.</p>
 
 <b>-MSSCAN </b><i>directory</i> [suboptions]
 
-<p style="padding-left: 30px;">A special mode of ringserver is to recursively scan a directory for files containing Mini-SEED formatted data records and insert them into the ring as packets with a /MSEED suffix.  Optional suboptions control scanning behavior, the StateFile suboption is highly recommended.  See <b>Mini-SEED Scanning</b> for more details.</p>
+<p style="padding-left: 30px;">A special mode of ringserver is to recursively scan a directory for files containing miniSEED formatted data records and insert them into the ring as packets with a /MSEED suffix.  Optional suboptions control scanning behavior, the StateFile suboption is highly recommended.  See <b>miniSEED Scanning</b> for more details.</p>
 
 <b>-VOLATILE</b>
 
@@ -156,7 +156,7 @@ ringserver [options] [configfile]
 
 ## <a id='seedlink-support'>Seedlink Support</a>
 
-<p >The SeedLink protocol only transmits 512-byte Mini-SEED data records. Therefore only 512-byte Mini-SEED packets with a '/MSEED' suffix on the stream ID will be exported via SeedLink if enabled.</p>
+<p >The SeedLink protocol only transmits 512-byte miniSEED data records. Therefore only 512-byte miniSEED packets with a '/MSEED' suffix on the stream ID will be exported via SeedLink if enabled.</p>
 
 <p >This server supports the wildcarding of network and station codes during SeedLink negotiation using the '?' and '*' characters for single or multiple character matches respectively.  Not all SeedLink clients support wildcarded network and station codes.</p>
 
@@ -192,9 +192,9 @@ ringserver [options] [configfile]
 
 <p >Custom HTTP headers may be included in HTTP responses using the <b>HTTPHeader</b> config file parameter.  This can be used, for example, to enable cross-site HTTP requests via Cross-Origin Resource Sharing (CORS).</p>
 
-## <a id='mini-seed-archiving'>Mini-Seed Archiving</a>
+## <a id='miniseed-archiving'>Miniseed Archiving</a>
 
-<p >Using either the <b>-MSWRITE</b> command line option or the <b>MSeedWrite</b> config file parameter the server can be configured to write all Mini-SEED data records received via DataLink to a user defined directory and file structure.  The archive <i>format</i> argument is expanded for each packet processed using the following flags:</p>
+<p >Using either the <b>-MSWRITE</b> command line option or the <b>MSeedWrite</b> config file parameter the server can be configured to write all miniSEED data records received via DataLink to a user defined directory and file structure.  The archive <i>format</i> argument is expanded for each packet processed using the following flags:</p>
 
 <pre >
   <b>n</b> : network code, white space removed
@@ -259,9 +259,9 @@ ringserver [options] [configfile]
 
 <p >resulting in hour length files because the minute and second are specified with the non-defining modifier.  The minute and second fields are from the first packet in the file.</p>
 
-## <a id='mini-seed-scanning'>Mini-Seed Scanning</a>
+## <a id='miniseed-scanning'>Miniseed Scanning</a>
 
-<p >Using either the <b>-MSSCAN</b> command line option or the <b>MSeedScan</b> config file parameter the server can be configured to recursively scan a directory for files containing Mini-SEED data records and insert them into the ring.  Intended for real-time data re-distribution files are continuously scanned, newly added records are inserted into the ring.</p>
+<p >Using either the <b>-MSSCAN</b> command line option or the <b>MSeedScan</b> config file parameter the server can be configured to recursively scan a directory for files containing miniSEED data records and insert them into the ring.  Intended for real-time data re-distribution files are continuously scanned, newly added records are inserted into the ring.</p>
 
 <p >Sub-options can be used to control the scanning process.  The sub-options are specified on the same line as the scan directory as key-value pairs separated by an equals '=' character and may not contain spaces (because they are separated by spaces).  Do not use quotes for the values.  The available sub-options are:</p>
 
@@ -301,4 +301,4 @@ IRIS Data Management Center
 </pre>
 
 
-(man page 2018/02/20)
+(man page )

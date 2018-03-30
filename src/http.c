@@ -1265,7 +1265,7 @@ GenerateStatus (ClientInfo *cinfo, char **status)
       MSScanInfo *mssinfo = loopstp->params;
 
       snprintf (string, sizeof (string),
-                "  Mini-SEED Scanner\n"
+                "  miniSEED Scanner\n"
                 "    Directory: %s\n"
                 "    Max recursion: %d\n"
                 "    State file: %s\n"

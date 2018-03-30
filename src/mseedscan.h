@@ -1,7 +1,7 @@
 /***************************************************************************
  * mseedscan.h
  *
- * Mini-SEED scanning declerations.
+ * miniSEED scanning declerations.
  *
  * modified: 2010.025
  ***************************************************************************/
@@ -17,7 +17,7 @@ extern "C" {
 
 #include "rbtree.h"
 
-/* Supported Mini-SEED record size */
+/* Supported miniSEED record size */
 #define MSSCAN_RECSIZE 512
 
 /* Maximum filename length */
@@ -48,7 +48,7 @@ typedef struct MSScanInfo_s {
   
   /* Internal tracking parameters */
   RingParams *ringparams; /* Ring buffer parameters */
-  MSRecord *msr;          /* Parsed MiniSEED record */
+  MSRecord *msr;          /* Parsed miniSEED record */
   RBTree   *filetree;     /* Working list of scanned files in a tree */
   int      accesserr;     /* Flag to indicate directory access errors */
   int      recurlevel;    /* Track recursion level */

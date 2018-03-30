@@ -1,11 +1,11 @@
 /***************************************************************************
  * mseedscan.c
  *
- * Mini-SEED scanning thread specific routines.
+ * miniSEED scanning thread specific routines.
  *
  * Recursively scan one or more directory structures and continuously
  * check for file modifications.  The files are presumed to be
- * composed of Mini-SEED records of length MSSCAN_RECSIZE.
+ * composed of miniSEED records of length MSSCAN_RECSIZE.
  * As the files are appended or created the new records will be read
  * and inserted into the ring.
  *
@@ -16,9 +16,9 @@
  * will be skipped for each idle file.  The quiet files will never be
  * checked ever again.
  *
- * If a file is scanned and a valid Mini-SEED record was not read from
+ * If a file is scanned and a valid miniSEED record was not read from
  * the file a placeholder will be kept but the file will not be read
- * from again.  This way files which do not contain Mini-SEED will
+ * from again.  This way files which do not contain miniSEED will
  * only be reported once.  This placeholder will be retained in a
  * statefile (if used), this means that the file will not be scanned
  * if the program is re-started.  In order to get the plugin to
@@ -141,7 +141,7 @@ static int ECloseDir (EDIR *edirp);
 /***********************************************************************
  * MS_ScanThread:
  *
- * Thread to perform Mini-SEED scanning.
+ * Thread to perform miniSEED scanning.
  *
  * Returns NULL.
  ***********************************************************************/
@@ -201,7 +201,7 @@ MS_ScanThread (void *arg)
   pthread_mutex_unlock (&(mytdp->td_lock));
 
   /* Report start of scanning */
-  lprintf (1, "Mini-SEED scanning started [%s]", mssinfo->dirname);
+  lprintf (1, "miniSEED scanning started [%s]", mssinfo->dirname);
 
   /* Start scan sequence */
   while (mytdp->td_flags != TDF_CLOSE && scanerror == 0)
@@ -344,7 +344,7 @@ MS_ScanThread (void *arg)
   if (mssinfo->msr)
     msr_free (&(mssinfo->msr));
 
-  lprintf (1, "Mini-SEED scanning stopped [%s]", mssinfo->dirname);
+  lprintf (1, "miniSEED scanning stopped [%s]", mssinfo->dirname);
 
   /* Set thread CLOSED status */
   pthread_mutex_lock (&(mytdp->td_lock));
@@ -369,7 +369,7 @@ MS_ScanThread (void *arg)
  *
  * If the FileNode->offset of an existing entry is -1 skip the file,
  * this happens when there was trouble reading the file, the contents
- * were not Mini-SEED on a previous attempt, etc.
+ * were not miniSEED on a previous attempt, etc.
  *
  * Return 0 on success and -1 on error and -2 on fatal error.
  ***************************************************************************/
@@ -735,7 +735,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
       /* If no data has ever been read from this file, ignore file */
       if (fnode->offset == 0)
       {
-        lprintf (0, "[MSeedScan] %s: Not a valid Mini-SEED record at offset %lld, ignoring file",
+        lprintf (0, "[MSeedScan] %s: Not a valid miniSEED record at offset %lld, ignoring file",
                  filename, (long long)(newoffset - nread));
         close (fd);
         return -1;
@@ -743,7 +743,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
       /* Otherwise, if records have been read, skip until next scan */
       else
       {
-        lprintf (0, "[MSeedScan] %s: Not a valid Mini-SEED record at offset %lld (new bytes %lld), skipping for this scan",
+        lprintf (0, "[MSeedScan] %s: Not a valid miniSEED record at offset %lld (new bytes %lld), skipping for this scan",
                  filename, (long long)(newoffset - nread),
                  (long long)(newsize - newoffset + nread));
         close (fd);
@@ -992,7 +992,7 @@ WriteRecord (MSScanInfo *mssinfo, char *record, int reclen)
   RingPacket packet;
   int rv;
 
-  /* Parse Mini-SEED header */
+  /* Parse miniSEED header */
   if ((rv = msr_unpack (record, reclen, &(mssinfo->msr), 0, 0)) != MS_NOERROR)
   {
     ms_recsrcname (record, streamid, 0);

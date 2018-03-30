@@ -660,7 +660,7 @@ HandleWrite (ClientInfo *cinfo)
   if (nread < 0)
     return -1;
 
-  /* Write received Mini-SEED to a disk archive if configured */
+  /* Write received miniSEED to a disk archive if configured */
   if (cinfo->mswrite)
   {
     char filename[100];
@@ -670,7 +670,7 @@ HandleWrite (ClientInfo *cinfo)
     {
       if (!strncmp (++type, "MSEED", 5))
       {
-        /* Parse the Mini-SEED record header */
+        /* Parse the miniSEED record header */
         if (msr_unpack (cinfo->packetdata, cinfo->packet.datasize, &msr, 0, 0) == MS_NOERROR)
         {
           /* Check for file name in streamid: "filename::streamid/MSEED" */
@@ -681,12 +681,12 @@ HandleWrite (ClientInfo *cinfo)
             fn = filename;
           }
 
-          /* Write Mini-SEED record to disk */
+          /* Write miniSEED record to disk */
           if (ds_streamproc (cinfo->mswrite, msr, fn, cinfo->hostname))
           {
-            lprintf (1, "[%s] Error writing Mini-SEED to disk", cinfo->hostname);
+            lprintf (1, "[%s] Error writing miniSEED to disk", cinfo->hostname);
 
-            SendPacket (cinfo, "ERROR", "Error writing Mini-SEED to disk", 0, 1, 1);
+            SendPacket (cinfo, "ERROR", "Error writing miniSEED to disk", 0, 1, 1);
 
             return -1;
           }
@@ -977,7 +977,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
           {
             MSScanInfo *mssinfo = loopstp->params;
 
-            mxmlElementSetAttr (st, "Type", "Mini-SEED Scanner");
+            mxmlElementSetAttr (st, "Type", "miniSEED Scanner");
             mxmlElementSetAttr (st, "Directory", mssinfo->dirname);
             mxmlElementSetAttrf (st, "MaxRecursion", "%d", mssinfo->maxrecur);
             mxmlElementSetAttr (st, "StateFile", mssinfo->statefile);

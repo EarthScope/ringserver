@@ -115,8 +115,8 @@ static uint8_t memorymapring = 1;                    /* Flag to control mmap'ing
 static uint8_t volatilering = 0;                     /* Flag to control if ring is volatile or not */
 static uint8_t autorecovery = 1;                     /* Flag to control auto recovery from corruption */
 static float timewinlimit = 1.0;                     /* Time window search limit in percent */
-static char *mseedarchive = NULL;                    /* Mini-SEED archive definition */
-static int mseedidleto = 300;                        /* Mini-SEED idle file timeout */
+static char *mseedarchive = NULL;                    /* miniSEED archive definition */
+static int mseedidleto = 300;                        /* miniSEED idle file timeout */
 static sigset_t globalsigset;                        /* Signal set for signal handling */
 
 static int tcpprotonumber = -1;
@@ -978,12 +978,12 @@ ListenThread (void *arg)
     /* Initialize streams lock */
     pthread_mutex_init (&cinfo->streams_lock, NULL);
 
-    /* Initialize the Mini-SEED write parameters */
+    /* Initialize the miniSEED write parameters */
     if (mseedarchive)
     {
       if (!(cinfo->mswrite = (DataStream *)malloc (sizeof (DataStream))))
       {
-        lprintf (0, "Error allocating memory for Mini-SEED write parameters");
+        lprintf (0, "Error allocating memory for miniSEED write parameters");
         if (clientsocket)
           close (clientsocket);
         break;
@@ -2064,7 +2064,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
 /***************************************************************************
  * ConfigMSWrite:
  *
- * Configure Mini-SEED writing parameters for a given archive definition.
+ * Configure miniSEED writing parameters for a given archive definition.
  *
  * Returns 0 on success and non zero on error.
  ***************************************************************************/
@@ -2129,7 +2129,7 @@ ConfigMSWrite (char *value)
 /***************************************************************************
  * AddMSeedScanThread:
  *
- * Add a Mini=SEED scanner thread to the server thread list.  The
+ * Add a miniSEED scanner thread to the server thread list.  The
  * supplied configuration string should contain a base directory
  * followed by optional sub-parameters.
  *
@@ -2144,7 +2144,7 @@ AddMSeedScanThread (char *configstr)
   char *sptr;
   int initcurrentstate = 0;
 
-  /* Set Mini-SEED scanning defaults */
+  /* Set miniSEED scanning defaults */
   memset (&mssinfo, 0, sizeof (MSScanInfo)); /* Init struct to zeros */
   mssinfo.maxrecur = -1;                     /* Maximum level of directory recursion, -1 is no limit */
   mssinfo.scansleep0 = 1;                    /* Sleep between scans interval when no records found */
@@ -2791,8 +2791,8 @@ Usage (int level)
   if (level >= 1)
   {
     fprintf (stderr,
-             " -MSWRITE format  Write all received Mini-SEED to an archive\n"
-             " -MSSCAN dir      Scan directory for files containing Mini-SEED\n"
+             " -MSWRITE format  Write all received miniSEED to an archive\n"
+             " -MSSCAN dir      Scan directory for files containing miniSEED\n"
              " -VOLATILE        Create volatile ring, contents not saved to files\n"
              "\n");
 

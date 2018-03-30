@@ -452,7 +452,7 @@ SLStreamPackets (ClientInfo *cinfo)
     /* If not skipping this record send to the client and update byte count */
     if (!skiprecord)
     {
-      /* Send Mini-SEED record to client */
+      /* Send miniSEED record to client */
       if (SendRecord (&cinfo->packet, cinfo->packetdata, SLRECSIZE, cinfo))
       {
         if (cinfo->socketerr != 2)
@@ -1513,7 +1513,7 @@ HandleInfo (ClientInfo *cinfo)
 
   } /* End of CONNECTIONS request processing */
 
-  /* Convert to XML string, pack into Mini-SEED and send to client */
+  /* Convert to XML string, pack into miniSEED and send to client */
   if (xmldoc)
   {
     /* Do not wrap the output XML */
@@ -1538,10 +1538,10 @@ HandleInfo (ClientInfo *cinfo)
       xmllength--;
     }
 
-    /* Set up encapsulating Mini-SEED record template */
+    /* Set up encapsulating miniSEED record template */
     fsdh = (struct fsdh_s *)record;
 
-    /* Create Mini-SEED header primitive for 512-byte, ASCII encoded,
+    /* Create miniSEED header primitive for 512-byte, ASCII encoded,
      * host byte-order, 0 sample rate record, including a Blockette 1000.
      * This leaves 456 bytes in each record for ASCII data. */
     fsdh->dataquality = 'D';

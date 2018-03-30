@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2018/02/20
+s.TH RINGSERVER 1 2018/03/30
 .SH NAME
 ringserver \- Generic packet ring buffer
 
@@ -156,17 +156,17 @@ program on stderr and to separate ringserver diagnostics from other
 output on the console.
 
 .IP "-MSWRITE \fIformat\fP"
-A special mode of ringserver is to write all Mini-SEED data records
+A special mode of ringserver is to write all miniSEED data records
 received via DataLink (ring packets ending with the /MSEED suffix) to
-a user defined directory and file structure.  See \fBMini-SEED
+a user defined directory and file structure.  See \fBminiSEED
 Archiving\fP for more details.
 
 .IP "-MSSCAN \fIdirectory\fP [suboptions]"
 A special mode of ringserver is to recursively scan a directory for
-files containing Mini-SEED formatted data records and insert them into
+files containing miniSEED formatted data records and insert them into
 the ring as packets with a /MSEED suffix.  Optional suboptions control
 scanning behavior, the StateFile suboption is highly recommended.  See
-\fBMini-SEED Scanning\fP for more details.
+\fBminiSEED Scanning\fP for more details.
 
 .IP "-VOLATILE"
 Create a volatile (non-stateful) ring buffer, in other words do not
@@ -217,8 +217,8 @@ permission.
 
 .SH "SeedLink Support"
 
-The SeedLink protocol only transmits 512-byte Mini-SEED data records.
-Therefore only 512-byte Mini-SEED packets with a '/MSEED' suffix on
+The SeedLink protocol only transmits 512-byte miniSEED data records.
+Therefore only 512-byte miniSEED packets with a '/MSEED' suffix on
 the stream ID will be exported via SeedLink if enabled.
 
 This server supports the wildcarding of network and station codes
@@ -284,10 +284,10 @@ Custom HTTP headers may be included in HTTP responses using the
 \fBHTTPHeader\fP config file parameter.  This can be used, for example,
 to enable cross-site HTTP requests via Cross-Origin Resource Sharing (CORS).
 
-.SH "Mini-SEED Archiving"
+.SH "miniSEED Archiving"
 Using either the \fB-MSWRITE\fP command line option or the
 \fBMSeedWrite\fP config file parameter the server can be configured to
-write all Mini-SEED data records received via DataLink to a user
+write all miniSEED data records received via DataLink to a user
 defined directory and file structure.  The archive \fIformat\fP
 argument is expanded for each packet processed using the following
 flags:
@@ -365,10 +365,10 @@ resulting in hour length files because the minute and second are
 specified with the non-defining modifier.  The minute and second
 fields are from the first packet in the file.
 
-.SH "Mini-SEED Scanning"
+.SH "miniSEED Scanning"
 Using either the \fB-MSSCAN\fP command line option or the
 \fBMSeedScan\fP config file parameter the server can be configured to
-recursively scan a directory for files containing Mini-SEED data
+recursively scan a directory for files containing miniSEED data
 records and insert them into the ring.  Intended for real-time data
 re-distribution files are continuously scanned, newly added records
 are inserted into the ring.

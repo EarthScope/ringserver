@@ -1,9 +1,9 @@
 /***************************************************************************
  * dsarchive.c
  *
- * Routines to archive Mini-SEED data records.
+ * Routines to archive miniSEED data records.
  *
- * The philosophy: a "DataStream" describes an archive that Mini-SEED
+ * The philosophy: a "DataStream" describes an archive that miniSEED
  * records will be saved to.  Each archive can be separated into
  * "DataStreamGroup"s, each unique group will be saved into a unique
  * file.  The definition of the groups is implied by the format of the
@@ -63,7 +63,7 @@ static int ds_strparse (const char *string, const char *delim, DSstrlist **list)
 /***************************************************************************
  * ds_streamproc:
  *
- * Save MiniSEED records in a custom directory/file structure.  The
+ * Save miniSEED records in a custom directory/file structure.  The
  * appropriate directories and files are created if nesecessary.  If
  * files already exist they are appended to.  If 'msr' is NULL then
  * ds_shutdown() will be called to close all open files and free all

@@ -1,7 +1,7 @@
 /***************************************************************************
  * dsarchive.h
  *
- * Routines to archive Mini-SEED data records, specialized for ringserver.
+ * Routines to archive miniSEED data records, specialized for ringserver.
  *
  * Written by Chad Trabant
  *   IRIS Data Management Center

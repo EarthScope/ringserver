@@ -69,7 +69,7 @@ typedef struct ClientInfo_s {
   int64_t     lastid;       /* Last packet ID sent to client */
   hptime_t    starttime;    /* Requested start time */
   hptime_t    endtime;      /* Requested end time */
-  DataStream *mswrite;      /* Mini-SEED data write parameters */
+  DataStream *mswrite;      /* miniSEED data write parameters */
   RBTree     *streams;      /* Tracking of streams transferred */
   pthread_mutex_t streams_lock; /* Mutex lock for streams tree */
   int         streamscount; /* Count of streams in tree */

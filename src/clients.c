@@ -447,7 +447,7 @@ ClientThread (void *arg)
   if (cinfo->addr)
     free (cinfo->addr);
 
-  /* Shutdown and release Mini-SEED write data stream */
+  /* Shutdown and release miniSEED write data stream */
   if (cinfo->mswrite)
   {
     ds_streamproc (cinfo->mswrite, NULL, NULL, cinfo->hostname);

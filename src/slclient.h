@@ -19,7 +19,7 @@ extern "C" {
 #define SLCAPABILITIES "SLPROTO:3.1 CAP EXTREPLY NSWILDCARD BATCH WS:13"
 #define SLSERVERVER "SeedLink v3.1 (" VERSION " RingServer) :: " SLCAPABILITIES
 
-#define SLRECSIZE           512      /* Mini-SEED record size */
+#define SLRECSIZE           512      /* miniSEED record size */
 #define SLHEADSIZE          8        /* SeedLink header size */
 #define SELSIZE             8        /* Maximum selector size */
 #define SIGNATURE           "SL"     /* SeedLink header signature */
