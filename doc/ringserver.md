@@ -119,7 +119,7 @@ ringserver [options] [configfile]
 
 <b>-MSWRITE </b><i>format</i>
 
-<p style="padding-left: 30px;">A special mode of ringserver is to write all miniSEED data records received via DataLink (ring packets ending with the /MSEED suffix) to a user defined directory and file structure.  See <b>miniSEED Archiving</b> for more details.</p>
+<p style="padding-left: 30px;">A special mode of ringserver is to write all miniSEED data records received via DataLink (ring packets ending with the <b>/MSEED</b> suffix) to a user defined directory and file structure.  See <b>miniSEED Archiving</b> for more details.</p>
 
 <b>-MSSCAN </b><i>directory</i> [suboptions]
 
@@ -222,7 +222,9 @@ END CLIENT host.iris.edu [192.168.255.255] total TX bytes: 4608
 
 ## <a id='miniseed-archiving'>Miniseed Archiving</a>
 
-<p >Using either the <b>-MSWRITE</b> command line option or the <b>MSeedWrite</b> config file parameter the server can be configured to write all miniSEED data records received via DataLink to a user defined directory and file structure.  The archive <i>format</i> argument is expanded for each packet processed using the following flags:</p>
+<p >Using either the <b>-MSWRITE</b> command line option or the <b>MSeedWrite</b> config file parameter the server can be configured to write all miniSEED data records received via DataLink to a user defined directory and file structure.  Only ring packets ending with the <b>/MSEED</b> suffix are considered.</p>
+
+<p >The archive <i>format</i> argument is expanded for each packet processed using the following flags:</p>
 
 <pre >
   <b>n</b> : network code, white space removed

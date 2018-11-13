@@ -157,9 +157,9 @@ output on the console.
 
 .IP "-MSWRITE \fIformat\fP"
 A special mode of ringserver is to write all miniSEED data records
-received via DataLink (ring packets ending with the /MSEED suffix) to
-a user defined directory and file structure.  See \fBminiSEED
-Archiving\fP for more details.
+received via DataLink (ring packets ending with the \fB/MSEED\fP
+suffix) to a user defined directory and file structure.  See
+\fBminiSEED Archiving\fP for more details.
 
 .IP "-MSSCAN \fIdirectory\fP [suboptions]"
 A special mode of ringserver is to recursively scan a directory for
@@ -321,9 +321,11 @@ END CLIENT host.iris.edu [192.168.255.255] total TX bytes: 4608
 Using either the \fB-MSWRITE\fP command line option or the
 \fBMSeedWrite\fP config file parameter the server can be configured to
 write all miniSEED data records received via DataLink to a user
-defined directory and file structure.  The archive \fIformat\fP
-argument is expanded for each packet processed using the following
-flags:
+defined directory and file structure.  Only ring packets ending with
+the \fB/MSEED\fP suffix are considered.
+
+The archive \fIformat\fP argument is expanded for each packet processed
+using the following flags:
 
 .nf
   \fBn\fP : network code, white space removed
