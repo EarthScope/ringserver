@@ -3,35 +3,42 @@
 # Build container using this command:
 #     docker build -t ringserver:latest .
 #
-# Run built container:
-#     docker run --rm -it ringserver
+# Run container, using host networking (may not work on non-Linux):
+#     docker run --network="host" --rm -it ringserver
+#
+# Run container, using bridge networking (likely impossible to submit data):
+#     docker run --network="bridge" -p 18000:18000 --rm -it ringserver
 
 
-# build ringserver in a separate container,
+# Build ringserver in a separate container,
 # so resulting container does not include compiler tools
 FROM centos:7 as buildenv
-# install compiler
+# Install compiler
 RUN yum install -y gcc make
-# build executable
+# Build executable
 COPY . /build
-RUN cd /build && make
+RUN cd /build && CFLAGS="-O2" make
 
-
+# Build ringserver container
 FROM centos:7
-# install updates
+# Install updates
 RUN yum upgrade -y
-# copy executable from build image
+# Copy executable and default config from build image
 COPY --from=buildenv /build/ringserver /ringserver
 COPY --from=buildenv /build/doc/ring.conf /ring.conf
-# run as non-root user
+# Run as non-root user
 RUN adduser ringuser && \
     mkdir -p /data/ring && \
     chown -R ringuser /data
 WORKDIR /data
 USER ringuser
-# expose default port
+
+# Expose default SeedLink and DataLink ports
 EXPOSE 18000
-# default command is "ringserver"
-ENTRYPOINt [ "/ringserver" ]
-# default arguments are config file
-CMD [ "/ring.conf" ]
+EXPOSE 16000
+
+# Default command is "ringserver"
+ENTRYPOINT [ "/ringserver" ]
+
+# Default arguments
+CMD [ "/ring.conf", "-L", "16000" ]
