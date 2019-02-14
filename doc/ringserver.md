@@ -185,7 +185,7 @@ ringserver [options] [configfile]
 
 <p >Access to the <b>status</b> and <b>connections</b> information is limited to clients that have trusted permission.</p>
 
-<p >The <b>streams</b>, <b>streamids</b> and <b>connections</b> endpoints accept a <i>match</i> parameter that is a pattern used to limit the returned information.  For example: http://localhost/streams?match=IU_ANMO</p>
+<p >The <b>streams</b>, <b>streamids</b> and <b>connections</b> endpoints accept a <i>match</i> parameter that is a regular expression pattern used to limit the returned information.  For the <b>streams</b> and <b>streamids</b> endpoints the matching is applied to stream IDs.  For the <b>connections</b> endpoint the matching is applied to hostname, client IP address and client ID. For example: http://localhost/streams?match=IU_ANMO.</p>
 
 <p >The <b>streamids</b> endpoint accepts a <i>level</i> parameter that limits the returned information to a unique list of stream identifiers at the specified level.  Valid values are 1 through 6.  Identifier components should be delimited with underscore characters.  To illustrate, if a ringserver contains streams in the pattern of "NET_STA_LOC_CHAN/MSEED" a request for level 2 returns a unique list of "NET_STA" values.  For example: http://localhost/streamids?level=2.</p>
 
@@ -331,4 +331,4 @@ IRIS Data Management Center
 </pre>
 
 
-(man page 2018/03/30)
+(man page 2019/02/14)
