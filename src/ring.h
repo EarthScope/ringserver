@@ -31,7 +31,7 @@ extern "C" {
 #define RINGLATEST   -3
 #define RINGNEXT     -4
 
-/* Define a maximium stream ID string length */
+/* Define a maximum stream ID string length */
 #define MAXSTREAMID 60
 
 /* Ring parameters, stored at the beginning of the packet buffer file */
