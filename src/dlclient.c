@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
 
@@ -566,6 +567,180 @@ HandleNegotiation (ClientInfo *cinfo)
       }
     }
   } /* End of REJECT */
+
+  /* AUTHORIZATION size\r\n[token] - token authorization for write */
+  else if (!strncasecmp (cinfo->recvbuf, "AUTHORIZATION", 13))
+  {
+    /* Parse size from request */
+    fields = sscanf (cinfo->recvbuf, "%*s %d %c", &size, &junk);
+
+    /* Make sure we got a single pattern or no pattern */
+    if (fields > 1)
+    {
+      if (SendPacket (cinfo, "ERROR", "AUTHORIZATION requires a single argument", 0, 1, 1))
+        return -1;
+
+      OKGO = 0;
+    }
+
+    else if (size > DLMAXREGEXLEN)
+    {
+      lprintf (0, "[%s] auth token too large (%)", cinfo->hostname, size);
+
+      snprintf (sendbuffer, sizeof (sendbuffer), "authorization token too large, must be <= %d",
+                DLMAXREGEXLEN);
+      if (SendPacket (cinfo, "ERROR", sendbuffer, 0, 1, 1))
+        return -1;
+
+      OKGO = 0;
+    }
+    else
+    {
+      if ( ! authdir) {
+        lprintf (0, "[%s] cannot authorize for write, auth not configured", cinfo->hostname);
+
+        snprintf (sendbuffer, sizeof (sendbuffer),
+            "[%s] cannot authorize for write, auth not configured", cinfo->hostname);
+        if (SendPacket (cinfo, "ERROR", sendbuffer, 0, 1, 1))
+          return -1;
+
+        OKGO = 0;
+      } else {
+        char *keypath = NULL;
+        char *keyfilename = NULL;
+        struct stat filestat;
+        FILE *fp;
+        char key[16384];
+        int key_len = 0;
+        char *jwt_str = NULL;
+        char *jwt_str_verify = NULL;
+        jwt_t *jwt = NULL;
+        int ret;
+        if (cinfo->jwttoken)
+          jwt_free( cinfo->jwttoken);
+
+        /* Read regex of size bytes from socket */
+        if (!(jwt_str = (char *)malloc (size + 1)))
+        {
+          lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
+          return -1;
+        }
+
+        if (RecvData (cinfo, jwt_str, size) < 0)
+        {
+          lprintf (0, "[%s] Error Recv'ing data", cinfo->hostname);
+          return -1;
+        }
+
+        /* Make sure buffer is a terminated string */
+        jwt_str[size] = '\0';
+
+        /* read key to verify */
+        if (asprintf (&keypath, "%s/%s", authdir, "secret.key") < 0)
+          return -1;
+
+        keyfilename = realpath (keypath, NULL);
+        if (keyfilename == NULL)
+        {
+          lprintf (0, "Error resolving path to key file: %s", keypath);
+          return -1;
+        }
+
+
+        if (stat (keyfilename, &filestat))
+          return -1;
+        if ((fp = fopen (keyfilename, "r")) == NULL)
+        {
+          lprintf (0, "Error opening key file %s:  %s",
+                   keyfilename, strerror (errno));
+          return -1;
+        }
+        key_len = fread(key, 1, sizeof(key), fp);
+      	fclose(fp);
+        key[key_len] = '\0';
+      	if (key[key_len-1] == '\n') {
+      		//zap newline
+      		key[key_len-1] = '\0';
+      	}
+
+        free (keypath);
+
+        ret = jwt_new(&jwt);
+        if (ret != 0) {
+          lprintf (0, "Error alloc memory for jwt %d", ret);
+          return -1;
+        }
+        ret = jwt_decode(&jwt, jwt_str, NULL, 0);
+        if (ret != 0) {
+            lprintf (0, "[%s] cannot parse auth token w/o secret %d %s '%s'", cinfo->hostname, ret, strerror (ret), jwt_str);
+            lprintf (0, "%s", jwt_str);
+            lprintf (0, "%s", key);
+        }
+        char* pretty_jwt;
+        pretty_jwt = jwt_dump_str(jwt, 1);
+        lprintf (0, "Pretty JWT: %s", pretty_jwt);
+
+        //jwt_free(&jwt);
+        // decode with verify secret
+        ret = jwt_decode(&jwt, jwt_str, key, strlen(key));
+
+        if (ret != 0) {
+            lprintf (0, "[%s] cannot parse auth token %d %s '%s'", cinfo->hostname, ret, strerror (ret), jwt_str);
+            lprintf (0, "%s", jwt_str);
+            lprintf (0, "%s", key);
+
+            snprintf (sendbuffer, sizeof (sendbuffer),
+                "[%s] cannot parse auth token '%s'", cinfo->hostname, jwt_str);
+            if (SendPacket (cinfo, "ERROR", sendbuffer, 0, 1, 1))
+              return -1;
+
+            OKGO = 0;
+            return -1; // kill on auth error?
+        }
+        // verify with secret by re-encode and string
+        jwt_str_verify = jwt_encode_str(jwt);
+        if (!strncasecmp (jwt_str_verify, jwt_str, size)) {
+          lprintf (0, "[%s] cannot verify auth token %d %s '%s'", cinfo->hostname, ret, strerror (ret), jwt_str);
+          lprintf (0, "%s", jwt_str_verify);
+          lprintf (0, "%s", key);
+
+          snprintf (sendbuffer, sizeof (sendbuffer),
+              "[%s] cannot parse auth token '%s'", cinfo->hostname, jwt_str);
+          if (SendPacket (cinfo, "ERROR", sendbuffer, 0, 1, 1))
+            return -1;
+
+          OKGO = 0;
+          return -1; // kill on auth error?
+        } else {
+          lprintf (0, "[%s] verify auth token for write. '%s'", cinfo->hostname, jwt_str);
+          lprintf (0, "[%s] verify auth token for write. '%s'", cinfo->hostname, jwt_str);
+        }
+
+        cinfo->jwttoken = jwt;
+        // no longer need the base64 string
+        free(jwt_str);
+        /* Compile write expression */
+        const char *writepatternstr;
+        writepatternstr = jwt_get_grant(cinfo->jwttoken, "wpat");
+        const char *errptr;
+        int erroffset;
+        cinfo->writepattern = pcre_compile (writepatternstr, 0, &errptr, &erroffset, NULL);
+        if (errptr)
+        {
+          lprintf (0, "JWTToken: Error with pcre_compile: %s (offset: %d)", errptr, erroffset);
+
+          if (SendPacket (cinfo, "ERROR", "Error with jwt write expression", 0, 1, 1))
+            return -1;
+        }
+        else
+        {
+          snprintf (sendbuffer, sizeof (sendbuffer), "auth for write granted");
+          if (SendPacket (cinfo, "OK", sendbuffer, selected, 1, 1))
+            return -1;
+        }
+      }
+    }
+  }
 
   /* BYE - End connection */
   else if (!strncasecmp (cinfo->recvbuf, "BYE", 3))

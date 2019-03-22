@@ -14,6 +14,8 @@ extern "C" {
 #include <pthread.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <openssl/ssl.h>
+#include <jwt.h>
 
 #include "ring.h"
 #include "rbtree.h"
@@ -85,6 +87,8 @@ typedef struct ClientInfo_s {
   double      rxbyterate;   /* Track rate of data byte reception */
   hptime_t    ratetime;     /* Time stamp for TX and RX rate calculations */
   void       *extinfo;      /* Extended client info, protocol specific */
+  jwt_t      *jwttoken;     /* JWT token for WRITE auth */
+  pcre       *writepattern; /* Auth write pattern from JWT token */
 } ClientInfo;
 
 /* Structure used as the data for B-tree of stream tracking */

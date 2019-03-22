@@ -78,6 +78,7 @@ struct cthread *cthreads = NULL; /* Client threads list */
 
 char *serverid = NULL;    /* Server ID */
 char *webroot = NULL;     /* Web content root directory */
+char *authdir = NULL;     /* JWT auth content root directory */
 hptime_t serverstarttime; /* Server start time */
 int clientcount = 0;      /* Track number of connected clients */
 int resolvehosts = 1;     /* Flag to control resolving of client hostnames */
@@ -1421,6 +1422,7 @@ GetOptVal (int argcount, char **argvec, int argopt)
  * [D] HTTPHeader <HTTP header>
  * [D] MSeedWrite <format>
  * MSeedScan <directory>
+ * AuthDir <directory>
  *
  * Returns 0 on success and -1 on error.
  ***************************************************************************/
@@ -2025,6 +2027,52 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
       if (AddMSeedScanThread (svalue))
       {
         lprintf (0, "Error with MSeedScan config file line: %s", ptr);
+        return -1;
+      }
+    }
+    else if (!dynamiconly && !strncasecmp ("AuthDir", ptr, 7))
+    {
+      char *value;
+      char *tptr;
+      char dchar;
+
+      if (strlen (ptr) < 9)
+      {
+        lprintf (0, "Error with AuthDir config file line: %s", ptr);
+        return -1;
+      }
+
+      /* Find beginning of non-white-space value */
+      value = ptr + 8;
+      while (isspace ((int)*value))
+        value++;
+
+      /* If single or double quotes are detected eliminate them */
+      if (*value == '"' || *value == '\'')
+      {
+        dchar = *value;
+        value++;
+
+        if ((tptr = strchr (value, dchar)))
+        {
+          /* Truncate string at matching quote */
+          *tptr = '\0';
+        }
+        else
+        {
+          lprintf (0, "Mismatching quotes for AuthDir config file line: %s", ptr);
+          return -1;
+        }
+      }
+
+      if (authdir)
+        free (authdir);
+
+      authdir = realpath (value, NULL);
+
+      if (authdir == NULL)
+      {
+        lprintf (0, "Error with AuthDir value: %s", value);
         return -1;
       }
     }
