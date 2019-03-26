@@ -78,7 +78,7 @@ DLHandleCmd (ClientInfo *cinfo)
   if (!strncmp (cinfo->recvbuf, "WRITE", 5))
   {
     /* Check for write permission */
-    if (!cinfo->writeperm)
+    if (!cinfo->writeperm && !cinfo->jwttoken)
     {
       lprintf (1, "[%s] Data packet received from client without write permission",
                cinfo->hostname);
@@ -663,68 +663,39 @@ HandleNegotiation (ClientInfo *cinfo)
       		key[key_len-1] = '\0';
       	}
 
-        free (keypath);
-
         ret = jwt_new(&jwt);
         if (ret != 0) {
           lprintf (0, "Error alloc memory for jwt %d", ret);
           return -1;
         }
-        ret = jwt_decode(&jwt, jwt_str, NULL, 0);
-        if (ret != 0) {
-            lprintf (0, "[%s] cannot parse auth token w/o secret %d %s '%s'", cinfo->hostname, ret, strerror (ret), jwt_str);
-            lprintf (0, "%s", jwt_str);
-            lprintf (0, "%s", key);
-        }
-        char* pretty_jwt;
-        pretty_jwt = jwt_dump_str(jwt, 1);
-        lprintf (0, "Pretty JWT: %s", pretty_jwt);
 
-        //jwt_free(&jwt);
         // decode with verify secret
         ret = jwt_decode(&jwt, jwt_str, key, strlen(key));
 
         if (ret != 0) {
-            lprintf (0, "[%s] cannot parse auth token %d %s '%s'", cinfo->hostname, ret, strerror (ret), jwt_str);
+            lprintf (0, "[%s] cannot parse/verify auth token %d %s '%s'", cinfo->hostname, ret, strerror (ret), jwt_str);
             lprintf (0, "%s", jwt_str);
             lprintf (0, "%s", key);
 
             snprintf (sendbuffer, sizeof (sendbuffer),
-                "[%s] cannot parse auth token '%s'", cinfo->hostname, jwt_str);
+                "[%s] cannot parse/verify auth token '%s'", cinfo->hostname, jwt_str);
             if (SendPacket (cinfo, "ERROR", sendbuffer, 0, 1, 1))
               return -1;
 
             OKGO = 0;
             return -1; // kill on auth error?
         }
-        // verify with secret by re-encode and string
-        jwt_str_verify = jwt_encode_str(jwt);
-        if (!strncasecmp (jwt_str_verify, jwt_str, size)) {
-          lprintf (0, "[%s] cannot verify auth token %d %s '%s'", cinfo->hostname, ret, strerror (ret), jwt_str);
-          lprintf (0, "%s", jwt_str_verify);
-          lprintf (0, "%s", key);
-
-          snprintf (sendbuffer, sizeof (sendbuffer),
-              "[%s] cannot parse auth token '%s'", cinfo->hostname, jwt_str);
-          if (SendPacket (cinfo, "ERROR", sendbuffer, 0, 1, 1))
-            return -1;
-
-          OKGO = 0;
-          return -1; // kill on auth error?
-        } else {
-          lprintf (0, "[%s] verify auth token for write. '%s'", cinfo->hostname, jwt_str);
-          lprintf (0, "[%s] verify auth token for write. '%s'", cinfo->hostname, jwt_str);
-        }
 
         cinfo->jwttoken = jwt;
         // no longer need the base64 string
         free(jwt_str);
         /* Compile write expression */
-        const char *writepatternstr;
-        writepatternstr = jwt_get_grant(cinfo->jwttoken, "wpat");
+        cinfo->writepatternstr = jwt_get_grant(cinfo->jwttoken, "wpat");
+        lprintf (0, "JWTToken: writepattern: %s", cinfo->writepatternstr);
+
         const char *errptr;
         int erroffset;
-        cinfo->writepattern = pcre_compile (writepatternstr, 0, &errptr, &erroffset, NULL);
+        cinfo->writepattern = pcre_compile (cinfo->writepatternstr, 0, &errptr, &erroffset, NULL);
         if (errptr)
         {
           lprintf (0, "JWTToken: Error with pcre_compile: %s (offset: %d)", errptr, erroffset);
@@ -793,6 +764,8 @@ HandleWrite (ClientInfo *cinfo)
 
   MSRecord *msr = 0;
   char *type;
+  pcre_extra *match_extra = NULL;
+  int pcre_result = 0;
 
   if (!cinfo)
     return -1;
@@ -809,6 +782,28 @@ HandleWrite (ClientInfo *cinfo)
 
     return -1;
   }
+
+  if (cinfo->jwttoken && cinfo->writepattern) {
+      pcre_result = pcre_exec (cinfo->writepattern, match_extra, streamid, strlen (streamid), 0, 0, NULL, 0);
+      if(pcre_result<0) {
+          // PCRE_ERROR_NOMATCH=-1
+          lprintf (1, "[%s] Token not auth to WRITE streamid: %.100s  %d",
+                   cinfo->hostname, streamid, pcre_result);
+
+          SendPacket (cinfo, "ERROR", "Token not auth to WRITE streamid", 0, 1, 1);
+          if (match_extra) {
+            pcre_free(match_extra);
+          }
+          return -1;
+      } else {
+          lprintf (1, "[%s] Token auth ok to WRITE streamid: %.100s   %d",
+                   cinfo->hostname, streamid, pcre_result);
+          if (match_extra) {
+             pcre_free(match_extra);
+          }
+      }
+  }
+
 
   /* Copy the stream ID */
   memcpy (cinfo->packet.streamid, streamid, sizeof (cinfo->packet.streamid));

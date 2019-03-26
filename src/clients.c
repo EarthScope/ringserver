@@ -427,6 +427,12 @@ ClientThread (void *arg)
     pcre_free (cinfo->reader->reject);
   if (cinfo->reader->reject_extra)
     pcre_free (cinfo->reader->reject_extra);
+  if (cinfo->jwttoken)
+    jwt_free (cinfo->jwttoken);
+  if (cinfo->writepattern)
+    pcre_free (cinfo->writepattern);
+  if (cinfo->writepatternstr)
+    free (cinfo->writepatternstr);
 
   /* Release stream tracking binary tree */
   pthread_mutex_lock (&(cinfo->streams_lock));
