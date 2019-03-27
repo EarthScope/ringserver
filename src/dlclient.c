@@ -686,6 +686,17 @@ HandleNegotiation (ClientInfo *cinfo)
             return -1; // kill on auth error?
         }
 
+        // check expire time
+        time_t currTime = time(NULL);
+        if (currTime >  jwt_get_grant_int(jwt, "exp")) {
+          // jwt_get_grant_int returns 0 is not exist, so no exp => fail
+          lprintf (1, "[%s] Token expired: %d > %d",
+                   cinfo->hostname, currTime, jwt_get_grant_int(jwt, "exp"));
+
+          SendPacket (cinfo, "ERROR", "Token expired", 0, 1, 1);
+          return -1;
+        }
+
         cinfo->jwttoken = jwt;
         // no longer need the base64 string
         free(jwt_str);
@@ -784,6 +795,15 @@ HandleWrite (ClientInfo *cinfo)
   }
 
   if (cinfo->jwttoken && cinfo->writepattern) {
+      time_t currTime = time(NULL);
+      if (currTime >  jwt_get_grant_int(cinfo->jwttoken, "exp")) {
+        // jwt_get_grant_int returns 0 is not exist, so no exp => fail
+        lprintf (1, "[%s] Token expired for WRITE streamid: %.100s %d > %d",
+                 cinfo->hostname, streamid, currTime, jwt_get_grant_int(cinfo->jwttoken, "exp"));
+
+        SendPacket (cinfo, "ERROR", "Token expired WRITE streamid", 0, 1, 1);
+        return -1;
+      }
       pcre_result = pcre_exec (cinfo->writepattern, match_extra, streamid, strlen (streamid), 0, 0, NULL, 0);
       if(pcre_result<0) {
           // PCRE_ERROR_NOMATCH=-1
