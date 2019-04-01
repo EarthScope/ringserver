@@ -48,7 +48,6 @@ static int GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, in
 static int GenerateStatus (ClientInfo *cinfo, char **status);
 static int GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path);
 static int SendFileHTTP (ClientInfo *cinfo, char *path);
-static int SendJWTTokenHTTP (ClientInfo *cinfo, char *path);
 static int NegotiateWebSocket (ClientInfo *cinfo, char *version,
                                char *upgradeHeader, char *connectionHeader,
                                char *secWebSocketKeyHeader, char *secWebSocketVersionHeader,

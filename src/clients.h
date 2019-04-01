@@ -88,7 +88,7 @@ typedef struct ClientInfo_s {
   hptime_t    ratetime;     /* Time stamp for TX and RX rate calculations */
   void       *extinfo;      /* Extended client info, protocol specific */
   jwt_t      *jwttoken;     /* JWT token for WRITE auth */
-  char       *writepatternstr; /* WRITE match as string */
+  const char       *writepatternstr; /* WRITE match as string */
   pcre       *writepattern; /* Auth write pattern from JWT token */
 } ClientInfo;
 

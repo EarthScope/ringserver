@@ -23,6 +23,9 @@
  * Modified: 2016.354
  **************************************************************************/
 
+ /* _GNU_SOURCE needed to get asprintf() under Linux */
+ #define _GNU_SOURCE
+
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -610,10 +613,9 @@ HandleNegotiation (ClientInfo *cinfo)
         char *keyfilename = NULL;
         struct stat filestat;
         FILE *fp;
-        char key[16384];
+        unsigned char key[16384];
         int key_len = 0;
         char *jwt_str = NULL;
-        char *jwt_str_verify = NULL;
         jwt_t *jwt = NULL;
         int ret;
         if (cinfo->jwttoken)
@@ -670,7 +672,7 @@ HandleNegotiation (ClientInfo *cinfo)
         }
 
         // decode with verify secret
-        ret = jwt_decode(&jwt, jwt_str, key, strlen(key));
+        ret = jwt_decode(&jwt, jwt_str, key, key_len);
 
         if (ret != 0) {
             lprintf (0, "[%s] cannot parse/verify auth token %d %s '%s'", cinfo->hostname, ret, strerror (ret), jwt_str);
@@ -717,7 +719,7 @@ HandleNegotiation (ClientInfo *cinfo)
         else
         {
           snprintf (sendbuffer, sizeof (sendbuffer), "auth for write granted");
-          if (SendPacket (cinfo, "OK", sendbuffer, selected, 1, 1))
+          if (SendPacket (cinfo, "OK", sendbuffer, 0, 1, 1))
             return -1;
         }
       }
