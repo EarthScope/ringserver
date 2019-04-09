@@ -818,7 +818,7 @@ HandleWrite (ClientInfo *cinfo)
           }
           return -1;
       } else {
-          lprintf (1, "[%s] Token auth ok to WRITE streamid: %.100s   %d",
+          lprintf (3, "[%s] Token auth ok to WRITE streamid: %.100s   %d",
                    cinfo->hostname, streamid, pcre_result);
           if (match_extra) {
              pcre_free(match_extra);
