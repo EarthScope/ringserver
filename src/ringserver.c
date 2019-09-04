@@ -86,11 +86,12 @@ int shutdownsig = 0;      /* Shutdown signal */
 /* Local functions and variables */
 static struct thread_data *InitThreadData (void *prvtptr);
 static void *ListenThread (void *arg);
-static int InitServerSocket (char *portstr);
+static int InitServerSocket (char *portstr, uint8_t protocols);
 static int ProcessParam (int argcount, char **argvec);
 static char *GetOptVal (int argcount, char **argvec, int argopt);
 static int ReadConfigFile (char *configfile, int dynamiconly, time_t mtime);
 static int ConfigMSWrite (char *value);
+static int AddListenThreads (ListenPortParams *lpp, char *options);
 static int AddMSeedScanThread (char *configstr);
 static int AddServerThread (unsigned int type, void *params);
 static uint64_t CalcSize (char *sizestr);
@@ -485,7 +486,7 @@ main (int argc, char *argv[])
         if (stp->td == 0 && !shutdownsig)
         {
           /* Initialize server socket, thread data and create thread */
-          if (lpp->socket <= 0 && (lpp->socket = InitServerSocket (lpp->portstr)) == -1)
+          if (lpp->socket <= 0 && (lpp->socket = InitServerSocket (lpp->portstr, lpp->protocols)) == -1)
           {
             lprintf (0, "Error initializing %s server socket for port %s", threadtype, lpp->portstr);
           }
@@ -1072,7 +1073,7 @@ ListenThread (void *arg)
  * Return socket descriptor on success and -1 on error.
  ***********************************************************************/
 static int
-InitServerSocket (char *portstr)
+InitServerSocket (char *portstr, uint8_t protocols)
 {
   struct addrinfo *addr;
   struct addrinfo hints;
@@ -1084,7 +1085,15 @@ InitServerSocket (char *portstr)
     return -1;
 
   memset (&hints, 0, sizeof (hints));
-  hints.ai_family = PF_INET; /* PF_INET6 for IPv6, or PF_UNSPEC for any protocol */
+
+  /* AF_INET, AF_INET6, or AF_UNSPEC for IPv4 or IPv6 or unspecified */
+  if (protocols & FAMILY_IPv4)
+    hints.ai_family = AF_INET;
+  else if (protocols & FAMILY_IPv6)
+    hints.ai_family = AF_INET6;
+  else if (protocols & FAMILY_IPvU)
+    hints.ai_family = AF_UNSPEC;
+
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
 
@@ -1117,7 +1126,7 @@ InitServerSocket (char *portstr)
     return -1;
   }
 
-  if (listen (fd, 5) == -1)
+  if (listen (fd, 10) == -1)
   {
     lprintf (0, "Error with listen(): %s", strerror (errno));
     close (fd);
@@ -1201,9 +1210,9 @@ ProcessParam (int argcount, char **argvec)
       lpp.protocols = PROTO_ALL;
       lpp.socket = -1;
 
-      if (AddServerThread (LISTEN_THREAD, &lpp))
+      if (!AddListenThreads (&lpp, NULL))
       {
-        lprintf (0, "Error adding server thread for all protocols");
+        lprintf (0, "Error adding listening threads for all protocols");
         exit (1);
       }
     }
@@ -1214,9 +1223,9 @@ ProcessParam (int argcount, char **argvec)
       lpp.protocols = PROTO_DATALINK;
       lpp.socket = -1;
 
-      if (AddServerThread (LISTEN_THREAD, &lpp))
+      if (!AddListenThreads (&lpp, NULL))
       {
-        lprintf (0, "Error adding server thread for DataLink");
+        lprintf (0, "Error adding listening threads for DataLink");
         exit (1);
       }
     }
@@ -1227,9 +1236,9 @@ ProcessParam (int argcount, char **argvec)
       lpp.protocols = PROTO_SEEDLINK;
       lpp.socket = -1;
 
-      if (AddServerThread (LISTEN_THREAD, &lpp))
+      if (!AddListenThreads (&lpp, NULL))
       {
-        lprintf (0, "Error adding server thread for SeedLink");
+        lprintf (0, "Error adding listening threads for SeedLink");
         exit (1);
       }
     }
@@ -1637,9 +1646,13 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
           lpp.protocols |= PROTO_SEEDLINK;
         if (strcasestr (svalue, "HTTP"))
           lpp.protocols |= PROTO_HTTP;
+
+        if (lpp.protocols == 0)
+          lpp.protocols = PROTO_ALL;
+
       }
 
-      if (AddServerThread (LISTEN_THREAD, &lpp))
+      if (!AddListenThreads (&lpp, svalue))
       {
         lprintf (0, "Error adding server thread for ListenPort config file line: %s", ptr);
         return -1;
@@ -1658,7 +1671,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
       lpp.protocols = PROTO_DATALINK;
       lpp.socket = -1;
 
-      if (AddServerThread (LISTEN_THREAD, &lpp))
+      if (!AddListenThreads (&lpp, svalue))
       {
         lprintf (0, "Error adding server thread for DataLinkPort config file line: %s", ptr);
         return -1;
@@ -1677,7 +1690,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
       lpp.protocols = PROTO_SEEDLINK;
       lpp.socket = -1;
 
-      if (AddServerThread (LISTEN_THREAD, &lpp))
+      if (!AddListenThreads (&lpp, svalue))
       {
         lprintf (0, "Error adding server thread for SeedLinkPort config file line: %s", ptr);
         return -1;
@@ -2125,6 +2138,83 @@ ConfigMSWrite (char *value)
 
   return 0;
 } /* End of ConfigMSWrite() */
+
+/***************************************************************************
+ * AddListenThreads:
+ *
+ * Add listen threads to the server thread list, searching the options
+ * string for protocol family selections.  The params structure will
+ * be copied.
+ *
+ * Returns number of listening threads on success and 0 on error.
+ ***************************************************************************/
+static int
+AddListenThreads (ListenPortParams *lpp, char *options)
+{
+  uint8_t protocols;
+  int threads = 0;
+
+  if (!lpp)
+    return 0;
+
+  protocols = lpp->protocols;
+
+  /* Listen for requested protocol families */
+  if (options)
+  {
+    if (strcasestr (options, "IPv4"))
+    {
+      lpp->protocols = protocols | FAMILY_IPv4;
+      if (AddServerThread (LISTEN_THREAD, lpp))
+      {
+        return 0;
+      }
+      threads += 1;
+    }
+
+    if (strcasestr (options, "IPv6"))
+    {
+      lpp->protocols = protocols | FAMILY_IPv6;
+      if (AddServerThread (LISTEN_THREAD, lpp))
+      {
+        return 0;
+      }
+      threads += 1;
+    }
+
+    if (strcasestr (options, "IPvU"))
+    {
+      lpp->protocols = protocols | FAMILY_IPvU;
+      if (AddServerThread (LISTEN_THREAD, lpp))
+      {
+        return 0;
+      }
+      threads += 1;
+    }
+  }
+
+  /* Default: listen on dedicated IPv4 and IPv6 sockets */
+  if (!options || !threads)
+  {
+    lpp->protocols = protocols | FAMILY_IPv4;
+    if (AddServerThread (LISTEN_THREAD, lpp))
+    {
+      return 0;
+    }
+    threads += 1;
+
+    lpp->protocols = protocols | FAMILY_IPv6;
+    if (AddServerThread (LISTEN_THREAD, lpp))
+    {
+      return 0;
+    }
+    threads += 1;
+  }
+
+  lpp->protocols = protocols;
+
+  return threads;
+} /* End of AddListenThreads() */
 
 /***************************************************************************
  * AddMSeedScanThread:

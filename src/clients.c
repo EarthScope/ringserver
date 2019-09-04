@@ -1099,18 +1099,33 @@ RecvLine (ClientInfo *cinfo)
  * Generate a string containing the names of the protocols specified
  * by the protocols flag.
  *
- * Return length of string in protocolstr on success or NULL for error.
+ * Return length of string in protocolstr on success or 0 for error.
  ***************************************************************************/
 int
 GenProtocolString (uint8_t protocols, char *protocolstr, size_t maxlength)
 {
   int length;
+  char *family;
+
+  if (!protocolstr)
+    return 0;
+
+  if (protocols & FAMILY_IPv4)
+    family = "IPv4";
+  else if (protocols & FAMILY_IPv6)
+    family = "IPv6";
+  else if (protocols & FAMILY_IPvU)
+    family = "IPvU";
+  else
+    family = "Unknown family?";
 
   length = snprintf (protocolstr, maxlength,
-                     "%s%s%s",
+                     "%s: %s%s%s%s",
+                     family,
                      (protocols & PROTO_DATALINK) ? "DataLink " : "",
                      (protocols & PROTO_SEEDLINK) ? "SeedLink " : "",
-                     (protocols & PROTO_HTTP) ? "HTTP " : "");
+                     (protocols & PROTO_HTTP) ? "HTTP " : "",
+                     (protocols & PROTO_ALL) ? "All protocols " : "");
 
   if (length < maxlength && protocolstr[length - 1] == ' ')
     protocolstr[length - 1] = '\0';
