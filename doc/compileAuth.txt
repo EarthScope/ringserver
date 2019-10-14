@@ -1,0 +1,48 @@
+
+# compiling with authorization, on authorization branch
+git checkout authorization
+
+# requires libjwt, for json web token support,
+# which requires jannson, for json support
+
+sudo apt-get install git  build-essential make autoconf libtool libssl-dev pkg-config libjwt-dev
+
+#put jansson-2.12 ,maybe also  libjwt-1.10.1 , in ringserver dir
+wget http://www.digip.org/jansson/releases/jansson-2.12.tar.gz
+tar zxf jansson-2.12.tar.gz
+
+### jansson
+cd jansson-2.12
+./configure
+make
+
+### libjwt  (or maybe use apt-get installed version?)
+cd libjwt-1.10.1
+autoreconf -i
+./configure
+make
+
+
+### to git rid of:
+./configure: line 11997: syntax error near unexpected token `OPENSSL,'
+./configure: line 11997: `	PKG_CHECK_MODULES(OPENSSL, openssl >= 0.9.8)'
+apt-get install pkg-config
+then run
+autoreconf -i
+./configure
+
+# to test:
+sudo apt-get install python3 python3-websockets python3-dateutil python3-defusedxml
+git clone https://github.com/crotwell/scsn-utils.git
+edit ringserver conf file add
+AuthDir your/auth/directory
+which should contain your secret as
+secret.key
+
+# generate a token with
+/usr/bin/python3 scsn-utils/python/createToken.py -p '<regex match pattern>' -s your/auth/directory/secret.key -u dragrace -o dutytoken.jwt --ed 70
+
+/usr/bin/python3 scsn-utils/python/createToken.py -p 'XX.*/MSEED' -s your/auth/directory/secret.key -u dragrace -o dutytoken.jwt --ed 70
+# also use
+--verify <url>
+to verify token with websocket connetion to ringserver
