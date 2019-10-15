@@ -1,0 +1,7 @@
+jansson-*
+libjwt-*
+pcre
+mxml
+*.o
+ringserver
+libmseed/libmseed.a
