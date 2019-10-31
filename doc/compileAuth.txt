@@ -1,4 +1,6 @@
 
+git clone https://github.com/crotwell/ringserver.git
+
 # compiling with authorization, on authorization branch
 git checkout authorization
 
@@ -7,29 +9,30 @@ git checkout authorization
 
 sudo apt-get install git  build-essential make autoconf libtool libssl-dev pkg-config libjwt-dev
 
+sudo apt-get install libjwt-dev libjansson-dev
+
+# ....or
+#
 #put jansson-2.12 ,maybe also  libjwt-1.10.1 , in ringserver dir
-wget http://www.digip.org/jansson/releases/jansson-2.12.tar.gz
-tar zxf jansson-2.12.tar.gz
-
+# wget http://www.digip.org/jansson/releases/jansson-2.12.tar.gz
+#tar zxf jansson-2.12.tar.gz
 ### jansson
-cd jansson-2.12
-./configure
-make
-
+#cd jansson-2.12
+#./configure
+#make
 ### libjwt  (or maybe use apt-get installed version?)
-cd libjwt-1.10.1
-autoreconf -i
-./configure
-make
-
-
+#cd libjwt-1.10.1
+#autoreconf -i
+#./configure
+#make
 ### to git rid of:
-./configure: line 11997: syntax error near unexpected token `OPENSSL,'
-./configure: line 11997: `	PKG_CHECK_MODULES(OPENSSL, openssl >= 0.9.8)'
-apt-get install pkg-config
-then run
-autoreconf -i
-./configure
+# ./configure: line 11997: syntax error near unexpected token `OPENSSL,'
+# ./configure: line 11997: `	PKG_CHECK_MODULES(OPENSSL, openssl >= 0.9.8)'
+# apt-get install pkg-config
+#then run
+# autoreconf -i
+# ./configure
+
 
 # to test:
 sudo apt-get install python3 python3-websockets python3-dateutil python3-defusedxml
