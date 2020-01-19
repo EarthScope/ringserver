@@ -167,6 +167,8 @@ ringserver [options] [configfile]
 
 <p >The protocols allowed by any given listening port can be set to any combination of the supported protocols by adding flags to the <i>Listen</i> parameter of the server configuration file.</p>
 
+<p >Both IPv4 and IPv6 are supported by default. The server can be limited to a specified network protocol family by adding flags to the <i>Listen</i> parameter of the server configuration file.</p>
+
 ## <a id='http-support'>Http Support</a>
 
 <p >The server will respond to HTTP requests for a few fixed resources. If the <b>WebRoot</b> config parameter is set to a directory, the files under that directory will also be served when requesed through the HTTP GET method.  Except for the fixed resources, the HTTP server implementation is limited to returning existing files and returning "index.html" files when a directory is requested.</p>
@@ -331,4 +333,4 @@ IRIS Data Management Center
 </pre>
 
 
-(man page 2019/02/14)
+(man page 2020/01/19)

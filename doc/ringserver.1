@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2019/02/14
+.TH RINGSERVER 1 2020/01/19
 .SH NAME
 ringserver \- Generic packet ring buffer
 
@@ -235,6 +235,10 @@ client, all subsequent communication is expected in this protocol.
 
 The protocols allowed by any given listening port can be set to any
 combination of the supported protocols by adding flags to the
+\fIListen\fP parameter of the server configuration file.
+
+Both IPv4 and IPv6 are supported by default. The server can be limited
+to a specified network protocol family by adding flags to the
 \fIListen\fP parameter of the server configuration file.
 
 .SH "HTTP Support"
