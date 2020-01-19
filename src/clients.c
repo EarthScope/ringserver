@@ -1120,12 +1120,11 @@ GenProtocolString (uint8_t protocols, char *protocolstr, size_t maxlength)
     family = "Unknown family?";
 
   length = snprintf (protocolstr, maxlength,
-                     "%s: %s%s%s%s",
+                     "%s: %s%s%s",
                      family,
                      (protocols & PROTO_DATALINK) ? "DataLink " : "",
                      (protocols & PROTO_SEEDLINK) ? "SeedLink " : "",
-                     (protocols & PROTO_HTTP) ? "HTTP " : "",
-                     (protocols & PROTO_ALL) ? "All protocols " : "");
+                     (protocols & PROTO_HTTP) ? "HTTP " : "");
 
   if (length < maxlength && protocolstr[length - 1] == ' ')
     protocolstr[length - 1] = '\0';
