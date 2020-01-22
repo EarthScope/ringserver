@@ -20,8 +20,6 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
- *
- * Modified: 2020.022
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -91,7 +89,7 @@ static int ProcessParam (int argcount, char **argvec);
 static char *GetOptVal (int argcount, char **argvec, int argopt);
 static int ReadConfigFile (char *configfile, int dynamiconly, time_t mtime);
 static int ConfigMSWrite (char *value);
-static int AddListenThreads (ListenPortParams *lpp, char *options);
+static int AddListenThreads (ListenPortParams *lpp);
 static int AddMSeedScanThread (char *configstr);
 static int AddServerThread (unsigned int type, void *params);
 static uint64_t CalcSize (char *sizestr);
@@ -485,12 +483,8 @@ main (int argc, char *argv[])
         /* Start new listening thread if needed */
         if (stp->td == 0 && !shutdownsig)
         {
-          /* Initialize server socket, thread data and create thread */
-          if (lpp->socket <= 0 && (lpp->socket = InitServerSocket (lpp->portstr, lpp->protocols)) == -1)
-          {
-            lprintf (0, "Error initializing %s server socket for port %s", threadtype, lpp->portstr);
-          }
-          else if (!(stp->td = InitThreadData (lpp)))
+          /* Initialize thread data and create thread */
+          if (!(stp->td = InitThreadData (lpp)))
           {
             lprintf (0, "Error initializing %s thread_data: %s", threadtype, strerror (errno));
           }
@@ -1146,7 +1140,7 @@ InitServerSocket (char *portstr, uint8_t protocols)
 static int
 ProcessParam (int argcount, char **argvec)
 {
-  ListenPortParams lpp;
+  ListenPortParams lpp = {0};
   int optind;
 
   /* Process all command line arguments */
@@ -1208,7 +1202,7 @@ ProcessParam (int argcount, char **argvec)
       lpp.protocols = PROTO_ALL;
       lpp.socket = -1;
 
-      if (!AddListenThreads (&lpp, NULL))
+      if (!AddListenThreads (&lpp))
       {
         lprintf (0, "Error adding listening threads for all protocols");
         exit (1);
@@ -1221,7 +1215,7 @@ ProcessParam (int argcount, char **argvec)
       lpp.protocols = PROTO_DATALINK;
       lpp.socket = -1;
 
-      if (!AddListenThreads (&lpp, NULL))
+      if (!AddListenThreads (&lpp))
       {
         lprintf (0, "Error adding listening threads for DataLink");
         exit (1);
@@ -1234,7 +1228,7 @@ ProcessParam (int argcount, char **argvec)
       lpp.protocols = PROTO_SEEDLINK;
       lpp.socket = -1;
 
-      if (!AddListenThreads (&lpp, NULL))
+      if (!AddListenThreads (&lpp))
       {
         lprintf (0, "Error adding listening threads for SeedLink");
         exit (1);
@@ -1648,9 +1642,13 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
         if (lpp.protocols == 0)
           lpp.protocols = PROTO_ALL;
 
+        if (strcasestr (svalue, "IPv4"))
+          lpp.protocols |= FAMILY_IPv4;
+        if (strcasestr (svalue, "IPv6"))
+          lpp.protocols |= FAMILY_IPv6;
       }
 
-      if (!AddListenThreads (&lpp, svalue))
+      if (!AddListenThreads (&lpp))
       {
         lprintf (0, "Error adding server thread for ListenPort config file line: %s", ptr);
         return -1;
@@ -1669,7 +1667,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
       lpp.protocols = PROTO_DATALINK;
       lpp.socket = -1;
 
-      if (!AddListenThreads (&lpp, svalue))
+      if (!AddListenThreads (&lpp))
       {
         lprintf (0, "Error adding server thread for DataLinkPort config file line: %s", ptr);
         return -1;
@@ -1688,7 +1686,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
       lpp.protocols = PROTO_SEEDLINK;
       lpp.socket = -1;
 
-      if (!AddListenThreads (&lpp, svalue))
+      if (!AddListenThreads (&lpp))
       {
         lprintf (0, "Error adding server thread for SeedLinkPort config file line: %s", ptr);
         return -1;
@@ -2140,16 +2138,21 @@ ConfigMSWrite (char *value)
 /***************************************************************************
  * AddListenThreads:
  *
- * Add listen threads to the server thread list, searching the options
- * string for protocol family selections.  The params structure will
- * be copied.
+ * Add listen threads to the server thread list and initializing the
+ * server listening sockets.
+ *
+ * A listening thread is created for each of the IPv4 and IPv6 network
+ * protocol families, both by default.
+ *
+ * The params structure will be copied by AddServerThread().
  *
  * Returns number of listening threads on success and 0 on error.
  ***************************************************************************/
 static int
-AddListenThreads (ListenPortParams *lpp, char *options)
+AddListenThreads (ListenPortParams *lpp)
 {
   uint8_t protocols;
+  uint8_t families = 0;
   int threads = 0;
 
   if (!lpp)
@@ -2157,49 +2160,63 @@ AddListenThreads (ListenPortParams *lpp, char *options)
 
   protocols = lpp->protocols;
 
-  /* Listen for requested protocol families */
-  if (options)
+  /* Split server protocols from network protocol families */
+  if (protocols & FAMILY_IPv4)
   {
-    if (strcasestr (options, "IPv4"))
-    {
-      lpp->protocols = protocols | FAMILY_IPv4;
-      if (AddServerThread (LISTEN_THREAD, lpp))
-      {
-        return 0;
-      }
-      threads += 1;
-    }
-
-    if (strcasestr (options, "IPv6"))
-    {
-      lpp->protocols = protocols | FAMILY_IPv6;
-      if (AddServerThread (LISTEN_THREAD, lpp))
-      {
-        return 0;
-      }
-      threads += 1;
-    }
+    families |= FAMILY_IPv4;
+    protocols &= ~FAMILY_IPv4;
+  }
+  if (protocols & FAMILY_IPv6)
+  {
+    families |= FAMILY_IPv6;
+    protocols &= ~FAMILY_IPv6;
   }
 
-  /* Default: listen on dedicated IPv4 and IPv6 sockets */
-  if (!options || !threads)
+  /* Try to initialize listening for IPv4, if requested or default (neither family requested) */
+  if (families == 0 || (families & FAMILY_IPv4))
   {
     lpp->protocols = protocols | FAMILY_IPv4;
-    if (AddServerThread (LISTEN_THREAD, lpp))
-    {
-      return 0;
-    }
-    threads += 1;
 
-    lpp->protocols = protocols | FAMILY_IPv6;
-    if (AddServerThread (LISTEN_THREAD, lpp))
+    if ((lpp->socket = InitServerSocket (lpp->portstr, lpp->protocols)) > 0)
     {
+      if (AddServerThread (LISTEN_THREAD, lpp))
+      {
+        return 0;
+      }
+
+      threads += 1;
+    }
+    /* If explicitly requested, an initialization error is a failure */
+    else if (families & FAMILY_IPv4)
+    {
+      lprintf (0, "Error initializing IPv4 server listening socket for port %s", lpp->portstr);
       return 0;
     }
-    threads += 1;
   }
 
-  lpp->protocols = protocols;
+  /* Try to initialize listening for IPv6, if requested or default (neither family requested) */
+  if (families == 0 || (families & FAMILY_IPv6))
+  {
+    lpp->protocols = protocols | FAMILY_IPv6;
+
+    if ((lpp->socket = InitServerSocket (lpp->portstr, lpp->protocols)) > 0)
+    {
+      if (AddServerThread (LISTEN_THREAD, lpp))
+      {
+        return 0;
+      }
+
+      threads += 1;
+    }
+    /* If explicitly requested, an initialization error is a failure */
+    else if (families & FAMILY_IPv6)
+    {
+      lprintf (0, "Error initializing IPv6 server listening socket for port %s", lpp->portstr);
+      return 0;
+    }
+  }
+
+  lpp->protocols = protocols | families;
 
   return threads;
 } /* End of AddListenThreads() */
