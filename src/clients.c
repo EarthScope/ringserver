@@ -1114,8 +1114,6 @@ GenProtocolString (uint8_t protocols, char *protocolstr, size_t maxlength)
     family = "IPv4";
   else if (protocols & FAMILY_IPv6)
     family = "IPv6";
-  else if (protocols & FAMILY_IPvU)
-    family = "IPvU";
   else
     family = "Unknown family?";
 

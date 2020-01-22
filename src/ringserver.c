@@ -21,7 +21,7 @@
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
  *
- * Modified: 2018.044
+ * Modified: 2020.022
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -1086,13 +1086,11 @@ InitServerSocket (char *portstr, uint8_t protocols)
 
   memset (&hints, 0, sizeof (hints));
 
-  /* AF_INET, AF_INET6, or AF_UNSPEC for IPv4 or IPv6 or unspecified */
+  /* AF_INET, or AF_INET6 for IPv4 or IPv6 */
   if (protocols & FAMILY_IPv4)
     hints.ai_family = AF_INET;
   else if (protocols & FAMILY_IPv6)
     hints.ai_family = AF_INET6;
-  else if (protocols & FAMILY_IPvU)
-    hints.ai_family = AF_UNSPEC;
 
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
@@ -2175,16 +2173,6 @@ AddListenThreads (ListenPortParams *lpp, char *options)
     if (strcasestr (options, "IPv6"))
     {
       lpp->protocols = protocols | FAMILY_IPv6;
-      if (AddServerThread (LISTEN_THREAD, lpp))
-      {
-        return 0;
-      }
-      threads += 1;
-    }
-
-    if (strcasestr (options, "IPvU"))
-    {
-      lpp->protocols = protocols | FAMILY_IPvU;
       if (AddServerThread (LISTEN_THREAD, lpp))
       {
         return 0;
