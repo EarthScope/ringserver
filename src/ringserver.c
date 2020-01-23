@@ -1106,7 +1106,16 @@ InitServerSocket (char *portstr, uint8_t protocols)
   optval = 1;
   if (setsockopt (fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof (optval)))
   {
-    lprintf (0, "Error with setsockopt(): %s", strerror (errno));
+    lprintf (0, "Error setting SO_REUSEADDR with setsockopt(): %s", strerror (errno));
+    close (fd);
+    return -1;
+  }
+
+  /* Limit IPv6 sockets to IPv6 only, avoid mapped addresses, we handle IPv4 separately */
+  if (addr->ai_family == AF_INET6 &&
+      setsockopt (fd, IPPROTO_IPV6, IPV6_V6ONLY, &optval, sizeof (optval)))
+  {
+    lprintf (0, "Error setting IPV6_V6ONLY with setsockopt(): %s", strerror (errno));
     close (fd);
     return -1;
   }
@@ -1140,7 +1149,7 @@ InitServerSocket (char *portstr, uint8_t protocols)
 static int
 ProcessParam (int argcount, char **argvec)
 {
-  ListenPortParams lpp = {0};
+  ListenPortParams lpp;
   int optind;
 
   /* Process all command line arguments */
