@@ -1071,6 +1071,7 @@ InitServerSocket (char *portstr, uint8_t protocols)
 {
   struct addrinfo *addr;
   struct addrinfo hints;
+  char *familystr = NULL;
   int fd;
   int optval;
   int gaierror;
@@ -1082,16 +1083,28 @@ InitServerSocket (char *portstr, uint8_t protocols)
 
   /* AF_INET, or AF_INET6 for IPv4 or IPv6 */
   if (protocols & FAMILY_IPv4)
+  {
     hints.ai_family = AF_INET;
+    familystr = "IPv4";
+  }
   else if (protocols & FAMILY_IPv6)
+  {
     hints.ai_family = AF_INET6;
+    familystr = "IPv6";
+  }
+  else
+  {
+    hints.ai_family = AF_UNSPEC;
+    familystr = "IPvUnspecified";
+  }
 
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
 
   if ((gaierror = getaddrinfo (NULL, portstr, &hints, &addr)))
   {
-    lprintf (0, "Error with getaddrinfo(): %s", gai_strerror (gaierror));
+    lprintf (0, "Error with getaddrinfo(), %s port %s: %s",
+             familystr, portstr, gai_strerror (gaierror));
     return -1;
   }
 
@@ -1099,14 +1112,18 @@ InitServerSocket (char *portstr, uint8_t protocols)
   fd = socket (addr->ai_family, addr->ai_socktype, addr->ai_protocol);
   if (fd < 0)
   {
-    lprintf (0, "Error with socket(): %s", strerror (errno));
+    /* Print error only if not "unsupported" IPv6, as this is expected */
+    if (addr->ai_family != AF_INET6 && errno != EAFNOSUPPORT)
+      lprintf (0, "Error with socket(), %s port %s: %s",
+               familystr, portstr, strerror (errno));
     return -1;
   }
 
   optval = 1;
   if (setsockopt (fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof (optval)))
   {
-    lprintf (0, "Error setting SO_REUSEADDR with setsockopt(): %s", strerror (errno));
+    lprintf (0, "Error setting SO_REUSEADDR with setsockopt(), %s port %s: %s",
+             familystr, portstr, strerror (errno));
     close (fd);
     return -1;
   }
@@ -1115,21 +1132,24 @@ InitServerSocket (char *portstr, uint8_t protocols)
   if (addr->ai_family == AF_INET6 &&
       setsockopt (fd, IPPROTO_IPV6, IPV6_V6ONLY, &optval, sizeof (optval)))
   {
-    lprintf (0, "Error setting IPV6_V6ONLY with setsockopt(): %s", strerror (errno));
+    lprintf (0, "Error setting IPV6_V6ONLY with setsockopt(), %s port %s: %s",
+             familystr, portstr, strerror (errno));
     close (fd);
     return -1;
   }
 
   if (bind (fd, addr->ai_addr, addr->ai_addrlen) < 0)
   {
-    lprintf (0, "Error with bind(): %s", strerror (errno));
+    lprintf (0, "Error with bind(), %s port %s: %s",
+             familystr, portstr, strerror (errno));
     close (fd);
     return -1;
   }
 
   if (listen (fd, 10) == -1)
   {
-    lprintf (0, "Error with listen(): %s", strerror (errno));
+    lprintf (0, "Error with listen(), %s port %s: %s",
+             familystr, portstr, strerror (errno));
     close (fd);
     return -1;
   }
