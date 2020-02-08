@@ -278,6 +278,9 @@ IsAllDigits (char *string)
   int idx;
   int length;
 
+  if (!string)
+    return 0;
+
   length = strlen (string);
 
   for (idx = 0; idx < length; idx++)

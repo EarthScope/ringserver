@@ -79,8 +79,8 @@ ClientThread (void *arg)
   ssize_t nrecv;
   int nread;
 
-  struct sockaddr_in sin;
-  socklen_t sinlen = sizeof (struct sockaddr_in);
+  struct sockaddr_storage saddr = {0};
+  socklen_t saddrlen = sizeof(saddr);
   int serverport = -1;
 
   /* Throttle related */
@@ -132,9 +132,12 @@ ClientThread (void *arg)
   }
 
   /* Find the server port used for this connection */
-  if (getsockname (cinfo->socket, (struct sockaddr *)&sin, &sinlen) == 0)
+  if (getsockname (cinfo->socket, (struct sockaddr *)&saddr, &saddrlen) == 0)
   {
-    serverport = ntohs (sin.sin_port);
+    if (saddr.ss_family == AF_INET)
+      serverport = ntohs (((struct sockaddr_in *)&saddr)->sin_port);
+    else
+      serverport = ntohs (((struct sockaddr_in6 *)&saddr)->sin6_port);
   }
 
   lprintf (1, "Client connected [%d]: %s [%s] port %s",

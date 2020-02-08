@@ -62,8 +62,15 @@
 /* A structure to list IP addresses ranges */
 typedef struct IPNet_s
 {
-  struct in_addr network;
-  struct in_addr netmask;
+  union {
+    struct in_addr in_addr;
+    struct in6_addr in6_addr;
+  } network;
+  union {
+    struct in_addr in_addr;
+    struct in6_addr in6_addr;
+  } netmask;
+  int family;
   char *limitstr;
   struct IPNet_s *next;
 } IPNet;
@@ -1113,7 +1120,7 @@ InitServerSocket (char *portstr, uint8_t protocols)
   if (fd < 0)
   {
     /* Print error only if not "unsupported" IPv6, as this is expected */
-    if (addr->ai_family != AF_INET6 && errno != EAFNOSUPPORT)
+    if (!(addr->ai_family == AF_INET6 && errno == EAFNOSUPPORT))
       lprintf (0, "Error with socket(), %s port %s: %s",
                familystr, portstr, strerror (errno));
     return -1;
@@ -1338,22 +1345,22 @@ ProcessParam (int argcount, char **argvec)
     serverid = strdup ("Ring Server");
   }
 
-  /* Add 127.0.0.1 (loopback) to write permission list if list empty */
+  /* Add localhost (loopback) to write permission list if list empty */
   if (!writeips)
   {
-    if (AddIPNet (&writeips, "127.0.0.1/32", NULL))
+    if (AddIPNet (&writeips, "localhost/128", NULL))
     {
-      lprintf (0, "Error adding 127.0.0.1/32 to write permission list");
+      lprintf (0, "Error adding localhost/128 to write permission list");
       return -1;
     }
   }
 
-  /* Add 127.0.0.1 (loopback) to trusted list if list empty */
+  /* Add localhost (loopback) to trusted list if list empty */
   if (!trustedips)
   {
-    if (AddIPNet (&trustedips, "127.0.0.1/32", NULL))
+    if (AddIPNet (&trustedips, "localhost/128", NULL))
     {
-      lprintf (0, "Error adding 127.0.0.1/32 to trusted list");
+      lprintf (0, "Error adding localhost/128 to trusted list");
       return -1;
     }
   }
@@ -2068,22 +2075,22 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     }
   } /* Done reading config file lines */
 
-  /* Add 127.0.0.1 (loopback) to write permission list if list empty */
+  /* Add localhost (loopback) to write permission list if list empty */
   if (!writeips)
   {
-    if (AddIPNet (&writeips, "127.0.0.1/32", NULL))
+    if (AddIPNet (&writeips, "localhost/128", NULL))
     {
-      lprintf (0, "Error adding 127.0.0.1/32 to write permission list");
+      lprintf (0, "Error adding localhost/128 to write permission list");
       return -1;
     }
   }
 
-  /* Add 127.0.0.1 (loopback) to trusted list if list empty */
+  /* Add localhost (loopback) to trusted list if list empty */
   if (!trustedips)
   {
-    if (AddIPNet (&trustedips, "127.0.0.1/32", NULL))
+    if (AddIPNet (&trustedips, "localhost/128", NULL))
     {
-      lprintf (0, "Error adding 127.0.0.1/32 to trusted list");
+      lprintf (0, "Error adding localhost/128 to trusted list");
       return -1;
     }
   }
@@ -2607,105 +2614,177 @@ CalcStats (ClientInfo *cinfo)
 /***************************************************************************
  * AddIPNet:
  *
- * Add an IPV4 network and netmask to an IPNet list.
+ * Add network and netmask to an IPNet list.  Both IPv4 and IPv6 are
+ * supported.
  *
  * Returns 0 on success and -1 on error.
  ***************************************************************************/
 static int
 AddIPNet (IPNet **pplist, char *network, char *limitstr)
 {
+  struct addrinfo hints;
+  struct addrinfo *addrlist;
+  struct addrinfo *addr;
+  struct sockaddr_in *sockaddr;
+  struct sockaddr_in6 *sockaddr6;
   IPNet *newipnet;
   char net[100];
-  char *mask;
+  char *end = NULL;
+  char *prefixstr;
+  unsigned long int prefix = 0;
+  uint32_t v4netmask = 0;
+  int rv;
+  int idx;
+  int jdx;
 
   if (!pplist || !network)
     return -1;
 
-  /* Allocate new IPNet */
-  if (!(newipnet = (IPNet *)calloc (1, sizeof (IPNet))))
-  {
-    lprintf (0, "AddIPNet(): Error allocating memory for IPNet");
-    return -1;
-  }
-
   /* Copy network string for manipulation */
   strncpy (net, network, sizeof (net));
 
-  /* Split netmask from network: "IP/netmask" */
-  if ((mask = strchr (net, '/')))
+  /* Split netmask/prefixlen from network if present: "IP/netmask" */
+  if ((prefixstr = strchr (net, '/')))
   {
-    *mask++ = '\0';
-  }
-  else
-  {
-    /* The default netmask */
-    mask = "32";
+    *prefixstr++ = '\0';
   }
 
-  /* Convert bit count netmask to binary format */
-  if (IsAllDigits (mask))
+  /* Convert prefix string to value */
+  if (IsAllDigits (prefixstr))
   {
-    uint32_t bitsmask = 0;
-    unsigned long int numbits = strtoul (mask, NULL, 10);
-    int i;
+    prefix = strtoul (prefixstr, &end, 10);
 
-    /* Sanity check and catch errors from strtoul() */
-    if (numbits > 32)
+    if (*end)
     {
-      lprintf (0, "bit-count netmask (%s) must be less than 32", mask);
-      return -1;
-    }
-
-    for (i = 0; i < numbits; i++)
-    {
-      bitsmask = bitsmask >> 1;
-      bitsmask |= 0x80000000;
-    }
-
-    if (!ms_bigendianhost ())
-    {
-      ms_gswap4 (&bitsmask);
-    }
-
-    /* Assign bit count-derived mask to the netmask address */
-    newipnet->netmask.s_addr = bitsmask;
-  }
-  else
-  {
-    /* Convert netmask string to in_addr, supporting only AF_INET */
-    if (inet_pton (AF_INET, mask, &(newipnet->netmask)) <= 0)
-    {
-      lprintf (0, "Error parsing net mask address: %s", mask);
+      lprintf (0, "AddIPNet(): Error converting prefix value (%s)", prefixstr);
       return -1;
     }
   }
-
-  /* Convert IP string to in_addr, supporting only AF_INET */
-  if (inet_pton (AF_INET, net, &(newipnet->network)) <= 0)
+  /* Convert IPv4 netmask to prefix, anything not all digits must be a mask */
+  else if (prefixstr)
   {
-    lprintf (0, "Error parsing IP address: %s", net);
+    if (inet_pton (AF_INET, prefixstr, &v4netmask) <= 0)
+    {
+      lprintf (0, "AddIPNet(): Error parsing IPv4 netmask: %s", prefixstr);
+      return -1;
+    }
+
+    if (v4netmask > 0)
+    {
+      if (ntohl(v4netmask) & (~ntohl(v4netmask) >> 1))
+      {
+        lprintf (0, "AddIPNet(): Invalid IPv4 netmask: %s", prefixstr);
+        return -1;
+      }
+    }
+  }
+  else
+  {
+    prefix = 128;
+  }
+
+  /* Sanity check and catch errors from strtoul() */
+  if (prefix > 128)
+  {
+    lprintf (0, "AddIPNet(): Error, prefix (%s) must be less than 128", prefixstr);
     return -1;
   }
 
-  /* AND the ip and netmask to get the actual network */
-  newipnet->network.s_addr &= newipnet->netmask.s_addr;
+  /* Convert address portion to binary address, resolving if possible */
+  memset (&hints, 0, sizeof (hints));
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_family = AF_UNSPEC;     /* Either IPv4 and/or IPv6 */
+  hints.ai_flags = AI_ADDRCONFIG;  /* Only return entries that could actually connect */
 
-  /* Store any supplied limit expression */
-  if (limitstr)
+  if ((rv = getaddrinfo (net, NULL, &hints, &addrlist)) != 0)
   {
-    if (!(newipnet->limitstr = strdup (limitstr)))
-    {
-      lprintf (0, "AddIPNet(): Error allocating memory for limit string");
-      return -1;
-    }
+    lprintf (0, "AddIPNet(): Error with getaddrinfo(%s): %s", net, gai_strerror (rv));
+    return -1;
   }
 
-  /* Push the new entry on the top of the list */
-  newipnet->next = *pplist;
-  *pplist = newipnet;
+  /* Loop through results from getaddrinfo(), adding new entries */
+  for (addr = addrlist; addr != 0; addr = addr->ai_next)
+  {
+    /* Allocate new IPNet */
+    if (!(newipnet = (IPNet *)calloc (1, sizeof (IPNet))))
+    {
+      lprintf (0, "AddIPNet(): Error allocating memory for IPNet");
+      return -1;
+    }
+
+    if (addr->ai_family == AF_INET)
+    {
+      newipnet->family = AF_INET;
+
+      /* Use IPv4 netmask if specified directly */
+      if (v4netmask > 0)
+        newipnet->netmask.in_addr.s_addr = v4netmask;
+      /* Calculate netmask from prefix, if the prefix > 32 use 32 as a max for IPv4 */
+      else if (prefix > 0)
+        newipnet->netmask.in_addr.s_addr = ~((1 << (32 - ((prefix > 32) ? 32 : prefix))) - 1);
+      else
+        newipnet->netmask.in_addr.s_addr = 0;
+
+      /* Swap calculated netmask to network order, if a (swapped) mask not available */
+      if (v4netmask == 0)
+      {
+        newipnet->netmask.in_addr.s_addr = htonl(newipnet->netmask.in_addr.s_addr);
+      }
+
+      sockaddr = (struct sockaddr_in *)addr->ai_addr;
+      newipnet->network.in_addr.s_addr = sockaddr->sin_addr.s_addr;
+
+      /* Calculate network: AND the address and netmask */
+      newipnet->network.in_addr.s_addr &= newipnet->netmask.in_addr.s_addr;
+    }
+    else if (addr->ai_family == AF_INET6)
+    {
+      newipnet->family = AF_INET6;
+
+      memset (&newipnet->netmask.in6_addr, 0, sizeof (struct in6_addr));
+
+      /* Calculate netmask from prefix */
+      if (prefix > 0)
+      {
+        for (idx = prefix, jdx = 0; idx > 0; idx -= 8, jdx++)
+        {
+          if (idx >= 8)
+            newipnet->netmask.in6_addr.s6_addr[jdx] = 0xFFu;
+          else
+            newipnet->netmask.in6_addr.s6_addr[jdx] = (uint8_t)(0xFFu << (8 - idx));
+	}
+      }
+
+      sockaddr6 = (struct sockaddr_in6 *)addr->ai_addr;
+      memcpy (&newipnet->network.in6_addr.s6_addr, &sockaddr6->sin6_addr.s6_addr, sizeof(struct sockaddr_in6));
+
+      /* Calculate network: AND the address and netmask */
+      for (idx = 0; idx < 16; idx++)
+      {
+        newipnet->network.in6_addr.s6_addr[idx] &= newipnet->netmask.in6_addr.s6_addr[idx];
+      }
+    }
+
+    /* Store any supplied limit expression */
+    if (limitstr)
+    {
+      if (!(newipnet->limitstr = strdup (limitstr)))
+      {
+        lprintf (0, "AddIPNet(): Error allocating memory for limit string");
+        return -1;
+      }
+    }
+
+    /* Push the new entry on the top of the list */
+    newipnet->next = *pplist;
+    *pplist = newipnet;
+  }
+
+  freeaddrinfo (addrlist);
 
   return 0;
 } /* End of AddIPNet() */
+
 
 /***************************************************************************
  * MatchIP:
@@ -2719,27 +2798,49 @@ static IPNet *
 MatchIP (IPNet *list, struct sockaddr *addr)
 {
   IPNet *net = list;
-  struct in_addr testnet;
+  struct in_addr *testnet = &((struct sockaddr_in *)addr)->sin_addr;
+  struct in6_addr *testnet6 = &((struct sockaddr_in6 *)addr)->sin6_addr;
 
   if (!list)
     return 0;
 
-  /* Only IP4 addresses are supported */
-  if (addr->sa_family != AF_INET)
+  /* Sanity, only IPv4 and IPv6 addresses */
+  if (addr->sa_family != AF_INET && addr->sa_family != AF_INET6)
     return 0;
 
   /* Search IPNet list for a matching entry for addr */
   while (net)
   {
-    /* Copy the addr to the test addr */
-    testnet.s_addr = ((struct sockaddr_in *)addr)->sin_addr.s_addr;
-
-    /* AND the test addr with the netmask to get the test network */
-    testnet.s_addr &= net->netmask.s_addr;
-
     /* Check for match between test network and list network */
-    if (testnet.s_addr == net->network.s_addr)
-      return net;
+    if (addr->sa_family == AF_INET && net->family == AF_INET)
+    {
+      if ((testnet->s_addr & net->netmask.in_addr.s_addr) == net->network.in_addr.s_addr)
+      {
+        return net;
+      }
+    }
+    else if (addr->sa_family == AF_INET6 && net->family == AF_INET6)
+    {
+      if ((testnet6->s6_addr[0] & net->netmask.in6_addr.s6_addr[0]) == net->network.in6_addr.s6_addr[0] &&
+          (testnet6->s6_addr[1] & net->netmask.in6_addr.s6_addr[1]) == net->network.in6_addr.s6_addr[1] &&
+          (testnet6->s6_addr[2] & net->netmask.in6_addr.s6_addr[2]) == net->network.in6_addr.s6_addr[2] &&
+          (testnet6->s6_addr[3] & net->netmask.in6_addr.s6_addr[3]) == net->network.in6_addr.s6_addr[3] &&
+          (testnet6->s6_addr[4] & net->netmask.in6_addr.s6_addr[4]) == net->network.in6_addr.s6_addr[4] &&
+          (testnet6->s6_addr[5] & net->netmask.in6_addr.s6_addr[5]) == net->network.in6_addr.s6_addr[5] &&
+          (testnet6->s6_addr[6] & net->netmask.in6_addr.s6_addr[6]) == net->network.in6_addr.s6_addr[6] &&
+          (testnet6->s6_addr[7] & net->netmask.in6_addr.s6_addr[7]) == net->network.in6_addr.s6_addr[7] &&
+          (testnet6->s6_addr[8] & net->netmask.in6_addr.s6_addr[8]) == net->network.in6_addr.s6_addr[8] &&
+          (testnet6->s6_addr[9] & net->netmask.in6_addr.s6_addr[9]) == net->network.in6_addr.s6_addr[9] &&
+          (testnet6->s6_addr[10] & net->netmask.in6_addr.s6_addr[10]) == net->network.in6_addr.s6_addr[10] &&
+          (testnet6->s6_addr[11] & net->netmask.in6_addr.s6_addr[11]) == net->network.in6_addr.s6_addr[11] &&
+          (testnet6->s6_addr[12] & net->netmask.in6_addr.s6_addr[12]) == net->network.in6_addr.s6_addr[12] &&
+          (testnet6->s6_addr[13] & net->netmask.in6_addr.s6_addr[13]) == net->network.in6_addr.s6_addr[13] &&
+          (testnet6->s6_addr[14] & net->netmask.in6_addr.s6_addr[14]) == net->network.in6_addr.s6_addr[14] &&
+          (testnet6->s6_addr[15] & net->netmask.in6_addr.s6_addr[15]) == net->network.in6_addr.s6_addr[15])
+      {
+        return net;
+      }
+    }
 
     net = net->next;
   }
