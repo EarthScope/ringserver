@@ -795,8 +795,9 @@ ListenThread (void *arg)
   char portstr[32];
   char protocolstr[100];
 
-  struct sockaddr addr;
-  socklen_t addrlen = sizeof (addr);
+  struct sockaddr_storage addr_storage;
+  struct sockaddr *paddr = (struct sockaddr *)&addr_storage;
+  socklen_t addrlen = sizeof (addr_storage);
   int one = 1;
 
   mytdp = (struct thread_data *)arg;
@@ -819,7 +820,7 @@ ListenThread (void *arg)
   while (!shutdownsig)
   {
     /* Process next connection in queue */
-    clientsocket = accept (lpp->socket, &addr, &addrlen);
+    clientsocket = accept (lpp->socket, paddr, &addrlen);
 
     /* Check for accept errors */
     if (clientsocket == -1)
@@ -842,7 +843,7 @@ ListenThread (void *arg)
     }
 
     /* Generate IP address and port number strings */
-    if (getnameinfo (&addr, addrlen, ipstr, sizeof (ipstr), portstr, sizeof (portstr),
+    if (getnameinfo (paddr, addrlen, ipstr, sizeof (ipstr), portstr, sizeof (portstr),
                      NI_NUMERICHOST | NI_NUMERICSERV))
     {
       lprintf (0, "Error creating IP and port strings");
@@ -855,7 +856,7 @@ ListenThread (void *arg)
     /* Reject clients not in matching list */
     if (matchips)
     {
-      if (!MatchIP (matchips, &addr))
+      if (!MatchIP (matchips, paddr))
       {
         lprintf (1, "Rejecting non-matching connection from: %s:%s", ipstr, portstr);
         close (clientsocket);
@@ -866,7 +867,7 @@ ListenThread (void *arg)
     /* Reject clients in the rejection list */
     if (rejectips)
     {
-      if (MatchIP (rejectips, &addr))
+      if (MatchIP (rejectips, paddr))
       {
         lprintf (1, "Rejecting connection from: %s:%s", ipstr, portstr);
         close (clientsocket);
@@ -877,9 +878,9 @@ ListenThread (void *arg)
     /* Enforce per-address connection limit for non write permission addresses */
     if (maxclientsperip)
     {
-      if (!(writeips && MatchIP (writeips, &addr)))
+      if (!(writeips && MatchIP (writeips, paddr)))
       {
-        if (ClientIPCount (&addr) >= maxclientsperip)
+        if (ClientIPCount (paddr) >= maxclientsperip)
         {
           lprintf (1, "Too many connections from: %s:%s", ipstr, portstr);
           close (clientsocket);
@@ -891,7 +892,7 @@ ListenThread (void *arg)
     /* Enforce maximum number of clients if specified */
     if (maxclients && clientcount >= maxclients)
     {
-      if ((writeips && MatchIP (writeips, &addr)) && clientcount <= (maxclients + RESERVECONNECTIONS))
+      if ((writeips && MatchIP (writeips, paddr)) && clientcount <= (maxclients + RESERVECONNECTIONS))
       {
         lprintf (1, "Allowing connection in reserve space from %s:%s", ipstr, portstr);
       }
@@ -924,7 +925,7 @@ ListenThread (void *arg)
       close (clientsocket);
       break;
     }
-    memcpy (cinfo->addr, &addr, addrlen);
+    memcpy (cinfo->addr, &addr_storage, addrlen);
     cinfo->addrlen = addrlen;
 
     /* Store IP address and port number strings */
@@ -941,7 +942,7 @@ ListenThread (void *arg)
     {
       IPNet *ipnet;
 
-      if ((ipnet = MatchIP (limitips, &addr)))
+      if ((ipnet = MatchIP (limitips, paddr)))
       {
         cinfo->limitstr = ipnet->limitstr;
       }
@@ -950,7 +951,7 @@ ListenThread (void *arg)
     /* Grant write permission if address is in the write list */
     if (writeips)
     {
-      if (MatchIP (writeips, &addr))
+      if (MatchIP (writeips, paddr))
       {
         cinfo->writeperm = 1;
       }
@@ -959,7 +960,7 @@ ListenThread (void *arg)
     /* Set trusted flag if address is in the trusted list */
     if (trustedips)
     {
-      if (MatchIP (trustedips, &addr))
+      if (MatchIP (trustedips, paddr))
       {
         cinfo->trusted = 1;
       }
