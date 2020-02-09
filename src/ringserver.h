@@ -15,7 +15,7 @@ extern "C" {
 #endif
 
 #define PACKAGE   "ringserver"
-#define VERSION   "2018.078"
+#define VERSION   "2020.022"
 
 /* Thread data flags */
 #define TDF_SPAWNING    (1<<0)          /* Thread is now spawning   */
@@ -41,7 +41,10 @@ struct thread_data {
 #define PROTO_DATALINK  0x01
 #define PROTO_SEEDLINK  0x02
 #define PROTO_HTTP      0x04
-#define PROTO_ALL       0xFF
+#define FAMILY_IPv4     0x08
+#define FAMILY_IPv6     0x10
+
+#define PROTO_ALL (PROTO_DATALINK | PROTO_SEEDLINK | PROTO_HTTP)
 
 /* Doubly-linkable structure to list server threads */
 struct sthread {

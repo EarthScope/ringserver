@@ -20,8 +20,6 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with ringserver. If not, see http://www.gnu.org/licenses/.
- *
- * Modified: 2018.044
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -64,8 +62,15 @@
 /* A structure to list IP addresses ranges */
 typedef struct IPNet_s
 {
-  struct in_addr network;
-  struct in_addr netmask;
+  union {
+    struct in_addr in_addr;
+    struct in6_addr in6_addr;
+  } network;
+  union {
+    struct in_addr in_addr;
+    struct in6_addr in6_addr;
+  } netmask;
+  int family;
   char *limitstr;
   struct IPNet_s *next;
 } IPNet;
@@ -86,11 +91,12 @@ int shutdownsig = 0;      /* Shutdown signal */
 /* Local functions and variables */
 static struct thread_data *InitThreadData (void *prvtptr);
 static void *ListenThread (void *arg);
-static int InitServerSocket (char *portstr);
+static int InitServerSocket (char *portstr, uint8_t protocols);
 static int ProcessParam (int argcount, char **argvec);
 static char *GetOptVal (int argcount, char **argvec, int argopt);
 static int ReadConfigFile (char *configfile, int dynamiconly, time_t mtime);
 static int ConfigMSWrite (char *value);
+static int AddListenThreads (ListenPortParams *lpp);
 static int AddMSeedScanThread (char *configstr);
 static int AddServerThread (unsigned int type, void *params);
 static uint64_t CalcSize (char *sizestr);
@@ -484,12 +490,8 @@ main (int argc, char *argv[])
         /* Start new listening thread if needed */
         if (stp->td == 0 && !shutdownsig)
         {
-          /* Initialize server socket, thread data and create thread */
-          if (lpp->socket <= 0 && (lpp->socket = InitServerSocket (lpp->portstr)) == -1)
-          {
-            lprintf (0, "Error initializing %s server socket for port %s", threadtype, lpp->portstr);
-          }
-          else if (!(stp->td = InitThreadData (lpp)))
+          /* Initialize thread data and create thread */
+          if (!(stp->td = InitThreadData (lpp)))
           {
             lprintf (0, "Error initializing %s thread_data: %s", threadtype, strerror (errno));
           }
@@ -793,8 +795,9 @@ ListenThread (void *arg)
   char portstr[32];
   char protocolstr[100];
 
-  struct sockaddr addr;
-  socklen_t addrlen = sizeof (addr);
+  struct sockaddr_storage addr_storage;
+  struct sockaddr *paddr = (struct sockaddr *)&addr_storage;
+  socklen_t addrlen = sizeof (addr_storage);
   int one = 1;
 
   mytdp = (struct thread_data *)arg;
@@ -817,7 +820,7 @@ ListenThread (void *arg)
   while (!shutdownsig)
   {
     /* Process next connection in queue */
-    clientsocket = accept (lpp->socket, &addr, &addrlen);
+    clientsocket = accept (lpp->socket, paddr, &addrlen);
 
     /* Check for accept errors */
     if (clientsocket == -1)
@@ -840,7 +843,7 @@ ListenThread (void *arg)
     }
 
     /* Generate IP address and port number strings */
-    if (getnameinfo (&addr, addrlen, ipstr, sizeof (ipstr), portstr, sizeof (portstr),
+    if (getnameinfo (paddr, addrlen, ipstr, sizeof (ipstr), portstr, sizeof (portstr),
                      NI_NUMERICHOST | NI_NUMERICSERV))
     {
       lprintf (0, "Error creating IP and port strings");
@@ -853,7 +856,7 @@ ListenThread (void *arg)
     /* Reject clients not in matching list */
     if (matchips)
     {
-      if (!MatchIP (matchips, &addr))
+      if (!MatchIP (matchips, paddr))
       {
         lprintf (1, "Rejecting non-matching connection from: %s:%s", ipstr, portstr);
         close (clientsocket);
@@ -864,7 +867,7 @@ ListenThread (void *arg)
     /* Reject clients in the rejection list */
     if (rejectips)
     {
-      if (MatchIP (rejectips, &addr))
+      if (MatchIP (rejectips, paddr))
       {
         lprintf (1, "Rejecting connection from: %s:%s", ipstr, portstr);
         close (clientsocket);
@@ -875,9 +878,9 @@ ListenThread (void *arg)
     /* Enforce per-address connection limit for non write permission addresses */
     if (maxclientsperip)
     {
-      if (!(writeips && MatchIP (writeips, &addr)))
+      if (!(writeips && MatchIP (writeips, paddr)))
       {
-        if (ClientIPCount (&addr) >= maxclientsperip)
+        if (ClientIPCount (paddr) >= maxclientsperip)
         {
           lprintf (1, "Too many connections from: %s:%s", ipstr, portstr);
           close (clientsocket);
@@ -889,7 +892,7 @@ ListenThread (void *arg)
     /* Enforce maximum number of clients if specified */
     if (maxclients && clientcount >= maxclients)
     {
-      if ((writeips && MatchIP (writeips, &addr)) && clientcount <= (maxclients + RESERVECONNECTIONS))
+      if ((writeips && MatchIP (writeips, paddr)) && clientcount <= (maxclients + RESERVECONNECTIONS))
       {
         lprintf (1, "Allowing connection in reserve space from %s:%s", ipstr, portstr);
       }
@@ -922,7 +925,7 @@ ListenThread (void *arg)
       close (clientsocket);
       break;
     }
-    memcpy (cinfo->addr, &addr, addrlen);
+    memcpy (cinfo->addr, &addr_storage, addrlen);
     cinfo->addrlen = addrlen;
 
     /* Store IP address and port number strings */
@@ -939,7 +942,7 @@ ListenThread (void *arg)
     {
       IPNet *ipnet;
 
-      if ((ipnet = MatchIP (limitips, &addr)))
+      if ((ipnet = MatchIP (limitips, paddr)))
       {
         cinfo->limitstr = ipnet->limitstr;
       }
@@ -948,7 +951,7 @@ ListenThread (void *arg)
     /* Grant write permission if address is in the write list */
     if (writeips)
     {
-      if (MatchIP (writeips, &addr))
+      if (MatchIP (writeips, paddr))
       {
         cinfo->writeperm = 1;
       }
@@ -957,7 +960,7 @@ ListenThread (void *arg)
     /* Set trusted flag if address is in the trusted list */
     if (trustedips)
     {
-      if (MatchIP (trustedips, &addr))
+      if (MatchIP (trustedips, paddr))
       {
         cinfo->trusted = 1;
       }
@@ -1072,10 +1075,11 @@ ListenThread (void *arg)
  * Return socket descriptor on success and -1 on error.
  ***********************************************************************/
 static int
-InitServerSocket (char *portstr)
+InitServerSocket (char *portstr, uint8_t protocols)
 {
   struct addrinfo *addr;
   struct addrinfo hints;
+  char *familystr = NULL;
   int fd;
   int optval;
   int gaierror;
@@ -1084,13 +1088,31 @@ InitServerSocket (char *portstr)
     return -1;
 
   memset (&hints, 0, sizeof (hints));
-  hints.ai_family = PF_INET; /* PF_INET6 for IPv6, or PF_UNSPEC for any protocol */
+
+  /* AF_INET, or AF_INET6 for IPv4 or IPv6 */
+  if (protocols & FAMILY_IPv4)
+  {
+    hints.ai_family = AF_INET;
+    familystr = "IPv4";
+  }
+  else if (protocols & FAMILY_IPv6)
+  {
+    hints.ai_family = AF_INET6;
+    familystr = "IPv6";
+  }
+  else
+  {
+    hints.ai_family = AF_UNSPEC;
+    familystr = "IPvUnspecified";
+  }
+
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
 
   if ((gaierror = getaddrinfo (NULL, portstr, &hints, &addr)))
   {
-    lprintf (0, "Error with getaddrinfo(): %s", gai_strerror (gaierror));
+    lprintf (0, "Error with getaddrinfo(), %s port %s: %s",
+             familystr, portstr, gai_strerror (gaierror));
     return -1;
   }
 
@@ -1098,28 +1120,44 @@ InitServerSocket (char *portstr)
   fd = socket (addr->ai_family, addr->ai_socktype, addr->ai_protocol);
   if (fd < 0)
   {
-    lprintf (0, "Error with socket(): %s", strerror (errno));
+    /* Print error only if not "unsupported" IPv6, as this is expected */
+    if (!(addr->ai_family == AF_INET6 && errno == EAFNOSUPPORT))
+      lprintf (0, "Error with socket(), %s port %s: %s",
+               familystr, portstr, strerror (errno));
     return -1;
   }
 
   optval = 1;
   if (setsockopt (fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof (optval)))
   {
-    lprintf (0, "Error with setsockopt(): %s", strerror (errno));
+    lprintf (0, "Error setting SO_REUSEADDR with setsockopt(), %s port %s: %s",
+             familystr, portstr, strerror (errno));
+    close (fd);
+    return -1;
+  }
+
+  /* Limit IPv6 sockets to IPv6 only, avoid mapped addresses, we handle IPv4 separately */
+  if (addr->ai_family == AF_INET6 &&
+      setsockopt (fd, IPPROTO_IPV6, IPV6_V6ONLY, &optval, sizeof (optval)))
+  {
+    lprintf (0, "Error setting IPV6_V6ONLY with setsockopt(), %s port %s: %s",
+             familystr, portstr, strerror (errno));
     close (fd);
     return -1;
   }
 
   if (bind (fd, addr->ai_addr, addr->ai_addrlen) < 0)
   {
-    lprintf (0, "Error with bind(): %s", strerror (errno));
+    lprintf (0, "Error with bind(), %s port %s: %s",
+             familystr, portstr, strerror (errno));
     close (fd);
     return -1;
   }
 
-  if (listen (fd, 5) == -1)
+  if (listen (fd, 10) == -1)
   {
-    lprintf (0, "Error with listen(): %s", strerror (errno));
+    lprintf (0, "Error with listen(), %s port %s: %s",
+             familystr, portstr, strerror (errno));
     close (fd);
     return -1;
   }
@@ -1201,9 +1239,9 @@ ProcessParam (int argcount, char **argvec)
       lpp.protocols = PROTO_ALL;
       lpp.socket = -1;
 
-      if (AddServerThread (LISTEN_THREAD, &lpp))
+      if (!AddListenThreads (&lpp))
       {
-        lprintf (0, "Error adding server thread for all protocols");
+        lprintf (0, "Error adding listening threads for all protocols");
         exit (1);
       }
     }
@@ -1214,9 +1252,9 @@ ProcessParam (int argcount, char **argvec)
       lpp.protocols = PROTO_DATALINK;
       lpp.socket = -1;
 
-      if (AddServerThread (LISTEN_THREAD, &lpp))
+      if (!AddListenThreads (&lpp))
       {
-        lprintf (0, "Error adding server thread for DataLink");
+        lprintf (0, "Error adding listening threads for DataLink");
         exit (1);
       }
     }
@@ -1227,9 +1265,9 @@ ProcessParam (int argcount, char **argvec)
       lpp.protocols = PROTO_SEEDLINK;
       lpp.socket = -1;
 
-      if (AddServerThread (LISTEN_THREAD, &lpp))
+      if (!AddListenThreads (&lpp))
       {
-        lprintf (0, "Error adding server thread for SeedLink");
+        lprintf (0, "Error adding listening threads for SeedLink");
         exit (1);
       }
     }
@@ -1308,22 +1346,22 @@ ProcessParam (int argcount, char **argvec)
     serverid = strdup ("Ring Server");
   }
 
-  /* Add 127.0.0.1 (loopback) to write permission list if list empty */
+  /* Add localhost (loopback) to write permission list if list empty */
   if (!writeips)
   {
-    if (AddIPNet (&writeips, "127.0.0.1/32", NULL))
+    if (AddIPNet (&writeips, "localhost/128", NULL))
     {
-      lprintf (0, "Error adding 127.0.0.1/32 to write permission list");
+      lprintf (0, "Error adding localhost/128 to write permission list");
       return -1;
     }
   }
 
-  /* Add 127.0.0.1 (loopback) to trusted list if list empty */
+  /* Add localhost (loopback) to trusted list if list empty */
   if (!trustedips)
   {
-    if (AddIPNet (&trustedips, "127.0.0.1/32", NULL))
+    if (AddIPNet (&trustedips, "localhost/128", NULL))
     {
-      lprintf (0, "Error adding 127.0.0.1/32 to trusted list");
+      lprintf (0, "Error adding localhost/128 to trusted list");
       return -1;
     }
   }
@@ -1637,9 +1675,17 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
           lpp.protocols |= PROTO_SEEDLINK;
         if (strcasestr (svalue, "HTTP"))
           lpp.protocols |= PROTO_HTTP;
+
+        if (lpp.protocols == 0)
+          lpp.protocols = PROTO_ALL;
+
+        if (strcasestr (svalue, "IPv4"))
+          lpp.protocols |= FAMILY_IPv4;
+        if (strcasestr (svalue, "IPv6"))
+          lpp.protocols |= FAMILY_IPv6;
       }
 
-      if (AddServerThread (LISTEN_THREAD, &lpp))
+      if (!AddListenThreads (&lpp))
       {
         lprintf (0, "Error adding server thread for ListenPort config file line: %s", ptr);
         return -1;
@@ -1658,7 +1704,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
       lpp.protocols = PROTO_DATALINK;
       lpp.socket = -1;
 
-      if (AddServerThread (LISTEN_THREAD, &lpp))
+      if (!AddListenThreads (&lpp))
       {
         lprintf (0, "Error adding server thread for DataLinkPort config file line: %s", ptr);
         return -1;
@@ -1677,7 +1723,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
       lpp.protocols = PROTO_SEEDLINK;
       lpp.socket = -1;
 
-      if (AddServerThread (LISTEN_THREAD, &lpp))
+      if (!AddListenThreads (&lpp))
       {
         lprintf (0, "Error adding server thread for SeedLinkPort config file line: %s", ptr);
         return -1;
@@ -2030,22 +2076,22 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     }
   } /* Done reading config file lines */
 
-  /* Add 127.0.0.1 (loopback) to write permission list if list empty */
+  /* Add localhost (loopback) to write permission list if list empty */
   if (!writeips)
   {
-    if (AddIPNet (&writeips, "127.0.0.1/32", NULL))
+    if (AddIPNet (&writeips, "localhost/128", NULL))
     {
-      lprintf (0, "Error adding 127.0.0.1/32 to write permission list");
+      lprintf (0, "Error adding localhost/128 to write permission list");
       return -1;
     }
   }
 
-  /* Add 127.0.0.1 (loopback) to trusted list if list empty */
+  /* Add localhost (loopback) to trusted list if list empty */
   if (!trustedips)
   {
-    if (AddIPNet (&trustedips, "127.0.0.1/32", NULL))
+    if (AddIPNet (&trustedips, "localhost/128", NULL))
     {
-      lprintf (0, "Error adding 127.0.0.1/32 to trusted list");
+      lprintf (0, "Error adding localhost/128 to trusted list");
       return -1;
     }
   }
@@ -2125,6 +2171,92 @@ ConfigMSWrite (char *value)
 
   return 0;
 } /* End of ConfigMSWrite() */
+
+/***************************************************************************
+ * AddListenThreads:
+ *
+ * Add listen threads to the server thread list and initializing the
+ * server listening sockets.
+ *
+ * A listening thread is created for each of the IPv4 and IPv6 network
+ * protocol families, both by default.
+ *
+ * The params structure will be copied by AddServerThread().
+ *
+ * Returns number of listening threads on success and 0 on error.
+ ***************************************************************************/
+static int
+AddListenThreads (ListenPortParams *lpp)
+{
+  uint8_t protocols;
+  uint8_t families = 0;
+  int threads = 0;
+
+  if (!lpp)
+    return 0;
+
+  protocols = lpp->protocols;
+
+  /* Split server protocols from network protocol families */
+  if (protocols & FAMILY_IPv4)
+  {
+    families |= FAMILY_IPv4;
+    protocols &= ~FAMILY_IPv4;
+  }
+  if (protocols & FAMILY_IPv6)
+  {
+    families |= FAMILY_IPv6;
+    protocols &= ~FAMILY_IPv6;
+  }
+
+  /* Try to initialize listening for IPv4, if requested or default (neither family requested) */
+  if (families == 0 || (families & FAMILY_IPv4))
+  {
+    lpp->protocols = protocols | FAMILY_IPv4;
+
+    if ((lpp->socket = InitServerSocket (lpp->portstr, lpp->protocols)) > 0)
+    {
+      if (AddServerThread (LISTEN_THREAD, lpp))
+      {
+        return 0;
+      }
+
+      threads += 1;
+    }
+    /* If explicitly requested, an initialization error is a failure */
+    else if (families & FAMILY_IPv4)
+    {
+      lprintf (0, "Error initializing IPv4 server listening socket for port %s", lpp->portstr);
+      return 0;
+    }
+  }
+
+  /* Try to initialize listening for IPv6, if requested or default (neither family requested) */
+  if (families == 0 || (families & FAMILY_IPv6))
+  {
+    lpp->protocols = protocols | FAMILY_IPv6;
+
+    if ((lpp->socket = InitServerSocket (lpp->portstr, lpp->protocols)) > 0)
+    {
+      if (AddServerThread (LISTEN_THREAD, lpp))
+      {
+        return 0;
+      }
+
+      threads += 1;
+    }
+    /* If explicitly requested, an initialization error is a failure */
+    else if (families & FAMILY_IPv6)
+    {
+      lprintf (0, "Error initializing IPv6 server listening socket for port %s", lpp->portstr);
+      return 0;
+    }
+  }
+
+  lpp->protocols = protocols | families;
+
+  return threads;
+} /* End of AddListenThreads() */
 
 /***************************************************************************
  * AddMSeedScanThread:
@@ -2483,105 +2615,177 @@ CalcStats (ClientInfo *cinfo)
 /***************************************************************************
  * AddIPNet:
  *
- * Add an IPV4 network and netmask to an IPNet list.
+ * Add network and netmask to an IPNet list.  Both IPv4 and IPv6 are
+ * supported.
  *
  * Returns 0 on success and -1 on error.
  ***************************************************************************/
 static int
 AddIPNet (IPNet **pplist, char *network, char *limitstr)
 {
+  struct addrinfo hints;
+  struct addrinfo *addrlist;
+  struct addrinfo *addr;
+  struct sockaddr_in *sockaddr;
+  struct sockaddr_in6 *sockaddr6;
   IPNet *newipnet;
   char net[100];
-  char *mask;
+  char *end = NULL;
+  char *prefixstr;
+  unsigned long int prefix = 0;
+  uint32_t v4netmask = 0;
+  int rv;
+  int idx;
+  int jdx;
 
   if (!pplist || !network)
     return -1;
 
-  /* Allocate new IPNet */
-  if (!(newipnet = (IPNet *)calloc (1, sizeof (IPNet))))
-  {
-    lprintf (0, "AddIPNet(): Error allocating memory for IPNet");
-    return -1;
-  }
-
   /* Copy network string for manipulation */
   strncpy (net, network, sizeof (net));
 
-  /* Split netmask from network: "IP/netmask" */
-  if ((mask = strchr (net, '/')))
+  /* Split netmask/prefixlen from network if present: "IP/netmask" */
+  if ((prefixstr = strchr (net, '/')))
   {
-    *mask++ = '\0';
-  }
-  else
-  {
-    /* The default netmask */
-    mask = "32";
+    *prefixstr++ = '\0';
   }
 
-  /* Convert bit count netmask to binary format */
-  if (IsAllDigits (mask))
+  /* Convert prefix string to value */
+  if (IsAllDigits (prefixstr))
   {
-    uint32_t bitsmask = 0;
-    unsigned long int numbits = strtoul (mask, NULL, 10);
-    int i;
+    prefix = strtoul (prefixstr, &end, 10);
 
-    /* Sanity check and catch errors from strtoul() */
-    if (numbits > 32)
+    if (*end)
     {
-      lprintf (0, "bit-count netmask (%s) must be less than 32", mask);
-      return -1;
-    }
-
-    for (i = 0; i < numbits; i++)
-    {
-      bitsmask = bitsmask >> 1;
-      bitsmask |= 0x80000000;
-    }
-
-    if (!ms_bigendianhost ())
-    {
-      ms_gswap4 (&bitsmask);
-    }
-
-    /* Assign bit count-derived mask to the netmask address */
-    newipnet->netmask.s_addr = bitsmask;
-  }
-  else
-  {
-    /* Convert netmask string to in_addr, supporting only AF_INET */
-    if (inet_pton (AF_INET, mask, &(newipnet->netmask)) <= 0)
-    {
-      lprintf (0, "Error parsing net mask address: %s", mask);
+      lprintf (0, "AddIPNet(): Error converting prefix value (%s)", prefixstr);
       return -1;
     }
   }
-
-  /* Convert IP string to in_addr, supporting only AF_INET */
-  if (inet_pton (AF_INET, net, &(newipnet->network)) <= 0)
+  /* Convert IPv4 netmask to prefix, anything not all digits must be a mask */
+  else if (prefixstr)
   {
-    lprintf (0, "Error parsing IP address: %s", net);
+    if (inet_pton (AF_INET, prefixstr, &v4netmask) <= 0)
+    {
+      lprintf (0, "AddIPNet(): Error parsing IPv4 netmask: %s", prefixstr);
+      return -1;
+    }
+
+    if (v4netmask > 0)
+    {
+      if (ntohl(v4netmask) & (~ntohl(v4netmask) >> 1))
+      {
+        lprintf (0, "AddIPNet(): Invalid IPv4 netmask: %s", prefixstr);
+        return -1;
+      }
+    }
+  }
+  else
+  {
+    prefix = 128;
+  }
+
+  /* Sanity check and catch errors from strtoul() */
+  if (prefix > 128)
+  {
+    lprintf (0, "AddIPNet(): Error, prefix (%s) must be less than 128", prefixstr);
     return -1;
   }
 
-  /* AND the ip and netmask to get the actual network */
-  newipnet->network.s_addr &= newipnet->netmask.s_addr;
+  /* Convert address portion to binary address, resolving if possible */
+  memset (&hints, 0, sizeof (hints));
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_family = AF_UNSPEC;     /* Either IPv4 and/or IPv6 */
+  hints.ai_flags = AI_ADDRCONFIG;  /* Only return entries that could actually connect */
 
-  /* Store any supplied limit expression */
-  if (limitstr)
+  if ((rv = getaddrinfo (net, NULL, &hints, &addrlist)) != 0)
   {
-    if (!(newipnet->limitstr = strdup (limitstr)))
-    {
-      lprintf (0, "AddIPNet(): Error allocating memory for limit string");
-      return -1;
-    }
+    lprintf (0, "AddIPNet(): Error with getaddrinfo(%s): %s", net, gai_strerror (rv));
+    return -1;
   }
 
-  /* Push the new entry on the top of the list */
-  newipnet->next = *pplist;
-  *pplist = newipnet;
+  /* Loop through results from getaddrinfo(), adding new entries */
+  for (addr = addrlist; addr != 0; addr = addr->ai_next)
+  {
+    /* Allocate new IPNet */
+    if (!(newipnet = (IPNet *)calloc (1, sizeof (IPNet))))
+    {
+      lprintf (0, "AddIPNet(): Error allocating memory for IPNet");
+      return -1;
+    }
+
+    if (addr->ai_family == AF_INET)
+    {
+      newipnet->family = AF_INET;
+
+      /* Use IPv4 netmask if specified directly */
+      if (v4netmask > 0)
+        newipnet->netmask.in_addr.s_addr = v4netmask;
+      /* Calculate netmask from prefix, if the prefix > 32 use 32 as a max for IPv4 */
+      else if (prefix > 0)
+        newipnet->netmask.in_addr.s_addr = ~((1 << (32 - ((prefix > 32) ? 32 : prefix))) - 1);
+      else
+        newipnet->netmask.in_addr.s_addr = 0;
+
+      /* Swap calculated netmask to network order, if a (swapped) mask not available */
+      if (v4netmask == 0)
+      {
+        newipnet->netmask.in_addr.s_addr = htonl(newipnet->netmask.in_addr.s_addr);
+      }
+
+      sockaddr = (struct sockaddr_in *)addr->ai_addr;
+      newipnet->network.in_addr.s_addr = sockaddr->sin_addr.s_addr;
+
+      /* Calculate network: AND the address and netmask */
+      newipnet->network.in_addr.s_addr &= newipnet->netmask.in_addr.s_addr;
+    }
+    else if (addr->ai_family == AF_INET6)
+    {
+      newipnet->family = AF_INET6;
+
+      memset (&newipnet->netmask.in6_addr, 0, sizeof (struct in6_addr));
+
+      /* Calculate netmask from prefix */
+      if (prefix > 0)
+      {
+        for (idx = prefix, jdx = 0; idx > 0; idx -= 8, jdx++)
+        {
+          if (idx >= 8)
+            newipnet->netmask.in6_addr.s6_addr[jdx] = 0xFFu;
+          else
+            newipnet->netmask.in6_addr.s6_addr[jdx] = (uint8_t)(0xFFu << (8 - idx));
+	}
+      }
+
+      sockaddr6 = (struct sockaddr_in6 *)addr->ai_addr;
+      memcpy (&newipnet->network.in6_addr.s6_addr, &sockaddr6->sin6_addr.s6_addr, sizeof(struct sockaddr_in6));
+
+      /* Calculate network: AND the address and netmask */
+      for (idx = 0; idx < 16; idx++)
+      {
+        newipnet->network.in6_addr.s6_addr[idx] &= newipnet->netmask.in6_addr.s6_addr[idx];
+      }
+    }
+
+    /* Store any supplied limit expression */
+    if (limitstr)
+    {
+      if (!(newipnet->limitstr = strdup (limitstr)))
+      {
+        lprintf (0, "AddIPNet(): Error allocating memory for limit string");
+        return -1;
+      }
+    }
+
+    /* Push the new entry on the top of the list */
+    newipnet->next = *pplist;
+    *pplist = newipnet;
+  }
+
+  freeaddrinfo (addrlist);
 
   return 0;
 } /* End of AddIPNet() */
+
 
 /***************************************************************************
  * MatchIP:
@@ -2595,27 +2799,49 @@ static IPNet *
 MatchIP (IPNet *list, struct sockaddr *addr)
 {
   IPNet *net = list;
-  struct in_addr testnet;
+  struct in_addr *testnet = &((struct sockaddr_in *)addr)->sin_addr;
+  struct in6_addr *testnet6 = &((struct sockaddr_in6 *)addr)->sin6_addr;
 
   if (!list)
     return 0;
 
-  /* Only IP4 addresses are supported */
-  if (addr->sa_family != AF_INET)
+  /* Sanity, only IPv4 and IPv6 addresses */
+  if (addr->sa_family != AF_INET && addr->sa_family != AF_INET6)
     return 0;
 
   /* Search IPNet list for a matching entry for addr */
   while (net)
   {
-    /* Copy the addr to the test addr */
-    testnet.s_addr = ((struct sockaddr_in *)addr)->sin_addr.s_addr;
-
-    /* AND the test addr with the netmask to get the test network */
-    testnet.s_addr &= net->netmask.s_addr;
-
     /* Check for match between test network and list network */
-    if (testnet.s_addr == net->network.s_addr)
-      return net;
+    if (addr->sa_family == AF_INET && net->family == AF_INET)
+    {
+      if ((testnet->s_addr & net->netmask.in_addr.s_addr) == net->network.in_addr.s_addr)
+      {
+        return net;
+      }
+    }
+    else if (addr->sa_family == AF_INET6 && net->family == AF_INET6)
+    {
+      if ((testnet6->s6_addr[0] & net->netmask.in6_addr.s6_addr[0]) == net->network.in6_addr.s6_addr[0] &&
+          (testnet6->s6_addr[1] & net->netmask.in6_addr.s6_addr[1]) == net->network.in6_addr.s6_addr[1] &&
+          (testnet6->s6_addr[2] & net->netmask.in6_addr.s6_addr[2]) == net->network.in6_addr.s6_addr[2] &&
+          (testnet6->s6_addr[3] & net->netmask.in6_addr.s6_addr[3]) == net->network.in6_addr.s6_addr[3] &&
+          (testnet6->s6_addr[4] & net->netmask.in6_addr.s6_addr[4]) == net->network.in6_addr.s6_addr[4] &&
+          (testnet6->s6_addr[5] & net->netmask.in6_addr.s6_addr[5]) == net->network.in6_addr.s6_addr[5] &&
+          (testnet6->s6_addr[6] & net->netmask.in6_addr.s6_addr[6]) == net->network.in6_addr.s6_addr[6] &&
+          (testnet6->s6_addr[7] & net->netmask.in6_addr.s6_addr[7]) == net->network.in6_addr.s6_addr[7] &&
+          (testnet6->s6_addr[8] & net->netmask.in6_addr.s6_addr[8]) == net->network.in6_addr.s6_addr[8] &&
+          (testnet6->s6_addr[9] & net->netmask.in6_addr.s6_addr[9]) == net->network.in6_addr.s6_addr[9] &&
+          (testnet6->s6_addr[10] & net->netmask.in6_addr.s6_addr[10]) == net->network.in6_addr.s6_addr[10] &&
+          (testnet6->s6_addr[11] & net->netmask.in6_addr.s6_addr[11]) == net->network.in6_addr.s6_addr[11] &&
+          (testnet6->s6_addr[12] & net->netmask.in6_addr.s6_addr[12]) == net->network.in6_addr.s6_addr[12] &&
+          (testnet6->s6_addr[13] & net->netmask.in6_addr.s6_addr[13]) == net->network.in6_addr.s6_addr[13] &&
+          (testnet6->s6_addr[14] & net->netmask.in6_addr.s6_addr[14]) == net->network.in6_addr.s6_addr[14] &&
+          (testnet6->s6_addr[15] & net->netmask.in6_addr.s6_addr[15]) == net->network.in6_addr.s6_addr[15])
+      {
+        return net;
+      }
+    }
 
     net = net->next;
   }

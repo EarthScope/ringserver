@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2019/02/14
+.TH RINGSERVER 1 2020/02/08
 .SH NAME
 ringserver \- Generic packet ring buffer
 
@@ -198,7 +198,7 @@ detailed parameter descriptions in the documented example config file.
 By default all clients are allowed to connect.  Specific clients can
 be rejected using the \fBRejectIP\fP config parameter.  If any
 \fBMatchIP\fP config parameters are specified only addresses that
-match one of the entries and are not rejected are allowed to connect.
+match one of the entries, and are not rejected, are allowed to connect.
 
 By default all clients are allowed access to all streams in the
 buffer.  Specific clients can be limited to subsets of streams using
@@ -212,8 +212,15 @@ connection information and more detailed status using the
 \fBTrustedIP\fP config parameter.
 
 If no client addresses are granted write permission via \fBWriteIP\fP
-then the address 127.0.0.1 (local loopback) is granted write
-permission.
+or granted trusted status via \fBTrustedIP\fP then the 'localhost'
+address (local loopback) are granted those permissions.
+
+Access control is host range (network) based, and specified as an
+address followed by an optional prefix in CIDR notation.  For example:
+"192.168.0.1/24" specifies the range of addresses from 192.168.0.1 to
+192.168.0.254.  The address may be a hostname, which will be resolved
+on startup.  The prefix is optional and, if omitted, defaults to
+specifying only the single address.
 
 .SH "SeedLink Support"
 
@@ -236,6 +243,11 @@ client, all subsequent communication is expected in this protocol.
 The protocols allowed by any given listening port can be set to any
 combination of the supported protocols by adding flags to the
 \fIListen\fP parameter of the server configuration file.
+
+Both IPv4 and IPv6 are supported by default (if supported by the
+system). The server can be limited to a specified network protocol
+family by adding flags to the \fIListen\fP parameter of the server
+configuration file.
 
 .SH "HTTP Support"
 
