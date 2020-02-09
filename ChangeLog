@@ -1,5 +1,6 @@
 2020.039:
 	- Update mini-XML library to 3.1.
+	- Update pcre library to 8.43.
 	- Add IPv6 support, on by default if supported by the system.
 
 2018.078:
