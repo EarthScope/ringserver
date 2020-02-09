@@ -1,15 +1,12 @@
 /*
  * Node get functions for Mini-XML, a small XML file parsing library.
  *
- * Copyright 2014-2017 by Michael R Sweet.
+ * https://www.msweet.org/mxml
  *
- * These coded instructions, statements, and computer programs are the
- * property of Michael R Sweet and are protected by Federal copyright
- * law.  Distribution and use rights are outlined in the file "COPYING"
- * which should have been included with this file.  If this file is
- * missing or damaged, see the license at:
+ * Copyright © 2014-2019 by Michael R Sweet.
  *
- *     https://michaelrsweet.github.io/mxml
+ * Licensed under Apache License v2.0.  See the file "LICENSE" for more
+ * information.
  */
 
 /*
@@ -17,7 +14,7 @@
  */
 
 #include "config.h"
-#include "mxml.h"
+#include "mxml-private.h"
 
 
 /*
@@ -345,6 +342,12 @@ mxmlGetReal(mxml_node_t *node)		/* I - Node to get */
  *
  * @code NULL@ is returned if the node (or its first child) is not a text node.
  * The "whitespace" argument can be @code NULL@.
+ *
+ * Note: Text nodes consist of whitespace-delimited words. You will only get
+ * single words of text when reading an XML file with @code MXML_TEXT@ nodes.
+ * If you want the entire string between elements in the XML file, you MUST read
+ * the XML file with @code MXML_OPAQUE@ nodes and get the resulting strings
+ * using the @link mxmlGetOpaque@ function instead.
  *
  * @since Mini-XML 2.7@
  */

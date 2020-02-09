@@ -1,19 +1,21 @@
 dnl
 dnl Configuration script for Mini-XML, a small XML-like file parsing library.
 dnl
-dnl Copyright 2003-2017 by Michael R Sweet.
+dnl https://www.msweet.org/mxml
 dnl
-dnl These coded instructions, statements, and computer programs are the
-dnl property of Michael R Sweet and are protected by Federal copyright
-dnl law.  Distribution and use rights are outlined in the file "COPYING"
-dnl which should have been included with this file.  If this file is
-dnl missing or damaged, see the license at:
+dnl Copyright © 2003-2019 by Michael R Sweet.
 dnl
-dnl     https://michaelrsweet.github.io/mxml
+dnl Licensed under Apache License v2.0.  See the file "LICENSE" for more
+dnl information.
 dnl
 
 dnl Package name and version...
-AC_INIT([Mini-XML], [2.11], [https://github.com/michaelrsweet/mxml/issues], [mxml], [https://michaelrsweet.github.io/mxml])
+AC_INIT([Mini-XML], [3.1], [https://github.com/michaelrsweet/mxml/issues], [mxml], [https://michaelrsweet.github.io/mxml])
+
+dnl This line is provided to ensure that you don't run the autoheader program
+dnl against this project.  Doing so is completely unsupported and WILL cause
+dnl problems!
+AH_TOP([#error "Somebody ran autoheader on this project which is unsupported and WILL cause problems."])
 
 dnl Get the build and host platforms and split the host_os value
 AC_CANONICAL_BUILD
@@ -36,8 +38,6 @@ CFLAGS="${CFLAGS:=}"
 CXXFLAGS="${CXXFLAGS:=}"
 LDFLAGS="${LDFLAGS:=}"
 AC_SUBST(LDFLAGS)
-OPTIM=""
-AC_SUBST(OPTIM)
 
 AC_ARG_WITH(ansi, [  --with-ansi             set full ANSI C mode, default=no],
 	use_ansi="$withval",
@@ -48,9 +48,14 @@ AC_ARG_WITH(archflags, [  --with-archflags        set additional architecture fl
 	ARCHFLAGS="")
 AC_SUBST(ARCHFLAGS)
 
+AC_ARG_WITH(optim,   [  --with-optim            set additional optimization flags, default=none],
+	OPTIM="$withval",
+	OPTIM="")
+AC_SUBST(OPTIM)
+
 AC_ARG_ENABLE(debug, [  --enable-debug          turn on debugging, default=no],
 if eval "test x$enable_debug = xyes"; then
- 	OPTIM="-g"
+ 	OPTIM="$OPTIM -g"
 fi)
 
 AC_ARG_WITH(docdir, [  --with-docdir           set directory for documentation, default=${prefix}/share/doc/mxml],
@@ -74,6 +79,7 @@ fi
 AC_PROG_RANLIB
 AC_CHECK_TOOL(AR,ar)
 AC_PATH_PROG(CP,cp)
+AC_PATH_PROGS(LDCONFIG,ldconfig false)
 AC_PATH_PROG(LN,ln)
 AC_PATH_PROG(MKDIR,mkdir)
 AC_PATH_PROG(RM,rm)
@@ -115,17 +121,6 @@ AC_CACHE_CHECK(for long long int, ac_cv_c_long_long,
 if test $ac_cv_c_long_long = yes; then
 	AC_DEFINE(HAVE_LONG_LONG)
 fi
-
-dnl EPUB support (via libz and zipc)
-MXML_EPUB=""
-AC_SUBST(MXML_EPUB)
-ZIPC=""
-AC_SUBST(ZIPC)
-AC_SEARCH_LIBS(gzgets,z,[
-	AC_DEFINE(HAVE_ZLIB_H)
-	ZIPC="zipc.o"
-	MXML_EPUB="mxml.epub"
-	LIBS="-lz $LIBS"])
 
 dnl Threading support
 AC_ARG_ENABLE(threads, [  --enable-threads        enable multi-threading support])
@@ -188,22 +183,14 @@ if test x$enable_shared != xno; then
 			LDFLAGS="$LDFLAGS -R\$(libdir)"
                 	;;
 
-		hp-ux)
-			AC_MSG_RESULT(yes)
-			LIBMXML="libmxml.sl.1"
-			DSO="ld"
-			DSOFLAGS="$DSOFLAGS -b -z +h libmxml.sl.1 +s +b \$(libdir)"
-			LDFLAGS="$LDFLAGS -Wl,+s,+b,\$(libdir)"
-			;;
-
-		irix)
+		linux*)
 			AC_MSG_RESULT(yes)
 			LIBMXML="libmxml.so.1.6"
 			DSO="\$(CC)"
-			DSOFLAGS="$DSOFLAGS -Wl,-rpath,\$(libdir),-set_version,sgi1.0,-soname,libmxml.so.1 -shared \$(OPTIM)"
+			DSOFLAGS="$DSOFLAGS -Wl,-soname,libmxml.so.1 -shared \$(OPTIM)"
 			;;
 
-		osf | linux* | gnu)
+		osf | gnu)
 			AC_MSG_RESULT(yes)
 			LIBMXML="libmxml.so.1.6"
 			DSO="\$(CC)"

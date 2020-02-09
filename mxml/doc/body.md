@@ -1,8 +1,8 @@
 ---
-title: Mini-XML API Reference
+title: Mini-XML 3.1 API Reference
 author: Michael R Sweet
-copyright: Copyright © 2003-2017, All Rights Reserved.
-docversion: 2.11
+copyright: Copyright © 2003-2019, All Rights Reserved.
+version: 3.1
 ...
 
 # Introduction
@@ -49,42 +49,23 @@ integrated Mini-XML into Gutenprint and removed libxml2.
 
 Thanks to lots of feedback and support from various developers, Mini-XML has
 evolved since then to provide a more complete XML implementation and now stands
-at a whopping 4,115 lines of code, compared to 140,410 lines of code for libxml2
-version 2.9.1.
+at a whopping 4,186 lines of code, compared to 196,141 lines of code for libxml2
+version 2.9.9.
 
 
 ## Resources
 
-The Mini-XML home page can be found at:
-
-    https://michaelrsweet.github.io/mxml
-
-From here you can download the current version of Mini-XML, the issue tracker,
-and other resources.
+The Mini-XML home page can be found at <https://www.msweet.org/mxml>.  From
+there you can download the current version of Mini-XML, access the issue
+tracker, and find other resources.
 
 
 ## Legal Stuff
 
-The Mini-XML library is copyright © 2003-2017 by Michael R Sweet and is provided
-under version 2 of the GNU Library General Public License (LGPL2) with the
-following exceptions:
-
-1. Static linking of applications to the Mini-XML library does not constitute a
-   derivative work and does not require the author to provide source code for
-   the application, use the shared Mini-XML libraries, or link their
-   applications against a user-supplied version of Mini-XML.
-
-   If you link the application to a modified version of Mini-XML, then the
-   changes to Mini-XML must be provided under the terms of the LGPL2 in sections
-   1, 2, and 4.
-
-2. You do not have to provide a copy of the Mini-XML license with programs that
-   are linked to the Mini-XML library, nor do you have to identify the Mini-XML
-   license in your program or documentation as required by section 6 of the
-   LGPL2.
-
-A copy of the complete license is available in the file `COPYING` provided with
-the source code.
+The Mini-XML library is copyright © 2003-2019 by Michael R Sweet and is provided
+under the Apache License Version 2.0 with an exception to allow linking against
+GPL2/LGPL2-only software.  See the files "LICENSE" and "NOTICE" for more
+information.
 
 
 # Using Mini-XML
@@ -144,7 +125,7 @@ defines several standard callbacks for simple XML data files:
 - `MXML_INTEGER_CALLBACK`: All data nodes contain whitespace-separated integers.
 - `MXML_OPAQUE_CALLBACK`: All data nodes contain opaque strings with whitespace preserved.
 - `MXML_REAL_CALLBACK` - All data nodes contain whitespace-separated floating-point numbers.
--  `MXML_TEXT_CALLBACK` - All data nodes contain whitespace-separated strings.
+- `MXML_TEXT_CALLBACK` - All data nodes contain whitespace-separated strings.
 
 You can provide your own callback functions for more complex XML documents.
 Your callback function will receive a pointer to the current element node and
@@ -1141,7 +1122,7 @@ The `print_children` function is:
            node != NULL;
            node = mxmlGetNextSibling(node))
       {
-        text = mxmlGettext(node, &whitespace);
+        text = mxmlGetText(node, &whitespace);
 
         if (whitespace)
           putchar(' ');

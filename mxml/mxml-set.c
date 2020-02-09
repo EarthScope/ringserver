@@ -1,15 +1,12 @@
 /*
  * Node set functions for Mini-XML, a small XML file parsing library.
  *
- * Copyright 2003-2017 by Michael R Sweet.
+ * https://www.msweet.org/mxml
  *
- * These coded instructions, statements, and computer programs are the
- * property of Michael R Sweet and are protected by Federal copyright
- * law.  Distribution and use rights are outlined in the file "COPYING"
- * which should have been included with this file.  If this file is
- * missing or damaged, see the license at:
+ * Copyright © 2003-2019 by Michael R Sweet.
  *
- *     https://michaelrsweet.github.io/mxml
+ * Licensed under Apache License v2.0.  See the file "LICENSE" for more
+ * information.
  */
 
 /*
@@ -17,7 +14,7 @@
  */
 
 #include "config.h"
-#include "mxml.h"
+#include "mxml-private.h"
 
 
 /*
@@ -32,6 +29,9 @@ int					/* O - 0 on success, -1 on failure */
 mxmlSetCDATA(mxml_node_t *node,		/* I - Node to set */
              const char  *data)		/* I - New data string */
 {
+  char	*s;				/* String pointer */
+
+
  /*
   * Range check input...
   */
@@ -46,14 +46,19 @@ mxmlSetCDATA(mxml_node_t *node,		/* I - Node to set */
       strncmp(node->value.element.name, "![CDATA[", 8))
     return (-1);
 
+  if (data == (node->value.element.name + 8))
+    return (0);
+
  /*
-  * Free any old element value and set the new value...
+  * Allocate the new value, free any old element value, and set the new value...
   */
+
+  s = _mxml_strdupf("![CDATA[%s", data);
 
   if (node->value.element.name)
     free(node->value.element.name);
 
-  node->value.element.name = _mxml_strdupf("![CDATA[%s]]", data);
+  node->value.element.name = s;
 
   return (0);
 }
@@ -83,6 +88,12 @@ mxmlSetCustom(
 
   if (!node || node->type != MXML_CUSTOM)
     return (-1);
+
+  if (data == node->value.custom.data)
+  {
+    node->value.custom.destroy = destroy;
+    return (0);
+  }
 
  /*
   * Free any old element value and set the new value...
@@ -114,6 +125,9 @@ mxmlSetElement(mxml_node_t *node,	/* I - Node to set */
 
   if (!node || node->type != MXML_ELEMENT || !name)
     return (-1);
+
+  if (name == node->value.element.name)
+    return (0);
 
  /*
   * Free any old element value and set the new value...
@@ -180,6 +194,9 @@ mxmlSetOpaque(mxml_node_t *node,	/* I - Node to set */
   if (!node || node->type != MXML_OPAQUE || !opaque)
     return (-1);
 
+  if (node->value.opaque == opaque)
+    return (0);
+
  /*
   * Free any old opaque value and set the new value...
   */
@@ -207,6 +224,7 @@ mxmlSetOpaquef(mxml_node_t *node,	/* I - Node to set */
 	       ...)			/* I - Additional arguments as needed */
 {
   va_list	ap;			/* Pointer to arguments */
+  char		*s;			/* Temporary string */
 
 
  /*
@@ -221,17 +239,17 @@ mxmlSetOpaquef(mxml_node_t *node,	/* I - Node to set */
     return (-1);
 
  /*
-  * Free any old string value and set the new value...
+  * Format the new string, free any old string value, and set the new value...
   */
+
+  va_start(ap, format);
+  s = _mxml_vstrdupf(format, ap);
+  va_end(ap);
 
   if (node->value.opaque)
     free(node->value.opaque);
 
-  va_start(ap, format);
-
-  node->value.opaque = _mxml_strdupf(format, ap);
-
-  va_end(ap);
+  node->value.opaque = s;
 
   return (0);
 }
@@ -290,6 +308,12 @@ mxmlSetText(mxml_node_t *node,		/* I - Node to set */
   if (!node || node->type != MXML_TEXT || !string)
     return (-1);
 
+  if (string == node->value.text.string)
+  {
+    node->value.text.whitespace = whitespace;
+    return (0);
+  }
+
  /*
   * Free any old string value and set the new value...
   */
@@ -317,6 +341,7 @@ mxmlSetTextf(mxml_node_t *node,		/* I - Node to set */
 	     ...)			/* I - Additional arguments as needed */
 {
   va_list	ap;			/* Pointer to arguments */
+  char		*s;			/* Temporary string */
 
 
  /*
@@ -334,15 +359,15 @@ mxmlSetTextf(mxml_node_t *node,		/* I - Node to set */
   * Free any old string value and set the new value...
   */
 
+  va_start(ap, format);
+  s = _mxml_vstrdupf(format, ap);
+  va_end(ap);
+
   if (node->value.text.string)
     free(node->value.text.string);
 
-  va_start(ap, format);
-
   node->value.text.whitespace = whitespace;
-  node->value.text.string     = _mxml_strdupf(format, ap);
-
-  va_end(ap);
+  node->value.text.string     = s;
 
   return (0);
 }
