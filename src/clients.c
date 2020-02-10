@@ -1178,7 +1178,8 @@ GetStreamNode (RBTree *tree, pthread_mutex_t *plock, char *streamid, int *new)
     }
 
     /* Initialize the new StreamNode */
-    strncpy (stream->streamid, streamid, sizeof (stream->streamid));
+    strncpy (stream->streamid, streamid, sizeof (stream->streamid) - 1);
+    *(stream->streamid + sizeof(stream->streamid) - 1) = '\0';
     stream->txpackets = 0;
     stream->txbytes = 0;
     stream->rxpackets = 0;

@@ -1144,7 +1144,7 @@ static int
 GenerateStatus (ClientInfo *cinfo, char **status)
 {
   struct sthread *loopstp;
-  char string[400];
+  char string[4096];
   char serverstart[50];
   char ringversion[15];
   char ringsize[30];

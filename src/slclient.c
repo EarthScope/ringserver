@@ -84,11 +84,11 @@ static void SendInfoRecord (char *record, int reclen, void *vcinfo);
 static void FreeStaNode (void *rbnode);
 static void FreeNetStaNode (void *rbnode);
 static int StaKeyCompare (const void *a, const void *b);
-static SLStaNode *GetStaNode (RBTree *tree, char *net, char *sta);
-static SLNetStaNode *GetNetStaNode (RBTree *tree, char *net, char *sta);
-static int StationToRegex (char *net, char *sta, char *selectors,
+static SLStaNode *GetStaNode (RBTree *tree, const char *net, const char *sta);
+static SLNetStaNode *GetNetStaNode (RBTree *tree, const char *net, const char *sta);
+static int StationToRegex (const char *net, const char *sta, const char *selectors,
                            char **matchregex, char **rejectregex);
-static int SelectToRegex (char *net, char *sta, char *select,
+static int SelectToRegex (const char *net, const char *sta, const char *select,
                           char **regex);
 
 /***********************************************************************
@@ -1589,7 +1589,7 @@ HandleInfo (ClientInfo *cinfo)
     /* Pack all XML into 512-byte records and send to client */
     if (!cinfo->socketerr)
     {
-      char seqnumstr[7];
+      char seqnumstr[11];
       int seqnum = 1;
       int offset = 0;
       int nsamps;
@@ -1599,7 +1599,7 @@ HandleInfo (ClientInfo *cinfo)
         nsamps = ((xmllength - offset) > 456) ? 456 : (xmllength - offset);
 
         /* Update sequence number and number of samples */
-        snprintf (seqnumstr, 7, "%06d", seqnum);
+        snprintf (seqnumstr, sizeof(seqnumstr), "%0d", seqnum);
         memcpy (fsdh->sequence_number, seqnumstr, 6);
 
         fsdh->numsamples = nsamps;
@@ -1841,7 +1841,7 @@ StaKeyCompare (const void *a, const void *b)
  * Return a pointer to a SLStaNode or 0 for error.
  ***************************************************************************/
 static SLStaNode *
-GetStaNode (RBTree *tree, char *net, char *sta)
+GetStaNode (RBTree *tree, const char *net, const char *sta)
 {
   SLStaKey stakey;
   SLStaKey *newstakey;
@@ -1849,8 +1849,9 @@ GetStaNode (RBTree *tree, char *net, char *sta)
   RBNode *rbnode;
 
   /* Create SLStaKey */
-  strncpy (stakey.net, net, sizeof (stakey.net));
-  strncpy (stakey.sta, sta, sizeof (stakey.sta));
+  memset (&stakey, 0, sizeof (stakey));
+  strncpy (stakey.net, net, sizeof (stakey.net) - 1);
+  strncpy (stakey.sta, sta, sizeof (stakey.sta) - 1);
 
   /* Search for a matching SLStaNode entry */
   if ((rbnode = RBFind (tree, &stakey)))
@@ -1895,7 +1896,7 @@ GetStaNode (RBTree *tree, char *net, char *sta)
  * Return a pointer to a SLNetStaNode or 0 for error.
  ***************************************************************************/
 static SLNetStaNode *
-GetNetStaNode (RBTree *tree, char *net, char *sta)
+GetNetStaNode (RBTree *tree, const char *net, const char *sta)
 {
   SLStaKey stakey;
   SLStaKey *newstakey;
@@ -1903,8 +1904,9 @@ GetNetStaNode (RBTree *tree, char *net, char *sta)
   RBNode *rbnode;
 
   /* Create SLStaKey */
-  strncpy (stakey.net, net, sizeof (stakey.net));
-  strncpy (stakey.sta, sta, sizeof (stakey.sta));
+  memset (&stakey, 0, sizeof (stakey));
+  strncpy (stakey.net, net, sizeof (stakey.net) - 1);
+  strncpy (stakey.sta, sta, sizeof (stakey.sta) - 1);
 
   /* Search for a matching SLNetStaNode entry */
   if ((rbnode = RBFind (tree, &stakey)))
@@ -1927,8 +1929,8 @@ GetNetStaNode (RBTree *tree, char *net, char *sta)
       return 0;
     }
 
-    strncpy (netstanode->net, net, sizeof (netstanode->net));
-    strncpy (netstanode->sta, sta, sizeof (netstanode->sta));
+    strncpy (netstanode->net, net, sizeof (netstanode->net) - 1);
+    strncpy (netstanode->sta, sta, sizeof (netstanode->sta) - 1);
 
     /* Initialize Stack of associated streams */
     netstanode->streams = StackCreate ();
@@ -1948,7 +1950,7 @@ GetNetStaNode (RBTree *tree, char *net, char *sta)
  * Return 0 on success and -1 on error.
  ***************************************************************************/
 static int
-StationToRegex (char *net, char *sta, char *selectors,
+StationToRegex (const char *net, const char *sta, const char *selectors,
                 char **matchregex, char **rejectregex)
 {
   char *selectorlist;
@@ -2046,6 +2048,7 @@ StationToRegex (char *net, char *sta, char *selectors,
   return 0;
 } /* End of StationToRegex() */
 
+
 /***************************************************************************
  * SelectToRegex:
  *
@@ -2068,180 +2071,177 @@ StationToRegex (char *net, char *sta, char *selectors,
  * Return 0 on success and -1 on error.
  ***************************************************************************/
 static int
-SelectToRegex (char *net, char *sta, char *select, char **regex)
+SelectToRegex (const char *net, const char *sta, const char *select, char **regex)
 {
-  char newpattern[100];
-  char loc[10];
-  char chan[10];
-  char *ptr;
+  const char *ptr;
+  char pattern[50];
+  char *build = pattern;
+  int idx;
   int length;
   int retval;
 
   if (!regex)
     return -1;
 
-  /* New pattern buffer */
-  newpattern[0] = '\0';
-
   /* Start pattern with a '^' */
-  strncat (newpattern, "^", 1);
+  *build++ = '^';
+
+  /* Santiy check lengths of input strings */
+  if (net && strlen (net) > 10)
+    return -1;
+  if (sta && strlen (sta) > 10)
+    return -1;
+  if (select && strlen(select) > 7)
+    return -1;
 
   if (net)
   {
-    /* Sanity check of network string */
-    if (strlen (net) > 10)
-      return -1;
-
     /* Translate network */
     ptr = net;
     while (*ptr)
     {
       if (*ptr == '?')
-        strncat (newpattern, ".", 1);
+      {
+        *build++ = '.';
+      }
       else if (*ptr == '*')
-        strncat (newpattern, ".*", 2);
+      {
+        *build++ = '.';
+        *build++ = '*';
+      }
       else
-        strncat (newpattern, ptr, 1);
+      {
+        *build++ = *ptr;
+      }
 
       ptr++;
     }
   }
   else
   {
-    strncat (newpattern, ".*", 2);
+    *build++ = '.';
+    *build++ = '*';
   }
 
   /* Add separator */
-  strncat (newpattern, "_", 1);
+  *build++ = '_';
 
   if (sta)
   {
-    /* Sanity check of station string */
-    if (strlen (sta) > 10)
-      return -1;
-
     /* Translate station */
     ptr = sta;
     while (*ptr)
     {
       if (*ptr == '?')
-        strncat (newpattern, ".", 1);
+      {
+        *build++ = '?';
+      }
       else if (*ptr == '*')
-        strncat (newpattern, ".*", 2);
+      {
+        *build++ = '.';
+        *build++ = '*';
+      }
       else
-        strncat (newpattern, ptr, 1);
+      {
+        *build++ = *ptr;
+      }
 
       ptr++;
     }
   }
   else
   {
-    strncat (newpattern, ".*", 2);
+    *build++ = '.';
+    *build++ = '*';
   }
 
   /* Add separator */
-  strncat (newpattern, "_", 1);
+  *build++ = '_';
 
   if (select)
   {
-    /* Truncate selector at any period, DECOTL subtypes are not supported */
+    /* Ingore selector after any period, DECOTL subtypes are not supported */
     if ((ptr = strrchr (select, '.')))
-    {
-      *ptr = '\0';
-    }
-
-    length = strlen (select);
+      length = ptr - select;
+    else
+      length = strlen (select);
 
     /* If location and channel are specified */
     if (length == 5)
     {
-      /* Split location and channel parts */
-      loc[0] = '\0';
-      chan[0] = '\0';
-      strncat (loc, select, 2);
-      ptr = select + 2;
-      strncat (chan, ptr, 3);
-
       /* Translate location, '-' means space location which is collapsed */
-      ptr = loc;
-      while (*ptr)
+      for (ptr = select, idx = 0; idx < 2; idx++, ptr++)
       {
         if (*ptr == '?')
-          strncat (newpattern, ".", 1);
+          *build++ = '.';
         else if (*ptr != '-')
-          strncat (newpattern, ptr, 1);
-
-        ptr++;
+          *build++ = *ptr;
       }
 
       /* Add separator */
-      strcat (newpattern, "_");
+      *build++ = '_';
 
       /* Translate channel */
-      ptr = chan;
-      while (*ptr)
+      for (ptr = &select[2], idx = 0; idx < 3; idx++, ptr++)
       {
         if (*ptr == '?')
-          strncat (newpattern, ".", 1);
+          *build++ = '.';
         else
-          strncat (newpattern, ptr, 1);
-
-        ptr++;
+          *build++ = *ptr;
       }
     }
     /* If only location is specified */
     else if (length == 2)
     {
       /* Translate location, '-' means space location which is collapsed */
-      ptr = select;
-      while (*ptr)
+      for (ptr = select, idx = 0; idx < 2; idx++, ptr++)
       {
         if (*ptr == '?')
-          strncat (newpattern, ".", 1);
+          *build++ = '.';
         else if (*ptr != '-')
-          strncat (newpattern, ptr, 1);
-
-        ptr++;
+          *build++ = *ptr;
       }
 
       /* Add separator */
-      strncat (newpattern, "_", 1);
+      *build++ = '_';
     }
     /* If only channel is specified */
     else if (length == 3)
     {
       /* Add wildcard for location and separator */
-      strcat (newpattern, ".*_");
+      *build++ = '.';
+      *build++ = '*';
+      *build++ = '_';
 
       /* Translate channel */
-      ptr = select;
-      while (*ptr)
+      for (ptr = select, idx = 0; idx < 3; idx++, ptr++)
       {
         if (*ptr == '?')
-          strncat (newpattern, ".", 1);
+          *build++ = '.';
         else
-          strncat (newpattern, ptr, 1);
-
-        ptr++;
+          *build++ = *ptr;
       }
     }
   }
   else
   {
-    strncat (newpattern, ".*", 2);
+    *build++ = '.';
+    *build++ = '*';
   }
 
   /* Add final catch-all for remaining stream ID parts if not already done */
   if (select)
   {
-    strncat (newpattern, ".*", 2);
+    *build++ = '.';
+    *build++ = '*';
   }
 
-  /* End pattern with a '$' */
-  strncat (newpattern, "$", 1);
+  /* End pattern with a '$' and terminate */
+  *build++ = '$';
+  *build++ = '\0';
 
   /* Add new pattern to regex string, expanding as needed up to SLMAXREGEXLEN bytes*/
-  if ((retval = AddToString (regex, newpattern, "|", 0, SLMAXREGEXLEN)))
+  if ((retval = AddToString (regex, pattern, "|", 0, SLMAXREGEXLEN)))
   {
     if (retval == -1)
     {

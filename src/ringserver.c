@@ -140,8 +140,8 @@ static char *httpheaders = NULL;
 int
 main (int argc, char *argv[])
 {
-  char ringfilename[1024];
-  char streamfilename[1024];
+  char ringfilename[512];
+  char streamfilename[512];
   hptime_t hpcurtime;
   time_t curtime;
   time_t chktime;
@@ -252,8 +252,8 @@ main (int argc, char *argv[])
       /* Move corrupt packet buffer and index to backup (.corrupt) files */
       if (autorecovery == 1)
       {
-        char ringfilecorr[1024];
-        char streamfilecorr[1024];
+        char ringfilecorr[520];
+        char streamfilecorr[520];
 
         lprintf (0, "Auto recovery, moving packet buffer and stream index files");
 
@@ -2629,7 +2629,7 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
   struct sockaddr_in *sockaddr;
   struct sockaddr_in6 *sockaddr6;
   IPNet *newipnet;
-  char net[100];
+  char net[100] = {0};
   char *end = NULL;
   char *prefixstr;
   unsigned long int prefix = 0;
@@ -2642,7 +2642,7 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
     return -1;
 
   /* Copy network string for manipulation */
-  strncpy (net, network, sizeof (net));
+  strncpy (net, network, sizeof (net) - 1);
 
   /* Split netmask/prefixlen from network if present: "IP/netmask" */
   if ((prefixstr = strchr (net, '/')))

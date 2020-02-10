@@ -85,7 +85,7 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
   struct tm ctm;
   time_t curtime;
   char *tptr;
-  char tstr[20];
+  char tstr[32];
   char filename[MAX_FILENAME_LEN];
   char definition[MAX_FILENAME_LEN];
   char pathformat[MAX_FILENAME_LEN];
@@ -772,12 +772,13 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
 
     foundgroup = (DataStreamGroup *)malloc (sizeof (DataStreamGroup));
 
+    memset (foundgroup, 0, sizeof (DataStreamGroup));
     foundgroup->defkey = strdup (defkey);
     foundgroup->filed = 0;
     foundgroup->modtime = curtime;
     strncpy (foundgroup->filename, filename, sizeof (foundgroup->filename));
     if (postpath)
-      strncpy (foundgroup->postpath, postpath, sizeof (foundgroup->postpath));
+      strncpy (foundgroup->postpath, postpath, sizeof (foundgroup->postpath) - 1);
     else
       foundgroup->postpath[0] = '\0';
     foundgroup->next = NULL;

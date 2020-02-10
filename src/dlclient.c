@@ -239,10 +239,11 @@ HandleNegotiation (ClientInfo *cinfo)
   if (!strncasecmp (cinfo->recvbuf, "ID", 2))
   {
     /* Parse client ID from command if included
-       * Everything after "ID " is the client ID */
+     * Everything after "ID " is the client ID */
     if (strlen (cinfo->recvbuf) > 3)
     {
-      strncpy (cinfo->clientid, cinfo->recvbuf + 3, sizeof (cinfo->clientid));
+      strncpy (cinfo->clientid, cinfo->recvbuf + 3, sizeof (cinfo->clientid) - 1);
+      *(cinfo->clientid + sizeof(cinfo->clientid) - 1) = '\0';
       lprintf (2, "[%s] Received ID (%s)", cinfo->hostname, cinfo->clientid);
     }
     else
