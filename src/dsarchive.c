@@ -887,7 +887,7 @@ ds_openfile (DataStream *datastream, const char *filename, char *ident)
         else
           rlim.rlim_cur = datastream->maxopenfiles;
 
-        lprintf (3, "[%s] Setting open file limit to %lld",
+        lprintf (3, "[%s] Setting open file limit to %" PRId64,
                  ident, (int64_t)rlim.rlim_cur);
 
         if (setrlimit (RLIMIT_NOFILE, &rlim) == -1)

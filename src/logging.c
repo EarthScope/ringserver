@@ -113,8 +113,8 @@ lprint (char *message)
   }
 
   /* Send message to lprintf() */
-  lprintf (0, message);
-} /* End of lprintf() */
+  lprintf (0, "%s", message);
+} /* End of lprint() */
 
 /***************************************************************************
  * WriteTLog:

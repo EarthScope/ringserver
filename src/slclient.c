@@ -254,18 +254,18 @@ SLHandleCmd (ClientInfo *cinfo)
 
       if (retval < 0)
       {
-        lprintf (0, "[%s] Error with RingPosition for '%lld'",
+        lprintf (0, "[%s] Error with RingPosition for %" PRId64,
                  cinfo->hostname, reqid);
         return -1;
       }
       else if (retval == 0)
       {
-        lprintf (0, "[%s] Could not find and position to packet ID: %lld",
+        lprintf (0, "[%s] Could not find and position to packet ID: %" PRId64,
                  cinfo->hostname, reqid);
       }
       else
       {
-        lprintf (2, "[%s] Positioned ring to packet ID: %lld",
+        lprintf (2, "[%s] Positioned ring to packet ID: %" PRId64,
                  cinfo->hostname, reqid);
       }
     }
@@ -336,7 +336,7 @@ SLHandleCmd (ClientInfo *cinfo)
       }
       else
       {
-        lprintf (2, "[%s] Positioned to packet %lld, first after: %s",
+        lprintf (2, "[%s] Positioned to packet %" PRId64 ", first after: %s",
                  cinfo->hostname, readid, timestr);
       }
     }
@@ -387,7 +387,7 @@ SLStreamPackets (ClientInfo *cinfo)
   }
   else if (readid > 0 && MS_ISVALIDHEADER (cinfo->packetdata) && cinfo->packet.datasize == SLRECSIZE)
   {
-    lprintf (3, "[%s] Read %s (%u bytes) packet ID %lld from ring",
+    lprintf (3, "[%s] Read %s (%u bytes) packet ID %" PRId64 " from ring",
              cinfo->hostname, cinfo->packet.streamid, cinfo->packet.datasize, cinfo->packet.pktid);
 
     /* Get (creating if needed) the StreamNode for this streamid */

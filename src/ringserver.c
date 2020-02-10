@@ -1369,7 +1369,7 @@ ProcessParam (int argcount, char **argvec)
   /* Check for specified ring directory */
   if (!ringsize)
   {
-    lprintf (0, "Error, ring buffer size not valid: %llu", ringsize);
+    lprintf (0, "Error, ring buffer size not valid: %" PRIu64, ringsize);
     exit (1);
   }
 
@@ -2044,7 +2044,12 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
       }
 
       /* Append multiple headers to composite string */
-      asprintf (&tptr, "%s%s\r\n", (httpheaders) ? httpheaders : "", value);
+      if (asprintf (&tptr, "%s%s\r\n", (httpheaders) ? httpheaders : "", value) == -1)
+      {
+        lprintf (0, "Error allocating memory");
+        return -1;
+      }
+
       if (httpheaders)
         free (httpheaders);
       httpheaders = tptr;
@@ -2961,19 +2966,19 @@ PrintHandler (int sig)
 {
   char timestr[100];
 
-  lprintf (1, "Ring parameters, ringsize: %llu, pktsize: %u (%lu)",
+  lprintf (1, "Ring parameters, ringsize: %" PRIu64 ", pktsize: %u (%lu)",
            ringparams->ringsize, ringparams->pktsize,
            ringparams->pktsize - sizeof (RingPacket));
-  lprintf (2, "   maxpackets: %lld, maxpktid: %lld",
+  lprintf (2, "   maxpackets: %" PRId64 ", maxpktid: %" PRId64,
            ringparams->maxpackets, ringparams->maxpktid);
-  lprintf (2, "   maxoffset: %lld, headersize: %u",
+  lprintf (2, "   maxoffset: %" PRId64 ", headersize: %u",
            ringparams->maxoffset, ringparams->headersize);
   ms_hptime2mdtimestr (ringparams->earliestptime, timestr, 1);
-  lprintf (2, "   earliest packet ID: %lld, offset: %lld, time: %s",
+  lprintf (2, "   earliest packet ID: %" PRId64 ", offset: %" PRId64 ", time: %s",
            ringparams->earliestid, ringparams->earliestoffset,
            (ringparams->earliestptime == HPTERROR) ? "NONE" : timestr);
   ms_hptime2mdtimestr (ringparams->latestptime, timestr, 1);
-  lprintf (2, "   latest packet ID: %lld, offset: %lld, time: %s",
+  lprintf (2, "   latest packet ID: %" PRId64 ", offset: %" PRId64 ", time: %s",
            ringparams->latestid, ringparams->latestoffset,
            (ringparams->latestptime == HPTERROR) ? "NONE" : timestr);
   lprintf (2, "   TX packet rate: %g, TX byte rate: %g",
