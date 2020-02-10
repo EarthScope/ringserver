@@ -508,7 +508,7 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
       {
         if (errno == ENOENT)
         {
-          lprintf (2, "Creating directory: %s", hostname, filename);
+          lprintf (2, "[%s] Creating directory: %s", hostname, filename);
           if (mkdir (filename, S_IRWXU | S_IRWXG | S_IRWXO)) /* Mode 0777 */
           {
             lprintf (0, "[%s] ds_streamproc: mkdir(%s) %s",
@@ -747,7 +747,7 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
     else if (rval == 0 && pglob.gl_pathc > 0)
     {
       if (pglob.gl_pathc > 1)
-        lprintf (3, "[%s] Found %d files matching %s, using last match",
+        lprintf (3, "[%s] Found %lu files matching %s, using last match",
                  ident, pglob.gl_pathc, globmatch);
 
       matchedfilename = pglob.gl_pathv[pglob.gl_pathc - 1];
@@ -766,9 +766,9 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
   if (foundgroup == NULL)
   {
     if (matchedfilename)
-      lprintf (2, "Resurrecting data stream entry for key %s", ident, defkey);
+      lprintf (2, "[%s] Resurrecting data stream entry for key %s", ident, defkey);
     else
-      lprintf (2, "Creating data stream entry for key %s", ident, defkey);
+      lprintf (2, "[%s] Creating data stream entry for key %s", ident, defkey);
 
     foundgroup = (DataStreamGroup *)malloc (sizeof (DataStreamGroup));
 

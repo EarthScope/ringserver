@@ -432,7 +432,7 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
     /* Make sure the filename was not truncated */
     if (filenamelen >= (sizeof (filekeybuf) - sizeof (FileKey) - 1))
     {
-      lprintf (0, "[MSeedScan] Directory entry name beyond maximum of %d characters, skipping:",
+      lprintf (0, "[MSeedScan] Directory entry name beyond maximum of %lu characters, skipping:",
                (sizeof (filekeybuf) - sizeof (FileKey) - 1));
       lprintf (0, "  %s", ede->d_name);
       continue;

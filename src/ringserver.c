@@ -2961,7 +2961,7 @@ PrintHandler (int sig)
 {
   char timestr[100];
 
-  lprintf (1, "Ring parameters, ringsize: %llu, pktsize: %u (%u)",
+  lprintf (1, "Ring parameters, ringsize: %llu, pktsize: %u (%lu)",
            ringparams->ringsize, ringparams->pktsize,
            ringparams->pktsize - sizeof (RingPacket));
   lprintf (2, "   maxpackets: %lld, maxpktid: %lld",

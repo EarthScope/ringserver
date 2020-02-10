@@ -1358,7 +1358,7 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
     match = pcre_compile (matchstr, 0, &errptr, &erroffset, NULL);
     if (errptr)
     {
-      lprintf (0, "[%s] Error with pcre_compile: %s", errptr);
+      lprintf (0, "[%s] Error with pcre_compile: %s", cinfo->hostname, errptr);
       matchlen = 0;
     }
   }
@@ -1749,7 +1749,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   keybufsize = keylength + 36;
   if (!(keybuf = (unsigned char *)malloc (keybufsize)))
   {
-    lprintf (0, "Cannot allocate memory for decoded key buffer (%zu bytes)", keybufsize);
+    lprintf (0, "Cannot allocate memory for decoded key buffer (%d bytes)", keybufsize);
     return -1;
   }
 

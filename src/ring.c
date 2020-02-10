@@ -237,7 +237,7 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     /* Allocate ring packet buffer */
     if (!(*ringparams = malloc (ringsize)))
     {
-      lprintf (0, "RingInitialize(): error allocating %d bytes for ring packet buffer",
+      lprintf (0, "RingInitialize(): error allocating %" PRId64 " bytes for ring packet buffer",
                ringsize);
       return -2;
     }
@@ -473,7 +473,7 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     return -1;
   }
 
-  lprintf (0, "Ring initialized, ringsize: %llu, pktsize: %u (%u)",
+  lprintf (0, "Ring initialized, ringsize: %llu, pktsize: %u (%lu)",
            ringsize, pktsize, (pktsize - sizeof (RingPacket)));
 
   /* Log the critical ring parameters if verbose enough */
@@ -690,7 +690,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
   /* Check packet size */
   if ((sizeof (RingPacket) + datasize) > ringparams->pktsize)
   {
-    lprintf (0, "RingWrite(): %s packet size too large (%d), maximum is %d bytes",
+    lprintf (0, "RingWrite(): %s packet size too large (%lu), maximum is %d bytes",
              packet->streamid, (sizeof (RingPacket) + datasize), ringparams->pktsize);
     return -1;
   }

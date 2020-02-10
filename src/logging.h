@@ -30,6 +30,9 @@ struct TLogParams_s {
 extern int verbose;
 extern struct TLogParams_s TLogParams;
 
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((__format__ (__printf__, 2, 3)))
+#endif
 extern int lprintf (int level, char *fmt, ...);
 extern void lprint (char *message);
 

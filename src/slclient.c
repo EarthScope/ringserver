@@ -324,7 +324,7 @@ SLHandleCmd (ClientInfo *cinfo)
 
       if (readid < 0)
       {
-        lprintf (0, "[%s] Error with RingAfter time: %s [%lld]",
+        lprintf (0, "[%s] Error with RingAfter time: %s [%" PRId64 "]",
                  cinfo->hostname, timestr, cinfo->starttime);
         SendReply (cinfo, "ERROR", "Error positioning reader to start of time window");
         return -1;
@@ -332,7 +332,7 @@ SLHandleCmd (ClientInfo *cinfo)
 
       if (readid == 0)
       {
-        lprintf (2, "[%s] No packet found for RingAfter time: %s, positioning to next packet",
+        lprintf (2, "[%s] No packet found for RingAfter time: %s [%" PRId64 "], positioning to next packet",
                  cinfo->hostname, timestr, cinfo->starttime);
         cinfo->reader->pktid = RINGNEXT;
       }
@@ -559,7 +559,7 @@ HandleNegotiation (ClientInfo *cinfo)
     if (bytes >= sizeof (sendbuffer))
     {
       lprintf (0, "[%s] Response to HELLO is likely truncated: '%*s'",
-               sizeof (sendbuffer), sendbuffer);
+               cinfo->hostname, (int)sizeof (sendbuffer), sendbuffer);
     }
 
     if (SendData (cinfo, sendbuffer, strlen (sendbuffer)))
@@ -1707,7 +1707,7 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
   /* Check that sequence number is not too big */
   if (packet->pktid > 0xFFFFFF)
   {
-    lprintf (0, "[%s] sequence number too large for SeedLink: %d",
+    lprintf (0, "[%s] sequence number too large for SeedLink: %" PRId64,
              cinfo->hostname, packet->pktid);
   }
 
@@ -1744,7 +1744,7 @@ SendInfoRecord (char *record, int reclen, void *vcinfo)
   /* Check that record is SLRECSIZE-bytes */
   if (reclen != SLRECSIZE)
   {
-    lprintf (0, "[%s] data record is not %d bytes: %d", SLRECSIZE, reclen);
+    lprintf (0, "Data record is not %d bytes: %d", SLRECSIZE, reclen);
     return;
   }
 

@@ -519,7 +519,7 @@ HandleNegotiation (ClientInfo *cinfo)
     }
     else if (size > DLMAXREGEXLEN)
     {
-      lprintf (0, "[%s] reject expression too large (%)", cinfo->hostname, size);
+      lprintf (0, "[%s] reject expression too large (%d)", cinfo->hostname, size);
 
       snprintf (sendbuffer, sizeof (sendbuffer), "reject expression too large, must be <= %d",
                 DLMAXREGEXLEN);
@@ -1108,7 +1108,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
       match = pcre_compile (matchexpr, 0, &errptr, &erroffset, NULL);
       if (errptr)
       {
-        lprintf (0, "[%s] Error with pcre_compile: %s", errptr);
+        lprintf (0, "[%s] Error with pcre_compile: %s", cinfo->hostname, errptr);
         errflag = 1;
         matchexpr = 0;
       }
