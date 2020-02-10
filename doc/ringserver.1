@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2020/02/08
+.TH RINGSERVER 1 2020/02/10
 .SH NAME
 ringserver \- Generic packet ring buffer
 
@@ -124,14 +124,6 @@ port is needed to communicate with the server.  By default, a listening
 port will accept all supported protocols.  Restricting a port to only
 allow specific protocols can be done using a configuration file, see
 \fBMulti-protocol Support\fP for more information.
-
-.IP "-DL \fIport\fP"
-Network port to listen for DataLink connections on.  This is a special
-case listening port limited to DataLink.
-
-.IP "-SL \fIport\fP"
-Network port to listen for SeedLink connections on.  This is a special
-case listening port limited to SeedLink.
 
 .IP "-T \fIlogdir\fP"
 Transfer log file base directory, by default the server does not write

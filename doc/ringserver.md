@@ -93,14 +93,6 @@ ringserver [options] [configfile]
 
 <p style="padding-left: 30px;">Network port to listen for incoming connections on.  By default the server will not listen for connections, setting at least one listen port is needed to communicate with the server.  By default, a listening port will accept all supported protocols.  Restricting a port to only allow specific protocols can be done using a configuration file, see <b>Multi-protocol Support</b> for more information.</p>
 
-<b>-DL </b><i>port</i>
-
-<p style="padding-left: 30px;">Network port to listen for DataLink connections on.  This is a special case listening port limited to DataLink.</p>
-
-<b>-SL </b><i>port</i>
-
-<p style="padding-left: 30px;">Network port to listen for SeedLink connections on.  This is a special case listening port limited to SeedLink.</p>
-
 <b>-T </b><i>logdir</i>
 
 <p style="padding-left: 30px;">Transfer log file base directory, by default the server does not write transfer logs.  If a directory is specified both transmission and reception logs will be written, these two logs can be toggled individually in the server config file.</p>
@@ -335,4 +327,4 @@ IRIS Data Management Center
 </pre>
 
 
-(man page 2020/02/08)
+(man page 2020/02/10)
