@@ -1,7 +1,8 @@
-2020.039:
+2020.040:
 	- Update mini-XML library to 3.1.
 	- Update pcre library to 8.43.
 	- Add IPv6 support, on by default if supported by the system.
+	- License ringserver specific code as Apache 2.
 
 2018.078:
 	- Add MIME-type mappings for extensions: htm, css, xml, json, text.
