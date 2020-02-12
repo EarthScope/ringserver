@@ -7,7 +7,7 @@
  * ORFEUS/EC-Project MEREDIAN
  * IRIS Data Management Center
  *
- * modified: 2016.281
+ * modified: 2017.053
  ***************************************************************************/
 
 #include <errno.h>
@@ -17,7 +17,6 @@
 #include <time.h>
 
 #include "libmseed.h"
-#include "lmplatform.h"
 
 static hptime_t ms_time2hptime_int (int year, int day, int hour,
                                     int min, int sec, int usec);
@@ -1193,6 +1192,14 @@ ms_readleapsecondfile (char *filename)
     return -1;
   }
 
+  /* Free existing leapsecondlist */
+  while (leapsecondlist != NULL)
+  {
+    LeapSecond *next = leapsecondlist->next;
+    free(leapsecondlist);
+    leapsecondlist = next;
+  }
+
   while (fgets (readline, sizeof (readline) - 1, fp))
   {
     /* Guarantee termination */
@@ -1248,6 +1255,7 @@ ms_readleapsecondfile (char *filename)
       ls->leapsecond = MS_EPOCH2HPTIME ((leapsecond - NTPPOSIXEPOCHDELTA));
       ls->TAIdelta   = TAIdelta;
       ls->next       = NULL;
+      count++;
 
       /* Add leap second to global list */
       if (!leapsecondlist)
@@ -1573,7 +1581,7 @@ ms_rsqrt64 (double val)
   x2 = val * 0.5;
   y  = val;
   memcpy (&i, &y, sizeof(i));
-  i  = 0x5fe6eb50c7b537a9 - (i >> 1);
+  i  = 0x5fe6eb50c7b537a9ULL - (i >> 1);
   memcpy (&y, &i, sizeof(y));
   y  = y * (1.5 - (x2 * y * y));
   y  = y * (1.5 - (x2 * y * y));

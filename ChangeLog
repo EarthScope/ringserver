@@ -1,3 +1,6 @@
+2020.043:
+	- Update libmseed to 2.19.6.
+
 2020.040:
 	- Update mini-XML library to 3.1.
 	- Update pcre library to 8.43.
