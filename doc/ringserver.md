@@ -141,7 +141,7 @@ ringserver [options] [configfile]
 
 <p >By default all clients are allowed to connect.  Specific clients can be rejected using the <b>RejectIP</b> config parameter.  If any <b>MatchIP</b> config parameters are specified only addresses that match one of the entries, and are not rejected, are allowed to connect.</p>
 
-<p >By default all clients are allowed access to all streams in the buffer.  Specific clients can be limited to subsets of streams using the <b>LimitIP</b> config parameter.  This parameter takes a regular expression that is used to match stream IDs that the client(s) are allowed access to.</p>
+<p >By default all clients are allowed access to all streams in the buffer, and clients with write permission are allowed to write any streams.  Specific clients can be limited to access or write subsets of streams using the <b>LimitIP</b> config parameter.  This parameter takes a regular expression that is used to match stream IDs that the client(s) are allowed access to or to write.</p>
 
 <p >By default all clients are allowed to request the server ID, simple status and list of streams.  Specific clients can be allowed to access connection information and more detailed status using the <b>TrustedIP</b> config parameter.</p>
 
@@ -327,4 +327,4 @@ IRIS Data Management Center
 </pre>
 
 
-(man page 2020/02/10)
+(man page 2020/02/12)

@@ -634,6 +634,21 @@ HandleWrite (ClientInfo *cinfo)
     return -1;
   }
 
+  /* Check that client is allowed to write this stream ID if limit is present */
+  if (cinfo->reader->limit)
+  {
+    if (pcre_exec (cinfo->reader->limit, cinfo->reader->limit_extra, streamid, strlen (streamid), 0, 0, NULL, 0))
+    {
+      lprintf (1, "[%s] Error, permission denied for WRITE of stream ID: %s",
+               cinfo->hostname, streamid);
+
+      snprintf (replystr, sizeof (replystr), "Error, permission denied for WRITE of stream ID: %s", streamid);
+      SendPacket (cinfo, "ERROR", replystr, 0, 1, 1);
+
+      return -1;
+    }
+  }
+
   /* Copy the stream ID */
   memcpy (cinfo->packet.streamid, streamid, sizeof (cinfo->packet.streamid));
 

@@ -1,5 +1,7 @@
 2020.043:
 	- Update libmseed to 2.19.6.
+	- Apply LimitIP SourceID pattern to limit what a client can write in
+	addition to read.
 
 2020.040:
 	- Update mini-XML library to 3.1.

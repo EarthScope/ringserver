@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2020/02/10
+.TH RINGSERVER 1 2020/02/12
 .SH NAME
 ringserver \- Generic packet ring buffer
 
@@ -193,10 +193,11 @@ be rejected using the \fBRejectIP\fP config parameter.  If any
 match one of the entries, and are not rejected, are allowed to connect.
 
 By default all clients are allowed access to all streams in the
-buffer.  Specific clients can be limited to subsets of streams using
-the \fBLimitIP\fP config parameter.  This parameter takes a regular
-expression that is used to match stream IDs that the client(s) are
-allowed access to.
+buffer, and clients with write permission are allowed to write any
+streams.  Specific clients can be limited to access or write subsets
+of streams using the \fBLimitIP\fP config parameter.  This parameter
+takes a regular expression that is used to match stream IDs that the
+client(s) are allowed access to or to write.
 
 By default all clients are allowed to request the server ID, simple
 status and list of streams.  Specific clients can be allowed to access
