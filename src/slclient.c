@@ -1597,7 +1597,7 @@ HandleInfo (ClientInfo *cinfo)
         nsamps = ((xmllength - offset) > 456) ? 456 : (xmllength - offset);
 
         /* Update sequence number and number of samples */
-        snprintf (seqnumstr, sizeof(seqnumstr), "%0d", seqnum);
+        snprintf (seqnumstr, sizeof(seqnumstr), "%06d", seqnum);
         memcpy (fsdh->sequence_number, seqnumstr, 6);
 
         fsdh->numsamples = nsamps;
