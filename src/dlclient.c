@@ -608,7 +608,7 @@ static int
 HandleWrite (ClientInfo *cinfo)
 {
   StreamNode *stream;
-  char replystr[100];
+  char replystr[200];
   char streamid[100];
   char flags[100];
   int nread;
