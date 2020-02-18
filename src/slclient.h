@@ -34,11 +34,11 @@ extern "C" {
 #define SLCAPABILITIES "SLPROTO:3.1 CAP EXTREPLY NSWILDCARD BATCH WS:13"
 #define SLSERVERVER "SeedLink v3.1 (" VERSION " RingServer) :: " SLCAPABILITIES
 
-#define SLRECSIZE           512      /* miniSEED record size */
 #define SLHEADSIZE          8        /* SeedLink header size */
 #define SELSIZE             8        /* Maximum selector size */
 #define SIGNATURE           "SL"     /* SeedLink header signature */
 #define INFOSIGNATURE       "SLINFO" /* SeedLink INFO packet signature */
+#define INFORECSIZE         512      /* miniSEED record size for INFO packets */
 
 #define SLMAXREGEXLEN       1048576  /* Maximum length of match/reject regex pattern */
 #define SLMAXSELECTLEN      2048     /* Maximum length of per-station/global selector buffer */

@@ -385,7 +385,7 @@ SLStreamPackets (ClientInfo *cinfo)
     lprintf (0, "[%s] Error reading next packet from ring", cinfo->hostname);
     return -1;
   }
-  else if (readid > 0 && MS_ISVALIDHEADER (cinfo->packetdata) && cinfo->packet.datasize == SLRECSIZE)
+  else if (readid > 0 && MS_ISVALIDHEADER (cinfo->packetdata))
   {
     lprintf (3, "[%s] Read %s (%u bytes) packet ID %" PRId64 " from ring",
              cinfo->hostname, cinfo->packet.streamid, cinfo->packet.datasize, cinfo->packet.pktid);
@@ -451,7 +451,7 @@ SLStreamPackets (ClientInfo *cinfo)
     if (!skiprecord)
     {
       /* Send miniSEED record to client */
-      if (SendRecord (&cinfo->packet, cinfo->packetdata, SLRECSIZE, cinfo))
+      if (SendRecord (&cinfo->packet, cinfo->packetdata, cinfo->packet.datasize, cinfo))
       {
         if (cinfo->socketerr != 2)
           lprintf (0, "[%s] Error sending record to client", cinfo->hostname);
@@ -1039,7 +1039,7 @@ HandleInfo (ClientInfo *cinfo)
   }
 
   /* Allocate miniSEED record buffer */
-  if ((record = calloc (1, SLRECSIZE)) == NULL)
+  if ((record = calloc (1, INFORECSIZE)) == NULL)
   {
     lprintf (0, "[%s] Error allocating receive buffer", cinfo->hostname);
     return -1;
@@ -1627,7 +1627,7 @@ HandleInfo (ClientInfo *cinfo)
           slinfo->terminfo = 0;
 
         /* Send INFO record to client, blind toss */
-        SendInfoRecord (record, SLRECSIZE, cinfo);
+        SendInfoRecord (record, INFORECSIZE, cinfo);
       }
     }
   }
@@ -1694,14 +1694,6 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
   if (!record || !vcinfo)
     return -1;
 
-  /* Check that record is SLRECSIZE-bytes */
-  if (reclen != SLRECSIZE)
-  {
-    lprintf (0, "[%s] data record is not %d bytes as expected: %d",
-             cinfo->hostname, SLRECSIZE, reclen);
-    return -1;
-  }
-
   /* Check that sequence number is not too big */
   if (packet->pktid > 0xFFFFFF)
   {
@@ -1712,7 +1704,7 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
   /* Create SeedLink header: signature + sequence number */
   snprintf (header, sizeof (header), "SL%06" PRIX64, packet->pktid);
 
-  if (SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE, SLRECSIZE}, 2))
+  if (SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE, reclen}, 2))
     return -1;
 
   /* Update the time of the last packet exchange */
@@ -1739,20 +1731,13 @@ SendInfoRecord (char *record, int reclen, void *vcinfo)
   if (!record || !vcinfo)
     return;
 
-  /* Check that record is SLRECSIZE-bytes */
-  if (reclen != SLRECSIZE)
-  {
-    lprintf (0, "Data record is not %d bytes: %d", SLRECSIZE, reclen);
-    return;
-  }
-
   /* Create INFO signature according to termination flag */
   if (slinfo->terminfo)
     memcpy (header, "SLINFO  ", SLHEADSIZE);
   else
     memcpy (header, "SLINFO *", SLHEADSIZE);
 
-  SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE, SLRECSIZE}, 2);
+  SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE, reclen}, 2);
 
   /* Update the time of the last packet exchange */
   cinfo->lastxchange = HPnow ();
