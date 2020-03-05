@@ -92,7 +92,7 @@ static int SelectToRegex (const char *net, const char *sta, const char *select,
 /***********************************************************************
  * SLHandleCmd:
  *
- * Handle DataLink command, which is expected to be in the
+ * Handle SeedLink command, which is expected to be in the
  * ClientInfo.recvbuf buffer.
  *
  * Returns zero on success, negative value on error.  On error the
@@ -358,10 +358,15 @@ SLHandleCmd (ClientInfo *cinfo)
 /***********************************************************************
  * SLStreamPackets:
  *
- * Send selected ring packets to DataLink client.
+ * Send selected ring packets to SeedLink client.
  *
- * Returns packet size sent on success, zero when no packet sent,
- * negative value on error.  On error the client should disconnected.
+ * The next read packet is only be sent if the type is allowed by
+ * SeedLink, e.g. miniSEED, but the size is returned to the caller
+ * to indicate that a packet was available.
+ *
+ * Return packet size processed on successful read from ring, zero
+ * when no next packet is available, or negative value on error.  On
+ * error the client should disconnected.
  ***********************************************************************/
 int
 SLStreamPackets (ClientInfo *cinfo)
@@ -404,17 +409,6 @@ SLStreamPackets (ClientInfo *cinfo)
       lprintf (3, "[%s] New stream for client: %s", cinfo->hostname, cinfo->packet.streamid);
       cinfo->streamscount++;
     }
-
-    /* Perform time-windowing start time check */
-    /* This check will skip the packets containing the start time
-       if  ( cinfo->starttime != 0 && cinfo->starttime != HPTERROR )
-       {
-       if ( cinfo->packet.datastart < cinfo->starttime )
-       {
-       skiprecord = 1;
-       }
-       }
-    */
 
     /* Perform time-windowing end time checks */
     if (cinfo->endtime != 0 && cinfo->endtime != HPTERROR)
@@ -1194,7 +1188,7 @@ HandleInfo (ClientInfo *cinfo)
       while ((stream = (RingStream *)StackPop (streams)))
       {
         /* Split the streamid to get the network and station codes,
-           assumed strream pattern: "NET_STA_LOC_CHAN/MSEED" */
+           assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
         if (SplitStreamID (stream->streamid, '_', 10, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
         {
           lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
@@ -1289,7 +1283,7 @@ HandleInfo (ClientInfo *cinfo)
       while ((stream = (RingStream *)StackPop (streams)))
       {
         /* Split the streamid to get the network and station codes,
-           assumed strream pattern: "NET_STA_LOC_CHAN/MSEED" */
+           assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
         if (SplitStreamID (stream->streamid, '_', 10, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
         {
           lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
@@ -1350,7 +1344,7 @@ HandleInfo (ClientInfo *cinfo)
           while ((stream = (RingStream *)StackPop (netstanode->streams)))
           {
             /* Split the streamid to get the network, station, location & channel codes
-               assumed strream pattern: "NET_STA_LOC_CHAN/MSEED" */
+               assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
             if (SplitStreamID (stream->streamid, '_', 10, net, sta, loc, chan, NULL, NULL, NULL) != 4)
             {
               lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
