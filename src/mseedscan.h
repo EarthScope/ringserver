@@ -32,9 +32,6 @@ extern "C" {
 
 #include "rbtree.h"
 
-/* Supported miniSEED record size */
-#define MSSCAN_RECSIZE 512
-
 /* Maximum filename length */
 #define MSSCAN_MAXFILENAME 512
 
@@ -60,25 +57,27 @@ typedef struct MSScanInfo_s {
   pcre_extra *fnmatch_extra;  /* Match expression extra study information */
   pcre *fnreject;         /* Compiled reject expression */
   pcre_extra *fnreject_extra; /* Reject expression extra study information */
-  
+
   /* Internal tracking parameters */
+  uint32_t readbuffersize;/* Size of file read buffer */
+  char    *readbuffer;    /* File read buffer */
   RingParams *ringparams; /* Ring buffer parameters */
   MSRecord *msr;          /* Parsed miniSEED record */
-  RBTree   *filetree;     /* Working list of scanned files in a tree */
+  RBTree  *filetree;      /* Working list of scanned files in a tree */
   int      accesserr;     /* Flag to indicate directory access errors */
   int      recurlevel;    /* Track recursion level */
-  
+
   uint64_t rxpackets[2];  /* Track total number of packets sent to ring */
   double   rxpacketrate;  /* Track rate of packet reading */
   uint64_t rxbytes[2];    /* Track total number of data bytes read */
   double   rxbyterate;    /* Track rate of data byte reading */
   double   scantime;      /* Duration of last scan in seconds */
   hptime_t ratetime;      /* Time stamp for RX rate calculations */
-  
+
   int scanfileschecked;   /* Track files checked per scan */
   int scanfilesread;      /* Track files read per scan */
   int scanrecordsread;    /* Track records read per scan */
-  int scanrecordswritten; /* Track records written per scan */  
+  int scanrecordswritten; /* Track records written per scan */
 } MSScanInfo;
 
 extern void *MS_ScanThread (void *arg);

@@ -151,7 +151,7 @@ ringserver [options] [configfile]
 
 ## <a id='seedlink-support'>Seedlink Support</a>
 
-<p >The SeedLink protocol only transmits 512-byte miniSEED data records. Therefore only 512-byte miniSEED packets with a '/MSEED' suffix on the stream ID will be exported via SeedLink if enabled.</p>
+<p >The legacy SeedLink protocol only transmits 512-byte miniSEED data records.  This server is able to transmit miniSEED records of any length via SeedLink.  To ensure compatitiblity with legacy clients, only 512-byte miniSEED records should be inserted into the ring buffer.</p>
 
 <p >This server supports the wildcarding of network and station codes during SeedLink negotiation using the '?' and '*' characters for single or multiple character matches respectively.  Not all SeedLink clients support wildcarded network and station codes.</p>
 
@@ -287,7 +287,7 @@ END CLIENT host.iris.edu [192.168.255.255] total TX bytes: 4608
 
 ## <a id='miniseed-scanning'>Miniseed Scanning</a>
 
-<p >Using either the <b>-MSSCAN</b> command line option or the <b>MSeedScan</b> config file parameter the server can be configured to recursively scan a directory for files containing miniSEED data records and insert them into the ring.  Intended for real-time data re-distribution files are continuously scanned, newly added records are inserted into the ring.</p>
+<p >Using either the <b>-MSSCAN</b> command line option or the <b>MSeedScan</b> config file parameter the server can be configured to recursively scan a directory for files containing miniSEED data records and insert them into the ring.  Intended for real-time data re-distribution, files are continuously scanned, newly added records are inserted into the ring.</p>
 
 <p >Sub-options can be used to control the scanning process.  The sub-options are specified on the same line as the scan directory as key-value pairs separated by an equals '=' character and may not contain spaces (because they are separated by spaces).  Do not use quotes for the values.  The available sub-options are:</p>
 
@@ -327,4 +327,4 @@ IRIS Data Management Center
 </pre>
 
 
-(man page 2020/02/12)
+(man page 2020/03/08)
