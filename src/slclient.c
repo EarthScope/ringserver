@@ -92,7 +92,7 @@ static int SelectToRegex (const char *net, const char *sta, const char *select,
 /***********************************************************************
  * SLHandleCmd:
  *
- * Handle DataLink command, which is expected to be in the
+ * Handle SeedLink command, which is expected to be in the
  * ClientInfo.recvbuf buffer.
  *
  * Returns zero on success, negative value on error.  On error the
@@ -358,10 +358,15 @@ SLHandleCmd (ClientInfo *cinfo)
 /***********************************************************************
  * SLStreamPackets:
  *
- * Send selected ring packets to DataLink client.
+ * Send selected ring packets to SeedLink client.
  *
- * Returns packet size sent on success, zero when no packet sent,
- * negative value on error.  On error the client should disconnected.
+ * The next read packet is only be sent if the type is allowed by
+ * SeedLink, e.g. miniSEED, but the size is returned to the caller
+ * to indicate that a packet was available.
+ *
+ * Return packet size processed on successful read from ring, zero
+ * when no next packet is available, or negative value on error.  On
+ * error the client should disconnected.
  ***********************************************************************/
 int
 SLStreamPackets (ClientInfo *cinfo)
@@ -385,7 +390,7 @@ SLStreamPackets (ClientInfo *cinfo)
     lprintf (0, "[%s] Error reading next packet from ring", cinfo->hostname);
     return -1;
   }
-  else if (readid > 0 && MS_ISVALIDHEADER (cinfo->packetdata) && cinfo->packet.datasize == SLRECSIZE)
+  else if (readid > 0 && MS_ISVALIDHEADER (cinfo->packetdata))
   {
     lprintf (3, "[%s] Read %s (%u bytes) packet ID %" PRId64 " from ring",
              cinfo->hostname, cinfo->packet.streamid, cinfo->packet.datasize, cinfo->packet.pktid);
@@ -404,17 +409,6 @@ SLStreamPackets (ClientInfo *cinfo)
       lprintf (3, "[%s] New stream for client: %s", cinfo->hostname, cinfo->packet.streamid);
       cinfo->streamscount++;
     }
-
-    /* Perform time-windowing start time check */
-    /* This check will skip the packets containing the start time
-       if  ( cinfo->starttime != 0 && cinfo->starttime != HPTERROR )
-       {
-       if ( cinfo->packet.datastart < cinfo->starttime )
-       {
-       skiprecord = 1;
-       }
-       }
-    */
 
     /* Perform time-windowing end time checks */
     if (cinfo->endtime != 0 && cinfo->endtime != HPTERROR)
@@ -451,7 +445,7 @@ SLStreamPackets (ClientInfo *cinfo)
     if (!skiprecord)
     {
       /* Send miniSEED record to client */
-      if (SendRecord (&cinfo->packet, cinfo->packetdata, SLRECSIZE, cinfo))
+      if (SendRecord (&cinfo->packet, cinfo->packetdata, cinfo->packet.datasize, cinfo))
       {
         if (cinfo->socketerr != 2)
           lprintf (0, "[%s] Error sending record to client", cinfo->hostname);
@@ -1039,7 +1033,7 @@ HandleInfo (ClientInfo *cinfo)
   }
 
   /* Allocate miniSEED record buffer */
-  if ((record = calloc (1, SLRECSIZE)) == NULL)
+  if ((record = calloc (1, INFORECSIZE)) == NULL)
   {
     lprintf (0, "[%s] Error allocating receive buffer", cinfo->hostname);
     return -1;
@@ -1194,7 +1188,7 @@ HandleInfo (ClientInfo *cinfo)
       while ((stream = (RingStream *)StackPop (streams)))
       {
         /* Split the streamid to get the network and station codes,
-           assumed strream pattern: "NET_STA_LOC_CHAN/MSEED" */
+           assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
         if (SplitStreamID (stream->streamid, '_', 10, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
         {
           lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
@@ -1289,7 +1283,7 @@ HandleInfo (ClientInfo *cinfo)
       while ((stream = (RingStream *)StackPop (streams)))
       {
         /* Split the streamid to get the network and station codes,
-           assumed strream pattern: "NET_STA_LOC_CHAN/MSEED" */
+           assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
         if (SplitStreamID (stream->streamid, '_', 10, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
         {
           lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
@@ -1350,7 +1344,7 @@ HandleInfo (ClientInfo *cinfo)
           while ((stream = (RingStream *)StackPop (netstanode->streams)))
           {
             /* Split the streamid to get the network, station, location & channel codes
-               assumed strream pattern: "NET_STA_LOC_CHAN/MSEED" */
+               assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
             if (SplitStreamID (stream->streamid, '_', 10, net, sta, loc, chan, NULL, NULL, NULL) != 4)
             {
               lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
@@ -1627,7 +1621,7 @@ HandleInfo (ClientInfo *cinfo)
           slinfo->terminfo = 0;
 
         /* Send INFO record to client, blind toss */
-        SendInfoRecord (record, SLRECSIZE, cinfo);
+        SendInfoRecord (record, INFORECSIZE, cinfo);
       }
     }
   }
@@ -1694,14 +1688,6 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
   if (!record || !vcinfo)
     return -1;
 
-  /* Check that record is SLRECSIZE-bytes */
-  if (reclen != SLRECSIZE)
-  {
-    lprintf (0, "[%s] data record is not %d bytes as expected: %d",
-             cinfo->hostname, SLRECSIZE, reclen);
-    return -1;
-  }
-
   /* Check that sequence number is not too big */
   if (packet->pktid > 0xFFFFFF)
   {
@@ -1712,7 +1698,7 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
   /* Create SeedLink header: signature + sequence number */
   snprintf (header, sizeof (header), "SL%06" PRIX64, packet->pktid);
 
-  if (SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE, SLRECSIZE}, 2))
+  if (SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE, reclen}, 2))
     return -1;
 
   /* Update the time of the last packet exchange */
@@ -1739,20 +1725,13 @@ SendInfoRecord (char *record, int reclen, void *vcinfo)
   if (!record || !vcinfo)
     return;
 
-  /* Check that record is SLRECSIZE-bytes */
-  if (reclen != SLRECSIZE)
-  {
-    lprintf (0, "Data record is not %d bytes: %d", SLRECSIZE, reclen);
-    return;
-  }
-
   /* Create INFO signature according to termination flag */
   if (slinfo->terminfo)
     memcpy (header, "SLINFO  ", SLHEADSIZE);
   else
     memcpy (header, "SLINFO *", SLHEADSIZE);
 
-  SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE, SLRECSIZE}, 2);
+  SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE, reclen}, 2);
 
   /* Update the time of the last packet exchange */
   cinfo->lastxchange = HPnow ();

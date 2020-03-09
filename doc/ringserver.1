@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2020/02/12
+.TH RINGSERVER 1 2020/03/08
 .SH NAME
 ringserver \- Generic packet ring buffer
 
@@ -217,9 +217,11 @@ specifying only the single address.
 
 .SH "SeedLink Support"
 
-The SeedLink protocol only transmits 512-byte miniSEED data records.
-Therefore only 512-byte miniSEED packets with a '/MSEED' suffix on
-the stream ID will be exported via SeedLink if enabled.
+The legacy SeedLink protocol only transmits 512-byte miniSEED data
+records.  This server is able to transmit miniSEED records of any
+length via SeedLink.  To ensure compatitiblity with legacy clients,
+only 512-byte miniSEED records should be inserted into the ring
+buffer.
 
 This server supports the wildcarding of network and station codes
 during SeedLink negotiation using the '?' and '*' characters for
@@ -413,7 +415,7 @@ Using either the \fB-MSSCAN\fP command line option or the
 \fBMSeedScan\fP config file parameter the server can be configured to
 recursively scan a directory for files containing miniSEED data
 records and insert them into the ring.  Intended for real-time data
-re-distribution files are continuously scanned, newly added records
+re-distribution, files are continuously scanned, newly added records
 are inserted into the ring.
 
 Sub-options can be used to control the scanning process.  The

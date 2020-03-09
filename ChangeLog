@@ -1,3 +1,7 @@
+2020.068:
+	- Add ability to serve variable miniSEED record lengths via SeedLink.
+	- Add ability to scan variable miniSEED record length via file scanning.
+
 2020.043:
 	- Update libmseed to 2.19.6.
 	- Apply LimitIP SourceID pattern to limit what a client can write in
