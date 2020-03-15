@@ -221,9 +221,11 @@ SLHandleCmd (ClientInfo *cinfo)
         else
           retval = 0;
 
-        /* Requested packet must be valid and have a matching data start time */
+        /* Requested packet must be valid and have a matching data start time
+         * Limit packet time matching to integer seconds to match SeedLink syntax limits */
         if (retval == stanode->packetid &&
-            (stanode->datastart == HPTERROR || stanode->datastart == cinfo->packet.datastart))
+            (stanode->datastart == HPTERROR ||
+             (int64_t)(MS_HPTIME2EPOCH(stanode->datastart)) == (int64_t)(MS_HPTIME2EPOCH(cinfo->packet.datastart))))
         {
           /* Use this packet ID if it is newer than any previous newest */
           if (newesttime == 0 || cinfo->packet.pkttime > newesttime)
@@ -243,30 +245,23 @@ SLHandleCmd (ClientInfo *cinfo)
     /* Position ring to starting packet ID if specified */
     if (slinfo->startid > 0)
     {
-      int64_t reqid;
-
-      /* SeedLink clients always resume data flow by requesting: lastpacket + 1
-       * The ring needs to be positioned to the actual last packet ID for RINGNEXT */
-
-      reqid = (slinfo->startid == 1) ? cinfo->ringparams->maxpktid : (slinfo->startid - 1);
-
-      retval = RingPosition (cinfo->reader, reqid, HPTERROR);
+      retval = RingPosition (cinfo->reader, slinfo->startid, HPTERROR);
 
       if (retval < 0)
       {
         lprintf (0, "[%s] Error with RingPosition for %" PRId64,
-                 cinfo->hostname, reqid);
+                 cinfo->hostname, slinfo->startid);
         return -1;
       }
       else if (retval == 0)
       {
         lprintf (0, "[%s] Could not find and position to packet ID: %" PRId64,
-                 cinfo->hostname, reqid);
+                 cinfo->hostname, slinfo->startid);
       }
       else
       {
         lprintf (2, "[%s] Positioned ring to packet ID: %" PRId64,
-                 cinfo->hostname, reqid);
+                 cinfo->hostname, slinfo->startid);
       }
     }
 
@@ -758,6 +753,11 @@ HandleNegotiation (ClientInfo *cinfo)
     starttimestr[0] = '\0';
     fields = sscanf (cinfo->recvbuf, "%*s %x %50s %c",
                      &startpacket, starttimestr, &junk);
+
+    /* SeedLink clients resume data flow by requesting: lastpacket + 1
+     * The ring needs to be positioned to the actual last packet ID for RINGNEXT,
+     * so set the starting packet to the last actual packet received by the client. */
+    startpacket = (startpacket == 1) ? cinfo->ringparams->maxpktid : (startpacket - 1);
 
     /* Make sure we got zero, one or two arguments */
     if (fields > 2)

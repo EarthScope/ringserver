@@ -1,3 +1,7 @@
+2020.075:
+	- Fix resuming SeedLink connections when both sequence and begin time are
+	included in multi-station mode.
+
 2020.068:
 	- Add ability to serve variable miniSEED record lengths via SeedLink.
 	- Add ability to scan variable miniSEED record length via file scanning.
