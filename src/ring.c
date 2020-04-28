@@ -1608,7 +1608,7 @@ RingLimit (RingReader *reader, char *pattern)
   /* Compile pattern and assign to reader */
   if (pattern)
   {
-    /* Free existing complied expression */
+    /* Free existing compiled expression */
     if (reader->limit)
       pcre_free (reader->limit);
 
