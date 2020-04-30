@@ -18,7 +18,8 @@ For usage infromation see the [ringserver manual](doc/ringserver.md) in the
 
 ## Download release versions
 
-The [releases](/iris-edu/ringserver/releases) area contains release versions.
+The [releases](https://github.com/iris-edu/ringserver/releases) area contains
+release versions for download.
 
 ## Building and Installing 
 
