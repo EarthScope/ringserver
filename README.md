@@ -16,6 +16,10 @@ transport that is agnostic to data format.
 For usage infromation see the [ringserver manual](doc/ringserver.md) in the
 'doc' directory.
 
+## Download release versions
+
+The [releases](/iris-edu/ringserver/releases) area contains release versions.
+
 ## Building and Installing 
 
 In most Unix/Linux environments a simple 'make' will build the program.
