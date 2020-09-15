@@ -11,6 +11,7 @@ all clean install ::
 	  if [ ! -f $$d/Makefile -a ! -f $$d/makefile ] ; then \
 	    if [ -x $$d/configure -a "$$d" = "pcre" ] ; then \
 	      echo "Running configure in $$d" ; \
+              ( cd $$d && touch -c * ) ; \
 	      ( cd $$d && ./configure --with-link-size=4 --disable-shared --enable-static --disable-cpp ) ; \
 	    elif [ -x $$d/configure -a "$$d" = "mxml" ] ; then \
 	       echo "Running configure in $$d" ; \
