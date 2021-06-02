@@ -29,13 +29,13 @@ extern "C" {
 #include <libmseed.h>
 
 /* Key for B-trees */
-typedef int64_t Key;
+typedef uint64_t Key;
 
 extern int      SplitStreamID (char *streamid, char delim, int maxlength,
                                char *id1, char *id2, char *id3, char *id4, char *id5, char *id6,
                                char *type);
 extern hptime_t HPnow (void);
-extern int64_t  FVNhash64 (char *str);
+extern uint64_t FVNhash64 (const char *);
 extern int      KeyCompare (const void *a, const void *b);
 extern int      IsAllDigits (char *string);
 
