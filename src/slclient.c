@@ -553,12 +553,17 @@ HandleNegotiation (ClientInfo *cinfo)
       return -1;
   }
 
-  /* CAPABILITIES - Parse capabilities flags */
-  else if (!strncasecmp (cinfo->recvbuf, "CAPABILITIES", 12))
+  /* ENABLE/CAPABILITIES - Parse capabilities flags */
+  else if (!strncasecmp (cinfo->recvbuf, "ENABLE", 6) ||
+           !strncasecmp (cinfo->recvbuf, "CAPABILITIES", 12))
   {
-    /* Check for enhanced status flags*/
+    /* Protocol version */
+    if (strstr (cinfo->recvbuf, "SLPROTO:4.0"))
+      slinfo->capabilities |= CAP_SLPROTO40;
+
+    /* Extended reply capability */
     if (strstr (cinfo->recvbuf, "EXTREPLY"))
-      slinfo->extreply = 1;
+      slinfo->capabilities |= CAP_EXTREPLY;
 
     if (!slinfo->batch && SendReply (cinfo, "OK", 0))
       return -1;
@@ -1658,7 +1663,7 @@ SendReply (ClientInfo *cinfo, char *reply, char *extreply)
   char sendstr[100];
 
   /* Create reply string to send */
-  if (slinfo->extreply && extreply)
+  if (slinfo->capabilities & CAP_EXTREPLY && extreply)
     snprintf (sendstr, sizeof (sendstr), "%s\r%s\r\n", reply, extreply);
   else
     snprintf (sendstr, sizeof (sendstr), "%s\r\n", reply);

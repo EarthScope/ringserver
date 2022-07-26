@@ -51,9 +51,32 @@ extern "C" {
 #define SLINFO_CONNECTIONS  6
 #define SLINFO_ALL          7
 
+/* Capability flags */
+typedef enum {
+  CAP_SLPROTO40     = 1u << 1,
+  CAP_WEBSOCKET13   = 1u << 2,
+  CAP_CAP           = 1u << 3,
+  CAP_EXTREPLY      = 1u << 4,
+  CAP_NSWILDCARD    = 1u << 5,
+  CAP_NSWILDCARDSEQ = 1u << 6,
+  CAP_BATCH         = 1u << 7,
+  CAP_ASYNC         = 1u << 8,
+  CAP_AUTHTOKEN     = 1u << 9,
+  CAP_AUTHUSERPASS  = 1u << 10,
+  CAP_MULTISTATION  = 1u << 11,
+  CAP_TIME          = 1u << 12,
+} CapabilityFlags;
+
+/* ACCEPT-able data format codes */
+typedef enum {
+  ACCEPT_MSEED2 = '2',
+  ACCEPT_MSEED3 = '3',
+} DataFormatCodes;
+
+
 /* Structure to hold SeedLink specific parameters */
 typedef struct SLInfo_s {
-  int         extreply;     /* Extended messages should be included in reply */
+  uint32_t    capabilities; /* Protocol feature capabilities */
   int         dialup;       /* Connection is in dialup/fetch mode */
   int         batch;        /* Connection is in batch mode */
   int         terminfo;     /* Terminating INFO packet flag */
