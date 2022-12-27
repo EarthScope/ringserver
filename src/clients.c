@@ -963,17 +963,17 @@ RecvCmd (ClientInfo *cinfo)
 /***********************************************************************
  * RecvLine:
  *
- * Read characters from a socket until '\r' (carriage return) is
- * found, followed by an optional '\n' (newline) or the maximum buffer
- * length is reached and place them into the client's receive buffer.
- * The resulting string in buffer will always be NULL terminated.
+ * Read characters from a socket until '\r' (carriage return) followed by an
+ * optional '\n' (newline) is found, or a lone '\n' is found, or the maximum
+ * buffer length is reached and place them into the client's receive buffer. The
+ * resulting string in buffer will always be NULL terminated.
  *
- * This routine can handle fragmented receives after some data has
- * been read.  If no data has been read and no data is available from
- * the socket this routine will return immediately.
+ * This routine can handle fragmented receives after some data has been read. If
+ * no data has been read and no data is available from the socket this routine
+ * will return immediately.
  *
- * Return number of characters read on success, 0 if no data is
- * available, -1 on connection shutdown and -2 on error.
+ * Return number of characters read on success, 0 if no data is available, -1 on
+ * connection shutdown and -2 on error.
  ***********************************************************************/
 int
 RecvLine (ClientInfo *cinfo)
@@ -996,7 +996,7 @@ RecvLine (ClientInfo *cinfo)
   if (!bptr)
     return -2;
 
-  /* Recv a character at a time until \r or buflen is reached */
+  /* Recv a character at a time until \r, \n, or buflen is reached */
   while (nread < cinfo->recvbuflen)
   {
     if ((nrecv = recv (cinfo->socket, bptr, 1, 0)) < 0)
@@ -1055,11 +1055,11 @@ RecvLine (ClientInfo *cinfo)
         cinfo->wsmaskidx++;
       }
 
-      /* If '\r' is received the line is complete */
-      if (*bptr == '\r')
+      /* If '\r' or '\n' is received the line is complete */
+      if (*bptr == '\r' || *bptr == '\n')
       {
         /* Check for optional '\n' (newline) and consume it if present */
-        if ((nrecv = recv (cinfo->socket, &peek, 1, MSG_PEEK)) == 1)
+        if (*bptr == '\r' && (nrecv = recv (cinfo->socket, &peek, 1, MSG_PEEK)) == 1)
         {
           /* Unmask received data (payload) if a mask was supplied as WebSocket */
           if (cinfo->wsmask.one != 0)
