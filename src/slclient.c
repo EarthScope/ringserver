@@ -34,7 +34,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
+ * Copyright (C) 2022:
  * @author Chad Trabant, IRIS Data Management Center
  **************************************************************************/
 
@@ -75,7 +75,7 @@
 
 static int HandleNegotiation (ClientInfo *cinfo);
 static int HandleInfo (ClientInfo *cinfo);
-static int SendReply (ClientInfo *cinfo, char *reply, char *extreply);
+static int SendReply (ClientInfo *cinfo, char *reply, ErrorCode code, char *extreply);
 static int SendRecord (RingPacket *packet, char *record, int reclen,
                        void *vcinfo);
 static void SendInfoRecord (char *record, int reclen, void *vcinfo);
@@ -163,7 +163,7 @@ SLHandleCmd (ClientInfo *cinfo)
                           &(cinfo->matchstr), &(cinfo->rejectstr)))
       {
         lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
-        SendReply (cinfo, "ERROR", "Error with StationToRegex");
+        SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error with StationToRegex()");
         return -1;
       }
     }
@@ -191,7 +191,7 @@ SLHandleCmd (ClientInfo *cinfo)
                             &(cinfo->matchstr), &(cinfo->rejectstr)))
         {
           lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
-          SendReply (cinfo, "ERROR", "Error with StationToRegex");
+          SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error with StationToRegex()");
           return -1;
         }
 
@@ -225,7 +225,7 @@ SLHandleCmd (ClientInfo *cinfo)
          * Limit packet time matching to integer seconds to match SeedLink syntax limits */
         if (retval == stanode->packetid &&
             (stanode->datastart == HPTERROR ||
-             (int64_t)(MS_HPTIME2EPOCH(stanode->datastart)) == (int64_t)(MS_HPTIME2EPOCH(cinfo->packet.datastart))))
+             (int64_t)(MS_HPTIME2EPOCH (stanode->datastart)) == (int64_t)(MS_HPTIME2EPOCH (cinfo->packet.datastart))))
         {
           /* Use this packet ID if it is newer than any previous newest */
           if (newesttime == 0 || cinfo->packet.pkttime > newesttime)
@@ -272,7 +272,7 @@ SLHandleCmd (ClientInfo *cinfo)
       {
         lprintf (0, "[%s] Error with RingMatch for (%lu bytes) '%s'",
                  cinfo->hostname, (unsigned long)strlen (cinfo->matchstr), cinfo->matchstr);
-        SendReply (cinfo, "ERROR", "cannot compile matches (combined matches too large?)");
+        SendReply (cinfo, "ERROR", ERROR_INTERNAL, "cannot compile matches (combined matches too large?)");
         return -1;
       }
     }
@@ -284,7 +284,7 @@ SLHandleCmd (ClientInfo *cinfo)
       {
         lprintf (0, "[%s] Error with RingReject for (%lu bytes) '%s'",
                  cinfo->hostname, (unsigned long)strlen (cinfo->rejectstr), cinfo->rejectstr);
-        SendReply (cinfo, "ERROR", "cannot compile rejections (combined rejection too large?)");
+        SendReply (cinfo, "ERROR", ERROR_INTERNAL, "cannot compile rejections (combined rejection too large?)");
         return -1;
       }
     }
@@ -304,14 +304,14 @@ SLHandleCmd (ClientInfo *cinfo)
       }
       else if (cinfo->timewinlimit < 1.0)
       {
-        int64_t pktlimit = (int64_t) (cinfo->timewinlimit * cinfo->ringparams->maxpackets);
+        int64_t pktlimit = (int64_t)(cinfo->timewinlimit * cinfo->ringparams->maxpackets);
 
         readid = RingAfterRev (cinfo->reader, cinfo->starttime, pktlimit, 0);
       }
       else
       {
         lprintf (0, "Time window search limit is invalid: %f", cinfo->timewinlimit);
-        SendReply (cinfo, "ERROR", "time window search limit is invalid");
+        SendReply (cinfo, "ERROR", ERROR_INTERNAL, "time window search limit is invalid");
         return -1;
       }
 
@@ -319,7 +319,7 @@ SLHandleCmd (ClientInfo *cinfo)
       {
         lprintf (0, "[%s] Error with RingAfter time: %s [%" PRId64 "]",
                  cinfo->hostname, timestr, cinfo->starttime);
-        SendReply (cinfo, "ERROR", "Error positioning reader to start of time window");
+        SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error positioning reader to start of time window");
         return -1;
       }
 
@@ -533,7 +533,6 @@ HandleNegotiation (ClientInfo *cinfo)
 
   slinfo = (SLInfo *)cinfo->extinfo;
 
-
   /* HELLO - Return server version and ID */
   if (!strncasecmp (cinfo->recvbuf, "HELLO", 5))
   {
@@ -553,37 +552,91 @@ HandleNegotiation (ClientInfo *cinfo)
       return -1;
   }
 
-  /* ENABLE/CAPABILITIES - Parse capabilities flags */
-  else if (!strncasecmp (cinfo->recvbuf, "ENABLE", 6) ||
-           !strncasecmp (cinfo->recvbuf, "CAPABILITIES", 12))
+  /* SLPROTO (v4.0) - Parse requested protocol version */
+  else if (!strncasecmp (cinfo->recvbuf, "SLPROTO", 7))
   {
-    /* Protocol version */
-    if (strstr (cinfo->recvbuf, "SLPROTO:4.0"))
-      slinfo->capabilities |= CAP_SLPROTO40;
+    uint8_t proto_major = 0;
+    uint8_t proto_minor = 0;
 
-    /* Extended reply capability */
-    if (strstr (cinfo->recvbuf, "EXTREPLY"))
-      slinfo->capabilities |= CAP_EXTREPLY;
+    fields = sscanf (cinfo->recvbuf, "%*s %" SCNu8 ".%" SCNu8,
+                     &proto_major, &proto_minor);
 
-    if (!slinfo->batch && SendReply (cinfo, "OK", 0))
+    if ((proto_major == 3) ||
+        (proto_major == 4 && proto_minor == 0))
+    {
+      if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
+        return -1;
+
+      slinfo->proto_major = proto_major;
+      slinfo->proto_minor = proto_minor;
+
+      lprintf (2, "[%s] Received %s, protocol accepted", cinfo->hostname, cinfo->recvbuf);
+    }
+    else
+    {
+      lprintf (2, "[%s] Received %s, protocol rejected", cinfo->hostname, cinfo->recvbuf);
+
+      if (!slinfo->batch && SendReply (cinfo, "ERROR UNSUPPORTED unsupported protocol version", ERROR_NONE, NULL))
+        return -1;
+    }
+  }
+
+  /* USERAGENT (v4.0) - Parse user agent command */
+  else if (!strncasecmp (cinfo->recvbuf, "USERAGENT", 9))
+  {
+    ptr = cinfo->recvbuf + 9;
+    while (isspace ((int)*ptr))
+      ptr++;
+
+    strncpy (cinfo->clientid, ptr, sizeof (cinfo->clientid) - 1);
+    cinfo->clientid[sizeof (cinfo->clientid) - 1] = '\0';
+
+    lprintf (2, "[%s] Received USERAGENT (%s)", cinfo->hostname, cinfo->clientid);
+
+    if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
       return -1;
   }
 
-  /* CAT - Return ASCII list of stations */
-  else if (!strncasecmp (cinfo->recvbuf, "CAT", 3))
+  /* GETCAPABILITIES (v4.0) - Return capabilities */
+  else if (!strncasecmp (cinfo->recvbuf, "GETCAPABILITIES", 15))
   {
+    lprintf (2, "[%s] Received GETCAPABILITIES", cinfo->hostname);
+
     snprintf (sendbuffer, sizeof (sendbuffer),
-              "CAT command not implemented\r\n");
+              "%s\r\n",
+              SLCAPABILITIESv4);
+
     if (SendData (cinfo, sendbuffer, strlen (sendbuffer)))
       return -1;
   }
 
-  /* BATCH - Batch mode for subsequent commands */
+  /* CAPABILITIES (v3.x) - Parse capabilities flags */
+  else if (!strncasecmp (cinfo->recvbuf, "CAPABILITIES", 12))
+  {
+    /* Extended reply capability */
+    if (strstr (cinfo->recvbuf, "EXTREPLY"))
+      slinfo->extreply = 1;
+
+    if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
+      return -1;
+  }
+
+  /* CAT (v3) - Return ASCII list of stations */
+  else if (!strncasecmp (cinfo->recvbuf, "CAT", 3))
+  {
+    snprintf (sendbuffer, sizeof (sendbuffer),
+              "CAT command not implemented\r\n");
+
+    if (SendData (cinfo, sendbuffer, strlen (sendbuffer)))
+      return -1;
+  }
+
+  /* BATCH (v3) - Batch mode for subsequent commands */
   else if (!strncasecmp (cinfo->recvbuf, "BATCH", 5))
   {
     slinfo->batch = 1;
 
-    if (SendReply (cinfo, "OK", 0))
+    if (SendReply (cinfo, "OK", ERROR_NONE, NULL))
       return -1;
   }
 
@@ -595,19 +648,37 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Parse station and network from request */
     slinfo->reqsta[0] = '\0';
     slinfo->reqnet[0] = '\0';
-    fields = sscanf (cinfo->recvbuf, "%*s %9s %9s %c",
-                     slinfo->reqsta, slinfo->reqnet, &junk);
 
-    if (fields == 1)
-      slinfo->reqnet[0] = '\0';
-
-    /* Make sure we got a station code and optionally a network code */
-    if (fields <= 0 || fields > 2)
+    if (slinfo->proto_major == 4)
     {
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", "STATION requires 1 or 2 arguments"))
-        return -1;
+      fields = sscanf (cinfo->recvbuf, "%*s %9s_%9s %c",
+                       slinfo->reqnet, slinfo->reqsta, &junk);
 
-      OKGO = 0;
+      /* Make sure we got a station code and optionally a network code */
+      if (fields != 1)
+      {
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "STATION requires 1 argument"))
+          return -1;
+
+        OKGO = 0;
+      }
+    }
+    else /* Protocols 3.x */
+    {
+      fields = sscanf (cinfo->recvbuf, "%*s %9s %9s %c",
+                       slinfo->reqsta, slinfo->reqnet, &junk);
+
+      if (fields == 1)
+        slinfo->reqnet[0] = '\0';
+
+      /* Make sure we got a station code and optionally a network code */
+      if (fields < 1 || fields > 2)
+      {
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "STATION requires 1 or 2 arguments"))
+          return -1;
+
+        OKGO = 0;
+      }
     }
 
     /* Sanity check, only allowed characters in network code */
@@ -616,7 +687,7 @@ HandleNegotiation (ClientInfo *cinfo)
       lprintf (0, "[%s] Error, requested network code illegal characters: '%s'",
                cinfo->hostname, slinfo->reqnet);
 
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", "Invalid characters in network code"))
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Invalid characters in network code"))
         return -1;
 
       OKGO = 0;
@@ -628,7 +699,7 @@ HandleNegotiation (ClientInfo *cinfo)
       lprintf (0, "[%s] Error, requested station code illegal characters: '%s'",
                cinfo->hostname, slinfo->reqsta);
 
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", "Invalid characters in station code"))
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Invalid characters in station code"))
         return -1;
 
       OKGO = 0;
@@ -641,11 +712,11 @@ HandleNegotiation (ClientInfo *cinfo)
       {
         lprintf (0, "[%s] Error in GetStaNode for command STATION", cinfo->hostname);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", "Error in GetStaNode"))
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetStaNode()"))
           return -1;
       }
 
-      if (!slinfo->batch && SendReply (cinfo, "OK", 0))
+      if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
         return -1;
 
       slinfo->stationcount++;
@@ -665,7 +736,7 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Make sure we got a single pattern */
     if (fields != 1)
     {
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", "SELECT requires a single argument"))
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "SELECT requires a single argument"))
         return -1;
 
       OKGO = 0;
@@ -681,7 +752,7 @@ HandleNegotiation (ClientInfo *cinfo)
       lprintf (0, "[%s] Error, select pattern contains illegal characters: '%s'",
                cinfo->hostname, pattern);
 
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", "Selector contains illegal characters"))
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Selector contains illegal characters"))
         return -1;
 
       OKGO = 0;
@@ -693,7 +764,7 @@ HandleNegotiation (ClientInfo *cinfo)
       lprintf (0, "[%s] Error, selector not 2-6 characters: %s",
                cinfo->hostname, pattern);
 
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", "Selector must be 2-6 characters"))
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Selector must be 2-6 characters"))
         return -1;
 
       OKGO = 0;
@@ -707,7 +778,7 @@ HandleNegotiation (ClientInfo *cinfo)
       {
         lprintf (0, "[%s] Error in GetStaNode for command SELECT", cinfo->hostname);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", "Error in GetStaNode"))
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetStaNode()"))
           return -1;
       }
       else
@@ -719,12 +790,12 @@ HandleNegotiation (ClientInfo *cinfo)
           lprintf (0, "[%s] Error for command SELECT (cannot AddToString), too many selectors for %s.%s",
                    cinfo->hostname, slinfo->reqnet, slinfo->reqsta);
 
-          if (!slinfo->batch && SendReply (cinfo, "ERROR", "Too many selectors for this station"))
+          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Too many selectors for this station"))
             return -1;
         }
         else
         {
-          if (!slinfo->batch && SendReply (cinfo, "OK", "Station specific"))
+          if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
             return -1;
         }
       }
@@ -739,12 +810,12 @@ HandleNegotiation (ClientInfo *cinfo)
         lprintf (0, "[%s] Error for command SELECT (cannot AddToString), too many global selectors",
                  cinfo->hostname);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", "Too many global selectors"))
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Too many global selectors"))
           return -1;
       }
       else
       {
-        if (!slinfo->batch && SendReply (cinfo, "OK", "All-stations mode"))
+        if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
           return -1;
       }
     }
@@ -767,7 +838,7 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Make sure we got zero, one or two arguments */
     if (fields > 2)
     {
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", "Too many arguments for DATA/FETCH"))
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Too many arguments for DATA/FETCH"))
         return -1;
 
       OKGO = 0;
@@ -785,7 +856,7 @@ HandleNegotiation (ClientInfo *cinfo)
         lprintf (0, "[%s] Error parsing time in DATA|FETCH: %s",
                  cinfo->hostname, starttimestr);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", "Error parsing start time"))
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Error parsing start time"))
           return -1;
 
         OKGO = 0;
@@ -803,7 +874,7 @@ HandleNegotiation (ClientInfo *cinfo)
           lprintf (0, "[%s] Error in GetStaNode for command DATA|FETCH",
                    cinfo->hostname);
 
-          if (!slinfo->batch && SendReply (cinfo, "ERROR", "Error in GetStaNode"))
+          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetStaNode()"))
             return -1;
 
           OKGO = 0;
@@ -818,7 +889,7 @@ HandleNegotiation (ClientInfo *cinfo)
 
       if (OKGO)
       {
-        if (!slinfo->batch && SendReply (cinfo, "OK", 0))
+        if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
           return -1;
 
         /* If any stations use FETCH the connection is dial-up */
@@ -861,7 +932,7 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Make sure we got start time and optionally end time */
     if (fields <= 0 || fields > 2)
     {
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", "TIME command requires 1 or 2 arguments"))
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "TIME command requires 1 or 2 arguments"))
         return -1;
 
       OKGO = 0;
@@ -879,19 +950,19 @@ HandleNegotiation (ClientInfo *cinfo)
         lprintf (0, "[%s] Error parsing start time for TIME: %s",
                  cinfo->hostname, starttimestr);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", "Error parsing start time"))
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Error parsing start time"))
           return -1;
 
         OKGO = 0;
       }
 
       /* Sanity check for future start time */
-      if ((time_t)MS_HPTIME2EPOCH(starttime) > time(NULL))
+      if ((time_t)MS_HPTIME2EPOCH (starttime) > time (NULL))
       {
         lprintf (0, "[%s] Start cannot be in future for TIME: %s",
                  cinfo->hostname, starttimestr);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", "Start time cannot be in the future"))
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Start time cannot be in the future"))
           return -1;
 
         OKGO = 0;
@@ -910,7 +981,7 @@ HandleNegotiation (ClientInfo *cinfo)
         lprintf (0, "[%s] Error parsing end time for TIME: %s",
                  cinfo->hostname, endtimestr);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", "Error parsing end time"))
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Error parsing end time"))
           return -1;
 
         OKGO = 0;
@@ -928,7 +999,7 @@ HandleNegotiation (ClientInfo *cinfo)
           lprintf (0, "[%s] Error in GetStaNode for command TIME",
                    cinfo->hostname);
 
-          if (!slinfo->batch && SendReply (cinfo, "ERROR", "Error in GetStaNode"))
+          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetStaNode()"))
             return -1;
 
           OKGO = 0;
@@ -942,7 +1013,7 @@ HandleNegotiation (ClientInfo *cinfo)
 
       if (OKGO)
       {
-        if (!slinfo->batch && SendReply (cinfo, "OK", 0))
+        if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
           return -1;
       }
 
@@ -979,10 +1050,12 @@ HandleNegotiation (ClientInfo *cinfo)
   /* Unrecognized command */
   else
   {
-    lprintf (1, "[%s] Unrecognized command: %.10s",
-             cinfo->hostname, cinfo->recvbuf);
+    snprintf (sendbuffer, sizeof (sendbuffer),
+              "Unrecognized command: %.50s", cinfo->recvbuf);
 
-    if (SendReply (cinfo, "ERROR", "Unrecognized command"))
+    lprintf (1, "[%s] %s", cinfo->hostname, sendbuffer);
+
+    if (SendReply (cinfo, "ERROR", ERROR_UNSUPPORTED, sendbuffer))
       return -1;
   }
 
@@ -1596,7 +1669,7 @@ HandleInfo (ClientInfo *cinfo)
         nsamps = ((xmllength - offset) > 456) ? 456 : (xmllength - offset);
 
         /* Update sequence number and number of samples */
-        snprintf (seqnumstr, sizeof(seqnumstr), "%06d", seqnum);
+        snprintf (seqnumstr, sizeof (seqnumstr), "%06d", seqnum);
         memcpy (fsdh->sequence_number, seqnumstr, 6);
 
         fsdh->numsamples = nsamps;
@@ -1657,16 +1730,56 @@ HandleInfo (ClientInfo *cinfo)
  * Returns 0 on success and -1 on error.
  ***************************************************************************/
 static int
-SendReply (ClientInfo *cinfo, char *reply, char *extreply)
+SendReply (ClientInfo *cinfo, char *reply, ErrorCode code, char *extreply)
 {
   SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
   char sendstr[100];
+  char *codestr;
+
+  switch (code)
+  {
+  case ERROR_INTERNAL:
+    codestr = "INTERNAL";
+    break;
+  case ERROR_UNSUPPORTED:
+    codestr = "UNSUPPORTED";
+    break;
+  case ERROR_UNEXPECTED:
+    codestr = "UNEXPECTED";
+    break;
+  case ERROR_UNAUTHORIZED:
+    codestr = "UNAUTHORIZED";
+    break;
+  case ERROR_LIMIT:
+    codestr = "LIMIT";
+    break;
+  case ERROR_ARGUMENTS:
+    codestr = "ARGUMENTS";
+    break;
+  case ERROR_AUTH:
+    codestr = "AUTH";
+    break;
+  default:
+    codestr = "UNKNOWN";
+  }
 
   /* Create reply string to send */
-  if (slinfo->capabilities & CAP_EXTREPLY && extreply)
-    snprintf (sendstr, sizeof (sendstr), "%s\r%s\r\n", reply, extreply);
+  if (slinfo->proto_major == 4)
+  {
+    if (code != ERROR_NONE && extreply)
+      snprintf (sendstr, sizeof (sendstr), "%s %s %s\r\n", reply, codestr, extreply);
+    else if (code != ERROR_NONE)
+      snprintf (sendstr, sizeof (sendstr), "%s %s\r\n", reply, codestr);
+    else
+      snprintf (sendstr, sizeof (sendstr), "%s\r\n", reply);
+  }
   else
-    snprintf (sendstr, sizeof (sendstr), "%s\r\n", reply);
+  {
+    if (slinfo->extreply && extreply)
+      snprintf (sendstr, sizeof (sendstr), "%s\r%s %s\r\n", reply, codestr, extreply);
+    else
+      snprintf (sendstr, sizeof (sendstr), "%s\r\n", reply);
+  }
 
   /* Send the reply */
   if (SendData (cinfo, sendstr, strlen (sendstr)))
@@ -1688,22 +1801,34 @@ static int
 SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
 {
   ClientInfo *cinfo = (ClientInfo *)vcinfo;
-  char header[SLHEADSIZE + 1];
+  SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
+  char header[100] = {0};
+  char stationidlen = 0;
+  int headerlen = 0;
 
   if (!record || !vcinfo)
     return -1;
 
-  /* Check that sequence number is not too big */
-  if (packet->pktid > 0xFFFFFF)
+  if (slinfo->proto_major == 4) /* Create v4 header */
   {
-    lprintf (0, "[%s] sequence number too large for SeedLink: %" PRId64,
-             cinfo->hostname, packet->pktid);
+
+    headerlen = SLHEADSIZE_EXT + stationidlen;
+  }
+  else /* Create v3 header */
+  {
+    /* Check that sequence number is not too big */
+    if (packet->pktid > 0xFFFFFF)
+    {
+      lprintf (0, "[%s] sequence number too large for SeedLink: %" PRId64,
+               cinfo->hostname, packet->pktid);
+    }
+
+    /* Create SeedLink header: signature + sequence number */
+    snprintf (header, sizeof (header), "SL%06" PRIX64, packet->pktid);
+    headerlen = SLHEADSIZE;
   }
 
-  /* Create SeedLink header: signature + sequence number */
-  snprintf (header, sizeof (header), "SL%06" PRIX64, packet->pktid);
-
-  if (SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE, reclen}, 2))
+  if (SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){headerlen, reclen}, 2))
     return -1;
 
   /* Update the time of the last packet exchange */
@@ -2030,7 +2155,6 @@ StationToRegex (const char *net, const char *sta, const char *selectors,
   return 0;
 } /* End of StationToRegex() */
 
-
 /***************************************************************************
  * SelectToRegex:
  *
@@ -2073,7 +2197,7 @@ SelectToRegex (const char *net, const char *sta, const char *select, char **rege
     return -1;
   if (sta && strlen (sta) > 10)
     return -1;
-  if (select && strlen(select) > 7)
+  if (select && strlen (select) > 7)
     return -1;
 
   if (net)
