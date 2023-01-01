@@ -68,7 +68,7 @@
 
 /* Define list of valid characters for selectors and station & network codes */
 #define VALIDSELECTCHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?!-"
-#define VALIDNETSTACHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*"
+#define VALIDSTAIDCHARS  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_"
 
 /* Define the number of no-action loops that trigger the throttle */
 #define THROTTLE_TRIGGER 10
@@ -82,11 +82,11 @@ static void SendInfoRecord (char *record, int reclen, void *vcinfo);
 static void FreeStaNode (void *rbnode);
 static void FreeNetStaNode (void *rbnode);
 static int StaKeyCompare (const void *a, const void *b);
-static SLStaNode *GetStaNode (RBTree *tree, const char *net, const char *sta);
-static SLNetStaNode *GetNetStaNode (RBTree *tree, const char *net, const char *sta);
-static int StationToRegex (const char *net, const char *sta, const char *selectors,
+static SLStaNode *GetStaNode (RBTree *tree, char *staid);
+static SLNetStaNode *GetNetStaNode (RBTree *tree, char *staid);
+static int StationToRegex (const char *net_sta, const char *selectors,
                            char **matchregex, char **rejectregex);
-static int SelectToRegex (const char *net, const char *sta, const char *select,
+static int SelectToRegex (const char *net_sta, const char *select,
                           char **regex);
 
 /***********************************************************************
@@ -102,7 +102,6 @@ int
 SLHandleCmd (ClientInfo *cinfo)
 {
   SLInfo *slinfo;
-  SLStaKey *stakey;
   SLStaNode *stanode;
   int64_t readid;
   int64_t retval;
@@ -159,7 +158,7 @@ SLHandleCmd (ClientInfo *cinfo)
     /* If no stations specified convert any global selectors to regexes */
     if (slinfo->stationcount == 0 && slinfo->selectors)
     {
-      if (StationToRegex (NULL, NULL, slinfo->selectors,
+      if (StationToRegex (NULL, slinfo->selectors,
                           &(cinfo->matchstr), &(cinfo->rejectstr)))
       {
         lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
@@ -183,11 +182,10 @@ SLHandleCmd (ClientInfo *cinfo)
 
       while ((rbnode = (RBNode *)StackPop (stack)))
       {
-        stakey = (SLStaKey *)rbnode->key;
         stanode = (SLStaNode *)rbnode->data;
 
         /* Configure regexes for this station */
-        if (StationToRegex (stakey->net, stakey->sta, stanode->selectors,
+        if (StationToRegex ((const char *)rbnode->key, stanode->selectors,
                             &(cinfo->matchstr), &(cinfo->rejectstr)))
         {
           lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
@@ -533,6 +531,8 @@ HandleNegotiation (ClientInfo *cinfo)
 
   slinfo = (SLInfo *)cinfo->extinfo;
 
+  fprintf (stderr, "DEBUG %s: received '%s'\n", __func__, cinfo->recvbuf);
+
   /* HELLO - Return server version and ID */
   if (!strncasecmp (cinfo->recvbuf, "HELLO", 5))
   {
@@ -645,14 +645,13 @@ HandleNegotiation (ClientInfo *cinfo)
   {
     OKGO = 1;
 
-    /* Parse station and network from request */
-    slinfo->reqsta[0] = '\0';
-    slinfo->reqnet[0] = '\0';
+    /* Parse station ID from request */
+    slinfo->reqstaid[0] = '\0';
 
     if (slinfo->proto_major == 4)
     {
-      fields = sscanf (cinfo->recvbuf, "%*s %9s_%9s %c",
-                       slinfo->reqnet, slinfo->reqsta, &junk);
+      fields = sscanf (cinfo->recvbuf, "%*s %20s %c", slinfo->reqstaid, &junk);
+      slinfo->reqstaid[sizeof(slinfo->reqstaid) - 1] = '\0';
 
       /* Make sure we got a station code and optionally a network code */
       if (fields != 1)
@@ -663,13 +662,12 @@ HandleNegotiation (ClientInfo *cinfo)
         OKGO = 0;
       }
     }
-    else /* Protocols 3.x */
+    else /* Protocol 3.x */
     {
-      fields = sscanf (cinfo->recvbuf, "%*s %9s %9s %c",
-                       slinfo->reqsta, slinfo->reqnet, &junk);
+      char reqnet[10] = {0};
+      char reqsta[10] = {0};
 
-      if (fields == 1)
-        slinfo->reqnet[0] = '\0';
+      fields = sscanf (cinfo->recvbuf, "%*s %9s %9s %c", reqsta, reqnet, &junk);
 
       /* Make sure we got a station code and optionally a network code */
       if (fields < 1 || fields > 2)
@@ -679,27 +677,20 @@ HandleNegotiation (ClientInfo *cinfo)
 
         OKGO = 0;
       }
+
+      /* Combine network and station into station ID */
+      snprintf (slinfo->reqstaid, sizeof (slinfo->reqstaid), "%s_%s", reqnet, reqsta);
     }
 
-    /* Sanity check, only allowed characters in network code */
-    if (OKGO && strspn (slinfo->reqnet, VALIDNETSTACHARS) != strlen (slinfo->reqnet))
-    {
-      lprintf (0, "[%s] Error, requested network code illegal characters: '%s'",
-               cinfo->hostname, slinfo->reqnet);
+    fprintf (stderr, "DEBUG staid: '%s'", slinfo->reqstaid);
 
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Invalid characters in network code"))
-        return -1;
-
-      OKGO = 0;
-    }
-
-    /* Sanity check, only allowed characters in station code */
-    if (OKGO && strspn (slinfo->reqsta, VALIDNETSTACHARS) != strlen (slinfo->reqsta))
+    /* Sanity check, only allowed characters in station ID */
+    if (OKGO && strspn (slinfo->reqstaid, VALIDSTAIDCHARS) != strlen (slinfo->reqstaid))
     {
       lprintf (0, "[%s] Error, requested station code illegal characters: '%s'",
-               cinfo->hostname, slinfo->reqsta);
+               cinfo->hostname, slinfo->reqstaid);
 
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Invalid characters in station code"))
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Invalid characters in station ID"))
         return -1;
 
       OKGO = 0;
@@ -708,7 +699,7 @@ HandleNegotiation (ClientInfo *cinfo)
     if (OKGO)
     {
       /* Add to the stations list */
-      if (!GetStaNode (slinfo->stations, slinfo->reqnet, slinfo->reqsta))
+      if (!GetStaNode (slinfo->stations, slinfo->reqstaid))
       {
         lprintf (0, "[%s] Error in GetStaNode for command STATION", cinfo->hostname);
 
@@ -774,7 +765,7 @@ HandleNegotiation (ClientInfo *cinfo)
     if (OKGO && cinfo->state == STATE_STATION)
     {
       /* Find the appropriate StaNode */
-      if (!(stanode = GetStaNode (slinfo->stations, slinfo->reqnet, slinfo->reqsta)))
+      if (!(stanode = GetStaNode (slinfo->stations, slinfo->reqstaid)))
       {
         lprintf (0, "[%s] Error in GetStaNode for command SELECT", cinfo->hostname);
 
@@ -787,8 +778,8 @@ HandleNegotiation (ClientInfo *cinfo)
         /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
         if (AddToString (&(stanode->selectors), pattern, ",", (pattern[0] == '!') ? 0 : 1, SLMAXSELECTLEN))
         {
-          lprintf (0, "[%s] Error for command SELECT (cannot AddToString), too many selectors for %s.%s",
-                   cinfo->hostname, slinfo->reqnet, slinfo->reqsta);
+          lprintf (0, "[%s] Error for command SELECT (cannot AddToString), too many selectors for %s",
+                   cinfo->hostname, slinfo->reqstaid);
 
           if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Too many selectors for this station"))
             return -1;
@@ -869,7 +860,7 @@ HandleNegotiation (ClientInfo *cinfo)
       if (fields >= 1)
       {
         /* Find the appropriate SLStaNode and store the requested ID and time */
-        if (!(stanode = GetStaNode (slinfo->stations, slinfo->reqnet, slinfo->reqsta)))
+        if (!(stanode = GetStaNode (slinfo->stations, slinfo->reqstaid)))
         {
           lprintf (0, "[%s] Error in GetStaNode for command DATA|FETCH",
                    cinfo->hostname);
@@ -994,7 +985,7 @@ HandleNegotiation (ClientInfo *cinfo)
       if (fields >= 1)
       {
         /* Find the appropriate SLStaNode and store the requested times */
-        if (!(stanode = GetStaNode (slinfo->stations, slinfo->reqnet, slinfo->reqsta)))
+        if (!(stanode = GetStaNode (slinfo->stations, slinfo->reqstaid)))
         {
           lprintf (0, "[%s] Error in GetStaNode for command TIME",
                    cinfo->hostname);
@@ -1250,7 +1241,9 @@ HandleInfo (ClientInfo *cinfo)
     SLNetStaNode *netstanode;
     RBNode *tnode;
 
-    char net[10], sta[10];
+    char net[10];
+    char sta[10];
+    char staid[21];
 
     /* Get copy of streams as a Stack */
     if (!(streams = GetStreamsStack (cinfo->ringparams, cinfo->reader)))
@@ -1273,12 +1266,18 @@ HandleInfo (ClientInfo *cinfo)
           return -1;
         }
 
+        /* Combine network and station into station ID */
+        snprintf (staid, sizeof (staid), "%s_%s", net, sta);
+
         /* Find or create new netsta entry */
-        netstanode = GetNetStaNode (netsta, net, sta);
+        netstanode = GetNetStaNode (netsta, staid);
 
         /* Check and update network-station values */
         if (netstanode)
         {
+          strncpy (netstanode->net, net, sizeof (netstanode->net) - 1);
+          strncpy (netstanode->sta, sta, sizeof (netstanode->sta) - 1);
+
           if (!netstanode->earliestdstime || netstanode->earliestdstime > stream->earliestdstime)
           {
             netstanode->earliestdstime = stream->earliestdstime;
@@ -1345,7 +1344,11 @@ HandleInfo (ClientInfo *cinfo)
     SLNetStaNode *netstanode;
     RBNode *tnode;
 
-    char net[10], sta[10], loc[10], chan[10];
+    char net[10];
+    char sta[10];
+    char loc[10];
+    char chan[10];
+    char staid[21];
 
     /* Get streams as a Stack (this is copied data) */
     if (!(streams = GetStreamsStack (cinfo->ringparams, cinfo->reader)))
@@ -1368,13 +1371,19 @@ HandleInfo (ClientInfo *cinfo)
           return -1;
         }
 
+        /* Combine network and station into station ID */
+        snprintf (staid, sizeof (staid), "%s_%s", net, sta);
+
         /* Find or create new netsta entry */
-        netstanode = GetNetStaNode (netsta, net, sta);
+        netstanode = GetNetStaNode (netsta, staid);
 
         if (netstanode)
         {
           /* Add stream to associated streams stack */
           StackUnshift (netstanode->streams, stream);
+
+          strncpy (netstanode->net, net, sizeof (netstanode->net) - 1);
+          strncpy (netstanode->sta, sta, sizeof (netstanode->sta) - 1);
 
           /* Check and update network-station earliest/latest values */
           if (!netstanode->earliestdstime || netstanode->earliestdstime > stream->earliestdstime)
@@ -1781,6 +1790,8 @@ SendReply (ClientInfo *cinfo, char *reply, ErrorCode code, char *extreply)
       snprintf (sendstr, sizeof (sendstr), "%s\r\n", reply);
   }
 
+  fprintf (stderr, "DEBUG, sending response: '%.*s'\n", (int)strcspn (sendstr, "\r\n"), sendstr);
+
   /* Send the reply */
   if (SendData (cinfo, sendstr, strlen (sendstr)))
     return -1;
@@ -1919,16 +1930,8 @@ StaKeyCompare (const void *a, const void *b)
 {
   int cmpval;
 
-  /* Compare network codes */
-  cmpval = strcmp (((SLStaKey *)a)->net, ((SLStaKey *)b)->net);
-
-  if (cmpval > 0)
-    return 1;
-  else if (cmpval < 0)
-    return -1;
-
-  /* Compare station codes */
-  cmpval = strcmp (((SLStaKey *)a)->sta, ((SLStaKey *)b)->sta);
+  /* Compare station IDs */
+  cmpval = strcmp (a, b);
 
   if (cmpval > 0)
     return 1;
@@ -1941,43 +1944,34 @@ StaKeyCompare (const void *a, const void *b)
 /***************************************************************************
  * GetStaNode:
  *
- * Search the specified binary tree for a given SLStaKey and return the
- * SLStaNode.  If the SLStaKey does not exist create it and add it to the
- * tree.
+ * Search the specified binary tree for a given entry.  If the entry does not
+ * exist create it and add it to the tree.
  *
- * Return a pointer to a SLStaNode or 0 for error.
+ * Return a pointer to the entry or 0 for error.
  ***************************************************************************/
 static SLStaNode *
-GetStaNode (RBTree *tree, const char *net, const char *sta)
+GetStaNode (RBTree *tree, char *staid)
 {
-  SLStaKey stakey;
-  SLStaKey *newstakey;
+  char *newkey = NULL;
   SLStaNode *stanode = 0;
   RBNode *rbnode;
 
-  /* Create SLStaKey */
-  memset (&stakey, 0, sizeof (stakey));
-  strncpy (stakey.net, net, sizeof (stakey.net) - 1);
-  strncpy (stakey.sta, sta, sizeof (stakey.sta) - 1);
-
   /* Search for a matching SLStaNode entry */
-  if ((rbnode = RBFind (tree, &stakey)))
+  if ((rbnode = RBFind (tree, staid)))
   {
     stanode = (SLStaNode *)rbnode->data;
   }
   else
   {
-    if ((newstakey = (SLStaKey *)malloc (sizeof (SLStaKey))) == NULL)
+    if ((newkey = strdup (staid)) == NULL)
     {
-      lprintf (0, "GetStaNode: Error allocating new key");
+      lprintf (0, "%s: Error allocating new key", __func__);
       return 0;
     }
 
-    memcpy (newstakey, &stakey, sizeof (SLStaKey));
-
     if ((stanode = (SLStaNode *)malloc (sizeof (SLStaNode))) == NULL)
     {
-      lprintf (0, "GetStaNode: Error allocating new node");
+      lprintf (0, "%s: Error allocating new node", __func__);
       return 0;
     }
 
@@ -1987,7 +1981,7 @@ GetStaNode (RBTree *tree, const char *net, const char *sta)
     stanode->datastart = HPTERROR;
     stanode->selectors = NULL;
 
-    RBTreeInsert (tree, newstakey, stanode, 0);
+    RBTreeInsert (tree, newkey, stanode, 0);
   }
 
   return stanode;
@@ -1996,53 +1990,41 @@ GetStaNode (RBTree *tree, const char *net, const char *sta)
 /***************************************************************************
  * GetNetStaNode:
  *
- * Search the specified binary tree for a given SLStaKey and return
- * the SLNetStaNode.  If the SLStaKey does not exist create it and add
- * it to the tree.
+ * Search the specified binary tree for a given entry.  If the entry does not
+ * exist create it and add it to the tree.
  *
- * Return a pointer to a SLNetStaNode or 0 for error.
+ * Return a pointer to the entry or 0 for error.
  ***************************************************************************/
 static SLNetStaNode *
-GetNetStaNode (RBTree *tree, const char *net, const char *sta)
+GetNetStaNode (RBTree *tree, char *staid)
 {
-  SLStaKey stakey;
-  SLStaKey *newstakey;
+  char *newkey = NULL;
   SLNetStaNode *netstanode = 0;
   RBNode *rbnode;
 
-  /* Create SLStaKey */
-  memset (&stakey, 0, sizeof (stakey));
-  strncpy (stakey.net, net, sizeof (stakey.net) - 1);
-  strncpy (stakey.sta, sta, sizeof (stakey.sta) - 1);
-
   /* Search for a matching SLNetStaNode entry */
-  if ((rbnode = RBFind (tree, &stakey)))
+  if ((rbnode = RBFind (tree, staid)))
   {
     netstanode = (SLNetStaNode *)rbnode->data;
   }
   else
   {
-    if ((newstakey = (SLStaKey *)malloc (sizeof (SLStaKey))) == NULL)
+    if ((newkey = strdup (staid)) == NULL)
     {
-      lprintf (0, "GetStaNode: Error allocating new key");
+      lprintf (0, "%s: Error allocating new key", __func__);
       return 0;
     }
-
-    memcpy (newstakey, &stakey, sizeof (SLStaKey));
 
     if ((netstanode = (SLNetStaNode *)calloc (1, sizeof (SLNetStaNode))) == NULL)
     {
-      lprintf (0, "GetNetStaNode: Error allocating new node");
+      lprintf (0, "%s: Error allocating new node", __func__);
       return 0;
     }
-
-    strncpy (netstanode->net, net, sizeof (netstanode->net) - 1);
-    strncpy (netstanode->sta, sta, sizeof (netstanode->sta) - 1);
 
     /* Initialize Stack of associated streams */
     netstanode->streams = StackCreate ();
 
-    RBTreeInsert (tree, newstakey, netstanode, 0);
+    RBTreeInsert (tree, newkey, netstanode, 0);
   }
 
   return netstanode;
@@ -2051,13 +2033,13 @@ GetNetStaNode (RBTree *tree, const char *net, const char *sta)
 /***************************************************************************
  * StationToRegex:
  *
- * Update match and reject regexes for the specified network, station
+ * Update match and reject regexes for the specified station ID (NET_STA)
  * and selector list (comma delimited).
  *
  * Return 0 on success and -1 on error.
  ***************************************************************************/
 static int
-StationToRegex (const char *net, const char *sta, const char *selectors,
+StationToRegex (const char *net_sta, const char *selectors,
                 char **matchregex, char **rejectregex)
 {
   char *selectorlist;
@@ -2101,9 +2083,9 @@ StationToRegex (const char *net, const char *sta, const char *selectors,
            implies all data for the specified station with the execption of the
            negated selection, therefore we need to match all channels from the
            station and then reject those in the negated selector */
-        if (!matched && net && sta)
+        if (!matched && net_sta)
         {
-          if (SelectToRegex (net, sta, NULL, matchregex))
+          if (SelectToRegex (net_sta, NULL, matchregex))
           {
             lprintf (0, "Error with SelectToRegex");
             if (selectorlist)
@@ -2114,7 +2096,7 @@ StationToRegex (const char *net, const char *sta, const char *selectors,
           matched++;
         }
 
-        if (SelectToRegex (net, sta, &selector[1], rejectregex))
+        if (SelectToRegex (net_sta, &selector[1], rejectregex))
         {
           lprintf (0, "Error with SelectToRegex");
           if (selectorlist)
@@ -2125,7 +2107,7 @@ StationToRegex (const char *net, const char *sta, const char *selectors,
       /* Handle regular selector */
       else
       {
-        if (SelectToRegex (net, sta, selector, matchregex))
+        if (SelectToRegex (net_sta, selector, matchregex))
         {
           lprintf (0, "Error with SelectToRegex");
           if (selectorlist)
@@ -2145,7 +2127,7 @@ StationToRegex (const char *net, const char *sta, const char *selectors,
   /* Otherwise update regex for station without selectors */
   else
   {
-    if (SelectToRegex (net, sta, NULL, matchregex))
+    if (SelectToRegex (net_sta, NULL, matchregex))
     {
       lprintf (0, "Error with SelectToRegex");
       return -1;
@@ -2177,7 +2159,7 @@ StationToRegex (const char *net, const char *sta, const char *selectors,
  * Return 0 on success and -1 on error.
  ***************************************************************************/
 static int
-SelectToRegex (const char *net, const char *sta, const char *select, char **regex)
+SelectToRegex (const char *net_sta, const char *select, char **regex)
 {
   const char *ptr;
   char pattern[50];
@@ -2192,55 +2174,21 @@ SelectToRegex (const char *net, const char *sta, const char *select, char **rege
   /* Start pattern with a '^' */
   *build++ = '^';
 
-  /* Santiy check lengths of input strings */
-  if (net && strlen (net) > 10)
-    return -1;
-  if (sta && strlen (sta) > 10)
+  /* Sanity check lengths of input strings */
+  if (net_sta && strlen (net_sta) > 20)
     return -1;
   if (select && strlen (select) > 7)
     return -1;
 
-  if (net)
+  if (net_sta)
   {
     /* Translate network */
-    ptr = net;
+    ptr = net_sta;
     while (*ptr)
     {
       if (*ptr == '?')
       {
         *build++ = '.';
-      }
-      else if (*ptr == '*')
-      {
-        *build++ = '.';
-        *build++ = '*';
-      }
-      else
-      {
-        *build++ = *ptr;
-      }
-
-      ptr++;
-    }
-  }
-  else
-  {
-    *build++ = '.';
-    *build++ = '*';
-  }
-
-  /* Add separator */
-  *build++ = '_';
-
-  if (sta)
-  {
-    /* Translate station */
-    ptr = sta;
-    while (*ptr)
-    {
-      if (*ptr == '?')
-      {
-        *build++ = '?';
       }
       else if (*ptr == '*')
       {

@@ -91,40 +91,28 @@ typedef struct SLInfo_s
   int stationcount;      /* Number of stations requested with STATION */
   int timewinchannels;   /* Count of channels for time window completion check */
   RBTree *stations;      /* Binary tree of stations requested */
-  char reqnet[10];       /* Requested network, used during negotiation */
-  char reqsta[10];       /* Requested station, used during negotiation */
+  char reqstaid[51];     /* Requested station ID, used during negotiation */
 } SLInfo;
 
-/* The StaKey and StaNode structures form the key and data elements
- * of a balanced tree that is used to store station level parameters.
- */
-
-/* Structure used as the key for B-tree of stations (SLStaNode) */
-typedef struct SLStaKey_s
-{
-  char net[10];
-  char sta[10];
-} SLStaKey;
-
-/* Structure used as the data for B-tree of stations */
+/* Requested station IDs, used as the data for B-tree of stations */
 typedef struct SLStaNode_s
 {
-  hptime_t starttime; /* Requested start time for NET_STA */
-  hptime_t endtime;   /* Requested end time for NET_STA */
+  hptime_t starttime; /* Requested start time for StaID */
+  hptime_t endtime;   /* Requested end time for StaID */
   int64_t packetid;   /* Requested packet ID */
   hptime_t datastart; /* Data start time of requested packet */
-  char *selectors;    /* List of SeedLink selectors for NET_STA */
+  char *selectors;    /* List of SeedLink selectors for StaID */
 } SLStaNode;
 
-/* Structure used as the data for B-tree of network-stations */
+/* Stream listings, used as the data for B-tree of network-stations */
 typedef struct SLNetStaNode_s
 {
-  char net[10];            /* Network code */
-  char sta[10];            /* Station code */
-  hptime_t earliestdstime; /* Data start time of earliest packet for NET_STA */
-  int64_t earliestid;      /* Earliest ID for NET_STA */
-  hptime_t latestdstime;   /* Data start time of latest packet for NET_STA */
-  int64_t latestid;        /* Latest ID for NET_STA */
+  char net[10];            /* Network code parsed from stream ID */
+  char sta[10];            /* Station code parsed from stream ID*/
+  hptime_t earliestdstime; /* Data start time of earliest packet for StaID */
+  int64_t earliestid;      /* Earliest packet ID for StaID */
+  hptime_t latestdstime;   /* Data start time of latest packet for StaID */
+  int64_t latestid;        /* Latest packet ID for StaID */
   Stack *streams;          /* Stack of associated streams */
 } SLNetStaNode;
 
