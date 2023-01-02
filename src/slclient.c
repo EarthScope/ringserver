@@ -520,7 +520,7 @@ HandleNegotiation (ClientInfo *cinfo)
   char starttimestr[51];
   char endtimestr[51];
   char pattern[9];
-  unsigned int startpacket = 0;
+  int64_t startpacket = -1;
 
   char *ptr;
   char OKGO = 1;
@@ -533,7 +533,7 @@ HandleNegotiation (ClientInfo *cinfo)
 
   fprintf (stderr, "DEBUG %s: received '%s'\n", __func__, cinfo->recvbuf);
 
-  /* HELLO - Return server version and ID */
+  /* HELLO (v3.x and v4.0) - Return server version and ID */
   if (!strncasecmp (cinfo->recvbuf, "HELLO", 5))
   {
     int bytes;
@@ -621,7 +621,7 @@ HandleNegotiation (ClientInfo *cinfo)
       return -1;
   }
 
-  /* CAT (v3) - Return ASCII list of stations */
+  /* CAT (v3.x) - Return ASCII list of stations */
   else if (!strncasecmp (cinfo->recvbuf, "CAT", 3))
   {
     snprintf (sendbuffer, sizeof (sendbuffer),
@@ -631,7 +631,7 @@ HandleNegotiation (ClientInfo *cinfo)
       return -1;
   }
 
-  /* BATCH (v3) - Batch mode for subsequent commands */
+  /* BATCH (v3.x) - Batch mode for subsequent commands */
   else if (!strncasecmp (cinfo->recvbuf, "BATCH", 5))
   {
     slinfo->batch = 1;
@@ -640,7 +640,7 @@ HandleNegotiation (ClientInfo *cinfo)
       return -1;
   }
 
-  /* STATION sta_code [net_code] - Select specified network and station */
+  /* STATION (v3.x and v4.0) - Select specified network and station */
   else if (!strncasecmp (cinfo->recvbuf, "STATION", 7))
   {
     OKGO = 1;
@@ -650,6 +650,7 @@ HandleNegotiation (ClientInfo *cinfo)
 
     if (slinfo->proto_major == 4)
     {
+      /* STATION stationID */
       fields = sscanf (cinfo->recvbuf, "%*s %20s %c", slinfo->reqstaid, &junk);
       slinfo->reqstaid[sizeof(slinfo->reqstaid) - 1] = '\0';
 
@@ -667,6 +668,7 @@ HandleNegotiation (ClientInfo *cinfo)
       char reqnet[10] = {0};
       char reqsta[10] = {0};
 
+      /* STATION STA NET */
       fields = sscanf (cinfo->recvbuf, "%*s %9s %9s %c", reqsta, reqnet, &junk);
 
       /* Make sure we got a station code and optionally a network code */
@@ -715,7 +717,7 @@ HandleNegotiation (ClientInfo *cinfo)
     }
   } /* End of STATION */
 
-  /* SELECT [pattern] - Refine selection of channels for STATION */
+  /* SELECT (v3.x and v4.0) - Refine selection of channels for STATION */
   else if (!strncasecmp (cinfo->recvbuf, "SELECT", 6))
   {
     OKGO = 1;
@@ -812,22 +814,40 @@ HandleNegotiation (ClientInfo *cinfo)
     }
   } /* End of SELECT */
 
-  /* DATA|FETCH [n [begin_time]] - Request data from a specific packet */
+  /* DATA|FETCH (v3.x and 4.0) - Request data from a specific packet */
   else if (!strncasecmp (cinfo->recvbuf, "DATA", 4) ||
            !strncasecmp (cinfo->recvbuf, "FETCH", 5))
   {
-    /* Parse packet and start time from request */
+    /* Parse packet sequence, start and end times from request */
     starttimestr[0] = '\0';
-    fields = sscanf (cinfo->recvbuf, "%*s %x %50s %c",
-                     &startpacket, starttimestr, &junk);
+    endtimestr[0] = '\0';
+
+    if (slinfo->proto_major == 4)
+    {
+      /* DATA|FETCH [seq_decimal [start [end]]] */
+      fields = sscanf (cinfo->recvbuf, "%*s %" SCNd64 " %50s %50s %c",
+                       &startpacket, starttimestr, endtimestr, &junk);
+    }
+    else /* Protocol 3.x */
+    {
+      unsigned int seq;
+
+      /* DATA|FETCH [seq_hex [start]] */
+      fields = sscanf (cinfo->recvbuf, "%*s %x %50s %c",
+                       &seq, starttimestr, &junk);
+
+      startpacket = seq;
+    }
 
     /* SeedLink clients resume data flow by requesting: lastpacket + 1
      * The ring needs to be positioned to the actual last packet ID for RINGNEXT,
      * so set the starting packet to the last actual packet received by the client. */
-    startpacket = (startpacket == 1) ? cinfo->ringparams->maxpktid : (startpacket - 1);
+    if (startpacket >= 0)
+      startpacket = (startpacket == 1) ? cinfo->ringparams->maxpktid : (startpacket - 1);
 
-    /* Make sure we got zero, one or two arguments */
-    if (fields > 2)
+    /* Make sure we got no extra arguments */
+    if ((slinfo->proto_major == 3 && fields > 2) ||
+        (slinfo->proto_major == 4 && fields > 3))
     {
       if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Too many arguments for DATA/FETCH"))
         return -1;
@@ -835,19 +855,40 @@ HandleNegotiation (ClientInfo *cinfo)
       OKGO = 0;
     }
 
-    /* Convert time string if supplied */
+    /* Convert start time string if specified */
     if (OKGO && fields == 2)
     {
       /* Change commas to dashes for parsing routine */
       while ((ptr = strchr (starttimestr, ',')))
         *ptr = '-';
 
+      // TODO libmseed3: use ms_mdtimestr2nstime(), do not need comma-change
       if ((starttime = ms_timestr2hptime (starttimestr)) == HPTERROR)
       {
         lprintf (0, "[%s] Error parsing time in DATA|FETCH: %s",
                  cinfo->hostname, starttimestr);
 
         if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Error parsing start time"))
+          return -1;
+
+        OKGO = 0;
+      }
+    }
+
+    /* Convert end time string if specified */
+    if (OKGO && fields == 3)
+    {
+      /* Change commas to dashes for parsing routine */
+      while ((ptr = strchr (endtimestr, ',')))
+        *ptr = '-';
+
+      // TODO libmseed3: use ms_mdtimestr2nstime(), do not need comma-change
+      if ((endtime = ms_timestr2hptime (endtimestr)) == HPTERROR)
+      {
+        lprintf (0, "[%s] Error parsing time in DATA|FETCH: %s",
+                 cinfo->hostname, endtimestr);
+
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Error parsing end time"))
           return -1;
 
         OKGO = 0;
@@ -875,6 +916,7 @@ HandleNegotiation (ClientInfo *cinfo)
           stanode->packetid = startpacket;
           stanode->datastart = starttime;
           stanode->starttime = starttime;
+          stanode->endtime = endtime;
         }
       }
 
@@ -898,6 +940,7 @@ HandleNegotiation (ClientInfo *cinfo)
       {
         slinfo->startid = startpacket;
         cinfo->starttime = starttime;
+        cinfo->endtime = endtime;
       }
 
       /* If FETCH the connection is dial-up */
@@ -909,7 +952,7 @@ HandleNegotiation (ClientInfo *cinfo)
     }
   } /* End of DATA|FETCH */
 
-  /* TIME [begin_time [end_time]] - Request data in time window */
+  /* TIME (v3.x) - Request data in time window */
   else if (!strncasecmp (cinfo->recvbuf, "TIME", 4))
   {
     OKGO = 1;
@@ -917,6 +960,8 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Parse start and end time from request */
     starttimestr[0] = '\0';
     endtimestr[0] = '\0';
+
+    /* TIME [start_time [end_time]] */
     fields = sscanf (cinfo->recvbuf, "%*s %50s %50s %c",
                      starttimestr, endtimestr, &junk);
 
@@ -936,6 +981,7 @@ HandleNegotiation (ClientInfo *cinfo)
       while ((ptr = strchr (starttimestr, ',')))
         *ptr = '-';
 
+      // TODO libmseed3: use ms_mdtimestr2nstime(), do not need comma-change
       if ((starttime = ms_timestr2hptime (starttimestr)) == HPTERROR)
       {
         lprintf (0, "[%s] Error parsing start time for TIME: %s",
@@ -967,6 +1013,7 @@ HandleNegotiation (ClientInfo *cinfo)
       while ((ptr = strchr (endtimestr, ',')))
         *ptr = '-';
 
+      // TODO libmseed3: use ms_mdtimestr2nstime(), do not need comma-change
       if ((endtime = ms_timestr2hptime (endtimestr)) == HPTERROR)
       {
         lprintf (0, "[%s] Error parsing end time for TIME: %s",
@@ -1025,14 +1072,14 @@ HandleNegotiation (ClientInfo *cinfo)
     }
   } /* End of TIME */
 
-  /* END - Stop negotiating, send data */
+  /* END (v3.x and v4.0) - Stop negotiating, send data */
   else if (!strncasecmp (cinfo->recvbuf, "END", 3))
   {
     /* Trigger ring configuration and data flow */
     cinfo->state = STATE_RINGCONFIG;
   }
 
-  /* BYE - End connection */
+  /* BYE (v3.x and v4.0) - End connection */
   else if (!strncasecmp (cinfo->recvbuf, "BYE", 3))
   {
     return -1;
@@ -1830,7 +1877,7 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
     char staid[22];
 
     /* Split the streamid to get the network and station codes,
-       assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
+     * assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
     if (SplitStreamID (packet->streamid, '_', 10, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
     {
       lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, packet->streamid);
