@@ -1102,7 +1102,7 @@ HandleInfo (ClientInfo *cinfo)
   }
 
   /* Allocate miniSEED record buffer */
-  if ((record = calloc (1, INFORECSIZE)) == NULL)
+  if ((record = calloc (1, SLINFORECSIZE)) == NULL)
   {
     lprintf (0, "[%s] Error allocating receive buffer", cinfo->hostname);
     return -1;
@@ -1243,7 +1243,7 @@ HandleInfo (ClientInfo *cinfo)
 
     char net[10];
     char sta[10];
-    char staid[21];
+    char staid[22];
 
     /* Get copy of streams as a Stack */
     if (!(streams = GetStreamsStack (cinfo->ringparams, cinfo->reader)))
@@ -1348,7 +1348,7 @@ HandleInfo (ClientInfo *cinfo)
     char sta[10];
     char loc[10];
     char chan[10];
-    char staid[21];
+    char staid[22];
 
     /* Get streams as a Stack (this is copied data) */
     if (!(streams = GetStreamsStack (cinfo->ringparams, cinfo->reader)))
@@ -1708,7 +1708,7 @@ HandleInfo (ClientInfo *cinfo)
           slinfo->terminfo = 0;
 
         /* Send INFO record to client, blind toss */
-        SendInfoRecord (record, INFORECSIZE, cinfo);
+        SendInfoRecord (record, SLINFORECSIZE, cinfo);
       }
     }
   }
@@ -1813,8 +1813,7 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
 {
   ClientInfo *cinfo = (ClientInfo *)vcinfo;
   SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
-  char header[100] = {0};
-  char stationidlen = 0;
+  char header[40] = {0};
   int headerlen = 0;
 
   if (!record || !vcinfo)
@@ -1822,8 +1821,56 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
 
   if (slinfo->proto_major == 4) /* Create v4 header */
   {
+    uint32_t ureclen = reclen;
+    uint64_t upktid = packet->pktid;
+    uint8_t ustationidlen = 0;
+    int stationid_printed;
+    char net[10];
+    char sta[10];
+    char staid[22];
 
-    headerlen = SLHEADSIZE_EXT + stationidlen;
+    /* Split the streamid to get the network and station codes,
+       assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
+    if (SplitStreamID (packet->streamid, '_', 10, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
+    {
+      lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, packet->streamid);
+      return -1;
+    }
+
+    /* Combine network and station into station ID */
+    if ((stationid_printed = snprintf (staid, sizeof (staid), "%s_%s", net, sta)) <= 0)
+    {
+      lprintf (0, "[%s] Error building station ID from %s + %s", cinfo->hostname, net, sta);
+      return -1;
+    }
+    else
+    {
+      ustationidlen = stationid_printed;
+    }
+
+    /* V4 header values are in little-endan byte order */
+    if (ms_bigendianhost ())
+    {
+      ms_gswap4 (&ureclen);
+      ms_gswap8 (&upktid);
+    }
+
+    /* Construct v4 header */
+    memcpy (header, "SE", 2);
+
+    // TODO: detect format version: MS2_ISVALIDHEADER and MS3_ISVALIDHEADER
+    if (MS_ISVALIDHEADER (record))
+      memcpy (header + 2, "2", 1); /* Payload format code, 2 = miniSEED 2 */
+    else
+      return -1;
+
+    memcpy (header + 3, "D", 1); /* Payload format subcode, D = data */
+    memcpy (header + 4, &ureclen, 4);
+    memcpy (header + 8, &upktid, 8);
+    memcpy (header + 16, &ustationidlen, 1);
+    memcpy (header + 17, staid, ustationidlen);
+
+    headerlen = SLHEADSIZE_EXT + ustationidlen;
   }
   else /* Create v3 header */
   {

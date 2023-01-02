@@ -38,13 +38,9 @@ extern "C"
 /* Server capabilities for v4 */
 #define SLCAPABILITIESv4 "SLPROTO:4.0 SLPROTO:3.1 TIME WS:13"
 
-#define SLHEADSIZE 8           /* SeedLink header size */
-#define SLHEADSIZE_EXT 16      /* Extended SeedLink header fixed size */
-#define SELSIZE 8              /* Maximum selector size */
-#define SIGNATURE "SL"         /* SeedLink header signature */
-#define SIGNATURE_EXT "SE"     /* Extended SeedLink header signature */
-#define INFOSIGNATURE "SLINFO" /* SeedLink INFO packet signature */
-#define INFORECSIZE 512        /* miniSEED record size for INFO packets */
+#define SLHEADSIZE 8             /* SeedLink header size */
+#define SLHEADSIZE_EXT 17        /* Extended SeedLink header fixed size */
+#define SLINFORECSIZE 512        /* miniSEED record size for INFO packets */
 
 #define SLMAXREGEXLEN 1048576 /* Maximum length of match/reject regex pattern */
 #define SLMAXSELECTLEN 2048   /* Maximum length of per-station/global selector buffer */
