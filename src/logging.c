@@ -116,6 +116,13 @@ lprint (char *message)
   lprintf (0, "%s", message);
 } /* End of lprint() */
 
+/* Wrapper macro to explicitly discard const annotation */
+void
+lprint_wrapper (const char *message)
+{
+  lprint ((char *)message);
+}
+
 /***************************************************************************
  * WriteTLog:
  *
@@ -136,7 +143,7 @@ WriteTLog (ClientInfo *cinfo, int reset)
   Stack *stack;
   int rv = 0;
 
-  hptime_t clock;
+  nstime_t clock;
   struct tm starttm;
   struct tm endtm;
 
@@ -205,9 +212,9 @@ WriteTLog (ClientInfo *cinfo, int reset)
   }
 
   /* Generate pretty strings for current & connection time */
-  clock = HPnow ();
-  ms_hptime2mdtimestr (clock, currtime, 0);
-  ms_hptime2mdtimestr (cinfo->conntime, conntime, 0);
+  clock = NSnow ();
+  ms_nstime2timestrz (clock, currtime, ISOMONTHDAY, NONE);
+  ms_nstime2timestrz (cinfo->conntime, conntime, ISOMONTHDAY, NONE);
 
   stack = StackCreate ();
 

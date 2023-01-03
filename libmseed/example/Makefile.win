@@ -5,21 +5,17 @@
 NODEBUG=1
 
 INCS = /I..
-OPTS = -D_CRT_SECURE_NO_WARNINGS
+OPTS = /O2 /D_CRT_SECURE_NO_WARNINGS
 LIBS = ../libmseed.lib
-BINS = msrepack.exe msview.exe
+
+SRCS = mseedview.c lm_parse.c lm_pack.c lm_pack_rollingbuffer.c lm_read_selection.c lm_read_recordlist.c lm_read_buffer.c lm_timestr.c
+BINS = $(SRCS:.c=.exe)
 
 all: $(BINS)
 
-msrepack.exe: msrepack.obj
-	link.exe /nologo /out:msrepack.exe $(LIBS) msrepack.obj
-
-msview.exe: msview.obj
-	link.exe /nologo /out:msview.exe $(LIBS) msview.obj
-
-.c.obj:
-	$(CC) /nologo $(CFLAGS) $(INCS) $(OPTS) /c $<
+.c.exe:
+	$(CC) /nologo $(CFLAGS) $(INCS) $(OPTS) $(LIBS) $<
 
 # Clean-up directives
 clean:
-	-del a.out core *.o *.obj *% *~ $(BINS)
+	-del *.obj *.exe *% *~

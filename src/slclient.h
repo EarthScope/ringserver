@@ -66,13 +66,6 @@ typedef enum
   ERROR_AUTH         = 1u << 7,
 } ErrorCode;
 
-/* ACCEPT-able data format codes */
-typedef enum
-{
-  ACCEPT_MSEED2 = '2',
-  ACCEPT_MSEED3 = '3',
-} DataFormatCodes;
-
 /* Structure to hold SeedLink specific parameters */
 typedef struct SLInfo_s
 {
@@ -93,10 +86,10 @@ typedef struct SLInfo_s
 /* Requested station IDs, used as the data for B-tree of stations */
 typedef struct SLStaNode_s
 {
-  hptime_t starttime; /* Requested start time for StaID */
-  hptime_t endtime;   /* Requested end time for StaID */
+  nstime_t starttime; /* Requested start time for StaID */
+  nstime_t endtime;   /* Requested end time for StaID */
   int64_t packetid;   /* Requested packet ID */
-  hptime_t datastart; /* Data start time of requested packet */
+  nstime_t datastart; /* Data start time of requested packet */
   char *selectors;    /* List of SeedLink selectors for StaID */
 } SLStaNode;
 
@@ -105,9 +98,9 @@ typedef struct SLNetStaNode_s
 {
   char net[10];            /* Network code parsed from stream ID */
   char sta[10];            /* Station code parsed from stream ID*/
-  hptime_t earliestdstime; /* Data start time of earliest packet for StaID */
+  nstime_t earliestdstime; /* Data start time of earliest packet for StaID */
   int64_t earliestid;      /* Earliest packet ID for StaID */
-  hptime_t latestdstime;   /* Data start time of latest packet for StaID */
+  nstime_t latestdstime;   /* Data start time of latest packet for StaID */
   int64_t latestid;        /* Latest packet ID for StaID */
   Stack *streams;          /* Stack of associated streams */
 } SLNetStaNode;

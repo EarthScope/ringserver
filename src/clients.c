@@ -17,7 +17,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
+ * Copyright (C) 2023:
  * @author Chad Trabant, IRIS Data Management Center
  **************************************************************************/
 
@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -99,9 +100,9 @@ ClientThread (void *arg)
 
   /* Initialize RingReader parameters */
   reader.pktid = 0;
-  reader.pkttime = HPTERROR;
-  reader.datastart = HPTERROR;
-  reader.dataend = HPTERROR;
+  reader.pkttime = NSTERROR;
+  reader.datastart = NSTERROR;
+  reader.dataend = NSTERROR;
   reader.limit = 0;
   reader.limit_extra = 0;
   reader.match = 0;
@@ -301,7 +302,7 @@ ClientThread (void *arg)
       throttleusec = 0;
 
       /* Update the time of the last packet exchange */
-      cinfo->lastxchange = HPnow ();
+      cinfo->lastxchange = NSnow ();
 
       /* Handle data from client according to client type */
       if (cinfo->type == CLIENT_DATALINK)
@@ -362,7 +363,7 @@ ClientThread (void *arg)
          for more than 10 seconds */
       if (throttleusec >= THROTTLE_MAXIMUM &&
           cinfo->lastxchange == cinfo->conntime &&
-          (HPnow () - cinfo->conntime) > (HPTMODULUS * 10))
+          (NSnow () - cinfo->conntime) > ((nstime_t)NSTMODULUS * 10))
       {
         lprintf (0, "[%s] Non-communicating client timeout",
                  cinfo->hostname);
@@ -608,7 +609,7 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[], int bufcount)
       length16 = totalbuflen;
       memcpy (&wsframe[2], &length16, 2);
       if (!ms_bigendianhost ())
-        ms_gswap2a (&wsframe[2]);
+        ms_gswap2 (&wsframe[2]);
     }
     else if (totalbuflen < (1ull << 63)) /* If payload length < 64-bit int store in next 8 bytes */
     {
@@ -617,7 +618,7 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[], int bufcount)
       length64 = totalbuflen;
       memcpy (&wsframe[2], &length64, 8);
       if (!ms_bigendianhost ())
-        ms_gswap8a (&wsframe[2]);
+        ms_gswap8 (&wsframe[2]);
     }
     else
     {
@@ -690,7 +691,7 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[], int bufcount)
   }
 
   /* Update the time of the last packet exchange */
-  cinfo->lastxchange = HPnow ();
+  cinfo->lastxchange = NSnow ();
 
   /* Restore original socket flags */
   if (fcntl (cinfo->socket, F_SETFL, sockflags) == -1)

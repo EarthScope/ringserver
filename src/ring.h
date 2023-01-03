@@ -69,16 +69,16 @@ typedef struct RingParams_s
   pthread_mutex_t *streamlock;/* Mutex lock for stream index */
   int32_t   streamcount;      /* Count of streams in index */
   int64_t   earliestid;       /* Earliest packet ID */
-  hptime_t  earliestptime;    /* Earliest packet creation time */
-  hptime_t  earliestdstime;   /* Earliest packet data start time */
-  hptime_t  earliestdetime;   /* Earliest packet data end time */
+  nstime_t  earliestptime;    /* Earliest packet creation time */
+  nstime_t  earliestdstime;   /* Earliest packet data start time */
+  nstime_t  earliestdetime;   /* Earliest packet data end time */
   int64_t   earliestoffset;   /* Earliest packet offset in bytes */
   int64_t   latestid;         /* Latest packet ID */
-  hptime_t  latestptime;      /* Latest packet creation time */
-  hptime_t  latestdstime;     /* Latest packet data start time */
-  hptime_t  latestdetime;     /* Latest packet data end time */
+  nstime_t  latestptime;      /* Latest packet creation time */
+  nstime_t  latestdstime;     /* Latest packet data start time */
+  nstime_t  latestdetime;     /* Latest packet data end time */
   int64_t   latestoffset;     /* Latest packet offset in bytes */
-  hptime_t  ringstart;        /* Ring initialization time */
+  nstime_t  ringstart;        /* Ring initialization time */
   double    txpacketrate;     /* Transmission packet rate in Hz */
   double    txbyterate;       /* Transmission byte rate in Hz */
   double    rxpacketrate;     /* Reception packet rate in Hz */
@@ -92,11 +92,11 @@ typedef struct RingPacket_s
 {
   int64_t   pktid;           /* RW: Packet ID */
   int64_t   offset;          /* RW: Offset in ring */
-  hptime_t  pkttime;         /* RW: Packet creation time */
+  nstime_t  pkttime;         /* RW: Packet creation time */
   int64_t   nextinstream;    /* RW: ID of next packet in stream, 0 if none */
   char      streamid[MAXSTREAMID]; /* Packet stream ID, NULL terminated */
-  hptime_t  datastart;       /* Packet data start time */
-  hptime_t  dataend;         /* Packet data end time */
+  nstime_t  datastart;       /* Packet data start time */
+  nstime_t  dataend;         /* Packet data end time */
   uint32_t  datasize;        /* Packet data size in bytes */
 } RingPacket;
 
@@ -104,13 +104,13 @@ typedef struct RingPacket_s
 typedef struct RingStream_s
 {
   char        streamid[MAXSTREAMID]; /* Packet stream ID */
-  hptime_t    earliestdstime;/* Earliest packet data start time */
-  hptime_t    earliestdetime;/* Earliest packet data end time */
-  hptime_t    earliestptime; /* Earliest packet creation time */
+  nstime_t    earliestdstime;/* Earliest packet data start time */
+  nstime_t    earliestdetime;/* Earliest packet data end time */
+  nstime_t    earliestptime; /* Earliest packet creation time */
   int64_t     earliestid;    /* ID of earliest packet */
-  hptime_t    latestdstime;  /* Latest packet data start time */
-  hptime_t    latestdetime;  /* Latest packet data end time */
-  hptime_t    latestptime;   /* Latest packet creation time */
+  nstime_t    latestdstime;  /* Latest packet data start time */
+  nstime_t    latestdetime;  /* Latest packet data end time */
+  nstime_t    latestptime;   /* Latest packet creation time */
   int64_t     latestid;      /* ID of latest packet */
 } RingStream;
 
@@ -119,9 +119,9 @@ typedef struct RingReader_s
 {
   RingParams *ringparams;    /* Ring parameters for this reader */
   int64_t     pktid;         /* Current packet ID position in ring */
-  hptime_t    pkttime;       /* Current packet creation time */
-  hptime_t    datastart;     /* Current packet data start time */
-  hptime_t    dataend;       /* Current packet data end time */
+  nstime_t    pkttime;       /* Current packet creation time */
+  nstime_t    datastart;     /* Current packet data start time */
+  nstime_t    dataend;       /* Current packet data end time */
   pcre       *limit;         /* Compiled limit expression */
   pcre_extra *limit_extra;   /* Limit expression extra study information */
   pcre       *match;         /* Compiled match expression */
@@ -141,9 +141,9 @@ extern int RingWrite (RingParams *ringparams, RingPacket *packet,
 extern int64_t RingRead (RingReader *reader, int64_t reqid,
 			 RingPacket *packet, char *packetdata);
 extern int64_t RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata);
-extern int64_t RingPosition (RingReader *reader, int64_t pktid, hptime_t pkttime);
-extern int64_t RingAfter (RingReader *reader, hptime_t reftime, int whence);
-extern int64_t RingAfterRev (RingReader *reader, hptime_t reftime, int64_t pktlimit, int whence);
+extern int64_t RingPosition (RingReader *reader, int64_t pktid, nstime_t pkttime);
+extern int64_t RingAfter (RingReader *reader, nstime_t reftime, int whence);
+extern int64_t RingAfterRev (RingReader *reader, nstime_t reftime, int64_t pktlimit, int whence);
 extern int RingLimit (RingReader *reader, char *pattern);
 extern int RingMatch (RingReader *reader, char *pattern);
 extern int RingReject (RingReader *reader, char *pattern);

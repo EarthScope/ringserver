@@ -92,7 +92,7 @@ extern pthread_mutex_t cthreads_lock;
 extern struct cthread *cthreads;
 extern char *serverid;
 extern char *webroot;
-extern hptime_t serverstarttime;
+extern nstime_t serverstarttime;
 extern int clientcount;
 extern int resolvehosts;
 extern int shutdownsig;

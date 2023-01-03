@@ -76,20 +76,20 @@ typedef struct ClientInfo_s {
   float       timewinlimit; /* Time window ring search limit in percent */
   RingParams *ringparams;   /* Ring buffer parameters */
   RingReader *reader;       /* Ring reader parameters */
-  hptime_t    conntime;     /* Client connect time */
+  nstime_t    conntime;     /* Client connect time */
   char       *limitstr;     /* Regular expression string to limit streams */
   char       *matchstr;     /* Regular expression string to match streams */
   char       *rejectstr;    /* Regular expression string to reject streams */
   char       *httpheaders;  /* Fixed headers to add to HTTP responses */
   int64_t     lastid;       /* Last packet ID sent to client */
-  hptime_t    starttime;    /* Requested start time */
-  hptime_t    endtime;      /* Requested end time */
+  nstime_t    starttime;    /* Requested start time */
+  nstime_t    endtime;      /* Requested end time */
   DataStream *mswrite;      /* miniSEED data write parameters */
   RBTree     *streams;      /* Tracking of streams transferred */
   pthread_mutex_t streams_lock; /* Mutex lock for streams tree */
   int         streamscount; /* Count of streams in tree */
   int         percentlag;   /* Percent lag of client in ring buffer */
-  hptime_t    lastxchange;  /* Time of last data transmission or reception */
+  nstime_t    lastxchange;  /* Time of last data transmission or reception */
   uint64_t    txpackets[2]; /* Track total number of packets transmitted to client */
   double      txpacketrate; /* Track rate of packet trasmission */
   uint64_t    txbytes[2];   /* Track total number of data bytes transmitted */
@@ -98,7 +98,7 @@ typedef struct ClientInfo_s {
   double      rxpacketrate; /* Track rate of packet reception */
   uint64_t    rxbytes[2];   /* Track total number of data bytes received */
   double      rxbyterate;   /* Track rate of data byte reception */
-  hptime_t    ratetime;     /* Time stamp for TX and RX rate calculations */
+  nstime_t    ratetime;     /* Time stamp for TX and RX rate calculations */
   void       *extinfo;      /* Extended client info, protocol specific */
 } ClientInfo;
 

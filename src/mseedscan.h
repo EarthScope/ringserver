@@ -17,7 +17,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
+ * Copyright (C) 2023:
  * @author Chad Trabant, IRIS Data Management Center
  ***************************************************************************/
 
@@ -62,7 +62,7 @@ typedef struct MSScanInfo_s {
   uint32_t readbuffersize;/* Size of file read buffer */
   char    *readbuffer;    /* File read buffer */
   RingParams *ringparams; /* Ring buffer parameters */
-  MSRecord *msr;          /* Parsed miniSEED record */
+  MS3Record *msr;         /* Parsed miniSEED record */
   RBTree  *filetree;      /* Working list of scanned files in a tree */
   int      accesserr;     /* Flag to indicate directory access errors */
   int      recurlevel;    /* Track recursion level */
@@ -72,7 +72,7 @@ typedef struct MSScanInfo_s {
   uint64_t rxbytes[2];    /* Track total number of data bytes read */
   double   rxbyterate;    /* Track rate of data byte reading */
   double   scantime;      /* Duration of last scan in seconds */
-  hptime_t ratetime;      /* Time stamp for RX rate calculations */
+  nstime_t ratetime;      /* Time stamp for RX rate calculations */
 
   int scanfileschecked;   /* Track files checked per scan */
   int scanfilesread;      /* Track files read per scan */

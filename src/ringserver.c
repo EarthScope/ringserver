@@ -83,7 +83,7 @@ struct cthread *cthreads = NULL; /* Client threads list */
 
 char *serverid = NULL;    /* Server ID */
 char *webroot = NULL;     /* Web content root directory */
-hptime_t serverstarttime; /* Server start time */
+nstime_t serverstarttime; /* Server start time */
 int clientcount = 0;      /* Track number of connected clients */
 int resolvehosts = 1;     /* Flag to control resolving of client hostnames */
 int shutdownsig = 0;      /* Shutdown signal */
@@ -142,7 +142,7 @@ main (int argc, char *argv[])
 {
   char ringfilename[512];
   char streamfilename[512];
-  hptime_t hpcurtime;
+  nstime_t hpcurtime;
   time_t curtime;
   time_t chktime;
   struct timespec timereq;
@@ -175,7 +175,7 @@ main (int argc, char *argv[])
     return 1;
 
   /* Redirect libmseed logging facility to lprintf() via the lprint() shim */
-  ms_loginit (lprint, 0, lprint, 0);
+  ms_loginit (lprint_wrapper, NULL, lprint_wrapper, NULL);
 
   /* Signal handling using POSIX routines, create set of all signals */
   if (sigfillset (&globalsigset))
@@ -314,7 +314,7 @@ main (int argc, char *argv[])
   }
 
   /* Set server start time */
-  serverstarttime = HPnow ();
+  serverstarttime = NSnow ();
 
   /* Initialize watchdog loop interval timers */
   curtime = time (NULL);
@@ -341,7 +341,7 @@ main (int argc, char *argv[])
      performing restarts and cleanup when necessary. */
   for (;;)
   {
-    hpcurtime = HPnow ();
+    hpcurtime = NSnow ();
 
     /* If shutdown is requested signal all client threads */
     if (shutdownsig == 1)
@@ -645,7 +645,7 @@ main (int argc, char *argv[])
           WriteTLog ((ClientInfo *)ctp->td->td_prvtptr, 1);
 
         /* Close idle clients if limit is set and exceeded */
-        if (clienttimeout && (hpcurtime - ((ClientInfo *)ctp->td->td_prvtptr)->lastxchange) > (clienttimeout * HPTMODULUS))
+        if (clienttimeout && (hpcurtime - ((ClientInfo *)ctp->td->td_prvtptr)->lastxchange) > (clienttimeout * (nstime_t)NSTMODULUS))
         {
           pthread_mutex_lock (&(ctp->td->td_lock));
           if (!(ctp->td->td_flags & TDF_CLOSE) &&
@@ -973,7 +973,7 @@ ListenThread (void *arg)
     cinfo->timewinlimit = timewinlimit;
 
     /* Set client connect time */
-    cinfo->conntime = HPnow ();
+    cinfo->conntime = NSnow ();
 
     /* Set last data exchange time to the connect time */
     cinfo->lastxchange = cinfo->conntime;
@@ -2557,7 +2557,7 @@ CalcSize (char *sizestr)
 static int
 CalcStats (ClientInfo *cinfo)
 {
-  hptime_t hpnow = HPnow ();
+  nstime_t nsnow = NSnow ();
   double deltasec;
   int64_t ulatestid;
   int64_t upktid;
@@ -2585,7 +2585,7 @@ CalcStats (ClientInfo *cinfo)
   if (cinfo->ratetime == 0)
     deltasec = 1.0;
   else
-    deltasec = (double)(hpnow - cinfo->ratetime) / HPTMODULUS;
+    deltasec = (double)(nsnow - cinfo->ratetime) / NSTMODULUS;
 
   /* Transmission */
   if (cinfo->txpackets[0] > 0)
@@ -2612,7 +2612,7 @@ CalcStats (ClientInfo *cinfo)
   }
 
   /* Update time stamp of history values */
-  cinfo->ratetime = hpnow;
+  cinfo->ratetime = nsnow;
 
   return 0;
 } /* End of CalcStats() */
@@ -2964,7 +2964,7 @@ SignalThread (void *arg)
 static void
 PrintHandler (int sig)
 {
-  char timestr[100];
+  char timestr[31];
 
   lprintf (1, "Ring parameters, ringsize: %" PRIu64 ", pktsize: %u (%lu)",
            ringparams->ringsize, ringparams->pktsize,
@@ -2973,14 +2973,14 @@ PrintHandler (int sig)
            ringparams->maxpackets, ringparams->maxpktid);
   lprintf (2, "   maxoffset: %" PRId64 ", headersize: %u",
            ringparams->maxoffset, ringparams->headersize);
-  ms_hptime2mdtimestr (ringparams->earliestptime, timestr, 1);
+  ms_nstime2timestrz (ringparams->earliestptime, timestr, ISOMONTHDAY, NANO_MICRO_NONE);
   lprintf (2, "   earliest packet ID: %" PRId64 ", offset: %" PRId64 ", time: %s",
            ringparams->earliestid, ringparams->earliestoffset,
-           (ringparams->earliestptime == HPTERROR) ? "NONE" : timestr);
-  ms_hptime2mdtimestr (ringparams->latestptime, timestr, 1);
+           (ringparams->earliestptime == NSTERROR) ? "NONE" : timestr);
+  ms_nstime2timestrz (ringparams->latestptime, timestr, ISOMONTHDAY, NANO_MICRO_NONE);
   lprintf (2, "   latest packet ID: %" PRId64 ", offset: %" PRId64 ", time: %s",
            ringparams->latestid, ringparams->latestoffset,
-           (ringparams->latestptime == HPTERROR) ? "NONE" : timestr);
+           (ringparams->latestptime == NSTERROR) ? "NONE" : timestr);
   lprintf (2, "   TX packet rate: %g, TX byte rate: %g",
            ringparams->txpacketrate, ringparams->txbyterate);
   lprintf (2, "   RX packet rate: %g, RX byte rate: %g",

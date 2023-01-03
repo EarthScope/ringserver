@@ -63,7 +63,7 @@ typedef struct DataStream_s
 DataStream;
 
 
-extern int ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
+extern int ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
 			  char *hostname);
 extern int ds_closeidle (DataStream *datastream, int idletimeout, char *ident);
 

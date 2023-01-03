@@ -34,7 +34,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2022:
+ * Copyright (C) 2023:
  * @author Chad Trabant, IRIS Data Management Center
  **************************************************************************/
 
@@ -55,6 +55,7 @@
 #include <time.h>
 
 #include <libmseed.h>
+#include <mseedformat.h>
 #include <mxml.h>
 
 #include "clients.h"
@@ -175,7 +176,7 @@ SLHandleCmd (ClientInfo *cinfo)
     {
       Stack *stack;
       RBNode *rbnode;
-      hptime_t newesttime = 0;
+      nstime_t newesttime = 0;
 
       stack = StackCreate ();
       RBBuildStack (slinfo->stations, stack);
@@ -196,7 +197,7 @@ SLHandleCmd (ClientInfo *cinfo)
         /* Track the widest time window requested */
 
         /* Set or expand the global starttime */
-        if (stanode->starttime != HPTERROR)
+        if (stanode->starttime != NSTERROR)
         {
           if (!cinfo->starttime)
             cinfo->starttime = stanode->starttime;
@@ -205,7 +206,7 @@ SLHandleCmd (ClientInfo *cinfo)
         }
 
         /* Set or expand the global endtime */
-        if (stanode->endtime != HPTERROR)
+        if (stanode->endtime != NSTERROR)
         {
           if (!cinfo->endtime)
             cinfo->endtime = stanode->endtime;
@@ -222,8 +223,8 @@ SLHandleCmd (ClientInfo *cinfo)
         /* Requested packet must be valid and have a matching data start time
          * Limit packet time matching to integer seconds to match SeedLink syntax limits */
         if (retval == stanode->packetid &&
-            (stanode->datastart == HPTERROR ||
-             (int64_t)(MS_HPTIME2EPOCH (stanode->datastart)) == (int64_t)(MS_HPTIME2EPOCH (cinfo->packet.datastart))))
+            (stanode->datastart == NSTERROR ||
+             (int64_t)(MS_NSTIME2EPOCH (stanode->datastart)) == (int64_t)(MS_NSTIME2EPOCH (cinfo->packet.datastart))))
         {
           /* Use this packet ID if it is newer than any previous newest */
           if (newesttime == 0 || cinfo->packet.pkttime > newesttime)
@@ -243,7 +244,7 @@ SLHandleCmd (ClientInfo *cinfo)
     /* Position ring to starting packet ID if specified */
     if (slinfo->startid > 0)
     {
-      retval = RingPosition (cinfo->reader, slinfo->startid, HPTERROR);
+      retval = RingPosition (cinfo->reader, slinfo->startid, NSTERROR);
 
       if (retval < 0)
       {
@@ -288,11 +289,11 @@ SLHandleCmd (ClientInfo *cinfo)
     }
 
     /* Set ring position based on time if start time specified and not a packet ID */
-    if (cinfo->starttime && cinfo->starttime != HPTERROR && !slinfo->startid)
+    if (cinfo->starttime && cinfo->starttime != NSTERROR && !slinfo->startid)
     {
-      char timestr[50];
+      char timestr[31];
 
-      ms_hptime2seedtimestr (cinfo->starttime, timestr, 1);
+      ms_nstime2timestrz (cinfo->starttime, timestr, ISOMONTHDAY, NANO_MICRO_NONE);
       readid = 0;
 
       /* Position ring according to start time, use reverse search if limited */
@@ -383,7 +384,9 @@ SLStreamPackets (ClientInfo *cinfo)
     lprintf (0, "[%s] Error reading next packet from ring", cinfo->hostname);
     return -1;
   }
-  else if (readid > 0 && MS_ISVALIDHEADER (cinfo->packetdata))
+  else if (readid > 0 &&
+           (MS2_ISVALIDHEADER (cinfo->packetdata) ||
+            MS3_ISVALIDHEADER (cinfo->packetdata)))
   {
     lprintf (3, "[%s] Read %s (%u bytes) packet ID %" PRId64 " from ring",
              cinfo->hostname, cinfo->packet.streamid, cinfo->packet.datasize, cinfo->packet.pktid);
@@ -404,7 +407,7 @@ SLStreamPackets (ClientInfo *cinfo)
     }
 
     /* Perform time-windowing end time checks */
-    if (cinfo->endtime != 0 && cinfo->endtime != HPTERROR)
+    if (cinfo->endtime != 0 && cinfo->endtime != NSTERROR)
     {
       /* Track count of number of channels for time-windowing */
       slinfo->timewinchannels += newstream;
@@ -515,8 +518,8 @@ HandleNegotiation (ClientInfo *cinfo)
   SLStaNode *stanode;
   int fields;
 
-  hptime_t starttime = HPTERROR;
-  hptime_t endtime = HPTERROR;
+  nstime_t starttime = NSTERROR;
+  nstime_t endtime = NSTERROR;
   char starttimestr[51];
   char endtimestr[51];
   char pattern[9];
@@ -858,12 +861,7 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Convert start time string if specified */
     if (OKGO && fields == 2)
     {
-      /* Change commas to dashes for parsing routine */
-      while ((ptr = strchr (starttimestr, ',')))
-        *ptr = '-';
-
-      // TODO libmseed3: use ms_mdtimestr2nstime(), do not need comma-change
-      if ((starttime = ms_timestr2hptime (starttimestr)) == HPTERROR)
+      if ((starttime = ms_mdtimestr2nstime (starttimestr)) == NSTERROR)
       {
         lprintf (0, "[%s] Error parsing time in DATA|FETCH: %s",
                  cinfo->hostname, starttimestr);
@@ -878,12 +876,7 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Convert end time string if specified */
     if (OKGO && fields == 3)
     {
-      /* Change commas to dashes for parsing routine */
-      while ((ptr = strchr (endtimestr, ',')))
-        *ptr = '-';
-
-      // TODO libmseed3: use ms_mdtimestr2nstime(), do not need comma-change
-      if ((endtime = ms_timestr2hptime (endtimestr)) == HPTERROR)
+      if ((endtime = ms_mdtimestr2nstime (endtimestr)) == NSTERROR)
       {
         lprintf (0, "[%s] Error parsing time in DATA|FETCH: %s",
                  cinfo->hostname, endtimestr);
@@ -977,12 +970,7 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Convert start time string */
     if (OKGO && fields >= 1)
     {
-      /* Change commas to dashes for parsing routine */
-      while ((ptr = strchr (starttimestr, ',')))
-        *ptr = '-';
-
-      // TODO libmseed3: use ms_mdtimestr2nstime(), do not need comma-change
-      if ((starttime = ms_timestr2hptime (starttimestr)) == HPTERROR)
+      if ((starttime = ms_mdtimestr2nstime (starttimestr)) == NSTERROR)
       {
         lprintf (0, "[%s] Error parsing start time for TIME: %s",
                  cinfo->hostname, starttimestr);
@@ -994,7 +982,7 @@ HandleNegotiation (ClientInfo *cinfo)
       }
 
       /* Sanity check for future start time */
-      if ((time_t)MS_HPTIME2EPOCH (starttime) > time (NULL))
+      if ((time_t)MS_NSTIME2EPOCH (starttime) > time (NULL))
       {
         lprintf (0, "[%s] Start cannot be in future for TIME: %s",
                  cinfo->hostname, starttimestr);
@@ -1009,12 +997,7 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Convert end time string if supplied */
     if (OKGO && fields == 2)
     {
-      /* Change commas to dashes for parsing routine */
-      while ((ptr = strchr (endtimestr, ',')))
-        *ptr = '-';
-
-      // TODO libmseed3: use ms_mdtimestr2nstime(), do not need comma-change
-      if ((endtime = ms_timestr2hptime (endtimestr)) == HPTERROR)
+      if ((endtime = ms_mdtimestr2nstime (endtimestr)) == NSTERROR)
       {
         lprintf (0, "[%s] Error parsing end time for TIME: %s",
                  cinfo->hostname, endtimestr);
@@ -1124,9 +1107,14 @@ HandleInfo (ClientInfo *cinfo)
   char errflag = 0;
 
   char *record = 0;
-  struct fsdh_s *fsdh;
-  struct blkt_1000_s *b1000;
-  uint16_t ushort;
+  int8_t swapflag;
+
+  uint16_t year = 0;
+  uint16_t yday = 0;
+  uint8_t hour = 0;
+  uint8_t min = 0;
+  uint8_t sec = 0;
+  uint32_t nsec = 0;
 
   if (!strncasecmp (cinfo->recvbuf, "INFO", 4))
   {
@@ -1175,8 +1163,8 @@ HandleInfo (ClientInfo *cinfo)
     return -1;
   }
 
-  /* Convert server start time to YYYY-MM-DD HH:MM:SS */
-  ms_hptime2mdtimestr (serverstarttime, string, 0);
+  /* Convert server start time to YYYY-MM-DD HH:MM:SSZ */
+  ms_nstime2timestrz (serverstarttime, string, ISOMONTHDAY, NONE);
 
   /* All responses, even the error response contain these attributes */
   mxmlElementSetAttr (seedlink, "software", SLSERVERVER);
@@ -1496,10 +1484,10 @@ HandleInfo (ClientInfo *cinfo)
               mxmlElementSetAttr (streamxml, "seedname", chan);
               mxmlElementSetAttr (streamxml, "type", "D");
 
-              /* Convert earliest and latest times to YYYY-MM-DD HH:MM:SS and add them */
-              ms_hptime2mdtimestr (stream->earliestdstime, string, 0);
+              /* Convert earliest and latest times to YYYY-MM-DDTHH:MM:SSZ and add them */
+              ms_nstime2timestrz (stream->earliestdstime, string, ISOMONTHDAY, NONE);
               mxmlElementSetAttr (streamxml, "begin_time", string);
-              ms_hptime2mdtimestr (stream->latestdetime, string, 0);
+              ms_nstime2timestrz (stream->latestdetime, string, ISOMONTHDAY, NONE);
               mxmlElementSetAttr (streamxml, "end_time", string);
             }
 
@@ -1568,8 +1556,8 @@ HandleInfo (ClientInfo *cinfo)
           mxmlElementSetAttr (connection, "host", tcinfo->ipstr);
           mxmlElementSetAttr (connection, "port", tcinfo->portstr);
 
-          /* Convert connect time to YYYY-MM-DD HH:MM:SS */
-          ms_hptime2mdtimestr (tcinfo->conntime, string, 0);
+          /* Convert connect time to YYYY-MM-DDTHH:MM:SSZ */
+          ms_nstime2timestrz (tcinfo->conntime, string, ISOMONTHDAY, NONE);
           mxmlElementSetAttr (connection, "ctime", string);
           mxmlElementSetAttr (connection, "begin_seq", "0");
 
@@ -1597,14 +1585,14 @@ HandleInfo (ClientInfo *cinfo)
             {
               /* Convert start & end time to YYYY-MM-DD HH:MM:SS or "unset" */
               if (tcinfo->starttime)
-                ms_hptime2mdtimestr (tcinfo->starttime, string, 0);
+                ms_nstime2timestrz (tcinfo->starttime, string, ISOMONTHDAY, NONE);
               else
                 strncpy (string, "unset", sizeof (string));
 
               mxmlElementSetAttr (window, "begin_time", string);
 
               if (tcinfo->endtime)
-                ms_hptime2mdtimestr (tcinfo->endtime, string, 0);
+                ms_nstime2timestrz (tcinfo->endtime, string, ISOMONTHDAY, NONE);
               else
                 strncpy (string, "unset", sizeof (string));
 
@@ -1664,53 +1652,44 @@ HandleInfo (ClientInfo *cinfo)
       xmllength--;
     }
 
-    /* Set up encapsulating miniSEED record template */
-    fsdh = (struct fsdh_s *)record;
+    /* Check to see if byte swapping is needed, miniSEED 2 is written big endian */
+    swapflag = (ms_bigendianhost ()) ? 0 : 1;
 
-    /* Create miniSEED header primitive for 512-byte, ASCII encoded,
-     * host byte-order, 0 sample rate record, including a Blockette 1000.
-     * This leaves 456 bytes in each record for ASCII data. */
-    fsdh->dataquality = 'D';
-    fsdh->reserved = ' ';
-    memcpy (fsdh->station, "INFO ", 5);
-    memcpy (fsdh->location, "  ", 2);
-    memcpy (fsdh->channel, (errflag) ? "ERR" : "INF", 3);
-    memcpy (fsdh->network, "SL", 2);
-    ms_hptime2btime (HPnow (), &(fsdh->start_time));
-    fsdh->samprate_fact = 0;
-    fsdh->samprate_mult = 0;
-    fsdh->act_flags = 0;
-    fsdh->io_flags = 0;
-    fsdh->dq_flags = 0;
-    fsdh->numblockettes = 1;
-    fsdh->time_correct = 0;
-    fsdh->data_offset = 56;
-    fsdh->blockette_offset = 48;
+    ms_nstime2time (NSnow (), &year, &yday, &hour, &min, &sec, &nsec);
 
-    /* Create Blockette 1000 header at byte 48 */
-    ushort = 1000;
-    memcpy (record + 48, &ushort, 2);
-    ushort = 0;
-    memcpy (record + 50, &ushort, 2);
+    /* Build Fixed Section Data Header */
+    memcpy (pMS2FSDH_SEQNUM (record), "000000", 6);
+    *pMS2FSDH_DATAQUALITY (record) = 'D';
+    *pMS2FSDH_RESERVED (record) = ' ';
+    memcpy (pMS2FSDH_STATION (record), "INFO ", 5);
+    memcpy (pMS2FSDH_LOCATION (record), "  ", 2);
+    memcpy (pMS2FSDH_CHANNEL (record), (errflag) ? "ERR" : "INF", 3);
+    memcpy (pMS2FSDH_NETWORK (record), "XX", 2);
+    *pMS2FSDH_YEAR (record) = HO2u (year, swapflag);
+    *pMS2FSDH_DAY (record) = HO2u (yday, swapflag);
+    *pMS2FSDH_HOUR (record) = hour;
+    *pMS2FSDH_MIN (record) = min;
+    *pMS2FSDH_SEC (record) = sec;
+    *pMS2FSDH_UNUSED (record) = 0;
+    *pMS2FSDH_FSEC (record) = 0;
+    *pMS2FSDH_NUMSAMPLES (record) = 0;
+    *pMS2FSDH_SAMPLERATEFACT (record) = 0;
+    *pMS2FSDH_SAMPLERATEMULT (record) = 0;
+    *pMS2FSDH_ACTFLAGS (record) = 0;
+    *pMS2FSDH_IOFLAGS (record) = 0;
+    *pMS2FSDH_DQFLAGS (record) = 0;
+    *pMS2FSDH_NUMBLOCKETTES (record) = 1;
+    *pMS2FSDH_TIMECORRECT (record) = 0;
+    *pMS2FSDH_DATAOFFSET (record) = HO2u (56, swapflag);
+    *pMS2FSDH_BLOCKETTEOFFSET (record) = HO2u (48, swapflag);
 
-    /* Create Blockette 1000 body at byte 52 */
-    b1000 = (struct blkt_1000_s *)(record + 52);
-    b1000->encoding = DE_ASCII;
-    b1000->byteorder = 1;
-    b1000->reclen = 9;
-    b1000->reserved = 0;
-
-    /* Make sure data records are in big-endian byte order */
-    if (!ms_bigendianhost ())
-    {
-      MS_SWAPBTIME (&fsdh->start_time);
-      ms_gswap2 (&fsdh->data_offset);
-      ms_gswap2 (&fsdh->blockette_offset);
-
-      /* Blockette 1000 type and next values */
-      ms_gswap2 (record + 48);
-      ms_gswap2 (record + 50);
-    }
+    /* Build Blockette 1000 */
+    *pMS2B1000_TYPE (record + 48) = HO2u (1000, swapflag);
+    *pMS2B1000_NEXT (record + 48) = 0;
+    *pMS2B1000_ENCODING (record + 48) = DE_ASCII;
+    *pMS2B1000_BYTEORDER (record + 48) = 1; /* 1 = big endian */
+    *pMS2B1000_RECLEN (record + 48) = 9;    /* 2^9 = 512 byte record */
+    *pMS2B1000_RESERVED (record + 48) = 0;
 
     /* Pack all XML into 512-byte records and send to client */
     if (!cinfo->socketerr)
@@ -1726,11 +1705,9 @@ HandleInfo (ClientInfo *cinfo)
 
         /* Update sequence number and number of samples */
         snprintf (seqnumstr, sizeof (seqnumstr), "%06d", seqnum);
-        memcpy (fsdh->sequence_number, seqnumstr, 6);
+        memcpy (pMS2FSDH_SEQNUM (record), seqnumstr, 6);
 
-        fsdh->numsamples = nsamps;
-        if (!ms_bigendianhost ())
-          ms_gswap2 (&fsdh->numsamples);
+        *pMS2FSDH_NUMSAMPLES (record) = HO2u (nsamps, swapflag);
 
         /* Copy XML data into record */
         memcpy (record + 56, xmlstr + offset, nsamps);
@@ -1905,9 +1882,10 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
     /* Construct v4 header */
     memcpy (header, "SE", 2);
 
-    // TODO: detect format version: MS2_ISVALIDHEADER and MS3_ISVALIDHEADER
-    if (MS_ISVALIDHEADER (record))
-      memcpy (header + 2, "2", 1); /* Payload format code, 2 = miniSEED 2 */
+    if (MS3_ISVALIDHEADER (record))
+      memcpy (header + 2, "3", 1);
+    else if (MS2_ISVALIDHEADER (record))
+      memcpy (header + 2, "2", 1);
     else
       return -1;
 
@@ -1937,7 +1915,7 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
     return -1;
 
   /* Update the time of the last packet exchange */
-  cinfo->lastxchange = HPnow ();
+  cinfo->lastxchange = NSnow ();
 
   return 0;
 } /* End of SendRecord() */
@@ -1969,7 +1947,7 @@ SendInfoRecord (char *record, int reclen, void *vcinfo)
   SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE, reclen}, 2);
 
   /* Update the time of the last packet exchange */
-  cinfo->lastxchange = HPnow ();
+  cinfo->lastxchange = NSnow ();
 
   return;
 } /* End of SendInfoRecord() */
@@ -2069,10 +2047,10 @@ GetStaNode (RBTree *tree, char *staid)
       return 0;
     }
 
-    stanode->starttime = HPTERROR;
-    stanode->endtime = HPTERROR;
+    stanode->starttime = NSTERROR;
+    stanode->endtime = NSTERROR;
     stanode->packetid = 0;
-    stanode->datastart = HPTERROR;
+    stanode->datastart = NSTERROR;
     stanode->selectors = NULL;
 
     RBTreeInsert (tree, newkey, stanode, 0);

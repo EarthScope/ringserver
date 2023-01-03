@@ -684,7 +684,7 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
     totalrecv += 2;
 
     if (!ms_bigendianhost ())
-      ms_gswap2a (&length16);
+      ms_gswap2 (&length16);
 
     *length = length16;
   }
@@ -699,7 +699,7 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
     totalrecv += 8;
 
     if (!ms_bigendianhost ())
-      ms_gswap8a (length);
+      ms_gswap8 (length);
   }
   else
   {
@@ -1065,10 +1065,10 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly)
       /* Otherwise include the full stream ID and the earliest and latest data times */
       else
       {
-        ms_hptime2isotimestr (ringstream->earliestdstime, earliest, 1);
-        ms_hptime2isotimestr (ringstream->latestdetime, latest, 1);
+        ms_nstime2timestrz (ringstream->earliestdstime, earliest, ISOMONTHDAY, NANO_MICRO);
+        ms_nstime2timestrz (ringstream->latestdetime, latest, ISOMONTHDAY, NANO_MICRO);
 
-        snprintf (streaminfo, sizeof (streaminfo), "%s  %sZ  %sZ\n",
+        snprintf (streaminfo, sizeof (streaminfo), "%s  %s  %s\n",
                   ringstream->streamid, earliest, latest);
         streaminfo[sizeof (streaminfo) - 1] = '\0';
       }
@@ -1170,7 +1170,7 @@ GenerateStatus (ClientInfo *cinfo, char **status)
   if (!cinfo || !status)
     return -1;
 
-  ms_hptime2mdtimestr (serverstarttime, serverstart, 0);
+  ms_nstime2timestrz (serverstarttime, serverstart, ISOMONTHDAY, NONE);
   snprintf (ringversion, sizeof (ringversion), "%u", (unsigned int)cinfo->ringparams->version);
   snprintf (ringsize, sizeof (ringsize), "%" PRIu64, cinfo->ringparams->ringsize);
   snprintf (packetsize, sizeof (packetsize), "%lu",
@@ -1186,13 +1186,13 @@ GenerateStatus (ClientInfo *cinfo, char **status)
   snprintf (rxpacketrate, sizeof (rxpacketrate), "%.1f", cinfo->ringparams->rxpacketrate);
   snprintf (rxbyterate, sizeof (rxbyterate), "%.1f", cinfo->ringparams->rxbyterate);
   snprintf (earliestpacketid, sizeof (earliestpacketid), "%" PRId64, cinfo->ringparams->earliestid);
-  ms_hptime2mdtimestr (cinfo->ringparams->earliestptime, earliestpacketcreate, 1);
-  ms_hptime2mdtimestr (cinfo->ringparams->earliestdstime, earliestpacketstart, 1);
-  ms_hptime2mdtimestr (cinfo->ringparams->earliestdetime, earliestpacketend, 1);
+  ms_nstime2timestrz (cinfo->ringparams->earliestptime, earliestpacketcreate, ISOMONTHDAY, NANO_MICRO_NONE);
+  ms_nstime2timestrz (cinfo->ringparams->earliestdstime, earliestpacketstart, ISOMONTHDAY, NANO_MICRO_NONE);
+  ms_nstime2timestrz (cinfo->ringparams->earliestdetime, earliestpacketend, ISOMONTHDAY, NANO_MICRO_NONE);
   snprintf (latestpacketid, sizeof (latestpacketid), "%" PRId64, cinfo->ringparams->latestid);
-  ms_hptime2mdtimestr (cinfo->ringparams->latestptime, latestpacketcreate, 1);
-  ms_hptime2mdtimestr (cinfo->ringparams->latestdstime, latestpacketstart, 1);
-  ms_hptime2mdtimestr (cinfo->ringparams->latestdetime, latestpacketend, 1);
+  ms_nstime2timestrz (cinfo->ringparams->latestptime, latestpacketcreate, ISOMONTHDAY, NANO_MICRO_NONE);
+  ms_nstime2timestrz (cinfo->ringparams->latestdstime, latestpacketstart, ISOMONTHDAY, NANO_MICRO_NONE);
+  ms_nstime2timestrz (cinfo->ringparams->latestdetime, latestpacketend, ISOMONTHDAY, NANO_MICRO_NONE);
 
   rv = asprintf (status,
                  "%s/%s\n"
@@ -1311,7 +1311,7 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
 {
   struct cthread *loopctp;
   ClientInfo *tcinfo;
-  hptime_t hpnow;
+  nstime_t nsnow;
   int totalcount = 0;
   int selectedcount = 0;
   char conninfo[1024];
@@ -1362,7 +1362,7 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
   }
 
   /* Get current time */
-  hpnow = HPnow ();
+  nsnow = NSnow ();
 
   /* List connections, lock client list while looping */
   pthread_mutex_lock (&cthreads_lock);
@@ -1409,10 +1409,10 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
       conntype = "Unknown";
     }
 
-    ms_hptime2mdtimestr (tcinfo->conntime, conntime, 1);
-    ms_hptime2mdtimestr (tcinfo->reader->pkttime, packettime, 1);
-    ms_hptime2mdtimestr (tcinfo->reader->datastart, datastart, 1);
-    ms_hptime2mdtimestr (tcinfo->reader->dataend, dataend, 1);
+    ms_nstime2timestrz (tcinfo->conntime, conntime, ISOMONTHDAY, NANO_MICRO_NONE);
+    ms_nstime2timestrz (tcinfo->reader->pkttime, packettime, ISOMONTHDAY, NANO_MICRO_NONE);
+    ms_nstime2timestrz (tcinfo->reader->datastart, datastart, ISOMONTHDAY, NANO_MICRO_NONE);
+    ms_nstime2timestrz (tcinfo->reader->dataend, dataend, ISOMONTHDAY, NANO_MICRO_NONE);
 
     if (tcinfo->reader->pktid <= 0)
       strncpy (lagstr, "-", sizeof (lagstr));
@@ -1431,7 +1431,7 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
               tcinfo->hostname, tcinfo->ipstr, tcinfo->portstr,
               conntype, tcinfo->clientid, conntime,
               tcinfo->reader->pktid, packettime, lagstr,
-              (double)MS_HPTIME2EPOCH ((hpnow - tcinfo->lastxchange)),
+              (double)MS_NSTIME2EPOCH ((nsnow - tcinfo->lastxchange)),
               tcinfo->txpackets[0], tcinfo->txpacketrate, tcinfo->txbytes[0], tcinfo->txbyterate,
               tcinfo->rxpackets[0], tcinfo->rxpacketrate, tcinfo->rxbytes[0], tcinfo->rxbyterate,
               tcinfo->streamscount,

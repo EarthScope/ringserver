@@ -192,7 +192,7 @@ MS_ScanThread (void *arg)
   mssinfo->rxpacketrate = 0.0;
   mssinfo->rxbyterate = 0.0;
   mssinfo->scantime = 0.0;
-  mssinfo->ratetime = HPnow ();
+  mssinfo->ratetime = NSnow ();
 
   /* Set thread active status */
   pthread_mutex_lock (&(mytdp->td_lock));
@@ -273,10 +273,10 @@ MS_ScanThread (void *arg)
     /* Rate calculation */
     if (mssinfo->rxpackets[0] > 0)
     {
-      hptime_t hpnow = HPnow ();
+      nstime_t nsnow = NSnow ();
 
       /* Calculate scan duration in seconds and make sure it's not zero */
-      mssinfo->scantime = (double)(hpnow - mssinfo->ratetime) / HPTMODULUS;
+      mssinfo->scantime = (double)(nsnow - mssinfo->ratetime) / NSTMODULUS;
       if (mssinfo->scantime == 0.0)
         mssinfo->scantime = 1.0;
 
@@ -288,7 +288,7 @@ MS_ScanThread (void *arg)
       mssinfo->rxpackets[1] = mssinfo->rxpackets[0];
       mssinfo->rxbytes[1] = mssinfo->rxbytes[0];
 
-      mssinfo->ratetime = hpnow;
+      mssinfo->ratetime = nsnow;
     }
 
     if (mssinfo->iostats && iostatscount <= 1)
@@ -345,7 +345,7 @@ MS_ScanThread (void *arg)
     free (mssinfo->readbuffer);
 
   if (mssinfo->msr)
-    msr_free (&(mssinfo->msr));
+    msr3_free (&(mssinfo->msr));
 
   lprintf (1, "miniSEED scanning stopped [%s]", mssinfo->dirname);
 
@@ -673,6 +673,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
   int reachedmax = 0;
   int detlen;
   int flags;
+  uint8_t msversion;
   off_t newoffset = fnode->offset;
   struct timespec treq, trem;
 
@@ -728,7 +729,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
     }
 
     /* Check buffer for miniSEED */
-    detlen = ms_detect (mssinfo->readbuffer, nread);
+    detlen = ms3_detect (mssinfo->readbuffer, nread, &msversion);
 
     /* If miniSEED not detected or length could not be determined */
     if (detlen <= 0)
@@ -1017,24 +1018,23 @@ WriteRecord (MSScanInfo *mssinfo, char *record, int reclen)
 {
   char streamid[100];
   RingPacket packet;
+  uint32_t flags = MSF_VALIDATECRC;
   int rv;
 
   /* Parse miniSEED header */
-  if ((rv = msr_unpack (record, reclen, &(mssinfo->msr), 0, 0)) != MS_NOERROR)
+  if ((rv = msr3_parse (record, reclen, &(mssinfo->msr), flags, 0)) != MS_NOERROR)
   {
-    ms_recsrcname (record, streamid, 0);
-    lprintf (0, "[MSeedScan] Error unpacking %s: %s", streamid, ms_errorstr (rv));
+    lprintf (0, "[MSeedScan] Error unpacking record: %s", ms_errorstr (rv));
     return -1;
   }
 
-  /* Generate stream ID for this record: NET_STA_LOC_CHAN/MSEED */
-  msr_srcname (mssinfo->msr, streamid, 0);
-  strcat (streamid, "/MSEED");
+  /* Generate stream ID for this record: SourceID/MSEED */
+  snprintf (streamid, sizeof (streamid), "%s/MSEED", mssinfo->msr->sid);
 
   memset (&packet, 0, sizeof (RingPacket));
   strncpy (packet.streamid, streamid, sizeof (packet.streamid) - 1);
   packet.datastart = mssinfo->msr->starttime;
-  packet.dataend = msr_endtime (mssinfo->msr);
+  packet.dataend = msr3_endtime (mssinfo->msr);
   packet.datasize = mssinfo->msr->reclen;
 
   /* Add the packet to the ring */

@@ -65,7 +65,7 @@
 #define PREVID(I, M) (((I) == 1) ? M : (I)-1)
 
 static int StreamStackNodeCmp (StackNode *a, StackNode *b);
-static inline RingPacket *GetPacket (RingParams *ringparams, int64_t pktid, hptime_t *pkttime);
+static inline RingPacket *GetPacket (RingParams *ringparams, int64_t pktid, nstime_t *pkttime);
 static RingStream *AddStreamIdx (RBTree *streamidx, RingStream *stream, Key **ppkey);
 static RingStream *GetStreamIdx (RBTree *streamidx, char *streamid);
 static int DelStreamIdx (RBTree *streamidx, char *streamid);
@@ -291,7 +291,7 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
   (*ringparams)->volatileflag = volatileflag;
   (*ringparams)->streamidx = RBTreeCreate (KeyCompare, free, free);
   (*ringparams)->streamcount = 0;
-  (*ringparams)->ringstart = HPnow ();
+  (*ringparams)->ringstart = NSnow ();
   (*ringparams)->data = ((char *)(*ringparams)) + headersize;
 
   /* Validate existing ring packet buffer parameters, resetting if needed */
@@ -339,14 +339,14 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     (*ringparams)->corruptflag = 0;
     (*ringparams)->fluxflag = 0;
     (*ringparams)->earliestid = 0;
-    (*ringparams)->earliestptime = HPTERROR;
-    (*ringparams)->earliestdstime = HPTERROR;
-    (*ringparams)->earliestdetime = HPTERROR;
+    (*ringparams)->earliestptime = NSTERROR;
+    (*ringparams)->earliestdstime = NSTERROR;
+    (*ringparams)->earliestdetime = NSTERROR;
     (*ringparams)->earliestoffset = -1;
     (*ringparams)->latestid = 0;
-    (*ringparams)->latestptime = HPTERROR;
-    (*ringparams)->latestdstime = HPTERROR;
-    (*ringparams)->latestdetime = HPTERROR;
+    (*ringparams)->latestptime = NSTERROR;
+    (*ringparams)->latestdstime = NSTERROR;
+    (*ringparams)->latestdetime = NSTERROR;
     (*ringparams)->latestoffset = -1;
     (*ringparams)->txpacketrate = 0.0;
     (*ringparams)->txbyterate = 0.0;
@@ -479,20 +479,20 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
   lprintf (2, "   maxoffset: %" PRId64 ", headersize: %u", maxoffset, headersize);
   lprintf (2, "   earliest packet ID: %" PRId64 ", offset: %" PRId64,
            (*ringparams)->earliestid, (*ringparams)->earliestoffset);
-  ms_hptime2mdtimestr ((*ringparams)->earliestptime, timestr, 1);
+  ms_nstime2timestrz ((*ringparams)->earliestptime, timestr, ISOMONTHDAY, NANO_MICRO_NONE);
   lprintf (2, "   earliest packet creation time: %s",
-           ((*ringparams)->earliestptime == HPTERROR) ? "NONE" : timestr);
-  ms_hptime2mdtimestr ((*ringparams)->earliestdstime, timestr, 1);
+           ((*ringparams)->earliestptime == NSTERROR) ? "NONE" : timestr);
+  ms_nstime2timestrz ((*ringparams)->earliestdstime, timestr, ISOMONTHDAY, NANO_MICRO_NONE);
   lprintf (2, "   earliest packet data start time: %s",
-           ((*ringparams)->earliestdstime == HPTERROR) ? "NONE" : timestr);
+           ((*ringparams)->earliestdstime == NSTERROR) ? "NONE" : timestr);
   lprintf (2, "   latest packet ID: %" PRId64 ", offset: %" PRId64,
            (*ringparams)->latestid, (*ringparams)->latestoffset);
-  ms_hptime2mdtimestr ((*ringparams)->latestptime, timestr, 1);
+  ms_nstime2timestrz ((*ringparams)->latestptime, timestr, ISOMONTHDAY, NANO_MICRO_NONE);
   lprintf (2, "   latest packet creation time: %s",
-           ((*ringparams)->latestptime == HPTERROR) ? "NONE" : timestr);
-  ms_hptime2mdtimestr ((*ringparams)->latestdstime, timestr, 1);
+           ((*ringparams)->latestptime == NSTERROR) ? "NONE" : timestr);
+  ms_nstime2timestrz ((*ringparams)->latestdstime, timestr, ISOMONTHDAY, NANO_MICRO_NONE);
   lprintf (2, "   latest packet data start time: %s",
-           ((*ringparams)->latestdstime == HPTERROR) ? "NONE" : timestr);
+           ((*ringparams)->latestdstime == NSTERROR) ? "NONE" : timestr);
 
   return 0;
 } /* End of RingInitialize() */
@@ -739,7 +739,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
   /* Update new packet details */
   packet->pktid = pktid;
   packet->offset = offset;
-  packet->pkttime = HPnow ();
+  packet->pkttime = NSnow ();
   packet->nextinstream = 0;
 
   /* Remove earliest packet if ring is full (next == earliest) */
@@ -928,7 +928,7 @@ RingRead (RingReader *reader, int64_t reqid,
 {
   RingParams *ringparams;
   RingPacket *pkt;
-  hptime_t pkttime;
+  nstime_t pkttime;
   int64_t pktid = 0;
 
   if (!reader || !packet)
@@ -1016,7 +1016,7 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
 {
   RingParams *ringparams;
   RingPacket *pkt;
-  hptime_t pkttime;
+  nstime_t pkttime;
   int64_t pktid = 0;
   uint8_t skip;
   uint32_t skipped;
@@ -1024,9 +1024,9 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
   int64_t latestoffset;
   int64_t earliestid;
   int64_t latestid;
-  hptime_t latestptime;
-  hptime_t latestdstime;
-  hptime_t latestdetime;
+  nstime_t latestptime;
+  nstime_t latestdstime;
+  nstime_t latestdetime;
 
   if (!reader || !packet)
     return -1;
@@ -1220,7 +1220,7 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
  *
  * Set the ring reading position to the specified packet ID, checking
  * that the ID is a valid packet in the ring.  If the pkttime value is
- * not HPTERROR it will also be checked and should match the requested
+ * not NSTERROR it will also be checked and should match the requested
  * packet ID.  The current read position is not changed if any errors
  * occur.
  *
@@ -1231,12 +1231,12 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
  * found and -1 on error.
  ***************************************************************************/
 int64_t
-RingPosition (RingReader *reader, int64_t pktid, hptime_t pkttime)
+RingPosition (RingReader *reader, int64_t pktid, nstime_t pkttime)
 {
   RingParams *ringparams;
   RingPacket *pkt;
-  hptime_t ptime;
-  hptime_t datastart, dataend;
+  nstime_t ptime;
+  nstime_t datastart, dataend;
 
   if (!reader)
     return -1;
@@ -1266,8 +1266,8 @@ RingPosition (RingReader *reader, int64_t pktid, hptime_t pkttime)
     return 0;
   }
 
-  /* Check for matching pkttime if not HPTERROR */
-  if (pkttime != HPTERROR)
+  /* Check for matching pkttime if not NSTERROR */
+  if (pkttime != NSTERROR)
   {
     if (pkttime != pkt->pkttime)
     {
@@ -1322,13 +1322,13 @@ RingPosition (RingReader *reader, int64_t pktid, hptime_t pkttime)
  * found and -1 on error.
  ***************************************************************************/
 int64_t
-RingAfter (RingReader *reader, hptime_t reftime, int whence)
+RingAfter (RingReader *reader, nstime_t reftime, int whence)
 {
   RingParams *ringparams;
   RingPacket *pkt0 = 0, *pkt1 = 0;
-  hptime_t pkttime0 = HPTERROR;
-  hptime_t pkttime1 = HPTERROR;
-  hptime_t datastart, dataend;
+  nstime_t pkttime0 = NSTERROR;
+  nstime_t pkttime1 = NSTERROR;
+  nstime_t datastart, dataend;
   int64_t pktid0, pktid1;
   int64_t skipped = 0;
   uint8_t skip;
@@ -1470,15 +1470,15 @@ RingAfter (RingReader *reader, hptime_t reftime, int whence)
  * found and -1 on error.
  ***************************************************************************/
 int64_t
-RingAfterRev (RingReader *reader, hptime_t reftime, int64_t pktlimit,
+RingAfterRev (RingReader *reader, nstime_t reftime, int64_t pktlimit,
               int whence)
 {
   RingParams *ringparams;
   RingPacket *pkt = 0;
   RingPacket *spkt = 0;
-  hptime_t pkttime = HPTERROR;
-  hptime_t spkttime = HPTERROR;
-  hptime_t datastart, dataend;
+  nstime_t pkttime = NSTERROR;
+  nstime_t spkttime = NSTERROR;
+  nstime_t datastart, dataend;
   int64_t pktid, spktid;
   int64_t count = 0;
   uint8_t skip;
@@ -1905,7 +1905,7 @@ GetStreamsStack (RingParams *ringparams, RingReader *reader)
  * Return a pointer to a RingPacket if found or 0 if no match.
  ***************************************************************************/
 static inline RingPacket *
-GetPacket (RingParams *ringparams, int64_t pktid, hptime_t *pkttime)
+GetPacket (RingParams *ringparams, int64_t pktid, nstime_t *pkttime)
 {
   int64_t offset;
   int64_t latestoffset;

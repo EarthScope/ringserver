@@ -23,7 +23,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
+ * Copyright (C) 2023:
  * @author Chad Trabant, IRIS Data Management Center
  ***************************************************************************/
 
@@ -31,6 +31,7 @@
 #include <fcntl.h>
 #include <glob.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -75,7 +76,7 @@ static int ds_strparse (const char *string, const char *delim, DSstrlist **list)
  * Returns 0 on success, -1 on error.
  ***************************************************************************/
 extern int
-ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
+ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
                char *hostname)
 {
   DataStreamGroup *foundgroup = NULL;
@@ -93,6 +94,18 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
   int writebytes;
   int writeloops;
   int rv;
+
+  char network[10] ={0};
+  char station[10] = {0};
+  char location[10] = {0};
+  char channel[10] = {0};
+
+  uint16_t year = 0;
+  uint16_t yday = 0;
+  uint8_t hour = 0;
+  uint8_t min = 0;
+  uint8_t sec = 0;
+  uint32_t nsec = 0;
 
   /* Special case for stream shutdown */
   if (!msr)
@@ -147,6 +160,12 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
     }
   }
 
+  /* Decompose SID into codes */
+  ms_sid2nslc (msr->sid, network, station, location, channel);
+
+  /* Decompose start time */
+  ms_nstime2time (msr->starttime, &year, &yday, &hour, &min, &sec, &nsec);
+
   while (fnptr != 0)
   {
     int globlen = 0;
@@ -183,13 +202,13 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
       switch (*w)
       {
       case 'n':
-        strncat (filename, msr->network, (sizeof (filename) - fnlen));
+        strncat (filename, network, (sizeof (filename) - fnlen));
         if (def)
-          strncat (definition, msr->network, (sizeof (definition) - fnlen));
+          strncat (definition, network, (sizeof (definition) - fnlen));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, msr->network, (sizeof (globmatch) - globlen));
+            strncat (globmatch, network, (sizeof (globmatch) - globlen));
           else
             strncat (globmatch, "*", (sizeof (globmatch) - globlen));
           globlen = strlen (globmatch);
@@ -198,13 +217,13 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
         p = w + 1;
         break;
       case 's':
-        strncat (filename, msr->station, (sizeof (filename) - fnlen));
+        strncat (filename, station, (sizeof (filename) - fnlen));
         if (def)
-          strncat (definition, msr->station, (sizeof (definition) - fnlen));
+          strncat (definition, station, (sizeof (definition) - fnlen));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, msr->station, (sizeof (globmatch) - globlen));
+            strncat (globmatch, station, (sizeof (globmatch) - globlen));
           else
             strncat (globmatch, "*", (sizeof (globmatch) - globlen));
           globlen = strlen (globmatch);
@@ -213,13 +232,13 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
         p = w + 1;
         break;
       case 'l':
-        strncat (filename, msr->location, (sizeof (filename) - fnlen));
+        strncat (filename, location, (sizeof (filename) - fnlen));
         if (def)
-          strncat (definition, msr->location, (sizeof (definition) - fnlen));
+          strncat (definition, location, (sizeof (definition) - fnlen));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, msr->location, (sizeof (globmatch) - globlen));
+            strncat (globmatch, location, (sizeof (globmatch) - globlen));
           else
             strncat (globmatch, "*", (sizeof (globmatch) - globlen));
           globlen = strlen (globmatch);
@@ -228,13 +247,13 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
         p = w + 1;
         break;
       case 'c':
-        strncat (filename, msr->channel, (sizeof (filename) - fnlen));
+        strncat (filename, channel, (sizeof (filename) - fnlen));
         if (def)
-          strncat (definition, msr->channel, (sizeof (definition) - fnlen));
+          strncat (definition, channel, (sizeof (definition) - fnlen));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, msr->channel, (sizeof (globmatch) - globlen));
+            strncat (globmatch, channel, (sizeof (globmatch) - globlen));
           else
             strncat (globmatch, "*", (sizeof (globmatch) - globlen));
           globlen = strlen (globmatch);
@@ -243,7 +262,8 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
         p = w + 1;
         break;
       case 'q':
-        snprintf (tstr, sizeof (tstr), "%c", msr->fsdh->dataquality);
+        memset (tstr, 0, sizeof(tstr));
+        mseh_get_string(msr, "FDSN.DataQuality", tstr, 1);
         strncat (filename, tstr, (sizeof (filename) - fnlen));
         if (def)
           strncat (definition, tstr, (sizeof (definition) - fnlen));
@@ -259,7 +279,7 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
         p = w + 1;
         break;
       case 'Y':
-        snprintf (tstr, sizeof (tstr), "%04d", (int)msr->fsdh->start_time.year);
+        snprintf (tstr, sizeof (tstr), "%04d", year);
         strncat (filename, tstr, (sizeof (filename) - fnlen));
         if (def)
           strncat (definition, tstr, (sizeof (definition) - fnlen));
@@ -275,7 +295,7 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
         p = w + 1;
         break;
       case 'y':
-        tdy = (int)msr->fsdh->start_time.year;
+        tdy = year;
         while (tdy > 100)
         {
           tdy -= 100;
@@ -296,7 +316,7 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
         p = w + 1;
         break;
       case 'j':
-        snprintf (tstr, sizeof (tstr), "%03d", (int)msr->fsdh->start_time.day);
+        snprintf (tstr, sizeof (tstr), "%03d", yday);
         strncat (filename, tstr, (sizeof (filename) - fnlen));
         if (def)
           strncat (definition, tstr, (sizeof (definition) - fnlen));
@@ -312,7 +332,7 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
         p = w + 1;
         break;
       case 'H':
-        snprintf (tstr, sizeof (tstr), "%02d", (int)msr->fsdh->start_time.hour);
+        snprintf (tstr, sizeof (tstr), "%02d", hour);
         strncat (filename, tstr, (sizeof (filename) - fnlen));
         if (def)
           strncat (definition, tstr, (sizeof (definition) - fnlen));
@@ -328,7 +348,7 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
         p = w + 1;
         break;
       case 'M':
-        snprintf (tstr, sizeof (tstr), "%02d", (int)msr->fsdh->start_time.min);
+        snprintf (tstr, sizeof (tstr), "%02d", min);
         strncat (filename, tstr, (sizeof (filename) - fnlen));
         if (def)
           strncat (definition, tstr, (sizeof (definition) - fnlen));
@@ -344,7 +364,7 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
         p = w + 1;
         break;
       case 'S':
-        snprintf (tstr, sizeof (tstr), "%02d", (int)msr->fsdh->start_time.sec);
+        snprintf (tstr, sizeof (tstr), "%02d", sec);
         strncat (filename, tstr, (sizeof (filename) - fnlen));
         if (def)
           strncat (definition, tstr, (sizeof (definition) - fnlen));
@@ -360,7 +380,7 @@ ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
         p = w + 1;
         break;
       case 'F':
-        snprintf (tstr, sizeof (tstr), "%04d", (int)msr->fsdh->start_time.fract);
+        snprintf (tstr, sizeof (tstr), "%09d", nsec);
         strncat (filename, tstr, (sizeof (filename) - fnlen));
         if (def)
           strncat (definition, tstr, (sizeof (definition) - fnlen));

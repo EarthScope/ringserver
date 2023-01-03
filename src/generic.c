@@ -17,7 +17,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
+ * Copyright (C) 2023:
  * @author Chad Trabant, IRIS Data Management Center
  **************************************************************************/
 
@@ -191,28 +191,25 @@ SplitStreamID (char *streamid, char delim, int maxlength,
 } /* End of SplitStreamID() */
 
 /***************************************************************************
- * HPnow:
+ * NSnow:
  *
- * Return the current time as a high precision epoch on success or
- * HPTERROR on error.
+ * Return the current time as a high precision nanosecond epoch on success or
+ * NSTERROR on error.
  ***************************************************************************/
-hptime_t
-HPnow (void)
+nstime_t
+NSnow (void)
 {
-  hptime_t now;
   struct timeval tp;
 
   if (gettimeofday (&tp, NULL))
   {
-    lprintf (0, "HPnow(): error with gettimeofday()");
-    return HPTERROR;
+    lprintf (0, "%s(): error with gettimeofday()", __func__);
+    return NSTERROR;
   }
 
-  now = ((hptime_t)tp.tv_sec * HPTMODULUS) +
-        ((hptime_t)tp.tv_usec * (HPTMODULUS / 1000000));
-
-  return now;
-} /* End of HPnow() */
+  return ((int64_t)tp.tv_sec * 1000000000 +
+          (int64_t)tp.tv_usec * 1000);
+} /* End of NSnow() */
 
 /***************************************************************************
  * FVNhash64:

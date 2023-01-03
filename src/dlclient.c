@@ -267,7 +267,7 @@ HandleNegotiation (ClientInfo *cinfo)
     char value[30];
     char subvalue[30];
     int64_t pktid = 0;
-    hptime_t hptime;
+    nstime_t nstime;
 
     OKGO = 1;
 
@@ -276,9 +276,9 @@ HandleNegotiation (ClientInfo *cinfo)
                      subcmd, value, subvalue, &junk);
 
     /* Make sure the subcommand, value and subvalue fields are terminated */
-    subcmd[9] = '\0';
-    value[29] = '\0';
-    subvalue[29] = '\0';
+    subcmd[sizeof (subcmd) - 1] = '\0';
+    value[sizeof (value) - 1] = '\0';
+    subvalue[sizeof (subvalue) - 1] = '\0';
 
     /* Make sure we got a single pattern or no pattern */
     if (fields < 2 || fields > 3)
@@ -293,23 +293,29 @@ HandleNegotiation (ClientInfo *cinfo)
       /* Process SET positioning */
       if (!strncmp (subcmd, "SET", 3))
       {
+        nstime = NSTERROR;
+
         /* Process SET <pktid> [time] */
         if (IsAllDigits (value))
         {
           pktid = strtoll (value, NULL, 10);
-          hptime = (fields == 3) ? strtoll (subvalue, NULL, 10) : HPTERROR;
+
+          if (fields == 3)
+          {
+            /* Wire protocol uses time in microseconds (hptime), convert to nanoseconds (nstime) */
+            nstime = strtoll (subvalue, NULL, 10);
+            nstime = MS_HPTIME2NSTIME (nstime);
+          }
         }
         /* Process SET EARLIEST */
         else if (!strncmp (value, "EARLIEST", 8))
         {
           pktid = RINGEARLIEST;
-          hptime = HPTERROR;
         }
         /* Process SET LATEST */
         else if (!strncmp (value, "LATEST", 6))
         {
           pktid = RINGLATEST;
-          hptime = HPTERROR;
         }
         else
         {
@@ -323,7 +329,7 @@ HandleNegotiation (ClientInfo *cinfo)
         /* If no errors with the set value do the positioning */
         if (OKGO)
         {
-          if ((pktid = RingPosition (cinfo->reader, pktid, hptime)) <= 0)
+          if ((pktid = RingPosition (cinfo->reader, pktid, nstime)) <= 0)
           {
             if (pktid == 0)
             {
@@ -332,8 +338,8 @@ HandleNegotiation (ClientInfo *cinfo)
             }
             else
             {
-              lprintf (0, "[%s] Error with RingPosition (pktid: %" PRId64 ", hptime: %" PRId64 ")",
-                       cinfo->hostname, pktid, hptime);
+              lprintf (0, "[%s] Error with RingPosition (pktid: %" PRId64 ", nstime: %" PRId64 ")",
+                       cinfo->hostname, pktid, nstime);
               if (SendPacket (cinfo, "ERROR", "Error positioning reader", 0, 1, 1))
                 return -1;
             }
@@ -350,7 +356,11 @@ HandleNegotiation (ClientInfo *cinfo)
       /* Process AFTER <time> positioning */
       else if (!strncmp (subcmd, "AFTER", 5))
       {
-        if ((hptime = strtoll (value, NULL, 10)) == 0 && errno == EINVAL)
+        /* Wire protocol uses time in microseconds (hptime), convert to nanoseconds (nstime) */
+        nstime = strtoll (value, NULL, 10);
+        nstime = MS_HPTIME2NSTIME (nstime);
+
+        if (nstime == 0 && errno == EINVAL)
         {
           lprintf (0, "[%s] Error parsing POSITION AFTER time: %s",
                    cinfo->hostname, value);
@@ -362,13 +372,13 @@ HandleNegotiation (ClientInfo *cinfo)
           /* Position ring according to start time, use reverse search if limited */
           if (cinfo->timewinlimit == 1.0)
           {
-            pktid = RingAfter (cinfo->reader, hptime, 1);
+            pktid = RingAfter (cinfo->reader, nstime, 1);
           }
           else if (cinfo->timewinlimit < 1.0)
           {
             int64_t pktlimit = (int64_t) (cinfo->timewinlimit * cinfo->ringparams->maxpackets);
 
-            pktid = RingAfterRev (cinfo->reader, hptime, pktlimit, 1);
+            pktid = RingAfterRev (cinfo->reader, nstime, pktlimit, 1);
           }
           else
           {
@@ -384,8 +394,8 @@ HandleNegotiation (ClientInfo *cinfo)
           }
           else if (pktid < 0)
           {
-            lprintf (0, "[%s] Error with RingAfter[Rev] (hptime: %" PRId64 ")",
-                     cinfo->hostname, hptime);
+            lprintf (0, "[%s] Error with RingAfter[Rev] (nstime: %" PRId64 ")",
+                     cinfo->hostname, nstime);
             if (SendPacket (cinfo, "ERROR", "Error positioning reader", 0, 1, 1))
               return -1;
           }
@@ -593,10 +603,10 @@ HandleNegotiation (ClientInfo *cinfo)
  * The command syntax is: "WRITE <streamid> <hpdatastart> <hpdataend> <flags> <datasize>"
  *
  * The stream ID is used verbatim by the ringserver.  The hpdatastart
- * and hpdataend are high-precision time stamps (dltime_t).  The data
- * size is the size in bytes of the data portion following the header.
- * The flags are single character indicators and interpreted the
- * following way:
+ * and hpdataend are high-precision time stamps (hptime), microseconds
+ * since the POSIX epoch.  The data size is the size in bytes of the data
+ * portion following the header.  The flags are single character indicators
+ * and interpreted the following way:
  *
  * flags:
  * 'N' = no acknowledgement is requested
@@ -615,14 +625,14 @@ HandleWrite (ClientInfo *cinfo)
   int newstream = 0;
   int rv;
 
-  MSRecord *msr = 0;
+  MS3Record *msr = NULL;
   char *type;
 
   if (!cinfo)
     return -1;
 
   /* Parse command parameters: WRITE <streamid> <datastart> <dataend> <flags> <datasize> */
-  if (sscanf (cinfo->recvbuf, "%*s %100s %" PRId64 " %" PRId64 " %100s %u",
+  if (sscanf (cinfo->recvbuf, "%*s %100s %" SCNd64 " %" SCNd64 " %100s %u",
               streamid, &(cinfo->packet.datastart), &(cinfo->packet.dataend),
               flags, &(cinfo->packet.datasize)) != 5)
   {
@@ -633,6 +643,11 @@ HandleWrite (ClientInfo *cinfo)
 
     return -1;
   }
+
+  /* Wire protocol for DataLink uses time stamps in as microseconds since the epoch,
+   * convert these to the nanosecond ticks used internally. */
+  cinfo->packet.datastart = MS_HPTIME2NSTIME (cinfo->packet.datastart);
+  cinfo->packet.dataend = MS_HPTIME2NSTIME (cinfo->packet.dataend);
 
   /* Check that client is allowed to write this stream ID if limit is present */
   if (cinfo->reader->limit)
@@ -685,7 +700,7 @@ HandleWrite (ClientInfo *cinfo)
       if (!strncmp (++type, "MSEED", 5))
       {
         /* Parse the miniSEED record header */
-        if (msr_unpack (cinfo->packetdata, cinfo->packet.datasize, &msr, 0, 0) == MS_NOERROR)
+        if (msr3_parse (cinfo->packetdata, cinfo->packet.datasize, &msr, 0, 0) == MS_NOERROR)
         {
           /* Check for file name in streamid: "filename::streamid/MSEED" */
           if ((fn = strstr (streamid, "::")))
@@ -707,7 +722,7 @@ HandleWrite (ClientInfo *cinfo)
         }
 
         if (msr)
-          msr_free (&msr);
+          msr3_free (&msr);
       }
     }
   }
@@ -891,7 +906,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
   else
   {
     /* Convert server start time to YYYY-MM-DD HH:MM:SS */
-    ms_hptime2mdtimestr (serverstarttime, string, 0);
+    ms_nstime2timestrz (serverstarttime, string, ISOMONTHDAY, NONE);
     mxmlElementSetAttr (status, "StartTime", string);
     mxmlElementSetAttrf (status, "RingVersion", "%u", (unsigned int)cinfo->ringparams->version);
     mxmlElementSetAttrf (status, "RingSize", "%" PRIu64, cinfo->ringparams->ringsize);
@@ -908,25 +923,25 @@ HandleInfo (ClientInfo *cinfo, int socket)
     mxmlElementSetAttrf (status, "RXPacketRate", "%.1f", cinfo->ringparams->rxpacketrate);
     mxmlElementSetAttrf (status, "RXByteRate", "%.1f", cinfo->ringparams->rxbyterate);
     mxmlElementSetAttrf (status, "EarliestPacketID", "%" PRId64, cinfo->ringparams->earliestid);
-    ms_hptime2mdtimestr (cinfo->ringparams->earliestptime, string, 1);
+    ms_nstime2timestrz (cinfo->ringparams->earliestptime, string, ISOMONTHDAY, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "EarliestPacketCreationTime",
-                        (cinfo->ringparams->earliestptime != HPTERROR) ? string : "-");
-    ms_hptime2mdtimestr (cinfo->ringparams->earliestdstime, string, 1);
+                        (cinfo->ringparams->earliestptime != NSTERROR) ? string : "-");
+    ms_nstime2timestrz (cinfo->ringparams->earliestdstime, string, ISOMONTHDAY, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "EarliestPacketDataStartTime",
-                        (cinfo->ringparams->earliestdstime != HPTERROR) ? string : "-");
-    ms_hptime2mdtimestr (cinfo->ringparams->earliestdetime, string, 1);
+                        (cinfo->ringparams->earliestdstime != NSTERROR) ? string : "-");
+    ms_nstime2timestrz (cinfo->ringparams->earliestdetime, string, ISOMONTHDAY, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "EarliestPacketDataEndTime",
-                        (cinfo->ringparams->earliestdetime != HPTERROR) ? string : "-");
+                        (cinfo->ringparams->earliestdetime != NSTERROR) ? string : "-");
     mxmlElementSetAttrf (status, "LatestPacketID", "%" PRId64, cinfo->ringparams->latestid);
-    ms_hptime2mdtimestr (cinfo->ringparams->latestptime, string, 1);
+    ms_nstime2timestrz (cinfo->ringparams->latestptime, string, ISOMONTHDAY, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "LatestPacketCreationTime",
-                        (cinfo->ringparams->latestptime != HPTERROR) ? string : "-");
-    ms_hptime2mdtimestr (cinfo->ringparams->latestdstime, string, 1);
+                        (cinfo->ringparams->latestptime != NSTERROR) ? string : "-");
+    ms_nstime2timestrz (cinfo->ringparams->latestdstime, string, ISOMONTHDAY, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "LatestPacketDataStartTime",
-                        (cinfo->ringparams->latestdstime != HPTERROR) ? string : "-");
-    ms_hptime2mdtimestr (cinfo->ringparams->latestdetime, string, 1);
+                        (cinfo->ringparams->latestdstime != NSTERROR) ? string : "-");
+    ms_nstime2timestrz (cinfo->ringparams->latestdetime, string, ISOMONTHDAY, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "LatestPacketDataEndTime",
-                        (cinfo->ringparams->latestdetime != HPTERROR) ? string : "-");
+                        (cinfo->ringparams->latestdetime != NSTERROR) ? string : "-");
   }
 
   /* Add contents to the XML structure depending on info request */
@@ -1018,7 +1033,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
   else if (!strncasecmp (type, "STREAMS", 7))
   {
     mxml_node_t *streamlist, *stream;
-    hptime_t hpnow;
+    nstime_t nsnow;
     int selectedcount = 0;
     Stack *streams;
     RingStream *ringstream;
@@ -1037,7 +1052,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
     if ((streams = GetStreamsStack (cinfo->ringparams, cinfo->reader)))
     {
       /* Get current time */
-      hpnow = HPnow ();
+      nsnow = NSnow ();
 
       /* Create a "Stream" element for each stream */
       while ((ringstream = (RingStream *)StackPop (streams)))
@@ -1051,18 +1066,18 @@ HandleInfo (ClientInfo *cinfo, int socket)
         {
           mxmlElementSetAttr (stream, "Name", ringstream->streamid);
           mxmlElementSetAttrf (stream, "EarliestPacketID", "%" PRId64, ringstream->earliestid);
-          ms_hptime2mdtimestr (ringstream->earliestdstime, string, 1);
+          ms_nstime2timestrz (ringstream->earliestdstime, string, ISOMONTHDAY, NANO_MICRO_NONE);
           mxmlElementSetAttr (stream, "EarliestPacketDataStartTime", string);
-          ms_hptime2mdtimestr (ringstream->earliestdetime, string, 1);
+          ms_nstime2timestrz (ringstream->earliestdetime, string, ISOMONTHDAY, NANO_MICRO_NONE);
           mxmlElementSetAttr (stream, "EarliestPacketDataEndTime", string);
           mxmlElementSetAttrf (stream, "LatestPacketID", "%" PRId64, ringstream->latestid);
-          ms_hptime2mdtimestr (ringstream->latestdstime, string, 1);
+          ms_nstime2timestrz (ringstream->latestdstime, string, ISOMONTHDAY, NANO_MICRO_NONE);
           mxmlElementSetAttr (stream, "LatestPacketDataStartTime", string);
-          ms_hptime2mdtimestr (ringstream->latestdetime, string, 1);
+          ms_nstime2timestrz (ringstream->latestdetime, string, ISOMONTHDAY, NANO_MICRO_NONE);
           mxmlElementSetAttr (stream, "LatestPacketDataEndTime", string);
 
           /* DataLatency value is the difference between the current time and the time of last sample in seconds */
-          mxmlElementSetAttrf (stream, "DataLatency", "%.1f", (double)MS_HPTIME2EPOCH ((hpnow - ringstream->latestdetime)));
+          mxmlElementSetAttrf (stream, "DataLatency", "%.1f", (double)MS_NSTIME2EPOCH ((nsnow - ringstream->latestdetime)));
         }
 
         free (ringstream);
@@ -1086,7 +1101,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
   else if (!strncasecmp (type, "CONNECTIONS", 11))
   {
     mxml_node_t *connlist, *conn;
-    hptime_t hpnow;
+    nstime_t nsnow;
     int selectedcount = 0;
     int totalcount = 0;
     struct cthread *loopctp;
@@ -1113,7 +1128,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
     type = "INFO CONNECTIONS";
 
     /* Get current time */
-    hpnow = HPnow ();
+    nsnow = NSnow ();
 
     /* Compile match expression supplied with request */
     if (matchexpr)
@@ -1191,21 +1206,21 @@ HandleInfo (ClientInfo *cinfo, int socket)
         mxmlElementSetAttr (conn, "IP", tcinfo->ipstr);
         mxmlElementSetAttr (conn, "Port", tcinfo->portstr);
         mxmlElementSetAttr (conn, "ClientID", tcinfo->clientid);
-        ms_hptime2mdtimestr (tcinfo->conntime, string, 1);
+        ms_nstime2timestrz (tcinfo->conntime, string, ISOMONTHDAY, NANO_MICRO_NONE);
         mxmlElementSetAttr (conn, "ConnectionTime", string);
         mxmlElementSetAttrf (conn, "Match", "%s", (tcinfo->matchstr) ? tcinfo->matchstr : "");
         mxmlElementSetAttrf (conn, "Reject", "%s", (tcinfo->rejectstr) ? tcinfo->rejectstr : "");
         mxmlElementSetAttrf (conn, "StreamCount", "%d", tcinfo->streamscount);
         mxmlElementSetAttrf (conn, "PacketID", "%" PRId64, tcinfo->reader->pktid);
-        ms_hptime2mdtimestr (tcinfo->reader->pkttime, string, 1);
+        ms_nstime2timestrz (tcinfo->reader->pkttime, string, ISOMONTHDAY, NANO_MICRO_NONE);
         mxmlElementSetAttr (conn, "PacketCreationTime",
-                            (tcinfo->reader->pkttime != HPTERROR) ? string : "-");
-        ms_hptime2mdtimestr (tcinfo->reader->datastart, string, 1);
+                            (tcinfo->reader->pkttime != NSTERROR) ? string : "-");
+        ms_nstime2timestrz (tcinfo->reader->datastart, string, ISOMONTHDAY, NANO_MICRO_NONE);
         mxmlElementSetAttr (conn, "PacketDataStartTime",
-                            (tcinfo->reader->datastart != HPTERROR) ? string : "-");
-        ms_hptime2mdtimestr (tcinfo->reader->dataend, string, 1);
+                            (tcinfo->reader->datastart != NSTERROR) ? string : "-");
+        ms_nstime2timestrz (tcinfo->reader->dataend, string, ISOMONTHDAY, NANO_MICRO_NONE);
         mxmlElementSetAttr (conn, "PacketDataEndTime",
-                            (tcinfo->reader->dataend != HPTERROR) ? string : "-");
+                            (tcinfo->reader->dataend != NSTERROR) ? string : "-");
         mxmlElementSetAttrf (conn, "TXPacketCount", "%" PRId64, tcinfo->txpackets[0]);
         mxmlElementSetAttrf (conn, "TXPacketRate", "%.1f", tcinfo->txpacketrate);
         mxmlElementSetAttrf (conn, "TXByteCount", "%" PRId64, tcinfo->txbytes[0]);
@@ -1216,7 +1231,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
         mxmlElementSetAttrf (conn, "RXByteRate", "%.1f", tcinfo->rxbyterate);
 
         /* Latency value is the difference between the current time and the time of last packet exchange in seconds */
-        mxmlElementSetAttrf (conn, "Latency", "%.1f", (double)MS_HPTIME2EPOCH ((hpnow - tcinfo->lastxchange)));
+        mxmlElementSetAttrf (conn, "Latency", "%.1f", (double)MS_NSTIME2EPOCH ((nsnow - tcinfo->lastxchange)));
 
         if (tcinfo->reader->pktid <= 0)
           strncpy (string, "-", sizeof (string));
@@ -1416,11 +1431,16 @@ SendRingPacket (ClientInfo *cinfo)
   if (!cinfo)
     return -1;
 
+  /* Create microsecond values for wire protocol from nanosecond values */
+  int64_t uspkttime = (cinfo->packet.pkttime) ? MS_NSTIME2HPTIME (cinfo->packet.pkttime) : 0;
+  int64_t usdatastart = (cinfo->packet.datastart) ? MS_NSTIME2HPTIME (cinfo->packet.datastart) : 0;
+  int64_t usdataend = (cinfo->packet.dataend) ? MS_NSTIME2HPTIME (cinfo->packet.dataend) : 0;
+
   /* Create packet header: "PACKET <streamid> <pktid> <hppackettime> <hpdatatime> <size>" */
   headerlen = snprintf (header, sizeof (header),
                         "PACKET %s %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %u",
-                        cinfo->packet.streamid, cinfo->packet.pktid, cinfo->packet.pkttime,
-                        cinfo->packet.datastart, cinfo->packet.dataend, cinfo->packet.datasize);
+                        cinfo->packet.streamid, cinfo->packet.pktid, uspkttime,
+                        usdatastart, usdataend, cinfo->packet.datasize);
 
   /* Sanity check header length */
   if (headerlen > 255)
