@@ -70,7 +70,6 @@
 #include <unistd.h>
 
 #include <libmseed.h>
-#include <pcre.h>
 
 #include "generic.h"
 #include "logging.h"
@@ -333,13 +332,13 @@ MS_ScanThread (void *arg)
 
   /* Free regex matching memory */
   if (mssinfo->fnmatch)
-    pcre_free (mssinfo->fnmatch);
-  if (mssinfo->fnmatch_extra)
-    pcre_free (mssinfo->fnmatch_extra);
+    pcre2_code_free (mssinfo->fnmatch);
+  if (mssinfo->fnmatch_data)
+    pcre2_match_data_free (mssinfo->fnmatch_data);
   if (mssinfo->fnreject)
-    pcre_free (mssinfo->fnreject);
-  if (mssinfo->fnreject_extra)
-    pcre_free (mssinfo->fnreject_extra);
+    pcre2_code_free (mssinfo->fnreject);
+  if (mssinfo->fnreject_data)
+    pcre2_match_data_free (mssinfo->fnreject_data);
 
   if (mssinfo->readbuffer)
     free (mssinfo->readbuffer);
@@ -505,13 +504,15 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
       mssinfo->scanfileschecked++;
 
     /* Do regex matching if an expression was specified */
-    if (mssinfo->fnmatch != 0)
-      if (pcre_exec (mssinfo->fnmatch, NULL, ede->d_name, strlen (ede->d_name), 0, 0, NULL, 0) != 0)
+    if (mssinfo->fnmatch)
+      if (pcre2_match (mssinfo->fnmatch, (PCRE2_SPTR8)ede->d_name, PCRE2_ZERO_TERMINATED, 0, 0,
+                       mssinfo->fnmatch_data, NULL) < 0)
         continue;
 
     /* Do regex rejecting if an expression was specified */
-    if (mssinfo->fnreject != 0)
-      if (pcre_exec (mssinfo->fnreject, NULL, ede->d_name, strlen (ede->d_name), 0, 0, NULL, 0) == 0)
+    if (mssinfo->fnreject)
+      if (pcre2_match (mssinfo->fnreject, (PCRE2_SPTR8)ede->d_name, PCRE2_ZERO_TERMINATED, 0, 0,
+                       mssinfo->fnreject_data, NULL) >= 0)
         continue;
 
     /* Sanity check for a regular file */
@@ -1069,47 +1070,42 @@ WriteRecord (MSScanInfo *mssinfo, char *record, int reclen)
 static int
 Initialize (MSScanInfo *mssinfo)
 {
-  const char *errptr;
-  int erroffset;
+  int errcode;
+  PCRE2_SIZE erroffset;
+  PCRE2_UCHAR buffer[256];
 
   /* Compile the match regex if specified */
   if (*(mssinfo->matchstr) != '\0')
   {
     /* Compile regex */
-    mssinfo->fnmatch = pcre_compile (mssinfo->matchstr, 0, &errptr, &erroffset, NULL);
-    if (errptr)
+    mssinfo->fnmatch = pcre2_compile ((PCRE2_SPTR)mssinfo->matchstr, PCRE2_ZERO_TERMINATED,
+                                      PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
+    if (mssinfo->fnmatch == NULL)
     {
-      lprintf (0, "[MSeedScan] Error with pcre_compile: %s (%s)", errptr, mssinfo->matchstr);
+      pcre2_get_error_message (errcode, buffer, sizeof (buffer));
+      lprintf (0, "%s(): Error compiling msscan match expression at %zu: %s",
+               __func__, erroffset, buffer);
       return -1;
     }
 
-    /* Study regex */
-    mssinfo->fnmatch_extra = pcre_study (mssinfo->fnmatch, 0, &errptr);
-    if (errptr)
-    {
-      lprintf (0, "[MSeedScan] Error with pcre_study: %s (%s)", errptr, mssinfo->matchstr);
-      return -1;
-    }
+    mssinfo->fnmatch_data = pcre2_match_data_create_from_pattern (mssinfo->fnmatch, NULL);
   }
 
   /* Compile the reject regex if specified */
   if (*(mssinfo->rejectstr) != '\0')
   {
     /* Compile regex */
-    mssinfo->fnreject = pcre_compile (mssinfo->rejectstr, 0, &errptr, &erroffset, NULL);
-    if (errptr)
+    mssinfo->fnreject = pcre2_compile ((PCRE2_SPTR)mssinfo->rejectstr, PCRE2_ZERO_TERMINATED,
+                                       PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
+    if (mssinfo->fnreject == NULL)
     {
-      lprintf (0, "[MSeedScan] Error with pcre_compile: %s (%s)", errptr, mssinfo->rejectstr);
+      pcre2_get_error_message (errcode, buffer, sizeof (buffer));
+      lprintf (0, "%s(): Error compiling msscan reject expression at %zu: %s",
+               __func__, erroffset, buffer);
       return -1;
     }
 
-    /* Study regex */
-    mssinfo->fnreject_extra = pcre_study (mssinfo->fnreject, 0, &errptr);
-    if (errptr)
-    {
-      lprintf (0, "[MSeedScan] Error with pcre_study: %s (%s)", errptr, mssinfo->rejectstr);
-      return -1;
-    }
+    mssinfo->fnreject_data = pcre2_match_data_create_from_pattern (mssinfo->fnreject, NULL);
   }
 
   /* Calculate maximum allowed record length and allocate file read buffer */

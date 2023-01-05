@@ -11,12 +11,12 @@ SRCS = stack.c rbtree.c logging.c clients.c slclient.c dlclient.c \
 OBJS = $(SRCS:.c=.o)
 
 # Standard compiler parameters
-CFLAGS += -D_REENTRANT -D_POSIX_PTHREAD_SEMANTICS -I../libmseed -I../mxml -I../pcre 
+CFLAGS += -D_REENTRANT -D_POSIX_PTHREAD_SEMANTICS -I../libmseed -I../mxml -I../pcre2/src
 
-LDLIBS  = ../pcre/.libs/libpcre.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread
+LDLIBS  = ../pcre2/.libs/libpcre2-8.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread
 
 # For SunOS/Solaris uncomment the following line
-#LDLIBS = ../pcre/.libs/libpcre.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread -lsocket -lnsl -lrt
+#LDLIBS = ../pcre2/.libs/libpcre2-8.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread -lsocket -lnsl -lrt
 
 all: $(BIN)
 

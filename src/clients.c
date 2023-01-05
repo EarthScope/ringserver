@@ -103,12 +103,12 @@ ClientThread (void *arg)
   reader.pkttime = NSTERROR;
   reader.datastart = NSTERROR;
   reader.dataend = NSTERROR;
-  reader.limit = 0;
-  reader.limit_extra = 0;
-  reader.match = 0;
-  reader.match_extra = 0;
-  reader.reject = 0;
-  reader.reject_extra = 0;
+  reader.limit = NULL;
+  reader.limit_data = NULL;
+  reader.match = NULL;
+  reader.match_data = NULL;
+  reader.reject = NULL;
+  reader.reject_data = NULL;
 
   /* Set initial state */
   cinfo->state = STATE_COMMAND;
@@ -416,19 +416,26 @@ ClientThread (void *arg)
     WriteTLog (cinfo, 1);
   }
 
-  /* Release match, reject and selectors strings */
+  /* Release limit related PCRE2 data
+   * The limitstr is not owned by the client so not free'd */
+  if (cinfo->reader->limit)
+    pcre2_code_free (cinfo->reader->limit);
+  if (cinfo->reader->limit_data)
+    pcre2_match_data_free (cinfo->reader->limit_data);
+
+  /* Release match and reject selectors strings and related PCRE2 data */
   if (cinfo->matchstr)
     free (cinfo->matchstr);
   if (cinfo->reader->match)
-    pcre_free (cinfo->reader->match);
-  if (cinfo->reader->match_extra)
-    pcre_free (cinfo->reader->match_extra);
+    pcre2_code_free (cinfo->reader->match);
+  if (cinfo->reader->match_data)
+    pcre2_match_data_free (cinfo->reader->match_data);
   if (cinfo->rejectstr)
     free (cinfo->rejectstr);
   if (cinfo->reader->reject)
-    pcre_free (cinfo->reader->reject);
-  if (cinfo->reader->reject_extra)
-    pcre_free (cinfo->reader->reject_extra);
+    pcre2_code_free (cinfo->reader->reject);
+  if (cinfo->reader->reject_data)
+    pcre2_match_data_free (cinfo->reader->reject_data);
 
   /* Release stream tracking binary tree */
   pthread_mutex_lock (&(cinfo->streams_lock));

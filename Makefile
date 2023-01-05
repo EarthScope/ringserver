@@ -4,14 +4,18 @@
 #   CFLAGS : Specify compiler options to use
 
 .PHONY: all clean
-all clean: pcre mxml libmseed src
+all clean: pcre2 mxml libmseed src
 	$(MAKE) -C src $@
 
 # Test for Makefile/makefile and run make, run configure if needed
-.PHONY: pcre
-pcre:
+.PHONY: pcre2
+pcre2:
 	@if [ ! -f $@/Makefile -a ! -f $@/makefile ] ; then \
-	  ( cd $@ && ./configure --with-link-size=4 --disable-shared --enable-static --disable-cpp ) ; \
+	  ( cd $@ && ./configure --with-link-size=4  \
+                                 --with-match-limit=1000 \
+                                 --with-match-limit-depth=1000 \
+                                 --disable-unicode \
+                                 --enable-static --disable-shared ) ; \
 	fi
 	$(MAKE) -C $@ $(MAKECMDGOALS)
 

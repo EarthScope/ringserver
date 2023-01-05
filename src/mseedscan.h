@@ -28,7 +28,10 @@
 extern "C" {
 #endif
 
-#include <pcre.h>
+#define PCRE2_STATIC
+#define PCRE2_CODE_UNIT_WIDTH 8
+#include <pcre2.h>
+#define PCRE2_COMPILE_OPTIONS (PCRE2_NO_AUTO_CAPTURE | PCRE2_NEVER_UTF)
 
 #include "rbtree.h"
 
@@ -53,10 +56,10 @@ typedef struct MSScanInfo_s {
   char  statefile[512];   /* State file to save/restore time stamps (abs path) */
   char  matchstr[512];    /* Filename match expression */
   char  rejectstr[512];   /* Filename reject expression */
-  pcre *fnmatch;          /* Compiled match expression */
-  pcre_extra *fnmatch_extra;  /* Match expression extra study information */
-  pcre *fnreject;         /* Compiled reject expression */
-  pcre_extra *fnreject_extra; /* Reject expression extra study information */
+  pcre2_code *fnmatch;    /* Compiled match expression */
+  pcre2_match_data *fnmatch_data;  /* Match data results */
+  pcre2_code *fnreject;   /* Compiled reject expression */
+  pcre2_match_data *fnreject_data; /* Match data results */
 
   /* Internal tracking parameters */
   uint32_t readbuffersize;/* Size of file read buffer */

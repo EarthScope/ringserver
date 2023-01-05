@@ -1325,9 +1325,12 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
   char matchstr[50];
   char *cp;
   int matchlen = 0;
-  pcre *match = 0;
-  const char *errptr;
-  int erroffset;
+
+  pcre2_code *match_code = NULL;
+  pcre2_match_data *match_data = NULL;
+  int errcode;
+  PCRE2_SIZE erroffset;
+  PCRE2_UCHAR buffer[256];
 
   if (!cinfo || !connectionlist || !path)
     return -1;
@@ -1353,12 +1356,17 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
   /* Compile match expression supplied with request */
   if (matchlen > 0)
   {
-    match = pcre_compile (matchstr, 0, &errptr, &erroffset, NULL);
-    if (errptr)
+    match_code = pcre2_compile ((PCRE2_SPTR)matchstr, PCRE2_ZERO_TERMINATED,
+                                PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
+    if (match_code == NULL)
     {
-      lprintf (0, "[%s] Error with pcre_compile: %s", cinfo->hostname, errptr);
+      pcre2_get_error_message (errcode, buffer, sizeof (buffer));
+      lprintf (0, "[%s] %s(): Error compiling connection match expression at %zu: %s",
+               cinfo->hostname, __func__, erroffset, buffer);
       matchlen = 0;
     }
+
+    match_data = pcre2_match_data_create_from_pattern (match_code, NULL);
   }
 
   /* Get current time */
@@ -1380,10 +1388,10 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
     tcinfo = (ClientInfo *)loopctp->td->td_prvtptr;
 
     /* Check matching expression against the client address string (host:port) and client ID */
-    if (match)
-      if (pcre_exec (match, NULL, tcinfo->hostname, strlen (tcinfo->hostname), 0, 0, NULL, 0) &&
-          pcre_exec (match, NULL, tcinfo->ipstr, strlen (tcinfo->ipstr), 0, 0, NULL, 0) &&
-          pcre_exec (match, NULL, tcinfo->clientid, strlen (tcinfo->clientid), 0, 0, NULL, 0))
+    if (match_code)
+      if (pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->hostname, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0 &&
+          pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->ipstr, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0 &&
+          pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->clientid, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0)
       {
         loopctp = loopctp->next;
         continue;
@@ -1452,8 +1460,10 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
   AddToString (connectionlist, conninfo, "", 0, 8388608);
 
   /* Free compiled match expression */
-  if (match)
-    pcre_free (match);
+  if (match_code)
+    pcre2_code_free (match_code);
+  if (match_data)
+    pcre2_match_data_free (match_data);
 
   return (*connectionlist) ? strlen (*connectionlist) : 0;
 } /* End of GenerateConnections() */

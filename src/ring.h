@@ -33,7 +33,12 @@ extern "C" {
 #include <pthread.h>
 
 #include <libmseed.h>
-#include <pcre.h>
+
+#define PCRE2_STATIC
+#define PCRE2_CODE_UNIT_WIDTH 8
+#include <pcre2.h>
+#define PCRE2_COMPILE_OPTIONS (PCRE2_NO_AUTO_CAPTURE | PCRE2_NEVER_UTF)
+
 #include "rbtree.h"
 
 /* Static ring parameters */
@@ -122,12 +127,12 @@ typedef struct RingReader_s
   nstime_t    pkttime;       /* Current packet creation time */
   nstime_t    datastart;     /* Current packet data start time */
   nstime_t    dataend;       /* Current packet data end time */
-  pcre       *limit;         /* Compiled limit expression */
-  pcre_extra *limit_extra;   /* Limit expression extra study information */
-  pcre       *match;         /* Compiled match expression */
-  pcre_extra *match_extra;   /* Match expression extra study information */
-  pcre       *reject;        /* Compiled reject expression */
-  pcre_extra *reject_extra;  /* Reject expression extra study information */
+  pcre2_code *limit;         /* Compiled limit expression */
+  pcre2_match_data *limit_data;  /* Match data results */
+  pcre2_code *match;         /* Compiled match expression */
+  pcre2_match_data *match_data;  /* Match data results */
+  pcre2_code *reject;        /* Compiled reject expression */
+  pcre2_match_data *reject_data; /* Match data results */
 } RingReader;
 
 

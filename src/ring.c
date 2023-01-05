@@ -53,12 +53,12 @@
 #include <unistd.h>
 
 #include <libmseed.h>
-#include <pcre.h>
 
+#include "ring.h"
 #include "generic.h"
 #include "logging.h"
 #include "rbtree.h"
-#include "ring.h"
+
 
 /* Macros to determine next and previous IDs given an ID and the maximum ID */
 #define NEXTID(I, M) ((((I) + 1) > (M)) ? 1 : (I) + 1)
@@ -1166,17 +1166,20 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
 
     /* Test limit expression if available */
     if (reader->limit)
-      if (pcre_exec (reader->limit, reader->limit_extra, pkt->streamid, strlen (pkt->streamid), 0, 0, NULL, 0))
+      if (pcre2_match (reader->limit, (PCRE2_SPTR8)pkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                       reader->limit_data, NULL) < 0)
         skip = 1;
 
     /* Test match expression if available and not already skipping */
     if (reader->match && skip == 0)
-      if (pcre_exec (reader->match, reader->match_extra, pkt->streamid, strlen (pkt->streamid), 0, 0, NULL, 0))
+      if (pcre2_match (reader->match, (PCRE2_SPTR8)pkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                       reader->match_data, NULL) < 0)
         skip = 1;
 
     /* Test reject expression if available and not already skipping */
     if (reader->reject && skip == 0)
-      if (!pcre_exec (reader->reject, reader->reject_extra, pkt->streamid, strlen (pkt->streamid), 0, 0, NULL, 0))
+      if (pcre2_match (reader->reject, (PCRE2_SPTR8)pkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                       reader->reject_data, NULL) >= 0)
         skip = 1;
 
     /* Sanity check that the packet was not removed since GetPacket() */
@@ -1372,20 +1375,20 @@ RingAfter (RingReader *reader, nstime_t reftime, int whence)
 
     /* Test limit expression if available */
     if (reader->limit && !skip)
-      if (pcre_exec (reader->limit, reader->limit_extra, pkt1->streamid,
-                     strlen (pkt1->streamid), 0, 0, NULL, 0))
+      if (pcre2_match (reader->limit, (PCRE2_SPTR8)pkt1->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                       reader->limit_data, NULL) < 0)
         skip = 1;
 
     /* Test match expression if available and not already skipping */
     if (reader->match && !skip)
-      if (pcre_exec (reader->match, reader->match_extra, pkt1->streamid,
-                     strlen (pkt1->streamid), 0, 0, NULL, 0))
+      if (pcre2_match (reader->match, (PCRE2_SPTR8)pkt1->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                       reader->match_data, NULL) < 0)
         skip = 1;
 
     /* Test reject expression if available and not already skipping */
     if (reader->reject && !skip)
-      if (!pcre_exec (reader->reject, reader->reject_extra, pkt1->streamid,
-                      strlen (pkt1->streamid), 0, 0, NULL, 0))
+      if (pcre2_match (reader->reject, (PCRE2_SPTR8)pkt1->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                       reader->reject_data, NULL) >= 0)
         skip = 1;
 
     /* Done if this matching packet has a data end time after that specified */
@@ -1507,20 +1510,20 @@ RingAfterRev (RingReader *reader, nstime_t reftime, int64_t pktlimit,
 
     /* Test limit expression if available */
     if (reader->limit)
-      if (pcre_exec (reader->limit, reader->limit_extra, spkt->streamid,
-                     strlen (spkt->streamid), 0, 0, NULL, 0))
+      if (pcre2_match (reader->limit, (PCRE2_SPTR8)spkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                       reader->limit_data, NULL) < 0)
         skip = 1;
 
     /* Test match expression if available and not already skipping */
     if (reader->match && !skip)
-      if (pcre_exec (reader->match, reader->match_extra, spkt->streamid,
-                     strlen (spkt->streamid), 0, 0, NULL, 0))
+      if (pcre2_match (reader->match, (PCRE2_SPTR8)spkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                       reader->match_data, NULL) < 0)
         skip = 1;
 
     /* Test reject expression if available and not already skipping */
     if (reader->reject && !skip)
-      if (!pcre_exec (reader->reject, reader->reject_extra, spkt->streamid,
-                      strlen (spkt->streamid), 0, 0, NULL, 0))
+      if (pcre2_match (reader->reject, (PCRE2_SPTR8)spkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                       reader->reject_data, NULL) >= 0)
         skip = 1;
 
     if (!skip)
@@ -1599,8 +1602,9 @@ RingAfterRev (RingReader *reader, nstime_t reftime, int64_t pktlimit,
 int
 RingLimit (RingReader *reader, char *pattern)
 {
-  const char *errptr;
-  int erroffset;
+  int errcode;
+  PCRE2_SIZE erroffset;
+  PCRE2_UCHAR buffer[256];
 
   if (!reader)
     return -1;
@@ -1610,45 +1614,32 @@ RingLimit (RingReader *reader, char *pattern)
   {
     /* Free existing compiled expression */
     if (reader->limit)
-      pcre_free (reader->limit);
+      pcre2_code_free (reader->limit);
+    if (reader->limit_data)
+      pcre2_match_data_free (reader->limit_data);
 
     /* Compile regex */
-    reader->limit = pcre_compile (pattern, 0, &errptr, &erroffset, NULL);
-    if (errptr)
+    reader->limit = pcre2_compile ((PCRE2_SPTR)pattern, PCRE2_ZERO_TERMINATED,
+                                   PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
+    if (reader->limit == NULL)
     {
-      lprintf (0, "RingLimit(): Error with pcre_compile: %s (offset: %d)", errptr, erroffset);
+      pcre2_get_error_message (errcode, buffer, sizeof (buffer));
+      lprintf (0, "%s(): Error compiling ring limit expression at %zu: %s",
+               __func__, erroffset, buffer);
       return -1;
     }
 
-    /* Free existing study data */
-    if (reader->limit_extra)
-      pcre_free (reader->limit_extra);
-
-    /* Study regex */
-    reader->limit_extra = pcre_study (reader->limit, 0, &errptr);
-    if (errptr)
-    {
-      lprintf (0, "RingLimit(): Error with pcre_study: %s", errptr);
-      return -1;
-    }
-
-    /* Set limits on total matches and backtracking/recursion allowed */
-    if (reader->limit_extra)
-    {
-      reader->limit_extra->flags = PCRE_EXTRA_MATCH_LIMIT | PCRE_EXTRA_MATCH_LIMIT_RECURSION;
-      reader->limit_extra->match_limit = 1000;
-      reader->limit_extra->match_limit_recursion = 1000;
-    }
+    reader->limit_data = pcre2_match_data_create_from_pattern (reader->limit, NULL);
   }
   /* If no pattern, clear any existing regex */
   else
   {
     if (reader->limit)
-      pcre_free (reader->limit);
-    reader->limit = 0;
-    if (reader->limit_extra)
-      pcre_free (reader->limit_extra);
-    reader->limit_extra = 0;
+      pcre2_code_free (reader->limit);
+    reader->limit = NULL;
+    if (reader->limit_data)
+      pcre2_match_data_free (reader->limit_data);
+    reader->limit_data = NULL;
   }
 
   return 0;
@@ -1664,8 +1655,9 @@ RingLimit (RingReader *reader, char *pattern)
 int
 RingMatch (RingReader *reader, char *pattern)
 {
-  const char *errptr;
-  int erroffset;
+  int errcode;
+  PCRE2_SIZE erroffset;
+  PCRE2_UCHAR buffer[256];
 
   if (!reader)
     return -1;
@@ -1675,45 +1667,32 @@ RingMatch (RingReader *reader, char *pattern)
   {
     /* Free existing complied expression */
     if (reader->match)
-      pcre_free (reader->match);
+      pcre2_code_free (reader->match);
+    if (reader->match_data)
+      pcre2_match_data_free (reader->match_data);
 
     /* Compile regex */
-    reader->match = pcre_compile (pattern, 0, &errptr, &erroffset, NULL);
-    if (errptr)
+    reader->match = pcre2_compile ((PCRE2_SPTR)pattern, PCRE2_ZERO_TERMINATED,
+                                   PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
+    if (reader->match == NULL)
     {
-      lprintf (0, "RingMatch(): Error with pcre_compile: %s (offset: %d)", errptr, erroffset);
+      pcre2_get_error_message (errcode, buffer, sizeof (buffer));
+      lprintf (0, "%s(): Error compiling ring match expression at %zu: %s",
+               __func__, erroffset, buffer);
       return -1;
     }
 
-    /* Free existing study data */
-    if (reader->match_extra)
-      pcre_free (reader->match_extra);
-
-    /* Study regex */
-    reader->match_extra = pcre_study (reader->match, 0, &errptr);
-    if (errptr)
-    {
-      lprintf (0, "RingMatch(): Error with pcre_study: %s", errptr);
-      return -1;
-    }
-
-    /* Set limits on total matches and backtracking/recursion allowed */
-    if (reader->match_extra)
-    {
-      reader->match_extra->flags = PCRE_EXTRA_MATCH_LIMIT | PCRE_EXTRA_MATCH_LIMIT_RECURSION;
-      reader->match_extra->match_limit = 1000;
-      reader->match_extra->match_limit_recursion = 1000;
-    }
+    reader->match_data = pcre2_match_data_create_from_pattern (reader->match, NULL);
   }
   /* If no pattern, clear any existing regex */
   else
   {
     if (reader->match)
-      pcre_free (reader->match);
-    reader->match = 0;
-    if (reader->match_extra)
-      pcre_free (reader->match_extra);
-    reader->match_extra = 0;
+      pcre2_code_free (reader->match);
+    reader->match = NULL;
+    if (reader->match_data)
+      pcre2_match_data_free (reader->match_data);
+    reader->match_data = NULL;
   }
 
   return 0;
@@ -1729,8 +1708,9 @@ RingMatch (RingReader *reader, char *pattern)
 int
 RingReject (RingReader *reader, char *pattern)
 {
-  const char *errptr;
-  int erroffset;
+  int errcode;
+  PCRE2_SIZE erroffset;
+  PCRE2_UCHAR buffer[256];
 
   if (!reader)
     return -1;
@@ -1740,45 +1720,32 @@ RingReject (RingReader *reader, char *pattern)
   {
     /* Free existing complied expression */
     if (reader->reject)
-      pcre_free (reader->reject);
+      pcre2_code_free (reader->reject);
+    if (reader->reject_data)
+      pcre2_match_data_free (reader->reject_data);
 
     /* Compile regex */
-    reader->reject = pcre_compile (pattern, 0, &errptr, &erroffset, NULL);
-    if (errptr)
+    reader->reject = pcre2_compile ((PCRE2_SPTR)pattern, PCRE2_ZERO_TERMINATED,
+                                    PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
+    if (reader->reject == NULL)
     {
-      lprintf (0, "RingReject(): Error with pcre_compile: %s (offset: %d)", errptr, erroffset);
+      pcre2_get_error_message (errcode, buffer, sizeof (buffer));
+      lprintf (0, "%s(): Error compiling ring reject expression at %zu: %s",
+               __func__, erroffset, buffer);
       return -1;
     }
 
-    /* Free existing study data */
-    if (reader->reject_extra)
-      pcre_free (reader->reject_extra);
-
-    /* Study regex */
-    reader->reject_extra = pcre_study (reader->reject, 0, &errptr);
-    if (errptr)
-    {
-      lprintf (0, "RingReject(): Error with pcre_study: %s", errptr);
-      return -1;
-    }
-
-    /* Set limits on total matches and backtracking/recursion allowed */
-    if (reader->reject_extra)
-    {
-      reader->reject_extra->flags = PCRE_EXTRA_MATCH_LIMIT | PCRE_EXTRA_MATCH_LIMIT_RECURSION;
-      reader->reject_extra->match_limit = 1000;
-      reader->reject_extra->match_limit_recursion = 1000;
-    }
+    reader->reject_data = pcre2_match_data_create_from_pattern (reader->reject, NULL);
   }
   /* If no pattern, clear any existing regex */
   else
   {
     if (reader->reject)
-      pcre_free (reader->reject);
-    reader->reject = 0;
-    if (reader->reject_extra)
-      pcre_free (reader->reject_extra);
-    reader->reject_extra = 0;
+      pcre2_code_free (reader->reject);
+    reader->reject = NULL;
+    if (reader->reject_data)
+      pcre2_match_data_free (reader->reject_data);
+    reader->reject_data = NULL;
   }
 
   return 0;
@@ -1809,7 +1776,7 @@ StreamStackNodeCmp (StackNode *a, StackNode *b)
  * StackDestroy(stack, free).
  *
  * If ringreader is not NULL only the streamids that match the
- * reader's limit and match expressions and do not match te reader's
+ * reader's limit and match expressions and do not match the reader's
  * reject expression will be included in the output Stack.
  *
  * Return a Stack on success and 0 on error.
@@ -1844,20 +1811,20 @@ GetStreamsStack (RingParams *ringparams, RingReader *reader)
     {
       /* Test limit expression if available */
       if (reader->limit)
-        if (pcre_exec (reader->limit, reader->limit_extra, stream->streamid,
-                       strlen (stream->streamid), 0, 0, NULL, 0))
+        if (pcre2_match (reader->limit, (PCRE2_SPTR8)stream->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                         reader->limit_data, NULL) < 0)
           continue;
 
       /* Test match expression if available */
       if (reader->match)
-        if (pcre_exec (reader->match, reader->match_extra, stream->streamid,
-                       strlen (stream->streamid), 0, 0, NULL, 0))
+        if (pcre2_match (reader->match, (PCRE2_SPTR8)stream->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                         reader->match_data, NULL) < 0)
           continue;
 
       /* Test reject expression if available */
       if (reader->reject)
-        if (!pcre_exec (reader->reject, reader->reject_extra, stream->streamid,
-                        strlen (stream->streamid), 0, 0, NULL, 0))
+        if (pcre2_match (reader->reject, (PCRE2_SPTR8)stream->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                         reader->reject_data, NULL) >= 0)
           continue;
     }
 

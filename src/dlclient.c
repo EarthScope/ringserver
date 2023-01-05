@@ -652,7 +652,8 @@ HandleWrite (ClientInfo *cinfo)
   /* Check that client is allowed to write this stream ID if limit is present */
   if (cinfo->reader->limit)
   {
-    if (pcre_exec (cinfo->reader->limit, cinfo->reader->limit_extra, streamid, strlen (streamid), 0, 0, NULL, 0))
+    if (pcre2_match (cinfo->reader->limit, (PCRE2_SPTR8)streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                     cinfo->reader->limit_data, NULL) < 0)
     {
       lprintf (1, "[%s] Error, permission denied for WRITE of stream ID: %s",
                cinfo->hostname, streamid);
@@ -854,7 +855,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
   char string[200];
   char *xmlstr = 0;
   int xmllength;
-  char *type = 0;
+  char *type = NULL;
   char *matchexpr = 0;
   char errflag = 0;
 
@@ -1107,9 +1108,12 @@ HandleInfo (ClientInfo *cinfo, int socket)
     struct cthread *loopctp;
     ClientInfo *tcinfo;
     char *conntype;
-    pcre *match = 0;
-    const char *errptr;
-    int erroffset;
+
+    pcre2_code *match_code = NULL;
+    pcre2_match_data *match_data = NULL;
+    int errcode;
+    PCRE2_SIZE erroffset;
+    PCRE2_UCHAR buffer[256];
 
     /* Check for trusted flag, required to access this resource */
     if (!cinfo->trusted)
@@ -1133,13 +1137,18 @@ HandleInfo (ClientInfo *cinfo, int socket)
     /* Compile match expression supplied with request */
     if (matchexpr)
     {
-      match = pcre_compile (matchexpr, 0, &errptr, &erroffset, NULL);
-      if (errptr)
+      match_code = pcre2_compile ((PCRE2_SPTR)matchexpr, PCRE2_ZERO_TERMINATED,
+                                  PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
+      if (match_code == NULL)
       {
-        lprintf (0, "[%s] Error with pcre_compile: %s", cinfo->hostname, errptr);
+        pcre2_get_error_message (errcode, buffer, sizeof (buffer));
+        lprintf (0, "%s(): Error compiling expression at %zu: %s",
+                 __func__, erroffset, buffer);
         errflag = 1;
         matchexpr = 0;
       }
+
+      match_data = pcre2_match_data_create_from_pattern (match_code, NULL);
     }
 
     /* Create "ConnectionList" element */
@@ -1165,10 +1174,10 @@ HandleInfo (ClientInfo *cinfo, int socket)
       tcinfo = (ClientInfo *)loopctp->td->td_prvtptr;
 
       /* Check matching expression against the client address string (host:port) and client ID */
-      if (match)
-        if (pcre_exec (match, NULL, tcinfo->hostname, strlen (tcinfo->hostname), 0, 0, NULL, 0) &&
-            pcre_exec (match, NULL, tcinfo->ipstr, strlen (tcinfo->ipstr), 0, 0, NULL, 0) &&
-            pcre_exec (match, NULL, tcinfo->clientid, strlen (tcinfo->clientid), 0, 0, NULL, 0))
+      if (match_code)
+        if (pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->hostname, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0 &&
+            pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->ipstr, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0 &&
+            pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->clientid, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0)
         {
           loopctp = loopctp->next;
           continue;
@@ -1252,8 +1261,10 @@ HandleInfo (ClientInfo *cinfo, int socket)
     mxmlElementSetAttrf (connlist, "SelectedConnections", "%d", selectedcount);
 
     /* Free compiled match expression */
-    if (match)
-      pcre_free (match);
+    if (match_code)
+      pcre2_code_free (match_code);
+    if (match_data)
+      pcre2_match_data_free (match_data);
 
   } /* End of CONNECTIONS */
   /* Unrecognized INFO request */
