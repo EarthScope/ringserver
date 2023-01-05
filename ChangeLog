@@ -1,3 +1,11 @@
+2023.xxx:
+	- Update libmseed to 3, adapt for miniSEED 3 API.
+	- Convert internal time stamps from microsecond ticks (hptime) to use
+	nanosecond ticks, as used by the libmseed3.
+	- Most generated time strings are now YYYY-MM-DDThh:mm:ss.sss*Z formatted.
+	- Upgrade to PCRE2 10.42 from legacy PCRE.
+	- Upgrade mini-XML (mxml) to 3.3.1.
+
 2020.075:
 	- Fix resuming SeedLink connections when both sequence and begin time are
 	included in multi-station mode.

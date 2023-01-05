@@ -3,7 +3,7 @@
  *
  * https://www.msweet.org/mxml
  *
- * Copyright © 2003-2019 by Michael R Sweet.
+ * Copyright © 2003-2021 by Michael R Sweet.
  *
  * Licensed under Apache License v2.0.  See the file "LICENSE" for more
  * information.
@@ -24,7 +24,7 @@
  * Version number...
  */
 
-#define MXML_VERSION "Mini-XML v3.1"
+#define MXML_VERSION "Mini-XML v3.3.1"
 
 
 /*
@@ -38,7 +38,7 @@
  * Long long support...
  */
 
-#define HAVE_LONG_LONG 1
+#define HAVE_LONG_LONG_INT 1
 
 
 /*

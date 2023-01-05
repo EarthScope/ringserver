@@ -1,4 +1,4 @@
-.TH mxml 3 "Mini-XML API" "2019-07-03" "Mini-XML API"
+.TH mxml 3 "Mini-XML API" "2022-07-25" "Mini-XML API"
 .SH NAME
 mxml \- Mini-XML API
 .SH INCLUDE FILE
@@ -411,9 +411,9 @@ mxml_node_t * mxmlFindPath (
 );
 .fi
 .PP
-The "path" is a slash-separated list of element names. The name "*" is
+The "path" is a slash-separated list of element names. The name "\fI" is
 considered a wildcard for one or more levels of elements.  For example,
-"foo/one/two", "bar/two/one", "*/one", and so forth.
+"foo/one/two", "bar/two/one", "\fR/one", and so forth.
 .PP
 The first child node of the found node is returned if the given node has
 children and the first child is a value node.
@@ -694,7 +694,9 @@ mxml_node_t * mxmlLoadFd (
 .PP
 The nodes in the specified file are added to the specified top node.
 If no top node is provided, the XML file MUST be well-formed with a
-single parent node like <?xml> for the entire file. The callback
+single parent node like 
+.URL ?xml ?xml
+ for the entire file. The callback
 function returns the value type that should be used for child nodes.
 The constants \fBMXML_INTEGER_CALLBACK\fR, \fBMXML_OPAQUE_CALLBACK\fR,
 \fBMXML_REAL_CALLBACK\fR, and \fBMXML_TEXT_CALLBACK\fR are defined for
@@ -718,7 +720,9 @@ mxml_node_t * mxmlLoadFile (
 .PP
 The nodes in the specified file are added to the specified top node.
 If no top node is provided, the XML file MUST be well-formed with a
-single parent node like <?xml> for the entire file. The callback
+single parent node like 
+.URL ?xml ?xml
+ for the entire file. The callback
 function returns the value type that should be used for child nodes.
 The constants \fBMXML_INTEGER_CALLBACK\fR, \fBMXML_OPAQUE_CALLBACK\fR,
 \fBMXML_REAL_CALLBACK\fR, and \fBMXML_TEXT_CALLBACK\fR are defined for
@@ -742,7 +746,9 @@ mxml_node_t * mxmlLoadString (
 .PP
 The nodes in the specified string are added to the specified top node.
 If no top node is provided, the XML string MUST be well-formed with a
-single parent node like <?xml> for the entire string. The callback
+single parent node like 
+.URL ?xml ?xml
+ for the entire string. The callback
 function returns the value type that should be used for child nodes.
 The constants \fBMXML_INTEGER_CALLBACK\fR, \fBMXML_OPAQUE_CALLBACK\fR,
 \fBMXML_REAL_CALLBACK\fR, and \fBMXML_TEXT_CALLBACK\fR are defined for
@@ -951,7 +957,9 @@ mxml_node_t * mxmlSAXLoadFd (
 .PP
 The nodes in the specified file are added to the specified top node.
 If no top node is provided, the XML file MUST be well-formed with a
-single parent node like <?xml> for the entire file. The callback
+single parent node like 
+.URL ?xml ?xml
+ for the entire file. The callback
 function returns the value type that should be used for child nodes.
 The constants \fBMXML_INTEGER_CALLBACK\fR, \fBMXML_OPAQUE_CALLBACK\fR,
 \fBMXML_REAL_CALLBACK\fR, and \fBMXML_TEXT_CALLBACK\fR are defined for
@@ -978,7 +986,9 @@ mxml_node_t * mxmlSAXLoadFile (
 .PP
 The nodes in the specified file are added to the specified top node.
 If no top node is provided, the XML file MUST be well-formed with a
-single parent node like <?xml> for the entire file. The callback
+single parent node like 
+.URL ?xml ?xml
+ for the entire file. The callback
 function returns the value type that should be used for child nodes.
 The constants \fBMXML_INTEGER_CALLBACK\fR, \fBMXML_OPAQUE_CALLBACK\fR,
 \fBMXML_REAL_CALLBACK\fR, and \fBMXML_TEXT_CALLBACK\fR are defined for
@@ -1005,7 +1015,9 @@ mxml_node_t * mxmlSAXLoadString (
 .PP
 The nodes in the specified string are added to the specified top node.
 If no top node is provided, the XML string MUST be well-formed with a
-single parent node like <?xml> for the entire string. The callback
+single parent node like 
+.URL ?xml ?xml
+ for the entire string. The callback
 function returns the value type that should be used for child nodes.
 The constants \fBMXML_INTEGER_CALLBACK\fR, \fBMXML_OPAQUE_CALLBACK\fR,
 \fBMXML_REAL_CALLBACK\fR, and \fBMXML_TEXT_CALLBACK\fR are defined for
@@ -1028,12 +1040,11 @@ char * mxmlSaveAllocString (
 .PP
 This function returns a pointer to a string containing the textual
 representation of the XML node tree.  The string should be freed
-using the free() function when you are done with it.  \fBNULL\fR is returned
-if the node would produce an empty string or if the string cannot be
-allocated.
+using \fBfree()\fR when you are done with it.  \fBNULL\fR is returned if the node
+would produce an empty string or if the string cannot be allocated.
 .PP
 The callback argument specifies a function that returns a whitespace
-string or NULL before and after each element.  If \fBMXML_NO_CALLBACK\fR
+string or \fBNULL\fR before and after each element.  If \fBMXML_NO_CALLBACK\fR
 is specified, whitespace will only be added before \fBMXML_TEXT\fR nodes
 with leading whitespace and before attribute names inside opening
 element tags.
@@ -1350,4 +1361,4 @@ typedef enum mxml_type_e mxml_type_t;
 .SH SEE ALSO
 Mini-XML Programmers Manual, https://www.msweet.org/mxml
 .SH COPYRIGHT
-Copyright \[co] 2003-2019 by Michael R Sweet.
+Copyright \[co] 2003-2021 by Michael R Sweet.
