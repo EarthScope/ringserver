@@ -1473,7 +1473,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
   IPNet *nextipnet = 0;
   ListenPortParams lpp;
 
-  char svalue[512];
+  char svalue[513];
   float fvalue;
   unsigned int uvalue;
   unsigned long long int lluvalue;
@@ -1915,7 +1915,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     }
     else if (!strncasecmp ("LimitIP", ptr, 7))
     {
-      char limitstr[512];
+      char limitstr[513];
 
       limitstr[0] = '\0';
       if (sscanf (ptr, "%*s %512s %512s", svalue, limitstr) != 2)
@@ -2962,7 +2962,7 @@ SignalThread (void *arg)
  * PrintHandler (USR1 signal):
  ***************************************************************************/
 static void
-PrintHandler (int sig)
+PrintHandler ()
 {
   char timestr[31];
 

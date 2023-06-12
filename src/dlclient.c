@@ -263,9 +263,9 @@ HandleNegotiation (ClientInfo *cinfo)
   /* POSITION <SET|AFTER> value [time]\r\n - Set ring reading position */
   else if (!strncasecmp (cinfo->recvbuf, "POSITION", 8))
   {
-    char subcmd[10];
-    char value[30];
-    char subvalue[30];
+    char subcmd[11];
+    char value[31];
+    char subvalue[31];
     int64_t pktid = 0;
     nstime_t nstime;
 
@@ -619,8 +619,8 @@ HandleWrite (ClientInfo *cinfo)
 {
   StreamNode *stream;
   char replystr[200];
-  char streamid[100];
-  char flags[100];
+  char streamid[101];
+  char flags[101];
   int nread;
   int newstream = 0;
   int rv;
