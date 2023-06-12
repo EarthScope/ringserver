@@ -1,8 +1,8 @@
 /**************************************************************************
  * ringserver.c
  *
- * Multi-threaded TCP generic ring buffer data server with interfaces
- * for SeedLink and DataLink protocols.
+ * Multi-threaded TCP generic ring buffer data server with support
+ * for SeedLink, DataLink and HTTP protocols.
  *
  * This file is part of the ringserver.
  *
@@ -2973,11 +2973,11 @@ PrintHandler (int sig)
            ringparams->maxpackets, ringparams->maxpktid);
   lprintf (2, "   maxoffset: %" PRId64 ", headersize: %u",
            ringparams->maxoffset, ringparams->headersize);
-  ms_nstime2timestrz (ringparams->earliestptime, timestr, ISOMONTHDAY, NANO_MICRO_NONE);
+  ms_nstime2timestr (ringparams->earliestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   earliest packet ID: %" PRId64 ", offset: %" PRId64 ", time: %s",
            ringparams->earliestid, ringparams->earliestoffset,
            (ringparams->earliestptime == NSTERROR) ? "NONE" : timestr);
-  ms_nstime2timestrz (ringparams->latestptime, timestr, ISOMONTHDAY, NANO_MICRO_NONE);
+  ms_nstime2timestr (ringparams->latestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   latest packet ID: %" PRId64 ", offset: %" PRId64 ", time: %s",
            ringparams->latestid, ringparams->latestoffset,
            (ringparams->latestptime == NSTERROR) ? "NONE" : timestr);

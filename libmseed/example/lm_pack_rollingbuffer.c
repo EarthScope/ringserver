@@ -8,7 +8,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2020 Chad Trabant, IRIS Data Management Center
+ * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -86,8 +86,7 @@ main (int argc, char **argv)
   flags |= MSF_UNPACKDATA;
 
   /* Loop over the input file as a source of data */
-  while ((retcode = ms3_readmsr (&msr, inputfile, NULL, NULL, flags,
-                                 verbose)) == MS_NOERROR)
+  while ((retcode = ms3_readmsr (&msr, inputfile, flags, verbose)) == MS_NOERROR)
   {
     if (mstl3_addmsr (mstl, msr, 0, 1, flags, NULL) == NULL)
     {
@@ -136,6 +135,8 @@ main (int argc, char **argv)
           precords, psamples);
 
   /* Make sure everything is cleaned up */
+  ms3_readmsr (&msr, NULL, flags, 0);
+
   if (msr)
     msr3_free (&msr);
 

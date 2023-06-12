@@ -6,7 +6,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2021 Chad Trabant, IRIS Data Management Center
+ * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -75,7 +75,6 @@ static void *ReadMSFileThread (void *vfe)
   /* Loop over the input file record by record */
   while ((fe->result = ms3_readmsr_r (&msfp, &msr,
                                       fe->filename,
-                                      NULL, NULL,
                                       readflags, verbose)) == MS_NOERROR)
   {
     fe->recordcount++;
@@ -92,7 +91,7 @@ static void *ReadMSFileThread (void *vfe)
   }
 
   /* Make sure everything is cleaned up */
-  ms3_readmsr_r (&msfp, &msr, NULL, NULL, NULL, 0, 0);
+  ms3_readmsr_r (&msfp, &msr, NULL, 0, 0);
 
   return NULL;
 }
@@ -182,7 +181,7 @@ main (int argc, char **argv)
             fe->filename, fe->recordcount, fe->result);
 
     if (fe->result == MS_NOERROR || fe->result == MS_ENDOFFILE)
-      mstl3_printtracelist (fe->mstl, ISOMONTHDAY, 1, 1);
+      mstl3_printtracelist (fe->mstl, ISOMONTHDAY, 1, 1, 0);
   }
 
   return 0;

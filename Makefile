@@ -4,7 +4,7 @@
 #   CFLAGS : Specify compiler options to use
 
 .PHONY: all clean
-all clean: pcre2 mxml libmseed src
+all clean: pcre2 mxml libmseed
 	$(MAKE) -C src $@
 
 # Test for Makefile/makefile and run make, run configure if needed

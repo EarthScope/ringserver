@@ -3,7 +3,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2020 Chad Trabant, IRIS Data Management Center
+ * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,17 +29,17 @@
 #define PACKAGE "lm_parse"
 #define VERSION "[libmseed " LIBMSEED_VERSION " " PACKAGE " ]"
 
-static flag verbose    = 0;
-static flag ppackets   = 0;
-static flag basicsum   = 0;
-static flag tracegap   = 0;
-static int printraw    = 0;
-static int printdata   = 0;
-static int reclen      = -1;
-static char *inputfile = NULL;
+static flag verbose      = 0;
+static flag ppackets     = 0;
+static flag basicsum     = 0;
+static flag tracegap     = 0;
+static flag splitversion = 0;
+static int printraw      = 0;
+static int printdata     = 0;
+static int reclen        = -1;
+static char *inputfile   = NULL;
 
 static int parameter_proc (int argcount, char **argvec);
-static void print_stderr (const char *message);
 static void usage (void);
 
 /* Binary I/O for Windows platforms */
@@ -59,9 +59,6 @@ main (int argc, char **argv)
   int64_t totalsamps = 0;
   int retcode;
 
-  /* Redirect libmseed logging facility to stderr for consistency */
-  ms_loginit (print_stderr, NULL, print_stderr, NULL);
-
   /* Process command line arguments */
   if (parameter_proc (argc, argv) < 0)
     return -1;
@@ -79,15 +76,14 @@ main (int argc, char **argv)
     mstl = mstl3_init (NULL);
 
   /* Loop over the input file */
-  while ((retcode = ms3_readmsr (&msr, inputfile, NULL, NULL, flags,
-                                 verbose)) == MS_NOERROR)
+  while ((retcode = ms3_readmsr (&msr, inputfile, flags, verbose)) == MS_NOERROR)
   {
     totalrecs++;
     totalsamps += msr->samplecnt;
 
     if (tracegap)
     {
-      mstl3_addmsr (mstl, msr, 0, 1, flags, NULL);
+      mstl3_addmsr (mstl, msr, splitversion, 1, flags, NULL);
     }
     else
     {
@@ -113,25 +109,25 @@ main (int argc, char **argv)
         {
           ms_log (2, "Unrecognized sample type: '%c'\n", msr->sampletype);
         }
-        if (msr->sampletype == 'a')
+        if (msr->sampletype == 't')
         {
-          char *ascii = (char *)msr->datasamples;
+          char *text = (char *)msr->datasamples;
           int length  = msr->numsamples;
 
-          ms_log (0, "ASCII Data:\n");
+          ms_log (0, "Text data:\n");
 
           /* Print maximum log message segments */
           while (length > (MAX_LOG_MSG_LENGTH - 1))
           {
-            ms_log (0, "%.*s", (MAX_LOG_MSG_LENGTH - 1), ascii);
-            ascii += MAX_LOG_MSG_LENGTH - 1;
+            ms_log (0, "%.*s", (MAX_LOG_MSG_LENGTH - 1), text);
+            text += MAX_LOG_MSG_LENGTH - 1;
             length -= MAX_LOG_MSG_LENGTH - 1;
           }
 
-          /* Print any remaining ASCII and add a newline */
+          /* Print any remaining TEXT and add a newline */
           if (length > 0)
           {
-            ms_log (0, "%.*s\n", length, ascii);
+            ms_log (0, "%.*s\n", length, text);
           }
           else
           {
@@ -173,10 +169,10 @@ main (int argc, char **argv)
     ms_log (2, "Cannot read %s: %s\n", inputfile, ms_errorstr (retcode));
 
   if (tracegap)
-    mstl3_printtracelist (mstl, SEEDORDINAL, 1, 1);
+    mstl3_printtracelist (mstl, ISOMONTHDAY_Z, 1, 1, splitversion);
 
   /* Make sure everything is cleaned up */
-  ms3_readmsr (&msr, NULL, NULL, NULL, flags, 0);
+  ms3_readmsr (&msr, NULL, flags, 0);
 
   if (mstl)
     mstl3_free (&mstl, 0);
@@ -232,6 +228,10 @@ parameter_proc (int argcount, char **argvec)
     {
       printdata = 2;
     }
+    else if (strcmp (argvec[optind], "-P") == 0)
+    {
+      splitversion = 1;
+    }
     else if (strncmp (argvec[optind], "-tg", 3) == 0)
     {
       tracegap = 1;
@@ -282,16 +282,6 @@ parameter_proc (int argcount, char **argvec)
 } /* End of parameter_proc() */
 
 /***************************************************************************
- * print_stderr():
- * Print messsage to stderr.
- ***************************************************************************/
-static void
-print_stderr (const char *message)
-{
-  fprintf (stderr, "%s", message);
-} /* End of print_stderr() */
-
-/***************************************************************************
  * usage():
  * Print the usage message and exit.
  ***************************************************************************/
@@ -309,6 +299,7 @@ usage (void)
            " -z             Print raw details of header\n"
            " -d             Print first 6 sample values\n"
            " -D             Print all sample values\n"
+           " -P             Additionally group traces by data publication version\n"
            " -tg            Print trace listing with gap information\n"
            " -s             Print a basic summary after processing a file\n"
            " -r bytes       Specify record length in bytes, required if no Blockette 1000\n"

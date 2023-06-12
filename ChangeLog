@@ -1,4 +1,11 @@
 2023.xxx:
+	NOTE: the ring buffer format has changed in this release. Older versions
+	of the saved buffer format will be converted for a seamless upgrade. Once
+	this conversion is completed older releases of ringserver will detect the
+	buffer as corrupt and discard the contents, a consequence of downgrading
+	to an earlier release.
+
+	- Add support for SeedLink protocol version 4.
 	- Update libmseed to 3, adapt for miniSEED 3 API.
 	- Convert internal time stamps from microsecond ticks (hptime) to use
 	nanosecond ticks, as used by the libmseed3.

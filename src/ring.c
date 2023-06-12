@@ -479,18 +479,18 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
   lprintf (2, "   maxoffset: %" PRId64 ", headersize: %u", maxoffset, headersize);
   lprintf (2, "   earliest packet ID: %" PRId64 ", offset: %" PRId64,
            (*ringparams)->earliestid, (*ringparams)->earliestoffset);
-  ms_nstime2timestrz ((*ringparams)->earliestptime, timestr, ISOMONTHDAY, NANO_MICRO_NONE);
+  ms_nstime2timestr ((*ringparams)->earliestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   earliest packet creation time: %s",
            ((*ringparams)->earliestptime == NSTERROR) ? "NONE" : timestr);
-  ms_nstime2timestrz ((*ringparams)->earliestdstime, timestr, ISOMONTHDAY, NANO_MICRO_NONE);
+  ms_nstime2timestr ((*ringparams)->earliestdstime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   earliest packet data start time: %s",
            ((*ringparams)->earliestdstime == NSTERROR) ? "NONE" : timestr);
   lprintf (2, "   latest packet ID: %" PRId64 ", offset: %" PRId64,
            (*ringparams)->latestid, (*ringparams)->latestoffset);
-  ms_nstime2timestrz ((*ringparams)->latestptime, timestr, ISOMONTHDAY, NANO_MICRO_NONE);
+  ms_nstime2timestr ((*ringparams)->latestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   latest packet creation time: %s",
            ((*ringparams)->latestptime == NSTERROR) ? "NONE" : timestr);
-  ms_nstime2timestrz ((*ringparams)->latestdstime, timestr, ISOMONTHDAY, NANO_MICRO_NONE);
+  ms_nstime2timestr ((*ringparams)->latestdstime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   latest packet data start time: %s",
            ((*ringparams)->latestdstime == NSTERROR) ? "NONE" : timestr);
 

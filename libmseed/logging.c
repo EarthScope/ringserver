@@ -3,7 +3,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2020 Chad Trabant, IRIS Data Management Center
+ * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,7 +49,7 @@ void print_message_int (MSLogParam *logp, int level, const char *message,
  * Otherwise, C11 defines the standardized _Thread_local storage-class.
  * Otherwise fallback to the commonly supported __thread keyword.
  */
-#if defined(LIBMSEED_NO_THREADING)
+#if !defined(LIBMSEED_NO_THREADING)
 #if defined(LMP_WIN)
   #define lm_thread_local __declspec( thread )
 #elif __STDC_VERSION__ >= 201112L

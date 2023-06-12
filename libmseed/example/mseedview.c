@@ -6,7 +6,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2020 Chad Trabant, IRIS Data Management Center
+ * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,8 +69,7 @@ main (int argc, char **argv)
   ms_rloginit (NULL, NULL, NULL, NULL, 10);
 
   /* Loop over the input file record by record */
-  while ((retcode = ms3_readmsr (&msr, inputfile, NULL, NULL,
-                                 flags, verbose)) == MS_NOERROR)
+  while ((retcode = ms3_readmsr (&msr, inputfile, flags, verbose)) == MS_NOERROR)
   {
     totalrecs++;
     totalsamps += msr->samplecnt;
@@ -122,7 +121,7 @@ main (int argc, char **argv)
   ms_rlog_emit (NULL, 0, verbose);
 
   /* Make sure everything is cleaned up */
-  ms3_readmsr (&msr, NULL, NULL, NULL, 0, 0);
+  ms3_readmsr (&msr, NULL, 0, 0);
 
   if (basicsum)
     ms_log (0, "Records: %" PRId64 ", Samples: %" PRId64 "\n",

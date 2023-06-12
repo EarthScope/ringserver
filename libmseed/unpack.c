@@ -9,7 +9,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2020 Chad Trabant, IRIS Data Management Center
+ * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -166,7 +166,7 @@ msr3_unpack_mseed3 (char *record, int reclen, MS3Record **ppmsr,
                                    HO4u (*pMS3FSDH_NSEC (record), msr->swapflag));
   if (msr->starttime == NSTERROR)
   {
-    ms_log (2, "%.*s: Cannot convert start time to internal time stamp\n",
+    ms_log (2, "%.*s: Cannot convert start time to internal time representation\n",
             sidlength, pMS3FSDH_SID (record));
     return MS_GENERROR;
   }
@@ -268,6 +268,7 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
 
   int length;
   int ione = 1;
+  int64_t ival;
   double dval;
   char sval[64];
 
@@ -279,6 +280,7 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
   uint16_t blkt_type;
   uint16_t next_blkt;
 
+  LM_PARSED_JSON *parsestate = NULL;
   MSEHEventDetection eventdetection;
   MSEHCalibration calibration;
   MSEHTimingException exception;
@@ -352,51 +354,51 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
   if (*pMS2FSDH_ACTFLAGS (record) & 0x01) /* Bit 0 */
     msr->flags |= 0x01;
   if (*pMS2FSDH_ACTFLAGS (record) & 0x04) /* Bit 2 */
-    mseh_set_boolean (msr, "FDSN.Event.Begin", &ione);
+    mseh_set_ptr_r (msr, "/FDSN/Event/Begin", &ione, 'b', &parsestate);
   if (*pMS2FSDH_ACTFLAGS (record) & 0x08) /* Bit 3 */
-    mseh_set_boolean (msr, "FDSN.Event.End", &ione);
+    mseh_set_ptr_r (msr, "/FDSN/Event/End", &ione, 'b', &parsestate);
   if (*pMS2FSDH_ACTFLAGS (record) & 0x10) /* Bit 4 */
   {
-    dval = 1;
-    mseh_set_number (msr, "FDSN.Time.LeapSecond", &dval);
+    ival = 1;
+    mseh_set_ptr_r (msr, "/FDSN/Time/LeapSecond", &ival, 'i', &parsestate);
   }
   if (*pMS2FSDH_ACTFLAGS (record) & 0x20) /* Bit 5 */
   {
-    dval = -1;
-    mseh_set_number (msr, "FDSN.Time.LeapSecond", &dval);
+    ival = -1;
+    mseh_set_ptr_r (msr, "/FDSN/Time/LeapSecond", &ival, 'i', &parsestate);
   }
   if (*pMS2FSDH_ACTFLAGS (record) & 0x40) /* Bit 6 */
-    mseh_set_boolean (msr, "FDSN.Event.InProgress", &ione);
+    mseh_set_ptr_r (msr, "/FDSN/Event/InProgress", &ione, 'b', &parsestate);
 
   /* Map I/O and clock flags */
   if (*pMS2FSDH_IOFLAGS (record) & 0x01) /* Bit 0 */
-    mseh_set_boolean (msr, "FDSN.Flags.StationVolumeParityError", &ione);
+    mseh_set_ptr_r (msr, "/FDSN/Flags/StationVolumeParityError", &ione, 'b', &parsestate);
   if (*pMS2FSDH_IOFLAGS (record) & 0x02) /* Bit 1 */
-    mseh_set_boolean (msr, "FDSN.Flags.LongRecordRead", &ione);
+    mseh_set_ptr_r (msr, "/FDSN/Flags/LongRecordRead", &ione, 'b', &parsestate);
   if (*pMS2FSDH_IOFLAGS (record) & 0x04) /* Bit 2 */
-    mseh_set_boolean (msr, "FDSN.Flags.ShortRecordRead", &ione);
+    mseh_set_ptr_r (msr, "/FDSN/Flags/ShortRecordRead", &ione, 'b', &parsestate);
   if (*pMS2FSDH_IOFLAGS (record) & 0x08) /* Bit 3 */
-    mseh_set_boolean (msr, "FDSN.Flags.StartOfTimeSeries", &ione);
+    mseh_set_ptr_r (msr, "/FDSN/Flags/StartOfTimeSeries", &ione, 'b', &parsestate);
   if (*pMS2FSDH_IOFLAGS (record) & 0x10) /* Bit 4 */
-    mseh_set_boolean (msr, "FDSN.Flags.EndOfTimeSeries", &ione);
+    mseh_set_ptr_r (msr, "/FDSN/Flags/EndOfTimeSeries", &ione, 'b', &parsestate);
   if (*pMS2FSDH_IOFLAGS (record) & 0x20) /* Bit 5 */
     msr->flags |= 0x04;
 
   /* Map data quality flags */
   if (*pMS2FSDH_DQFLAGS (record) & 0x01) /* Bit 0 */
-    mseh_set_boolean (msr, "FDSN.Flags.AmplifierSaturation", &ione);
+    mseh_set_ptr_r (msr, "/FDSN/Flags/AmplifierSaturation", &ione, 'b', &parsestate);
   if (*pMS2FSDH_DQFLAGS (record) & 0x02) /* Bit 1 */
-    mseh_set_boolean (msr, "FDSN.Flags.DigitizerClipping", &ione);
+    mseh_set_ptr_r (msr, "/FDSN/Flags/DigitizerClipping", &ione, 'b', &parsestate);
   if (*pMS2FSDH_DQFLAGS (record) & 0x04) /* Bit 2 */
-    mseh_set_boolean (msr, "FDSN.Flags.Spikes", &ione);
+    mseh_set_ptr_r (msr, "/FDSN/Flags/Spikes", &ione, 'b', &parsestate);
   if (*pMS2FSDH_DQFLAGS (record) & 0x08) /* Bit 3 */
-    mseh_set_boolean (msr, "FDSN.Flags.Glitches", &ione);
+    mseh_set_ptr_r (msr, "/FDSN/Flags/Glitches", &ione, 'b', &parsestate);
   if (*pMS2FSDH_DQFLAGS (record) & 0x10) /* Bit 4 */
-    mseh_set_boolean (msr, "FDSN.Flags.MissingData", &ione);
+    mseh_set_ptr_r (msr, "/FDSN/Flags/MissingData", &ione, 'b', &parsestate);
   if (*pMS2FSDH_DQFLAGS (record) & 0x20) /* Bit 5 */
-    mseh_set_boolean (msr, "FDSN.Flags.TelemetrySyncError", &ione);
+    mseh_set_ptr_r (msr, "/FDSN/Flags/TelemetrySyncError", &ione, 'b', &parsestate);
   if (*pMS2FSDH_DQFLAGS (record) & 0x40) /* Bit 6 */
-    mseh_set_boolean (msr, "FDSN.Flags.FilterCharging", &ione);
+    mseh_set_ptr_r (msr, "/FDSN/Flags/FilterCharging", &ione, 'b', &parsestate);
   if (*pMS2FSDH_DQFLAGS (record) & 0x80) /* Bit 7 */
     msr->flags |= 0x02;
 
@@ -404,7 +406,7 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
   if (dval != 0.0)
   {
     dval = dval / 10000.0;
-    mseh_set_number (msr, "FDSN.Time.Correction", &dval);
+    mseh_set_ptr_r (msr, "/FDSN/Time/Correction", &dval, 'n', &parsestate);
   }
 
   /* Traverse the blockettes */
@@ -483,7 +485,7 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
       eventdetection.medpickalgorithm = -1;
       eventdetection.next = NULL;
 
-      if (mseh_add_event_detection (msr, NULL, &eventdetection))
+      if (mseh_add_event_detection_r (msr, NULL, &eventdetection, &parsestate))
       {
         ms_log (2, "%s: Problem mapping Blockette 200 to extra headers\n", msr->sid);
         return MS_GENERROR;
@@ -516,7 +518,7 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
       eventdetection.medpickalgorithm = *pMS2B201_PICKALGORITHM (record + blkt_offset);
       eventdetection.next = NULL;
 
-      if (mseh_add_event_detection (msr, NULL, &eventdetection))
+      if (mseh_add_event_detection_r (msr, NULL, &eventdetection, &parsestate))
       {
         ms_log (2, "%s: Problem mapping Blockette 201 to extra headers\n", msr->sid);
         return MS_GENERROR;
@@ -571,7 +573,7 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
       calibration.noise[0] = '\0';
       calibration.next = NULL;
 
-      if (mseh_add_calibration (msr, NULL, &calibration))
+      if (mseh_add_calibration_r (msr, NULL, &calibration, &parsestate))
       {
         ms_log (2, "%s: Problem mapping Blockette 300 to extra headers\n", msr->sid);
         return MS_GENERROR;
@@ -628,7 +630,7 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
       calibration.noise[0] = '\0';
       calibration.next = NULL;
 
-      if (mseh_add_calibration (msr, NULL, &calibration))
+      if (mseh_add_calibration_r (msr, NULL, &calibration, &parsestate))
       {
         ms_log (2, "%s: Problem mapping Blockette 310 to extra headers\n", msr->sid);
         return MS_GENERROR;
@@ -679,7 +681,7 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
       ms_strncpcleantail (calibration.noise, pMS2B320_NOISETYPE (record + blkt_offset), 8);
       calibration.next = NULL;
 
-      if (mseh_add_calibration (msr, NULL, &calibration))
+      if (mseh_add_calibration_r (msr, NULL, &calibration, &parsestate))
       {
         ms_log (2, "%s: Problem mapping Blockette 320 to extra headers\n", msr->sid);
         return MS_GENERROR;
@@ -726,7 +728,7 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
       calibration.noise[0] = '\0';
       calibration.next = NULL;
 
-      if (mseh_add_calibration (msr, NULL, &calibration))
+      if (mseh_add_calibration_r (msr, NULL, &calibration, &parsestate))
       {
         ms_log (2, "%s: Problem mapping Blockette 390 to extra headers\n", msr->sid);
         return MS_GENERROR;
@@ -764,7 +766,7 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
       calibration.noise[0] = '\0';
       calibration.next = NULL;
 
-      if (mseh_add_calibration (msr, NULL, &calibration))
+      if (mseh_add_calibration_r (msr, NULL, &calibration, &parsestate))
       {
         ms_log (2, "%s: Problem mapping Blockette 395 to extra headers\n", msr->sid);
         return MS_GENERROR;
@@ -794,21 +796,26 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
       if (exception.time == NSTERROR)
         return MS_GENERROR;
 
-      exception.usec = *pMS2B500_MICROSECOND (record + blkt_offset);
+      /* Apply microsecond precision if non-zero */
+      if (*pMS2B500_MICROSECOND (record + blkt_offset) != 0)
+      {
+        exception.time += (nstime_t)*pMS2B500_MICROSECOND (record + blkt_offset) * (NSTMODULUS / 1000000);
+      }
+
       exception.receptionquality = *pMS2B500_RECEPTIONQUALITY (record + blkt_offset);
       exception.count = HO4u (*pMS2B500_EXCEPTIONCOUNT (record + blkt_offset), msr->swapflag);
       ms_strncpcleantail (exception.type, pMS2B500_EXCEPTIONTYPE (record + blkt_offset), 16);
       ms_strncpcleantail (exception.clockstatus, pMS2B500_CLOCKSTATUS (record + blkt_offset), 128);
 
-      if (mseh_add_timing_exception (msr, NULL, &exception))
+      if (mseh_add_timing_exception_r (msr, NULL, &exception, &parsestate))
       {
         ms_log (2, "%s: Problem mapping Blockette 500 to extra headers\n", msr->sid);
         return MS_GENERROR;
       }
 
-      /* Clock model maps to a single value at FDSN.Clock.Model */
+      /* Clock model maps to a single value at /FDSN/Clock/Model */
       ms_strncpcleantail (sval, pMS2B500_CLOCKMODEL (record + blkt_offset), 32);
-      mseh_set_string (msr, "FDSN.Clock.Model", sval);
+      mseh_set_ptr_r (msr, "/FDSN/Clock/Model", sval, 's', &parsestate);
     }
 
     else if (blkt_type == 1000)
@@ -833,7 +840,7 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
       B1001offset = blkt_offset;
 
       /* Optimization: if no other extra headers yet, directly print this common value */
-      if (msr->extralength == 0)
+      if (parsestate == NULL)
       {
         length = snprintf (sval, sizeof(sval), "{\"FDSN\":{\"Time\":{\"Quality\":%d}}}",
                            *pMS2B1001_TIMINGQUALITY (record + blkt_offset));
@@ -847,10 +854,11 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
 
         msr->extralength = length;
       }
+      /* Otherwise add it to existing headers */
       else
       {
-        dval = (double) *pMS2B1001_TIMINGQUALITY (record + blkt_offset);
-        mseh_set_number (msr, "FDSN.Time.Quality", &dval);
+        ival = *pMS2B1001_TIMINGQUALITY (record + blkt_offset);
+        mseh_set_ptr_r (msr, "/FDSN/Time/Quality", &ival, 'i', &parsestate);
       }
     }
 
@@ -888,13 +896,17 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
     blkt_count++;
   } /* End of while looping through blockettes */
 
-  /* Check for a Blockette 1000 */
-  if (B1000offset == 0)
+  /* Serialize extra header JSON structure and free parsed state */
+  if (parsestate)
   {
-    if (verbose > 1)
-    {
-      ms_log (1, "%s: Warning: No Blockette 1000 found\n", msr->sid);
-    }
+    mseh_serialize (msr, &parsestate);
+    mseh_free_parsestate (&parsestate);
+  }
+
+  /* Check for a Blockette 1000 and log warning if not found */
+  if (B1000offset == 0 && verbose > 1)
+  {
+    ms_log (1, "%s: Warning: No Blockette 1000 found\n", msr->sid);
   }
 
   /* Check that the data offset is after the blockette chain */
@@ -990,9 +1002,9 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
  * 2.x the raw record is expected to be located at the
  * ::MS3Record.record pointer.
  *
- * When the encoding is a fixed length per sample (text/ASCII,
- * integers or floats), calculate the data size based on the sample
- * count and use if less than size determined otherwise.
+ * When the encoding is a fixed length per sample (text, integers,
+ * or floats), calculate the data size based on the sample count and
+ * use if less than size determined otherwise.
  *
  * When the encoding is Steim1 or Steim2, search for 64-byte padding
  * frames (all zeros) at the end of the payload and remove from the
@@ -1038,13 +1050,13 @@ msr3_data_bounds (MS3Record *msr, uint32_t *dataoffset, uint32_t *datasize)
 
   /* If a fixed sample length encoding, calculate size and use if less
    * than otherwise determined. */
-  if (msr->encoding == DE_ASCII ||
+  if (msr->encoding == DE_TEXT ||
       msr->encoding == DE_INT16 || msr->encoding == DE_INT32 ||
       msr->encoding == DE_FLOAT32 || msr->encoding == DE_FLOAT64)
   {
     switch (msr->encoding)
     {
-    case DE_ASCII:
+    case DE_TEXT:
       samplebytes = 1;
       break;
     case DE_INT16:
@@ -1090,7 +1102,7 @@ msr3_data_bounds (MS3Record *msr, uint32_t *dataoffset, uint32_t *datasize)
  * The packed/encoded data is accessed in the record indicated by
  * ::MS3Record.record and the unpacked samples are placed in
  * ::MS3Record.datasamples.  The resulting data samples are either
- * text (ASCII) characters, 32-bit integers, 32-bit floats or 64-bit
+ * text characters, 32-bit integers, 32-bit floats or 64-bit
  * floats in host byte order.
  *
  * An internal buffer is allocated if the encoded data is not aligned
@@ -1300,9 +1312,9 @@ ms_decode_data (const void *input, size_t inputsize, uint8_t encoding,
   /* Decode data samples according to encoding */
   switch (encoding)
   {
-  case DE_ASCII:
+  case DE_TEXT:
     if (verbose > 1)
-      ms_log (0, "%s: Decoding ASCII data\n", (sid) ? sid : "");
+      ms_log (0, "%s: Decoding TEXT data\n", (sid) ? sid : "");
 
     nsamples = (int32_t)samplecount;
     if (nsamples > 0)
@@ -1462,7 +1474,7 @@ ms_nomsamprate (int factor, int multiplier)
 /***************************************************************************
  * ms2_recordsid:
  *
- * Generate an XFDSN: source identifier string for a specified raw
+ * Generate an FDSN source identifier string for a specified raw
  * miniSEED 2.x data record.
  *
  * Returns a pointer to the resulting string or NULL on error.
@@ -1630,26 +1642,32 @@ ms2_blktlen (uint16_t blkttype, const char *blkt, int8_t swapflag)
  * unused uint8_t   7       Unused, included for alignment
  * fract  uint16_t  8       0.0001 seconds, i.e. 1/10ths of milliseconds (0—9999)
  *
- * Return nstime_t value on success and NSTERROR on error.
+ * Return nstime_t value on success, NSTUNSET when year is 0, and NSTERROR on error.
  *
  * \ref MessageOnError - this function logs a message on error
  ***************************************************************************/
 static inline nstime_t
 ms_btime2nstime (uint8_t *btime, int8_t swapflag)
 {
-  nstime_t nstime;
+  uint16_t year;
 
-  nstime = ms_time2nstime (HO2u (*((uint16_t*)(btime)), swapflag),
-                           HO2u (*((uint16_t*)(btime+2)), swapflag),
-                           *(btime+4),
-                           *(btime+5),
-                           *(btime+6),
-                           (uint32_t)HO2u (*(uint16_t*)(btime+8), swapflag) * (NSTMODULUS / 10000));
-
-  if (nstime == NSTERROR)
+  if (btime == NULL)
   {
     return NSTERROR;
   }
 
-  return nstime;
+  year = HO2u (*((uint16_t*)(btime)), swapflag);
+
+  /* Special case, if year 0 return unset value */
+  if (year == 0)
+  {
+    return NSTUNSET;
+  }
+
+  return ms_time2nstime (year,
+                         HO2u (*((uint16_t *)(btime + 2)), swapflag),
+                         *(btime + 4),
+                         *(btime + 5),
+                         *(btime + 6),
+                         (uint32_t)HO2u (*(uint16_t *)(btime + 8), swapflag) * (NSTMODULUS / 10000));
 } /* End of ms_btime2nstime() */

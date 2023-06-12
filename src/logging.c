@@ -213,8 +213,8 @@ WriteTLog (ClientInfo *cinfo, int reset)
 
   /* Generate pretty strings for current & connection time */
   clock = NSnow ();
-  ms_nstime2timestrz (clock, currtime, ISOMONTHDAY, NONE);
-  ms_nstime2timestrz (cinfo->conntime, conntime, ISOMONTHDAY, NONE);
+  ms_nstime2timestr (clock, currtime, ISOMONTHDAY_Z, NONE);
+  ms_nstime2timestr (cinfo->conntime, conntime, ISOMONTHDAY_Z, NONE);
 
   stack = StackCreate ();
 

@@ -3,7 +3,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2020 Chad Trabant, IRIS Data Management Center
+ * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -93,7 +93,7 @@ main (int argc, char **argv)
   }
 
   /* Print summary */
-  mstl3_printtracelist (mstl, ISOMONTHDAY, 1, 1);
+  mstl3_printtracelist (mstl, ISOMONTHDAY, 1, 1, 0);
 
   ms_log (1, "Total records: %" PRId64 "\n", records);
 

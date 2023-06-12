@@ -5,7 +5,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2020 Chad Trabant, IRIS Data Management Center
+ * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -73,7 +73,7 @@ main (int argc, char **argv)
   }
 
   /* Traverse trace list structures and print summary information */
-  tid = mstl->traces;
+  tid = mstl->traces.next[0];
   while (tid)
   {
     if (!ms_nstime2timestr (tid->earliest, starttimestr, SEEDORDINAL, NANO_MICRO_NONE) ||
@@ -103,7 +103,7 @@ main (int argc, char **argv)
       seg = seg->next;
     }
 
-    tid = tid->next;
+    tid = tid->next[0];
   }
 
   /* Make sure everything is cleaned up */

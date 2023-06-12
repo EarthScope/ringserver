@@ -4,7 +4,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2020 Chad Trabant, IRIS Data Management Center
+ * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -88,7 +88,7 @@ main (int argc, char **argv)
   }
 
   /* Traverse trace list structures and print summary information */
-  tid = mstl->traces;
+  tid = mstl->traces.next[0];
   while (tid)
   {
     ms_log (0, "TraceID for %s (%d), segments: %u\n",
@@ -127,8 +127,8 @@ main (int argc, char **argv)
 
           ms_log (0, "    RECORD: bufferptr: %s, fileptr: %s, filename: %s, fileoffset: %"PRId64"\n",
                   bufferptrstr, fileptrstr, recptr->filename, recptr->fileoffset);
-          ms_nstime2timestrz (recptr->msr->starttime, starttimestr, ISOMONTHDAY, NANO);
-          ms_nstime2timestrz (recptr->endtime, endtimestr, ISOMONTHDAY, NANO);
+          ms_nstime2timestr (recptr->msr->starttime, starttimestr, ISOMONTHDAY_Z, NANO);
+          ms_nstime2timestr (recptr->endtime, endtimestr, ISOMONTHDAY_Z, NANO);
           ms_log (0, "    Start: %s, End: %s\n", starttimestr, endtimestr);
 
           recptr = recptr->next;
@@ -154,7 +154,7 @@ main (int argc, char **argv)
         {
           ms_log (0, "DATA (%" PRId64 " samples) of type '%c':\n", seg->numsamples, seg->sampletype);
 
-          if (sampletype == 'a')
+          if (sampletype == 't')
           {
             printf ("%*s",
                     (seg->numsamples > INT_MAX) ? INT_MAX : (int)seg->numsamples,
@@ -193,7 +193,7 @@ main (int argc, char **argv)
       seg = seg->next;
     }
 
-    tid = tid->next;
+    tid = tid->next[0];
   }
 
   /* Make sure everything is cleaned up */

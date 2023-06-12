@@ -293,7 +293,7 @@ SLHandleCmd (ClientInfo *cinfo)
     {
       char timestr[31];
 
-      ms_nstime2timestrz (cinfo->starttime, timestr, ISOMONTHDAY, NANO_MICRO_NONE);
+      ms_nstime2timestr (cinfo->starttime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
       readid = 0;
 
       /* Position ring according to start time, use reverse search if limited */
@@ -1164,7 +1164,7 @@ HandleInfo (ClientInfo *cinfo)
   }
 
   /* Convert server start time to YYYY-MM-DD HH:MM:SSZ */
-  ms_nstime2timestrz (serverstarttime, string, ISOMONTHDAY, NONE);
+  ms_nstime2timestr (serverstarttime, string, ISOMONTHDAY_Z, NONE);
 
   /* All responses, even the error response contain these attributes */
   mxmlElementSetAttr (seedlink, "software", SLSERVERVER);
@@ -1485,9 +1485,9 @@ HandleInfo (ClientInfo *cinfo)
               mxmlElementSetAttr (streamxml, "type", "D");
 
               /* Convert earliest and latest times to YYYY-MM-DDTHH:MM:SSZ and add them */
-              ms_nstime2timestrz (stream->earliestdstime, string, ISOMONTHDAY, NONE);
+              ms_nstime2timestr (stream->earliestdstime, string, ISOMONTHDAY_Z, NONE);
               mxmlElementSetAttr (streamxml, "begin_time", string);
-              ms_nstime2timestrz (stream->latestdetime, string, ISOMONTHDAY, NONE);
+              ms_nstime2timestr (stream->latestdetime, string, ISOMONTHDAY_Z, NONE);
               mxmlElementSetAttr (streamxml, "end_time", string);
             }
 
@@ -1557,7 +1557,7 @@ HandleInfo (ClientInfo *cinfo)
           mxmlElementSetAttr (connection, "port", tcinfo->portstr);
 
           /* Convert connect time to YYYY-MM-DDTHH:MM:SSZ */
-          ms_nstime2timestrz (tcinfo->conntime, string, ISOMONTHDAY, NONE);
+          ms_nstime2timestr (tcinfo->conntime, string, ISOMONTHDAY_Z, NONE);
           mxmlElementSetAttr (connection, "ctime", string);
           mxmlElementSetAttr (connection, "begin_seq", "0");
 
@@ -1585,14 +1585,14 @@ HandleInfo (ClientInfo *cinfo)
             {
               /* Convert start & end time to YYYY-MM-DD HH:MM:SS or "unset" */
               if (tcinfo->starttime)
-                ms_nstime2timestrz (tcinfo->starttime, string, ISOMONTHDAY, NONE);
+                ms_nstime2timestr (tcinfo->starttime, string, ISOMONTHDAY_Z, NONE);
               else
                 strncpy (string, "unset", sizeof (string));
 
               mxmlElementSetAttr (window, "begin_time", string);
 
               if (tcinfo->endtime)
-                ms_nstime2timestrz (tcinfo->endtime, string, ISOMONTHDAY, NONE);
+                ms_nstime2timestr (tcinfo->endtime, string, ISOMONTHDAY_Z, NONE);
               else
                 strncpy (string, "unset", sizeof (string));
 
