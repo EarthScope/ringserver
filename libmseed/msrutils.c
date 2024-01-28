@@ -3,7 +3,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
+ * Copyright (c) 2024 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -118,15 +118,13 @@ msr3_free (MS3Record **ppmsr)
  * \ref MessageOnError - this function logs a message on error
  ***************************************************************************/
 MS3Record *
-msr3_duplicate (MS3Record *msr, int8_t datadup)
+msr3_duplicate (const MS3Record *msr, int8_t datadup)
 {
   MS3Record *dupmsr = 0;
-  size_t datasize = 0;
-  int samplesize = 0;
 
   if (!msr)
   {
-    ms_log (2, "Required argument not defined: 'msr'\n");
+    ms_log (2, "%s(): Required input not defined: 'msr'\n", __func__);
     return NULL;
   }
 
@@ -137,9 +135,12 @@ msr3_duplicate (MS3Record *msr, int8_t datadup)
   /* Copy MS3Record structure */
   memcpy (dupmsr, msr, sizeof (MS3Record));
 
-  /* Reset pointers to not alias memory held by other structures */
+  /* Disconnect pointers from the source structure and reference values */
   dupmsr->extra = NULL;
+  dupmsr->extralength = 0;
   dupmsr->datasamples = NULL;
+  dupmsr->datasize = 0;
+  dupmsr->numsamples = 0;
 
   /* Copy extra headers */
   if (msr->extralength > 0 && msr->extra)
@@ -153,40 +154,29 @@ msr3_duplicate (MS3Record *msr, int8_t datadup)
     }
 
     memcpy (dupmsr->extra, msr->extra, msr->extralength);
+
+    if (dupmsr->extra)
+      dupmsr->extralength = msr->extralength;
   }
 
   /* Copy data samples if requested and available */
-  if (datadup && msr->numsamples > 0 && msr->datasamples)
+  if (datadup && msr->numsamples > 0 && msr->datasize > 0 && msr->datasamples)
   {
-    /* Determine size of samples in bytes */
-    samplesize = ms_samplesize (msr->sampletype);
-
-    if (samplesize == 0)
-    {
-      ms_log (2, "Unrecognized sample type: '%c'\n", msr->sampletype);
-      msr3_free (&dupmsr);
-      return NULL;
-    }
-
-    datasize = msr->numsamples * samplesize;
-
     /* Allocate memory for new data array */
-    if ((dupmsr->datasamples = libmseed_memory.malloc ((size_t) (datasize))) == NULL)
+    if ((dupmsr->datasamples = libmseed_memory.malloc ((size_t) (msr->datasize))) == NULL)
     {
       ms_log (2, "Error allocating memory\n");
       msr3_free (&dupmsr);
       return NULL;
     }
-    msr->datasize = datasize;
 
-    memcpy (dupmsr->datasamples, msr->datasamples, datasize);
-  }
-  /* Otherwise make sure the sample array and count are zero */
-  else
-  {
-    dupmsr->datasamples = NULL;
-    dupmsr->datasize = 0;
-    dupmsr->numsamples = 0;
+    memcpy (dupmsr->datasamples, msr->datasamples, msr->datasize);
+
+    if (dupmsr->datasamples)
+    {
+      dupmsr->datasize   = msr->datasize;
+      dupmsr->numsamples = msr->numsamples;
+    }
   }
 
   return dupmsr;
@@ -209,7 +199,7 @@ msr3_duplicate (MS3Record *msr, int8_t datadup)
  * @returns Time of the last sample on success and NSTERROR on error.
  ***************************************************************************/
 nstime_t
-msr3_endtime (MS3Record *msr)
+msr3_endtime (const MS3Record *msr)
 {
   int64_t sampleoffset = 0;
 
@@ -235,7 +225,7 @@ msr3_endtime (MS3Record *msr)
  * @endparblock
  ***************************************************************************/
 void
-msr3_print (MS3Record *msr, int8_t details)
+msr3_print (const MS3Record *msr, int8_t details)
 {
   char time[40];
   char b;
@@ -283,7 +273,7 @@ msr3_print (MS3Record *msr, int8_t details)
     ms_log (0, "    extra header length: %d bytes\n", msr->extralength);
     ms_log (0, "    data payload length: %d bytes\n", msr->datalength);
     ms_log (0, "       payload encoding: %s (val: %d)\n",
-            (char *)ms_encodingstr (msr->encoding), msr->encoding);
+            (char *)ms_encodingstr ((uint8_t)msr->encoding), msr->encoding);
 
     if (details > 1 && msr->extralength > 0 && msr->extra)
     {
@@ -319,7 +309,7 @@ msr3_resize_buffer (MS3Record *msr)
 
   if (!msr)
   {
-    ms_log (2, "Required argument not defined: 'msr'\n");
+    ms_log (2, "%s(): Required input not defined: 'msr'\n", __func__);
     return MS_GENERROR;
   }
 
@@ -354,7 +344,7 @@ msr3_resize_buffer (MS3Record *msr)
  * @returns Return sample rate in Hertz (samples per second)
  ***************************************************************************/
 inline double
-msr3_sampratehz (MS3Record *msr)
+msr3_sampratehz (const MS3Record *msr)
 {
   if (!msr)
     return 0.0;
@@ -375,13 +365,13 @@ msr3_sampratehz (MS3Record *msr)
  * Double precision is returned, but the true precision is dependent
  * on the accuracy of the host system clock among other things.
  *
- * @param[in] msr ::MS3Record to calculate lactency for
+ * @param[in] msr ::MS3Record to calculate latency for
  *
  * @returns seconds of latency or 0.0 on error (indistinguishable from
  * 0.0 latency).
  ***************************************************************************/
 double
-msr3_host_latency (MS3Record *msr)
+msr3_host_latency (const MS3Record *msr)
 {
   double span = 0.0; /* Time covered by the samples */
   double epoch;      /* Current epoch time */

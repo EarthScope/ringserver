@@ -3,7 +3,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
+ * Copyright (c) 2024 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,6 +54,51 @@ libmseed_url_support (void)
   return 0;
 #endif
 } /* End of libmseed_url_support() */
+
+/*****************************************************************/ /**
+ * @brief Initialize ::MS3FileParam parameters for a file descriptor
+ *
+ * Initialize a ::MS3FileParam for reading from a specified \a fd
+ * (file descriptor).
+ *
+ * The ::MS3FileParam should be used with ms3_readmsr_r() or
+ * ms3_readmsr_selection().  Once all data has been read from the
+ * stream, it will be closed during the cleanup call of those routines.
+ *
+ * @param[in] fd File descriptor for input reading
+ *
+ * @returns Allocated ::MS3FileParam on success and NULL on error.
+ *
+ * \ref MessageOnError - this function logs a message on error
+ *********************************************************************/
+MS3FileParam *
+ms3_mstl_init_fd (int fd)
+{
+  MS3FileParam *msfp;
+
+  /* Initialize the read parameters if needed */
+  msfp = (MS3FileParam *)libmseed_memory.malloc (sizeof (MS3FileParam));
+
+  if (msfp == NULL)
+  {
+    ms_log (2, "%s(): Cannot allocate memory for MS3FileParam\n", __func__);
+    return NULL;
+  }
+
+  *msfp = (MS3FileParam)MS3FileParam_INITIALIZER;
+
+  msfp->input.type = LMIO_FD;
+  msfp->input.handle = fdopen (fd, "rb");
+
+  if (msfp->input.handle == NULL)
+  {
+    ms_log (2, "%s(): Cannot open file descriptor %d\n", __func__, fd);
+    libmseed_memory.free (msfp);
+    return NULL;
+  }
+
+  return msfp;
+}
 
 /*****************************************************************/ /**
  * @brief Read miniSEED records from a file or URL
@@ -116,7 +161,7 @@ ms3_shift_msfp (MS3FileParam *msfp, int shift)
 {
   if (!msfp)
   {
-    ms_log (2, "Required argument not defined: 'msfp'\n");
+    ms_log (2, "%s(): Required input not defined: 'msfp'\n", __func__);
     return;
   }
 
@@ -210,7 +255,7 @@ ms3_shift_msfp (MS3FileParam *msfp, int shift)
  *********************************************************************/
 int
 ms3_readmsr_selection (MS3FileParam **ppmsfp, MS3Record **ppmsr, const char *mspath,
-                       uint32_t flags, MS3Selections *selections, int8_t verbose)
+                       uint32_t flags, const MS3Selections *selections, int8_t verbose)
 {
   MS3FileParam *msfp;
   uint32_t pflags = flags;
@@ -223,7 +268,7 @@ ms3_readmsr_selection (MS3FileParam **ppmsfp, MS3Record **ppmsr, const char *msp
 
   if (!ppmsr || !ppmsfp)
   {
-    ms_log (2, "Required argument not defined: 'ppmsr' or 'ppmsfp'\n");
+    ms_log (2, "%s(): Required input not defined: 'ppmsr' or 'ppmsfp'\n", __func__);
     return MS_GENERROR;
   }
 
@@ -236,7 +281,7 @@ ms3_readmsr_selection (MS3FileParam **ppmsfp, MS3Record **ppmsr, const char *msp
 
     if (msfp == NULL)
     {
-      ms_log (2, "Cannot allocate memory for MSFP\n");
+      ms_log (2, "Cannot allocate memory for MS3FileParam\n");
       return MS_GENERROR;
     }
 
@@ -306,7 +351,7 @@ ms3_readmsr_selection (MS3FileParam **ppmsfp, MS3Record **ppmsr, const char *msp
 
     if (strcmp (mspath, "-") == 0)
     {
-      msfp->input.type = LMIO_FILE;
+      msfp->input.type = LMIO_FD;
       msfp->input.handle = stdin;
     }
     else
@@ -540,7 +585,7 @@ ms3_readmsr_selection (MS3FileParam **ppmsfp, MS3Record **ppmsr, const char *msp
  *********************************************************************/
 int
 ms3_readtracelist (MS3TraceList **ppmstl, const char *mspath,
-                   MS3Tolerance *tolerance, int8_t splitversion,
+                   const MS3Tolerance *tolerance, int8_t splitversion,
                    uint32_t flags, int8_t verbose)
 {
   return ms3_readtracelist_selection (ppmstl, mspath, tolerance, NULL,
@@ -565,7 +610,7 @@ ms3_readtracelist (MS3TraceList **ppmstl, const char *mspath,
  *********************************************************************/
 int
 ms3_readtracelist_timewin (MS3TraceList **ppmstl, const char *mspath,
-                           MS3Tolerance *tolerance,
+                           const MS3Tolerance *tolerance,
                            nstime_t starttime, nstime_t endtime,
                            int8_t splitversion, uint32_t flags, int8_t verbose)
 {
@@ -629,7 +674,7 @@ ms3_readtracelist_timewin (MS3TraceList **ppmstl, const char *mspath,
  *********************************************************************/
 int
 ms3_readtracelist_selection (MS3TraceList **ppmstl, const char *mspath,
-                             MS3Tolerance *tolerance, MS3Selections *selections,
+                             const MS3Tolerance *tolerance, const MS3Selections *selections,
                              int8_t splitversion, uint32_t flags, int8_t verbose)
 {
   MS3Record *msr     = NULL;
@@ -642,7 +687,7 @@ ms3_readtracelist_selection (MS3TraceList **ppmstl, const char *mspath,
 
   if (!ppmstl)
   {
-    ms_log (2, "Required argument not defined: 'ppmstl'\n");
+    ms_log (2, "%s(): Required input not defined: 'ppmstl'\n", __func__);
     return MS_GENERROR;
   }
 
@@ -723,6 +768,8 @@ int
 ms3_url_useragent (const char *program, const char *version)
 {
 #if !defined(LIBMSEED_URL)
+  (void)program; /* Unused */
+  (void)version; /* Unused */
   ms_log (2, "URL support not included in library\n");
   return -1;
 #else
@@ -751,6 +798,7 @@ int
 ms3_url_userpassword (const char *userpassword)
 {
 #if !defined(LIBMSEED_URL)
+  (void) userpassword; /* Unused */
   ms_log (2, "URL support not included in library\n");
   return -1;
 #else
@@ -779,6 +827,7 @@ int
 ms3_url_addheader (const char *header)
 {
 #if !defined(LIBMSEED_URL)
+  (void)header; /* Unused */
   ms_log (2, "URL support not included in library\n");
   return -1;
 #else
@@ -856,7 +905,7 @@ msr3_writemseed (MS3Record *msr, const char *mspath, int8_t overwrite,
 
   if (!msr || !mspath)
   {
-    ms_log (2, "Required argument not defined: 'msr' or 'mspath'\n");
+    ms_log (2, "%s(): Required input not defined: 'msr' or 'mspath'\n", __func__);
     return -1;
   }
 
@@ -877,7 +926,7 @@ msr3_writemseed (MS3Record *msr, const char *mspath, int8_t overwrite,
   /* Close file and return record count */
   fclose (ofp);
 
-  return (packedrecords >= 0) ? packedrecords : -1;
+  return packedrecords;
 } /* End of msr3_writemseed() */
 
 /**********************************************************************/ /**
@@ -917,7 +966,7 @@ mstl3_writemseed (MS3TraceList *mstl, const char *mspath, int8_t overwrite,
 
   if (!mstl || !mspath)
   {
-    ms_log (2, "Required argument not defined: 'msr' or 'mspath'\n");
+    ms_log (2, "%s(): Required input not defined: 'msr' or 'mspath'\n", __func__);
     return -1;
   }
 
@@ -944,7 +993,7 @@ mstl3_writemseed (MS3TraceList *mstl, const char *mspath, int8_t overwrite,
   /* Close file and return record count */
   fclose (ofp);
 
-  return (packedrecords >= 0) ? packedrecords : -1;
+  return packedrecords;
 } /* End of mstl3_writemseed() */
 
 
@@ -963,12 +1012,12 @@ mstl3_writemseed (MS3TraceList *mstl, const char *mspath, int8_t overwrite,
 char *
 parse_pathname_range (const char *string, int64_t *start, int64_t *end)
 {
-  char startstr[21] = {0}; /* Maximum of 20 digit value */
-  char endstr[21]   = {0}; /* Maximum of 20 digit value */
-  int startdigits   = 0;
-  int enddigits     = 0;
-  char *dash        = NULL;
-  char *at          = NULL;
+  char startstr[21]   = {0}; /* Maximum of 20 digit value */
+  char endstr[21]     = {0}; /* Maximum of 20 digit value */
+  uint8_t startdigits = 0;
+  uint8_t enddigits   = 0;
+  char *dash          = NULL;
+  char *at            = NULL;
   char *ptr;
 
   if (!string || (!start || !end))

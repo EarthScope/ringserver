@@ -1,3 +1,67 @@
+2024.024: 3.1.1
+	- Change library compatibility version in Makefile to MAJOR.1.0, as this is now
+	incompatible with the x.0.0 releases.
+
+2024.024: 3.1.0
+	BREAKING CHANGES, data structure and an API changes:
+	- `MS3Record.encoding` now int16_t instead of int8_t.
+	- `MS3Record.datalength` now uint32_t instead of uint16_t (change in 3.0.18).
+	- `MS3Record.datasize` and `MS3TraceSeg.datasize` now uint64_t instead of size_t.
+	- `ms3_detect()` now returns int64_t instead of int.
+	- `mstl3_unpack_recordlist()`'s `outputsize` argument is now uint64_t instead of size_t.
+	- `mseh_get_ptr_r()`'s `maxlength` is now uint32_t instead of size_t.
+
+	- Fix to handle full range of allowed encoding values from 0-255.
+	- Fix to handle detection of huge record lengths beyond MAXRECLEN gracefully.
+	- Add more checks to avoid writing impossible values to miniSEED v2 blockette fields.
+	- Fix all compiler warnings at level -Wextra for clang, gcc, and \W3 for MSVC.
+
+2024.015:
+	- Fix build of DLL target on Windows by defining exports in libmseed.def.
+
+2024.007:
+	- Improve formatting of gap list produced by mstl3_printgaplist().
+
+2024.006: 3.0.18
+	- ms_nslc2sid() requires all codes except location to be set to reduce misuse.
+	- Fix raw, diagnostic generation of SIDs from miniSEED v2 when full codes are used.
+	- Fix handling of data length field in miniSEED v3 as 32-bits instead of 16-bits.
+	- Increase MAXRECLEN from 131172 to 10485760 (10 MiB) for v3 records.
+	- Define MAXRECLENv2 as 131172 (131+ KiB) to limit miniSEED v2 records and add
+	test for sample counts beyond the 16-bit field limit in v2 records when packing.
+	- Update yyjson to release 0.8.0.
+
+2023.335:
+	- Add LMIO_FD type of reading IO via arbitrary file descriptor and hooks for setting.
+	- Add mseh_replace() to replace extra headers.
+	- Consistently initialize header values to 0, fixing edge cases like header-only records.
+	- Update link in documentation of ms_readleapsecondfile() for sources of leap-seconds.list.
+
+2023.206: 3.0.17
+	- Add tests for default record length and encoding.
+	- Document versioning schema as semantic versioning.
+	- Add const qualifiers to packing routines that do not modify the
+	passed MS3Record structure.
+
+2023.204: 3.0.16
+	- Additional Steim 1 & 2 decoder optimization.
+	- Add more const qualifiers to pointer values.  Thanks @damb.
+
+2023.185:
+	- Fix logic in `msr3_duplicate()` for certain cases.
+	- Add many const qualifiers to pointer values where the library
+	interface does not modify the data.  Thanks @damb
+
+2023.180:
+	- Add const qualifier to record pointer declarations where the
+	library interface does not modify the data.
+
+2023.177:
+	- Incorporate ms_gswapX() functions into libmseed.h to promote inlining.
+	- Optimize Steim 1 & 2 decoders.
+	- Change test for environment variable DECODE_DEBUG to compile-time define
+	- Change test for environment variable ENCODE_DEBUG to compile-time define
+
 2023.162: 3.0.15
 	- Print sample rate in Hz consistently in msr3_print()
 	- Fix writing of SNR values field 9 of Blockette 201 (v2)

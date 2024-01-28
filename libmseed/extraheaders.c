@@ -3,7 +3,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
+ * Copyright (c) 2024 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -147,8 +147,8 @@ parse_json (char *jsonstring, size_t length, LM_PARSED_JSON *parsed)
  * \sa mseh_free_parsestate()
  ***************************************************************************/
 int
-mseh_get_ptr_r (MS3Record *msr, const char *ptr,
-                 void *value, char type, size_t maxlength,
+mseh_get_ptr_r (const MS3Record *msr, const char *ptr,
+                 void *value, char type, uint32_t maxlength,
                  LM_PARSED_JSON **parsestate)
 {
   LM_PARSED_JSON *parsed  = (parsestate) ? *parsestate : NULL;
@@ -161,7 +161,7 @@ mseh_get_ptr_r (MS3Record *msr, const char *ptr,
 
   if (!msr || !ptr)
   {
-    ms_log (2, "%s() Required argument not defined: 'msr' or 'ptr'\n", __func__);
+    ms_log (2, "%s() Required input not defined: 'msr' or 'ptr'\n", __func__);
     return MS_GENERROR;
   }
 
@@ -324,7 +324,7 @@ mseh_set_ptr_r (MS3Record *msr, const char *ptr,
 
   if (!msr || !ptr || !value)
   {
-    ms_log (2, "%s() Required argument not defined: 'msr', 'ptr', or 'value'\n", __func__);
+    ms_log (2, "%s() Required input not defined: 'msr', 'ptr', or 'value'\n", __func__);
     return MS_GENERROR;
   }
 
@@ -513,7 +513,7 @@ mseh_add_event_detection_r (MS3Record *msr, const char *ptr,
 
   if (!msr || !eventdetection)
   {
-    ms_log (2, "%s() Required argument not defined: 'msr' or 'eventdetection'\n", __func__);
+    ms_log (2, "%s() Required input not defined: 'msr' or 'eventdetection'\n", __func__);
     return MS_GENERROR;
   }
 
@@ -656,7 +656,7 @@ mseh_add_calibration_r (MS3Record *msr, const char *ptr,
 
   if (!msr || !calibration)
   {
-    ms_log (2, "%s() Required argument not defined: 'msr' or 'calibration'\n", __func__);
+    ms_log (2, "%s() Required input not defined: 'msr' or 'calibration'\n", __func__);
     return MS_GENERROR;
   }
 
@@ -834,7 +834,7 @@ mseh_add_timing_exception_r (MS3Record *msr, const char *ptr,
 
   if (!msr || !exception)
   {
-    ms_log (2, "%s() Required argument not defined: 'msr' or 'exception'\n", __func__);
+    ms_log (2, "%s() Required input not defined: 'msr' or 'exception'\n", __func__);
     return MS_GENERROR;
   }
 
@@ -923,7 +923,7 @@ mseh_add_recenter_r (MS3Record *msr, const char *ptr, MSEHRecenter *recenter,
 
   if (!msr || !recenter)
   {
-    ms_log (2, "%s() Required argument not defined: 'msr' or 'recenter'\n", __func__);
+    ms_log (2, "%s() Required input not defined: 'msr' or 'recenter'\n", __func__);
     return MS_GENERROR;
   }
 
@@ -1036,7 +1036,7 @@ mseh_serialize (MS3Record *msr, LM_PARSED_JSON **parsestate)
   msr->extra       = serialized;
   msr->extralength = (uint16_t)serialsize;
 
-  return (int)serialsize;
+  return msr->extralength;
 }
 
 /**********************************************************************/ /**
@@ -1072,6 +1072,76 @@ mseh_free_parsestate (LM_PARSED_JSON **parsestate)
 }
 
 /**********************************************************************/ /**
+ * @brief Replace extra headers with supplied JSON
+ *
+ * Parse the supplied JSON string, re-serialize into compact form, and replace
+ * the extra headers of \a msr with the result.
+ *
+ * To _remove_ all of the extra headers, set \a jsonstring to NULL.
+ *
+ * This function cannot be used in combination with the routines that use
+ * a parsed state, i.e. mseh_get_ptr_r() and mseh_set_ptr_r().
+ *
+ * @param[in] msr ::MS3Record to generate extra headers for
+ * @param[in] jsonstring JSON replacment for extra headers of \a msr
+ *
+ * @returns Length of extra headers on success, otherwise a (negative) libmseed error code
+ ***************************************************************************/
+int
+mseh_replace (MS3Record *msr, char *jsonstring)
+{
+  yyjson_read_flag read_flg = YYJSON_READ_NOFLAG;
+  yyjson_write_flag write_flg = YYJSON_WRITE_NOFLAG;
+  yyjson_read_err read_err;
+  yyjson_write_err write_err;
+  yyjson_alc alc = {_priv_malloc, _priv_realloc, _priv_free, NULL};
+  yyjson_doc *doc = NULL;
+
+  char *serialized  = NULL;
+  size_t serialsize = 0;
+
+  if (!msr)
+    return MS_GENERROR;
+
+  if (jsonstring != NULL)
+  {
+    /* Parse JSON into immutable form */
+    if ((doc = yyjson_read_opts (jsonstring, strlen (jsonstring), read_flg, &alc, &read_err)) == NULL)
+    {
+      ms_log (2, "%s() Cannot parse extra header JSON: %s\n",
+              __func__, (read_err.msg) ? read_err.msg : "Unknown error");
+      return MS_GENERROR;
+    }
+
+    /* Serialize new JSON string */
+    serialized = yyjson_write_opts (doc, write_flg, &alc, &serialsize, &write_err);
+
+    if (serialized == NULL)
+    {
+      ms_log (2, "%s() Cannot write extra header JSON: %s\n",
+              __func__, (write_err.msg) ? write_err.msg : "Unknown error");
+      return MS_GENERROR;
+    }
+
+    if (serialsize > UINT16_MAX)
+    {
+      ms_log (2, "%s() New serialization size exceeds limit of %d bytes: %" PRIu64 "\n",
+              __func__, UINT16_MAX, (uint64_t)serialsize);
+      libmseed_memory.free (serialized);
+      return MS_GENERROR;
+    }
+  }
+
+  /* Set new extra headers, replacing existing headers */
+  if (msr->extra)
+    libmseed_memory.free (msr->extra);
+  msr->extra       = serialized;
+  msr->extralength = (uint16_t)serialsize;
+
+  return msr->extralength;
+}
+
+/**********************************************************************/ /**
  * @brief Print the extra header structure for the specified MS3Record.
  *
  * Output is printed in a pretty, formatted form for readability and
@@ -1083,7 +1153,7 @@ mseh_free_parsestate (LM_PARSED_JSON **parsestate)
  * @returns 0 on success and a (negative) libmseed error code on error.
  ***************************************************************************/
 int
-mseh_print (MS3Record *msr, int indent)
+mseh_print (const MS3Record *msr, int indent)
 {
   char *extra;
   int idx;

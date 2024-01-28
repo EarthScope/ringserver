@@ -9,7 +9,7 @@
 # Extract version from libmseed.h, expected line should include LIBMSEED_VERSION "#.#.#"
 MAJOR_VER = $(shell grep LIBMSEED_VERSION libmseed.h | grep -Eo '[0-9]+.[0-9]+.[0-9]+' | cut -d . -f 1)
 FULL_VER = $(shell grep LIBMSEED_VERSION libmseed.h | grep -Eo '[0-9]+.[0-9]+.[0-9]+')
-COMPAT_VER = $(MAJOR_VER).0.0
+COMPAT_VER = $(MAJOR_VER).1.0
 
 # Default settings for install target
 PREFIX ?= /usr/local
@@ -21,9 +21,9 @@ DOCDIR ?= $(DATAROOTDIR)/doc/libmseed
 MANDIR ?= $(DATAROOTDIR)/man
 MAN3DIR ?= $(MANDIR)/man3
 
-LIB_SRCS = fileutils.c genutils.c gswap.c msio.c lookup.c yyjson.c \
-           msrutils.c extraheaders.c pack.c packdata.c tracelist.c gmtime64.c \
-           crc32c.c parseutils.c unpack.c unpackdata.c selection.c logging.c
+LIB_SRCS = fileutils.c genutils.c msio.c lookup.c yyjson.c msrutils.c \
+           extraheaders.c pack.c packdata.c tracelist.c gmtime64.c crc32c.c \
+           parseutils.c unpack.c unpackdata.c selection.c logging.c
 
 LIB_OBJS = $(LIB_SRCS:.c=.o)
 LIB_LOBJS = $(LIB_SRCS:.c=.lo)
@@ -75,7 +75,7 @@ $(LIB_SO): $(LIB_LOBJS)
 	ln -s $(LIB_SO) $(LIB_SO_BASE)
 	ln -s $(LIB_SO) $(LIB_SO_MAJOR)
 
-test check: static FORCE
+test tests check: static FORCE
 	@$(MAKE) -C test test
 
 example: static FORCE

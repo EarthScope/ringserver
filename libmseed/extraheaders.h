@@ -3,7 +3,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
+ * Copyright (c) 2024 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,11 +37,11 @@ void *_priv_realloc(void *ctx, void *ptr, size_t oldsize, size_t size);
 void _priv_free(void *ctx, void *ptr);
 
 /* Internal structure for holding parsed JSON extra headers */
-typedef struct LM_PARSED_JSON
+struct LM_PARSED_JSON_s
 {
   yyjson_doc *doc;
   yyjson_mut_doc *mut_doc;
-} LM_PARSED_JSON;
+};
 
 #ifdef __cplusplus
 }

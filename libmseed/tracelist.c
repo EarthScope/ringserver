@@ -3,7 +3,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
+ * Copyright (c) 2024 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,10 +26,10 @@
 
 #include "libmseed.h"
 
-MS3TraceSeg *mstl3_msr2seg (MS3Record *msr, nstime_t endtime);
-MS3TraceSeg *mstl3_addmsrtoseg (MS3TraceSeg *seg, MS3Record *msr, nstime_t endtime, int8_t whence);
+MS3TraceSeg *mstl3_msr2seg (const MS3Record *msr, nstime_t endtime);
+MS3TraceSeg *mstl3_addmsrtoseg (MS3TraceSeg *seg, const MS3Record *msr, nstime_t endtime, int8_t whence);
 MS3TraceSeg *mstl3_addsegtoseg (MS3TraceSeg *seg1, MS3TraceSeg *seg2);
-MS3RecordPtr *mstl3_add_recordptr (MS3TraceSeg *seg, MS3Record *msr, nstime_t endtime, int8_t whence);
+MS3RecordPtr *mstl3_add_recordptr (MS3TraceSeg *seg, const MS3Record *msr, nstime_t endtime, int8_t whence);
 
 static uint32_t lm_lcg_r (uint64_t *state);
 static uint8_t lm_random_height (uint8_t maximum, uint64_t *state);
@@ -182,7 +182,7 @@ mstl3_findID (MS3TraceList *mstl, const char *sid, uint8_t pubversion, MS3TraceI
 
   if (!mstl || !sid)
   {
-    ms_log (2, "Required argument not defined: 'mstl' or 'sid'\n");
+    ms_log (2, "%s(): Required input not defined: 'mstl' or 'sid'\n", __func__);
     return NULL;
   }
 
@@ -253,7 +253,7 @@ mstl3_addID (MS3TraceList *mstl, MS3TraceID *id, MS3TraceID **prev)
 
   if (!mstl || !id)
   {
-    ms_log (2, "Required argument not defined: 'mstl' or 'id'\n");
+    ms_log (2, "%s(): Required input not defined: 'mstl' or 'id'\n", __func__);
     return NULL;
   }
 
@@ -358,10 +358,11 @@ mstl3_addID (MS3TraceList *mstl, MS3TraceID *id, MS3TraceID **prev)
  * \ref MessageOnError - this function logs a message on error
  ***************************************************************************/
 MS3TraceSeg *
-mstl3_addmsr_recordptr (MS3TraceList *mstl, MS3Record *msr, MS3RecordPtr **pprecptr,
+mstl3_addmsr_recordptr (MS3TraceList *mstl, const MS3Record *msr, MS3RecordPtr **pprecptr,
                         int8_t splitversion, int8_t autoheal, uint32_t flags,
-                        MS3Tolerance *tolerance)
+                        const MS3Tolerance *tolerance)
 {
+  (void)flags; /* Unused */
   MS3TraceID *id = 0;
   MS3TraceID *previd[MSTRACEID_SKIPLIST_HEIGHT] = {NULL};
 
@@ -388,7 +389,7 @@ mstl3_addmsr_recordptr (MS3TraceList *mstl, MS3Record *msr, MS3RecordPtr **pprec
 
   if (!mstl || !msr)
   {
-    ms_log (2, "Required argument not defined: 'mstl' or 'msr'\n");
+    ms_log (2, "%s(): Required input not defined: 'mstl' or 'msr'\n", __func__);
     return NULL;
   }
 
@@ -849,9 +850,9 @@ mstl3_addmsr_recordptr (MS3TraceList *mstl, MS3Record *msr, MS3RecordPtr **pprec
  * \sa mstl3_addmsr()
  *********************************************************************/
 int64_t
-mstl3_readbuffer (MS3TraceList **ppmstl, char *buffer, uint64_t bufferlength,
+mstl3_readbuffer (MS3TraceList **ppmstl, const char *buffer, uint64_t bufferlength,
                   int8_t splitversion, uint32_t flags,
-                  MS3Tolerance *tolerance, int8_t verbose)
+                  const MS3Tolerance *tolerance, int8_t verbose)
 {
   return mstl3_readbuffer_selection (ppmstl, buffer, bufferlength,
                                      splitversion, flags, tolerance,
@@ -898,9 +899,9 @@ mstl3_readbuffer (MS3TraceList **ppmstl, char *buffer, uint64_t bufferlength,
  * \sa mstl3_addmsr()
  *********************************************************************/
 int64_t
-mstl3_readbuffer_selection (MS3TraceList **ppmstl, char *buffer, uint64_t bufferlength,
+mstl3_readbuffer_selection (MS3TraceList **ppmstl, const char *buffer, uint64_t bufferlength,
                             int8_t splitversion, uint32_t flags,
-                            MS3Tolerance *tolerance, MS3Selections *selections,
+                            const MS3Tolerance *tolerance, const MS3Selections *selections,
                             int8_t verbose)
 {
   MS3Record *msr   = NULL;
@@ -915,7 +916,7 @@ mstl3_readbuffer_selection (MS3TraceList **ppmstl, char *buffer, uint64_t buffer
 
   if (!ppmstl)
   {
-    ms_log (2, "Required argument not defined: 'ppmstl'\n");
+    ms_log (2, "%s(): Required input not defined: 'ppmstl'\n", __func__);
     return MS_GENERROR;
   }
 
@@ -1021,11 +1022,17 @@ mstl3_readbuffer_selection (MS3TraceList **ppmstl, char *buffer, uint64_t buffer
  * \ref MessageOnError - this function logs a message on error
  ***************************************************************************/
 MS3TraceSeg *
-mstl3_msr2seg (MS3Record *msr, nstime_t endtime)
+mstl3_msr2seg (const MS3Record *msr, nstime_t endtime)
 {
   MS3TraceSeg *seg = 0;
   size_t datasize = 0;
   int samplesize;
+
+  if (!msr)
+  {
+    ms_log (2, "%s(): Required input not defined: 'msr'\n", __func__);
+    return NULL;
+  }
 
   if (!(seg = (MS3TraceSeg *)libmseed_memory.malloc (sizeof (MS3TraceSeg))))
   {
@@ -1080,7 +1087,7 @@ mstl3_msr2seg (MS3Record *msr, nstime_t endtime)
  * \ref MessageOnError - this function logs a message on error
  ***************************************************************************/
 MS3TraceSeg *
-mstl3_addmsrtoseg (MS3TraceSeg *seg, MS3Record *msr, nstime_t endtime, int8_t whence)
+mstl3_addmsrtoseg (MS3TraceSeg *seg, const MS3Record *msr, nstime_t endtime, int8_t whence)
 {
   int samplesize = 0;
   void *newdatasamples = NULL;
@@ -1088,7 +1095,7 @@ mstl3_addmsrtoseg (MS3TraceSeg *seg, MS3Record *msr, nstime_t endtime, int8_t wh
 
   if (!seg || !msr)
   {
-    ms_log (2, "Required argument not defined: 'seg' or 'msr'\n");
+    ms_log (2, "%s(): Required input not defined: 'seg' or 'msr'\n", __func__);
     return NULL;
   }
 
@@ -1112,7 +1119,9 @@ mstl3_addmsrtoseg (MS3TraceSeg *seg, MS3Record *msr, nstime_t endtime, int8_t wh
 
     if (libmseed_prealloc_block_size)
     {
-      newdatasamples = libmseed_memory_prealloc (seg->datasamples, newdatasize, &(seg->datasize));
+      size_t current_size = seg->datasize;
+      newdatasamples = libmseed_memory_prealloc (seg->datasamples, newdatasize, &current_size);
+      seg->datasize = current_size;
     }
     else
     {
@@ -1189,7 +1198,7 @@ mstl3_addsegtoseg (MS3TraceSeg *seg1, MS3TraceSeg *seg2)
 
   if (!seg1 || !seg2)
   {
-    ms_log (2, "Required argument not defined: 'seg1' or 'seg2'\n");
+    ms_log (2, "%s(): Required input not defined: 'seg1' or 'seg2'\n", __func__);
     return NULL;
   }
 
@@ -1213,7 +1222,9 @@ mstl3_addsegtoseg (MS3TraceSeg *seg1, MS3TraceSeg *seg2)
 
     if (libmseed_prealloc_block_size)
     {
-      newdatasamples = libmseed_memory_prealloc (seg1->datasamples, newdatasize, &(seg1->datasize));
+      size_t current_size = seg1->datasize;
+      newdatasamples = libmseed_memory_prealloc (seg1->datasamples, newdatasize, &current_size);
+      seg1->datasize = current_size;
     }
     else
     {
@@ -1289,13 +1300,13 @@ mstl3_addsegtoseg (MS3TraceSeg *seg1, MS3TraceSeg *seg2)
  * \sa mstl3_addmsr()
  ***************************************************************************/
 MS3RecordPtr *
-mstl3_add_recordptr (MS3TraceSeg *seg, MS3Record *msr, nstime_t endtime, int8_t whence)
+mstl3_add_recordptr (MS3TraceSeg *seg, const MS3Record *msr, nstime_t endtime, int8_t whence)
 {
   MS3RecordPtr *recordptr = NULL;
 
   if (!seg || !msr)
   {
-    ms_log (2, "Required argument not defined: 'seg' or 'msr'\n");
+    ms_log (2, "%s(): Required input not defined: 'seg' or 'msr'\n", __func__);
     return NULL;
   }
 
@@ -1405,7 +1416,7 @@ mstl3_convertsamples (MS3TraceSeg *seg, char type, int8_t truncate)
 
   if (!seg)
   {
-    ms_log (2, "Required argument not defined: 'seg'\n");
+    ms_log (2, "%s(): Required input not defined: 'seg'\n", __func__);
     return -1;
   }
 
@@ -1555,7 +1566,7 @@ mstl3_resize_buffers (MS3TraceList *mstl)
 
   if (!mstl)
   {
-    ms_log (2, "Required argument not defined: 'mstl'\n");
+    ms_log (2, "%s(): Required input not defined: 'mstl'\n", __func__);
     return MS_GENERROR;
   }
 
@@ -1638,17 +1649,17 @@ mstl3_resize_buffers (MS3TraceList *mstl)
  ***************************************************************************/
 int64_t
 mstl3_unpack_recordlist (MS3TraceID *id, MS3TraceSeg *seg, void *output,
-                         size_t outputsize, int8_t verbose)
+                         uint64_t outputsize, int8_t verbose)
 {
   MS3RecordPtr *recordptr = NULL;
   int64_t unpackedsamples = 0;
   int64_t totalunpackedsamples = 0;
 
   char *filebuffer = NULL;
-  size_t filebuffersize = 0;
+  int64_t filebuffersize = 0;
 
-  size_t outputoffset = 0;
-  size_t decodedsize = 0;
+  uint64_t outputoffset = 0;
+  uint64_t decodedsize = 0;
   uint8_t samplesize = 0;
   char sampletype = 0;
   char recsampletype = 0;
@@ -1667,7 +1678,7 @@ mstl3_unpack_recordlist (MS3TraceID *id, MS3TraceSeg *seg, void *output,
 
   if (!id || !seg)
   {
-    ms_log (2, "Required argument not defined: 'id' or 'seg'\n");
+    ms_log (2, "%s(): Required input not defined: 'id' or 'seg'\n", __func__);
     return -1;
   }
 
@@ -1679,7 +1690,7 @@ mstl3_unpack_recordlist (MS3TraceID *id, MS3TraceSeg *seg, void *output,
 
   recordptr = seg->recordlist->first;
 
-  if (ms_encoding_sizetype(recordptr->msr->encoding, &samplesize, &sampletype))
+  if (ms_encoding_sizetype((uint8_t)recordptr->msr->encoding, &samplesize, &sampletype))
   {
     ms_log (2, "%s: Cannot determine sample size and type for encoding: %u\n",
             id->sid, recordptr->msr->encoding);
@@ -1687,14 +1698,14 @@ mstl3_unpack_recordlist (MS3TraceID *id, MS3TraceSeg *seg, void *output,
   }
 
   /* Calculate buffer size needed for unpacked samples */
-  decodedsize = (size_t)seg->samplecnt * samplesize;
+  decodedsize = seg->samplecnt * samplesize;
 
   /* If output buffer is supplied, check needed size */
   if (output)
   {
     if (decodedsize > outputsize)
     {
-      ms_log (2, "%s: Output buffer (%"PRIsize_t" bytes) is not large enough for decoded data (%"PRIsize_t" bytes)\n",
+      ms_log (2, "%s: Output buffer (%" PRIu64 " bytes) is not large enough for decoded data (%" PRIu64 " bytes)\n",
               id->sid, decodedsize, outputsize);
       return -1;
     }
@@ -1708,7 +1719,7 @@ mstl3_unpack_recordlist (MS3TraceID *id, MS3TraceSeg *seg, void *output,
   /* Otherwise allocate new buffer */
   else
   {
-    if ((output = libmseed_memory.malloc (decodedsize)) == NULL)
+    if ((output = libmseed_memory.malloc ((size_t)decodedsize)) == NULL)
     {
       ms_log (2, "%s: Cannot allocate memory for segment data samples\n", id->sid);
       return -1;
@@ -1729,7 +1740,7 @@ mstl3_unpack_recordlist (MS3TraceID *id, MS3TraceSeg *seg, void *output,
       continue;
     }
 
-    if (ms_encoding_sizetype(recordptr->msr->encoding, NULL, &recsampletype))
+    if (ms_encoding_sizetype((uint8_t)recordptr->msr->encoding, NULL, &recsampletype))
     {
       ms_log (2, "%s: Cannot determine sample type for encoding: %u\n", id->sid, recordptr->msr->encoding);
 
@@ -1824,7 +1835,7 @@ mstl3_unpack_recordlist (MS3TraceID *id, MS3TraceSeg *seg, void *output,
       }
 
       /* Read record into buffer */
-      if (fread (filebuffer, 1, recordptr->msr->reclen, fileptr) != recordptr->msr->reclen)
+      if (fread (filebuffer, 1, recordptr->msr->reclen, fileptr) != (size_t)recordptr->msr->reclen)
       {
         ms_log (2, "%s: Cannot read record from file: %s (%s)\n",
                 id->sid,
@@ -1848,7 +1859,7 @@ mstl3_unpack_recordlist (MS3TraceID *id, MS3TraceSeg *seg, void *output,
 
     /* Decode data from buffer */
     unpackedsamples = ms_decode_data (input, recordptr->msr->reclen - recordptr->dataoffset,
-                                      recordptr->msr->encoding, recordptr->msr->samplecnt,
+                                      (uint8_t)recordptr->msr->encoding, recordptr->msr->samplecnt,
                                       (unsigned char *)output + outputoffset, decodedsize - outputoffset,
                                       &sampletype, recordptr->msr->swapflag, id->sid, verbose);
 
@@ -1978,7 +1989,7 @@ mstl3_pack (MS3TraceList *mstl, void (*record_handler) (char *, int, void *),
 
   if (!mstl)
   {
-    ms_log (2, "Required argument not defined: 'mstl'\n");
+    ms_log (2, "%s(): Required input not defined: 'mstl'\n", __func__);
     return -1;
   }
 
@@ -2143,11 +2154,11 @@ mstl3_pack (MS3TraceList *mstl, void (*record_handler) (char *, int, void *),
  * @param[in] versions Flag to control inclusion of publication version on SourceIDs
  ***************************************************************************/
 void
-mstl3_printtracelist (MS3TraceList *mstl, ms_timeformat_t timeformat,
+mstl3_printtracelist (const MS3TraceList *mstl, ms_timeformat_t timeformat,
                       int8_t details, int8_t gaps, int8_t versions)
 {
-  MS3TraceID *id = 0;
-  MS3TraceSeg *seg = 0;
+  const MS3TraceID *id = 0;
+  const MS3TraceSeg *seg = 0;
   char stime[40];
   char etime[40];
   char gapstr[40];
@@ -2158,7 +2169,7 @@ mstl3_printtracelist (MS3TraceList *mstl, ms_timeformat_t timeformat,
   int segcnt = 0;
 
   char versioned_sid[LM_SIDLEN + 10] = {0};
-  char *display_sid = NULL;
+  const char *display_sid = NULL;
 
   if (!mstl)
   {
@@ -2275,10 +2286,10 @@ mstl3_printtracelist (MS3TraceList *mstl, ms_timeformat_t timeformat,
  * @param[in] subseconds Inclusion of subseconds, one of @ref ms_subseconds_t
  ***************************************************************************/
 void
-mstl3_printsynclist (MS3TraceList *mstl, char *dccid, ms_subseconds_t subseconds)
+mstl3_printsynclist (const MS3TraceList *mstl, const char *dccid, ms_subseconds_t subseconds)
 {
-  MS3TraceID *id = 0;
-  MS3TraceSeg *seg = 0;
+  const MS3TraceID *id = 0;
+  const MS3TraceSeg *seg = 0;
   char starttime[40];
   char endtime[40];
   char yearday[32];
@@ -2348,11 +2359,11 @@ mstl3_printsynclist (MS3TraceList *mstl, char *dccid, ms_subseconds_t subseconds
  * @param[in] maxgap Maximum gap to print in seconds (pointer to value)
  ***************************************************************************/
 void
-mstl3_printgaplist (MS3TraceList *mstl, ms_timeformat_t timeformat,
+mstl3_printgaplist (const MS3TraceList *mstl, ms_timeformat_t timeformat,
                     double *mingap, double *maxgap)
 {
-  MS3TraceID *id = 0;
-  MS3TraceSeg *seg = 0;
+  const MS3TraceID *id = 0;
+  const MS3TraceSeg *seg = 0;
 
   char time1[40], time2[40];
   char gapstr[40];
@@ -2363,12 +2374,11 @@ mstl3_printgaplist (MS3TraceList *mstl, ms_timeformat_t timeformat,
   int gapcnt = 0;
 
   if (!mstl)
+  {
     return;
+  }
 
-  if (!mstl->numtraceids)
-    return;
-
-  ms_log (0, "   SourceID              Last Sample              Next Sample       Gap  Samples\n");
+  ms_log (0, "       SourceID                      Last Sample                 Next Sample          Gap  Samples\n");
 
   id = mstl->traces.next[0];
   while (id)
@@ -2431,7 +2441,7 @@ mstl3_printgaplist (MS3TraceList *mstl, ms_timeformat_t timeformat,
         if (ms_nstime2timestr (seg->next->starttime, time2, timeformat, NANO_MICRO) == NULL)
           ms_log (2, "Cannot convert trace end time for %s\n", id->sid);
 
-        ms_log (0, "%-17s %-24s %-24s %-4s %-.8g\n",
+        ms_log (0, "%-27s %-28s %-28s %-4s %-.8g\n",
                 id->sid, time1, time2, gapstr, nsamples);
 
         gapcnt++;

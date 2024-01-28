@@ -17,7 +17,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2023:
+ * Copyright (C) 2024:
  * @author Chad Trabant, EarthScope Data Services
  ***************************************************************************/
 
@@ -28,8 +28,8 @@
 extern "C" {
 #endif
 
-#define LIBMSEED_VERSION "3.0.15"    //!< Library version
-#define LIBMSEED_RELEASE "2023.162"  //!< Library release date
+#define LIBMSEED_VERSION "3.1.1"     //!< Library version
+#define LIBMSEED_RELEASE "2024.024"  //!< Library release date
 
 /** @defgroup io-functions File and URL I/O */
 /** @defgroup miniseed-record Record Handling */
@@ -114,6 +114,7 @@ extern "C" {
     #define strncasecmp _strnicmp
     #define strtoull _strtoui64
     #define fileno _fileno
+    #define fdopen _fdopen
   #endif
 
   /* Extras needed for MinGW */
@@ -132,7 +133,8 @@ extern "C" {
 #endif
 
 #define MINRECLEN 40       //!< Minimum miniSEED record length supported
-#define MAXRECLEN 131172   //!< Maximum miniSEED record length supported
+#define MAXRECLEN 10485760 //!< Maximum miniSEED record length supported (10MiB)
+#define MAXRECLENv2 131172 //!< Maximum v2 miniSEED record length supported (131+ KiB or 2^17)
 
 #define LM_SIDLEN 64       //!< Length of source ID string
 
@@ -337,13 +339,23 @@ extern int ms_md2doy (int year, int month, int mday, int *yday);
     - \c 'd' - 64-bit float (IEEE) data samples
 */
 
+/** @def MS_PACK_DEFAULT_RECLEN
+    @brief Default record length to use when ::MS3Record.reclen == -1
+ */
+#define MS_PACK_DEFAULT_RECLEN 4096
+
+/** @def MS_PACK_DEFAULT_ENCODING
+    @brief Default data encoding to use when ::MS3Record.encoding == -1
+ */
+#define MS_PACK_DEFAULT_ENCODING DE_STEIM2
+
 /** @addtogroup miniseed-record
     @brief Definitions and functions related to individual miniSEED records
     @{ */
 
 /** @brief miniSEED record container */
 typedef struct MS3Record {
-  char           *record;            //!< Raw miniSEED record, if available
+  const char     *record;            //!< Raw miniSEED record, if available
   int32_t         reclen;            //!< Length of miniSEED record in bytes
   uint8_t         swapflag;          //!< Byte swap indicator (bitmask), see @ref byte-swap-flags
 
@@ -353,55 +365,55 @@ typedef struct MS3Record {
   uint8_t         flags;             //!< Record-level bit flags
   nstime_t        starttime;         //!< Record start time (first sample)
   double          samprate;          //!< Nominal sample rate as samples/second (Hz) or period (s)
-  int8_t          encoding;          //!< Data encoding format, see @ref encoding-values
+  int16_t         encoding;          //!< Data encoding format, see @ref encoding-values
   uint8_t         pubversion;        //!< Publication version
   int64_t         samplecnt;         //!< Number of samples in record
   uint32_t        crc;               //!< CRC of entire record
   uint16_t        extralength;       //!< Length of extra headers in bytes
-  uint16_t        datalength;        //!< Length of data payload in bytes
+  uint32_t        datalength;        //!< Length of data payload in bytes
   char           *extra;             //!< Pointer to extra headers
 
   /* Data sample fields */
   void           *datasamples;       //!< Data samples, \a numsamples of type \a sampletype
-  size_t          datasize;          //!< Size of datasamples buffer in bytes
+  uint64_t        datasize;          //!< Size of datasamples buffer in bytes
   int64_t         numsamples;        //!< Number of data samples in datasamples
-  char            sampletype;        //!< Sample type code: a, i, f, d @ref sample-types
+  char            sampletype;        //!< Sample type code: t, i, f, d @ref sample-types
 } MS3Record;
 
-extern int msr3_parse (char *record, uint64_t recbuflen, MS3Record **ppmsr,
+extern int msr3_parse (const char *record, uint64_t recbuflen, MS3Record **ppmsr,
                        uint32_t flags, int8_t verbose);
 
-extern int msr3_pack (MS3Record *msr,
+extern int msr3_pack (const MS3Record *msr,
                       void (*record_handler) (char *, int, void *),
                       void *handlerdata, int64_t *packedsamples,
                       uint32_t flags, int8_t verbose);
 
-extern int msr3_repack_mseed3 (MS3Record *msr, char *record, uint32_t recbuflen, int8_t verbose);
+extern int msr3_repack_mseed3 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_t verbose);
 
-extern int msr3_pack_header3 (MS3Record *msr, char *record, uint32_t recbuflen, int8_t verbose);
+extern int msr3_pack_header3 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_t verbose);
 
-extern int msr3_pack_header2 (MS3Record *msr, char *record, uint32_t recbuflen, int8_t verbose);
+extern int msr3_pack_header2 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_t verbose);
 
 extern int64_t msr3_unpack_data (MS3Record *msr, int8_t verbose);
 
-extern int msr3_data_bounds (MS3Record *msr, uint32_t *dataoffset, uint32_t *datasize);
+extern int msr3_data_bounds (const MS3Record *msr, uint32_t *dataoffset, uint32_t *datasize);
 
-extern int64_t ms_decode_data (const void *input, size_t inputsize, uint8_t encoding,
-                               int64_t samplecount, void *output, size_t outputsize,
-                               char *sampletype, int8_t swapflag, char *sid, int8_t verbose);
+extern int64_t ms_decode_data (const void *input, uint64_t inputsize, uint8_t encoding,
+                               uint64_t samplecount, void *output, uint64_t outputsize,
+                               char *sampletype, int8_t swapflag, const char *sid, int8_t verbose);
 
 extern MS3Record* msr3_init (MS3Record *msr);
 extern void       msr3_free (MS3Record **ppmsr);
-extern MS3Record* msr3_duplicate (MS3Record *msr, int8_t datadup);
-extern nstime_t   msr3_endtime (MS3Record *msr);
-extern void       msr3_print (MS3Record *msr, int8_t details);
+extern MS3Record* msr3_duplicate (const MS3Record *msr, int8_t datadup);
+extern nstime_t   msr3_endtime (const MS3Record *msr);
+extern void       msr3_print (const MS3Record *msr, int8_t details);
 extern int        msr3_resize_buffer (MS3Record *msr);
-extern double     msr3_sampratehz (MS3Record *msr);
-extern double     msr3_host_latency (MS3Record *msr);
+extern double     msr3_sampratehz (const MS3Record *msr);
+extern double     msr3_host_latency (const MS3Record *msr);
 
-extern int ms3_detect (const char *record, uint64_t recbuflen, uint8_t *formatversion);
-extern int ms_parse_raw3 (char *record, int maxreclen, int8_t details);
-extern int ms_parse_raw2 (char *record, int maxreclen, int8_t details, int8_t swapflag);
+extern int64_t ms3_detect (const char *record, uint64_t recbuflen, uint8_t *formatversion);
+extern int ms_parse_raw3 (const char *record, int maxreclen, int8_t details);
+extern int ms_parse_raw2 (const char *record, int maxreclen, int8_t details, int8_t swapflag);
 /** @} */
 
 /** @addtogroup data-selections
@@ -435,19 +447,19 @@ typedef struct MS3Selections {
   uint8_t pubversion;                //!< Selected publication version, use 0 for any
 } MS3Selections;
 
-extern MS3Selections* ms3_matchselect (MS3Selections *selections, char *sid,
-                                       nstime_t starttime, nstime_t endtime,
-                                       int pubversion, MS3SelectTime **ppselecttime);
-extern MS3Selections* msr3_matchselect (MS3Selections *selections, MS3Record *msr,
-                                        MS3SelectTime **ppselecttime);
-extern int ms3_addselect (MS3Selections **ppselections, char *sidpattern,
+extern const MS3Selections* ms3_matchselect (const MS3Selections *selections, const char *sid,
+                                             nstime_t starttime, nstime_t endtime,
+                                             int pubversion, const MS3SelectTime **ppselecttime);
+extern const MS3Selections* msr3_matchselect (const MS3Selections *selections, const MS3Record *msr,
+                                              const MS3SelectTime **ppselecttime);
+extern int ms3_addselect (MS3Selections **ppselections, const char *sidpattern,
                           nstime_t starttime, nstime_t endtime, uint8_t pubversion);
 extern int ms3_addselect_comp (MS3Selections **ppselections,
                                char *network, char* station, char *location, char *channel,
                                nstime_t starttime, nstime_t endtime, uint8_t pubversion);
-extern int ms3_readselectionsfile (MS3Selections **ppselections, char *filename);
+extern int ms3_readselectionsfile (MS3Selections **ppselections, const char *filename);
 extern void ms3_freeselections (MS3Selections *selections);
-extern void ms3_printselections (MS3Selections *selections);
+extern void ms3_printselections (const MS3Selections *selections);
 /** @} */
 
 /** @addtogroup record-list
@@ -539,7 +551,7 @@ typedef struct MS3TraceSeg {
   double          samprate;          //!< Nominal sample rate (Hz)
   int64_t         samplecnt;         //!< Number of samples in trace coverage
   void           *datasamples;       //!< Data samples, \a numsamples of type \a sampletype
-  size_t          datasize;          //!< Size of datasamples buffer in bytes
+  uint64_t        datasize;          //!< Size of datasamples buffer in bytes
   int64_t         numsamples;        //!< Number of data samples in datasamples
   char            sampletype;        //!< Sample type code, see @ref sample-types
   void           *prvtptr;           //!< Private pointer for general use, unused by library
@@ -596,8 +608,8 @@ typedef struct MS3TraceList {
  */
 typedef struct MS3Tolerance
 {
-  double (*time) (MS3Record *msr);     //!< Pointer to function that returns time tolerance
-  double (*samprate) (MS3Record *msr); //!< Pointer to function that returns sample rate tolerance
+  double (*time) (const MS3Record *msr);     //!< Pointer to function that returns time tolerance
+  double (*samprate) (const MS3Record *msr); //!< Pointer to function that returns sample rate tolerance
 } MS3Tolerance;
 
 /** @def MS3Tolerance_INITIALIZER
@@ -616,27 +628,27 @@ extern MS3TraceID*   mstl3_findID (MS3TraceList *mstl, const char *sid, uint8_t 
 #define mstl3_addmsr(mstl, msr, splitversion, autoheal, flags, tolerance) \
   mstl3_addmsr_recordptr (mstl, msr, NULL, splitversion, autoheal, flags, tolerance)
 
-extern MS3TraceSeg*  mstl3_addmsr_recordptr (MS3TraceList *mstl, MS3Record *msr, MS3RecordPtr **pprecptr,
+extern MS3TraceSeg*  mstl3_addmsr_recordptr (MS3TraceList *mstl, const MS3Record *msr, MS3RecordPtr **pprecptr,
                                              int8_t splitversion, int8_t autoheal, uint32_t flags,
-                                             MS3Tolerance *tolerance);
-extern int64_t       mstl3_readbuffer (MS3TraceList **ppmstl, char *buffer, uint64_t bufferlength,
+                                             const MS3Tolerance *tolerance);
+extern int64_t       mstl3_readbuffer (MS3TraceList **ppmstl, const char *buffer, uint64_t bufferlength,
                                        int8_t splitversion, uint32_t flags,
-                                       MS3Tolerance *tolerance, int8_t verbose);
-extern int64_t       mstl3_readbuffer_selection (MS3TraceList **ppmstl, char *buffer, uint64_t bufferlength,
+                                       const MS3Tolerance *tolerance, int8_t verbose);
+extern int64_t       mstl3_readbuffer_selection (MS3TraceList **ppmstl, const char *buffer, uint64_t bufferlength,
                                                  int8_t splitversion, uint32_t flags,
-                                                 MS3Tolerance *tolerance, MS3Selections *selections,
+                                                 const MS3Tolerance *tolerance, const MS3Selections *selections,
                                                  int8_t verbose);
 extern int64_t mstl3_unpack_recordlist (MS3TraceID *id, MS3TraceSeg *seg, void *output,
-                                        size_t outputsize, int8_t verbose);
+                                        uint64_t outputsize, int8_t verbose);
 extern int mstl3_convertsamples (MS3TraceSeg *seg, char type, int8_t truncate);
 extern int mstl3_resize_buffers (MS3TraceList *mstl);
 extern int64_t mstl3_pack (MS3TraceList *mstl, void (*record_handler) (char *, int, void *),
                            void *handlerdata, int reclen, int8_t encoding,
                            int64_t *packedsamples, uint32_t flags, int8_t verbose, char *extra);
-extern void mstl3_printtracelist (MS3TraceList *mstl, ms_timeformat_t timeformat,
+extern void mstl3_printtracelist (const MS3TraceList *mstl, ms_timeformat_t timeformat,
                                   int8_t details, int8_t gaps, int8_t versions);
-extern void mstl3_printsynclist (MS3TraceList *mstl, char *dccid, ms_subseconds_t subseconds);
-extern void mstl3_printgaplist (MS3TraceList *mstl, ms_timeformat_t timeformat,
+extern void mstl3_printsynclist (const MS3TraceList *mstl, const char *dccid, ms_subseconds_t subseconds);
+extern void mstl3_printgaplist (const MS3TraceList *mstl, ms_timeformat_t timeformat,
                                 double *mingap, double *maxgap);
 /** @} */
 
@@ -680,7 +692,8 @@ typedef struct LMIO
   {
     LMIO_NULL = 0,   //!< IO handle type is undefined
     LMIO_FILE = 1,   //!< IO handle is FILE-type
-    LMIO_URL  = 2    //!< IO handle is URL-type
+    LMIO_URL  = 2,   //!< IO handle is URL-type
+    LMIO_FD   = 3    //!< IO handle is a provided file descriptor
   } type;            //!< IO handle type
   void *handle;      //!< Primary IO handle, either file or URL
   void *handle2;     //!< Secondary IO handle for URL
@@ -729,14 +742,14 @@ extern int ms3_readmsr (MS3Record **ppmsr, const char *mspath, uint32_t flags, i
 extern int ms3_readmsr_r (MS3FileParam **ppmsfp, MS3Record **ppmsr, const char *mspath,
                           uint32_t flags, int8_t verbose);
 extern int ms3_readmsr_selection (MS3FileParam **ppmsfp, MS3Record **ppmsr, const char *mspath,
-                                  uint32_t flags, MS3Selections *selections, int8_t verbose);
-extern int ms3_readtracelist (MS3TraceList **ppmstl, const char *mspath, MS3Tolerance *tolerance,
+                                  uint32_t flags, const MS3Selections *selections, int8_t verbose);
+extern int ms3_readtracelist (MS3TraceList **ppmstl, const char *mspath, const MS3Tolerance *tolerance,
                               int8_t splitversion, uint32_t flags, int8_t verbose);
-extern int ms3_readtracelist_timewin (MS3TraceList **ppmstl, const char *mspath, MS3Tolerance *tolerance,
+extern int ms3_readtracelist_timewin (MS3TraceList **ppmstl, const char *mspath, const MS3Tolerance *tolerance,
                                       nstime_t starttime, nstime_t endtime, int8_t splitversion, uint32_t flags,
                                       int8_t verbose);
-extern int ms3_readtracelist_selection (MS3TraceList **ppmstl, const char *mspath, MS3Tolerance *tolerance,
-                                        MS3Selections *selections, int8_t splitversion, uint32_t flags, int8_t verbose);
+extern int ms3_readtracelist_selection (MS3TraceList **ppmstl, const char *mspath, const MS3Tolerance *tolerance,
+                                        const MS3Selections *selections, int8_t splitversion, uint32_t flags, int8_t verbose);
 extern int ms3_url_useragent (const char *program, const char *version);
 extern int ms3_url_userpassword (const char *userpassword);
 extern int ms3_url_addheader (const char *header);
@@ -746,6 +759,7 @@ extern int64_t msr3_writemseed (MS3Record *msr, const char *mspath, int8_t overw
 extern int64_t mstl3_writemseed (MS3TraceList *mst, const char *mspath, int8_t overwrite,
                                  int maxreclen, int8_t encoding, uint32_t flags, int8_t verbose);
 extern int libmseed_url_support (void);
+extern MS3FileParam *ms3_mstl_init_fd (int fd);
 /** @} */
 
 /** @addtogroup string-functions
@@ -893,7 +907,7 @@ typedef struct MSEHRecenter
  * @see mseh_get_ptr_r()
  * @see mseh_set_ptr_r()
  */
-typedef struct LM_PARSED_JSON LM_PARSED_JSON;
+typedef struct LM_PARSED_JSON_s LM_PARSED_JSON;
 
 /** @def mseh_get
     @brief A simple wrapper to access any type of extra header */
@@ -925,8 +939,8 @@ typedef struct LM_PARSED_JSON LM_PARSED_JSON;
 #define mseh_exists(msr, ptr)                  \
   (!mseh_get_ptr_r (msr, ptr, NULL, 0, 0, NULL))
 
-extern int mseh_get_ptr_r (MS3Record *msr, const char *ptr,
-                           void *value, char type, size_t maxlength,
+extern int mseh_get_ptr_r (const MS3Record *msr, const char *ptr,
+                           void *value, char type, uint32_t maxlength,
                            LM_PARSED_JSON **parsestate);
 
 /** @def mseh_set
@@ -976,8 +990,9 @@ extern int mseh_add_recenter_r (MS3Record *msr, const char *ptr,
 
 extern int mseh_serialize (MS3Record *msr, LM_PARSED_JSON **parsestate);
 extern void mseh_free_parsestate (LM_PARSED_JSON **parsestate);
+extern int mseh_replace (MS3Record *msr, char *jsonstring);
 
-extern int mseh_print (MS3Record *msr, int indent);
+extern int mseh_print (const MS3Record *msr, int indent);
 /** @} */
 
 /** @addtogroup record-list
@@ -1185,6 +1200,10 @@ extern int ms_rlog_free (MSLogParam *logp);
 /** @addtogroup leapsecond
     @brief Utilities for handling leap seconds
 
+    @note The library contains an embedded list of leap seconds through
+    year 2023.  These functions are only needed if leap seconds are added
+    in 2024 and beyond.
+
     The library contains functionality to load a list of leap seconds
     into a global list, which is then used to determine when leap
     seconds occurred, ignoring any flags in the data itself regarding
@@ -1227,9 +1246,9 @@ extern int ms_readleapsecondfile (const char *filename);
   @brief General utilities
   @{ */
 
-extern uint8_t ms_samplesize (const char sampletype);
-extern int ms_encoding_sizetype (const uint8_t encoding, uint8_t *samplesize, char *sampletype);
-extern const char *ms_encodingstr (const uint8_t encoding);
+extern uint8_t ms_samplesize (char sampletype);
+extern int ms_encoding_sizetype (uint8_t encoding, uint8_t *samplesize, char *sampletype);
+extern const char *ms_encodingstr (uint8_t encoding);
 extern const char *ms_errorstr (int errorcode);
 
 extern nstime_t ms_sampletime (nstime_t time, int64_t offset, double samprate);
@@ -1247,39 +1266,75 @@ extern uint64_t lmp_nanosleep (uint64_t nanoseconds);
 extern uint32_t ms_crc32c (const uint8_t *input, int length, uint32_t previousCRC32C);
 
 /** In-place byte swapping of 2 byte quantity */
-extern void ms_gswap2 (void *data2);
+static inline void
+ms_gswap2 (void *data2)
+{
+  uint16_t dat;
+
+  memcpy (&dat, data2, 2);
+
+  dat = ((dat & 0xff00) >> 8) | ((dat & 0x00ff) << 8);
+
+  memcpy (data2, &dat, 2);
+}
+
 /** In-place byte swapping of 4 byte quantity */
-extern void ms_gswap4 (void *data4);
+static inline void
+ms_gswap4 (void *data4)
+{
+  uint32_t dat;
+
+  memcpy (&dat, data4, 4);
+
+  dat = ((dat & 0xff000000) >> 24) | ((dat & 0x000000ff) << 24) |
+        ((dat & 0x00ff0000) >>  8) | ((dat & 0x0000ff00) <<  8);
+
+  memcpy (data4, &dat, 4);
+}
+
 /** In-place byte swapping of 8 byte quantity */
-extern void ms_gswap8 (void *data8);
+static inline void
+ms_gswap8 (void *data8)
+{
+  uint64_t dat;
+
+  memcpy (&dat, data8, sizeof(uint64_t));
+
+  dat = ((dat & 0xff00000000000000) >> 56) | ((dat & 0x00000000000000ff) << 56) |
+        ((dat & 0x00ff000000000000) >> 40) | ((dat & 0x000000000000ff00) << 40) |
+        ((dat & 0x0000ff0000000000) >> 24) | ((dat & 0x0000000000ff0000) << 24) |
+        ((dat & 0x000000ff00000000) >>  8) | ((dat & 0x00000000ff000000) <<  8);
+
+  memcpy (data8, &dat, sizeof(uint64_t));
+}
 
 #if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 5) || defined (__clang__)
 /** Deprecated: In-place byte swapping of 2 byte, memory-aligned, quantity */
 __attribute__ ((deprecated("Use ms_gswap2 instead.")))
-extern void     ms_gswap2a ( void *data2 );
+static inline void ms_gswap2a (void *data2) { ms_gswap2 (data2); }
 /** Deprecated: In-place byte swapping of 4 byte, memory-aligned, quantity */
 __attribute__ ((deprecated("Use ms_gswap4 instead.")))
-extern void     ms_gswap4a ( void *data4 );
+static inline void ms_gswap4a (void *data4) { ms_gswap4 (data4); }
 /** Deprecated: In-place byte swapping of 8 byte, memory-aligned, quantity */
 __attribute__ ((deprecated("Use ms_gswap8 instead.")))
-extern void     ms_gswap8a ( void *data8 );
+static inline void ms_gswap8a (void *data8) { ms_gswap8 (data8); }
 #elif defined(_MSC_FULL_VER) && (_MSC_FULL_VER > 140050320)
 /** Deprecated: In-place byte swapping of 2 byte, memory-aligned, quantity */
 __declspec(deprecated("Use ms_gswap2 instead."))
-extern void     ms_gswap2a ( void *data2 );
+static inline void ms_gswap2a (void *data2) { ms_gswap2 (data2); }
 /** Deprecated: In-place byte swapping of 4 byte, memory-aligned, quantity */
 __declspec(deprecated("Use ms_gswap4 instead."))
-extern void     ms_gswap4a ( void *data4 );
+static inline void ms_gswap4a (void *data4) { ms_gswap4 (data4); }
 /** Deprecated: In-place byte swapping of 8 byte, memory-aligned, quantity */
 __declspec(deprecated("Use ms_gswap8 instead."))
-extern void     ms_gswap8a ( void *data8 );
+static inline void ms_gswap8a (void *data8) { ms_gswap8 (data8); }
 #else
 /** Deprecated: In-place byte swapping of 2 byte, memory-aligned, quantity */
-extern void     ms_gswap2a ( void *data2 );
+static inline void ms_gswap2a (void *data2) { ms_gswap2 (data2); }
 /** Deprecated: In-place byte swapping of 4 byte, memory-aligned, quantity */
-extern void     ms_gswap4a ( void *data4 );
+static inline void ms_gswap4a (void *data4) { ms_gswap4 (data4); }
 /** Deprecated: In-place byte swapping of 8 byte, memory-aligned, quantity */
-extern void     ms_gswap8a ( void *data8 );
+static inline void ms_gswap8a (void *data8) { ms_gswap8 (data8); }
 #endif
 
 /** @} */

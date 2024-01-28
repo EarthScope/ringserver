@@ -3,7 +3,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
+ * Copyright (c) 2024 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -366,7 +366,7 @@ rlog_int (MSLogParam *logp, const char *function, int level,
       strncpy (message, "Error: ", MAX_LOG_MSG_LENGTH);
     }
 
-    presize = strlen (message);
+    presize = (int)strlen (message);
     printed = vsnprintf (&message[presize],
                          MAX_LOG_MSG_LENGTH - presize,
                          format, *varlist);
@@ -381,7 +381,7 @@ rlog_int (MSLogParam *logp, const char *function, int level,
       message[MAX_LOG_MSG_LENGTH - 1] = '\0';
     }
 
-    presize = strlen (message);
+    presize = (int)strlen (message);
     printed = vsnprintf (&message[presize],
                          MAX_LOG_MSG_LENGTH - presize,
                          format, *varlist);
@@ -396,7 +396,7 @@ rlog_int (MSLogParam *logp, const char *function, int level,
       message[MAX_LOG_MSG_LENGTH - 1] = '\0';
     }
 
-    presize = strlen (message);
+    presize = (int)strlen (message);
     printed = vsnprintf (&message[presize],
                          MAX_LOG_MSG_LENGTH - presize,
                          format, *varlist);

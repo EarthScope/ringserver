@@ -9,7 +9,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
+ * Copyright (c) 2024 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -72,7 +72,7 @@ static nstime_t ms_btime2nstime (uint8_t *btime, int8_t swapflag);
  * \ref MessageOnError - this function logs a message on error
  ***************************************************************************/
 int64_t
-msr3_unpack_mseed3 (char *record, int reclen, MS3Record **ppmsr,
+msr3_unpack_mseed3 (const char *record, int reclen, MS3Record **ppmsr,
                     uint32_t flags, int8_t verbose)
 {
   MS3Record *msr = NULL;
@@ -85,7 +85,7 @@ msr3_unpack_mseed3 (char *record, int reclen, MS3Record **ppmsr,
 
   if (!record || !ppmsr)
   {
-    ms_log (2, "Required argument not defined: 'record' or 'ppmsr'\n");
+    ms_log (2, "%s(): Required input not defined: 'record' or 'ppmsr'\n", __func__);
     return MS_GENERROR;
   }
 
@@ -191,7 +191,7 @@ msr3_unpack_mseed3 (char *record, int reclen, MS3Record **ppmsr,
     msr->extra[msr->extralength] = '\0';
   }
 
-  msr->datalength = HO2u (*pMS3FSDH_DATALENGTH (record), msr->swapflag);
+  msr->datalength = HO4u (*pMS3FSDH_DATALENGTH (record), msr->swapflag);
 
   /* Determine data payload byte swapping.
      Steim encodings are big endian.
@@ -255,7 +255,7 @@ msr3_unpack_mseed3 (char *record, int reclen, MS3Record **ppmsr,
  * \ref MessageOnError - this function logs a message on error
  ***************************************************************************/
 int64_t
-msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
+msr3_unpack_mseed2 (const char *record, int reclen, MS3Record **ppmsr,
                     uint32_t flags, int8_t verbose)
 {
   int B1000offset = 0;
@@ -287,7 +287,7 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
 
   if (!record || !ppmsr)
   {
-    ms_log (2, "Required argument not defined: 'record' or 'ppmsr'\n");
+    ms_log (2, "%s(): Required input not defined: 'record' or 'ppmsr'\n", __func__);
     return MS_GENERROR;
   }
 
@@ -1019,22 +1019,23 @@ msr3_unpack_mseed2 (char *record, int reclen, MS3Record **ppmsr,
  * \ref MessageOnError - this function logs a message on error
  ************************************************************************/
 int
-msr3_data_bounds (MS3Record *msr, uint32_t *dataoffset, uint32_t *datasize)
+msr3_data_bounds (const MS3Record *msr, uint32_t *dataoffset, uint32_t *datasize)
 {
   uint8_t nullframe[64] = {0};
   uint8_t samplebytes = 0;
   uint64_t rawsize;
 
-  if (!msr || !dataoffset || !datasize)
+  if (!msr || !msr->record || !dataoffset || !datasize)
   {
-    ms_log (2, "Required argument not defined: 'msr', 'dataoffset' or 'datasize'\n");
+    ms_log (2, "%s(): Required input not defined: 'msr', 'msr->record', 'dataoffset' or 'datasize'\n",
+            __func__);
     return MS_GENERROR;
   }
 
   /* Determine offset to data */
   if (msr->formatversion == 3)
   {
-    *dataoffset = MS3FSDH_LENGTH + strlen (msr->sid) + msr->extralength;
+    *dataoffset = MS3FSDH_LENGTH + (uint32_t)strlen (msr->sid) + msr->extralength;
     *datasize = msr->datalength;
   }
   else if (msr->formatversion == 2)
@@ -1119,7 +1120,7 @@ msr3_data_bounds (MS3Record *msr, uint32_t *dataoffset, uint32_t *datasize)
 int64_t
 msr3_unpack_data (MS3Record *msr, int8_t verbose)
 {
-  uint32_t datasize; /* byte size of data samples in record */
+  uint32_t datasize; /* length of data payload in bytes */
   int64_t nsamples; /* number of samples unpacked */
   size_t unpacksize; /* byte size of unpacked samples */
   uint8_t samplesize = 0; /* size of the data samples in bytes */
@@ -1129,7 +1130,7 @@ msr3_unpack_data (MS3Record *msr, int8_t verbose)
 
   if (!msr)
   {
-    ms_log (2, "Required argument not defined: 'msr'\n");
+    ms_log (2, "%s(): Required input not defined: 'msr'\n", __func__);
     return MS_GENERROR;
   }
 
@@ -1180,7 +1181,7 @@ msr3_unpack_data (MS3Record *msr, int8_t verbose)
     msr->encoding = DE_STEIM1;
   }
 
-  if (ms_encoding_sizetype(msr->encoding, &samplesize, NULL))
+  if (ms_encoding_sizetype((uint8_t)msr->encoding, &samplesize, NULL))
   {
     ms_log (2, "%s: Cannot determine sample size for encoding: %u\n", msr->sid, msr->encoding);
     return MS_GENERROR;
@@ -1209,7 +1210,9 @@ msr3_unpack_data (MS3Record *msr, int8_t verbose)
   {
     if (libmseed_prealloc_block_size)
     {
-      msr->datasamples = libmseed_memory_prealloc (msr->datasamples, unpacksize, &(msr->datasize));
+      size_t current_size  = msr->datasize;
+      msr->datasamples = libmseed_memory_prealloc (msr->datasamples, unpacksize, &current_size);
+      msr->datasize = current_size;
     }
     else
     {
@@ -1238,7 +1241,7 @@ msr3_unpack_data (MS3Record *msr, int8_t verbose)
   if (verbose > 2)
     ms_log (0, "%s: Unpacking %" PRId64 " samples\n", msr->sid, msr->samplecnt);
 
-  nsamples = ms_decode_data (encoded, datasize, msr->encoding, msr->samplecnt,
+  nsamples = ms_decode_data (encoded, datasize, (uint8_t)msr->encoding, msr->samplecnt,
                              msr->datasamples, msr->datasize, &(msr->sampletype),
                              (msr->swapflag & MSSWAP_PAYLOAD), msr->sid, verbose);
 
@@ -1270,41 +1273,33 @@ msr3_unpack_data (MS3Record *msr, int8_t verbose)
  * \ref MessageOnError - this function logs a message on error
  ************************************************************************/
 int64_t
-ms_decode_data (const void *input, size_t inputsize, uint8_t encoding,
-                int64_t samplecount, void *output, size_t outputsize,
-                char *sampletype, int8_t swapflag, char *sid, int8_t verbose)
+ms_decode_data (const void *input, uint64_t inputsize, uint8_t encoding,
+                uint64_t samplecount, void *output, uint64_t outputsize,
+                char *sampletype, int8_t swapflag, const char *sid, int8_t verbose)
 {
-  size_t decodedsize; /* byte size of decodeded samples */
-  int32_t nsamples; /* number of samples unpacked */
+  uint64_t decodedsize; /* byte size of decodeded samples */
+  int64_t nsamples; /* number of samples unpacked */
   uint8_t samplesize = 0; /* size of the data samples in bytes */
 
   if (!input || !output || !sampletype)
   {
-    ms_log (2, "Required argument not defined: 'input', 'output' or 'sampletype'\n");
+    ms_log (2, "%s(): Required input not defined: 'input', 'output' or 'sampletype'\n",
+            __func__);
     return MS_GENERROR;
   }
 
-  if (samplecount <= 0)
+  if (samplecount == 0)
     return 0;
-
-  /* Check for decode debugging environment variable */
-  if (libmseed_decodedebug < 0)
-  {
-    if (getenv ("DECODE_DEBUG"))
-      libmseed_decodedebug = 1;
-    else
-      libmseed_decodedebug = 0;
-  }
 
   if (ms_encoding_sizetype(encoding, &samplesize, sampletype))
     samplesize = 0;
 
   /* Calculate buffer size needed for unpacked samples */
-  decodedsize = (size_t)samplecount * samplesize;
+  decodedsize = samplecount * samplesize;
 
   if (decodedsize > outputsize)
   {
-    ms_log (2, "%s: Output buffer (%"PRIsize_t" bytes) is not large enought for decoded data (%"PRIsize_t" bytes)\n",
+    ms_log (2, "%s: Output buffer (%"PRIu64" bytes) is not large enought for decoded data (%"PRIu64" bytes)\n",
             (sid) ? sid : "", decodedsize, outputsize);
     return MS_GENERROR;
   }
@@ -1316,7 +1311,7 @@ ms_decode_data (const void *input, size_t inputsize, uint8_t encoding,
     if (verbose > 1)
       ms_log (0, "%s: Decoding TEXT data\n", (sid) ? sid : "");
 
-    nsamples = (int32_t)samplecount;
+    nsamples = (int64_t)samplecount;
     if (nsamples > 0)
     {
       memcpy (output, input, nsamples);
@@ -1438,9 +1433,9 @@ ms_decode_data (const void *input, size_t inputsize, uint8_t encoding,
     break;
   }
 
-  if (nsamples >= 0 && nsamples != samplecount)
+  if (nsamples >= 0 && (uint64_t)nsamples != samplecount)
   {
-    ms_log (2, "%s: only decoded %d samples of %" PRId64 " expected\n",
+    ms_log (2, "%s: only decoded %" PRId64 " samples of %" PRIu64 " expected\n",
             (sid) ? sid : "", nsamples, samplecount);
     return MS_GENERROR;
   }
@@ -1480,7 +1475,7 @@ ms_nomsamprate (int factor, int multiplier)
  * Returns a pointer to the resulting string or NULL on error.
  ***************************************************************************/
 char *
-ms2_recordsid (char *record, char *sid, int sidlen)
+ms2_recordsid (const char *record, char *sid, int sidlen)
 {
   char net[3] = {0};
   char sta[6] = {0};

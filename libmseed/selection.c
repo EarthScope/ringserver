@@ -3,7 +3,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
+ * Copyright (c) 2024 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,13 +54,13 @@ static int ms_globmatch (const char *string, const char *pattern);
  * @returns A pointer to matching ::MS3Selections entry successful
  * match and NULL for no match or error.
  ***************************************************************************/
-MS3Selections *
-ms3_matchselect (MS3Selections *selections, char *sid, nstime_t starttime,
-                 nstime_t endtime, int pubversion, MS3SelectTime **ppselecttime)
+const MS3Selections *
+ms3_matchselect (const MS3Selections *selections, const char *sid, nstime_t starttime,
+                 nstime_t endtime, int pubversion, const MS3SelectTime **ppselecttime)
 {
-  MS3Selections *findsl = NULL;
-  MS3SelectTime *findst = NULL;
-  MS3SelectTime *matchst = NULL;
+  const MS3Selections *findsl = NULL;
+  const MS3SelectTime *findst = NULL;
+  const MS3SelectTime *matchst = NULL;
 
   if (selections)
   {
@@ -141,8 +141,9 @@ ms3_matchselect (MS3Selections *selections, char *sid, nstime_t starttime,
  * @returns A pointer to matching ::MS3Selections entry successful
  * match and NULL for no match or error.
  ***************************************************************************/
-MS3Selections *
-msr3_matchselect (MS3Selections *selections, MS3Record *msr, MS3SelectTime **ppselecttime)
+const MS3Selections *
+msr3_matchselect (const MS3Selections *selections, const MS3Record *msr,
+                  const MS3SelectTime **ppselecttime)
 {
   nstime_t endtime;
 
@@ -177,7 +178,7 @@ msr3_matchselect (MS3Selections *selections, MS3Record *msr, MS3SelectTime **pps
  * \ref MessageOnError - this function logs a message on error
  ***************************************************************************/
 int
-ms3_addselect (MS3Selections **ppselections, char *sidpattern,
+ms3_addselect (MS3Selections **ppselections, const char *sidpattern,
                nstime_t starttime, nstime_t endtime, uint8_t pubversion)
 {
   MS3Selections *newsl = NULL;
@@ -185,7 +186,8 @@ ms3_addselect (MS3Selections **ppselections, char *sidpattern,
 
   if (!ppselections || !sidpattern)
   {
-    ms_log (2, "Required argument not defined: 'ppselections' or 'sidpattern'\n");
+    ms_log (2, "%s(): Required input not defined: 'ppselections' or 'sidpattern'\n",
+            __func__);
     return -1;
   }
 
@@ -312,7 +314,7 @@ ms3_addselect_comp (MS3Selections **ppselections, char *network, char *station,
 
   if (!ppselections)
   {
-    ms_log (2, "Required argument not defined: 'ppselections'\n");
+    ms_log (2, "%s(): Required input not defined: 'ppselections'\n", __func__);
     return -1;
   }
 
@@ -423,7 +425,7 @@ ms3_addselect_comp (MS3Selections **ppselections, char *network, char *station,
  * \ref MessageOnError - this function logs a message on error
  ***************************************************************************/
 int
-ms3_readselectionsfile (MS3Selections **ppselections, char *filename)
+ms3_readselectionsfile (MS3Selections **ppselections, const char *filename)
 {
   FILE *fp;
   nstime_t starttime;
@@ -444,7 +446,8 @@ ms3_readselectionsfile (MS3Selections **ppselections, char *filename)
 
   if (!ppselections || !filename)
   {
-    ms_log (2, "Required argument not defined: 'ppselections' or 'filename'\n");
+    ms_log (2, "%s(): Required input not defined: 'ppselections' or 'filename'\n",
+            __func__);
     return -1;
   }
 
@@ -701,9 +704,9 @@ ms3_freeselections (MS3Selections *selections)
  * @param[in] selections Start of ::MS3Selections to print
  ***************************************************************************/
 void
-ms3_printselections (MS3Selections *selections)
+ms3_printselections (const MS3Selections *selections)
 {
-  MS3Selections *select;
+  const MS3Selections *select;
   MS3SelectTime *selecttime;
   char starttime[50];
   char endtime[50];
@@ -913,6 +916,8 @@ ms_globmatch (const char *string, const char *pattern)
     case '\\':
       if (*pattern)
         c = *pattern++;
+      break;
+
     default:
       if (c != *string)
         return GLOBMATCH_FALSE;

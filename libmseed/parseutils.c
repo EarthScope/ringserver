@@ -3,7 +3,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
+ * Copyright (c) 2024 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -58,16 +58,16 @@
  * \ref MessageOnError - this function logs a message on error except MS_NOTSEED
  ***************************************************************************/
 int
-msr3_parse (char *record, uint64_t recbuflen, MS3Record **ppmsr,
+msr3_parse (const char *record, uint64_t recbuflen, MS3Record **ppmsr,
             uint32_t flags, int8_t verbose)
 {
-  int reclen  = 0;
-  int retcode = MS_NOERROR;
+  int64_t reclen = 0;
+  int64_t retcode = MS_NOERROR;
   uint8_t formatversion = 0;
 
   if (!ppmsr || !record)
   {
-    ms_log (2, "Required argument not defined: 'ppmsr' or 'record'\n");
+    ms_log (2, "%s(): Required input not defined: 'ppmsr' or 'record'\n", __func__);
     return MS_GENERROR;
   }
 
@@ -88,7 +88,7 @@ msr3_parse (char *record, uint64_t recbuflen, MS3Record **ppmsr,
       (recbuflen & (recbuflen - 1)) == 0 &&
       recbuflen <= MAXRECLEN)
   {
-    reclen = (int)recbuflen;
+    reclen = (int64_t)recbuflen;
   }
 
   /* No data record detected */
@@ -105,36 +105,37 @@ msr3_parse (char *record, uint64_t recbuflen, MS3Record **ppmsr,
 
   if (verbose > 2)
   {
-    ms_log (0, "Detected record length of %d bytes\n", reclen);
+    ms_log (0, "Detected record length of %" PRId64 " bytes\n", reclen);
   }
 
   /* Check that record length is in supported range */
   if (reclen < MINRECLEN || reclen > MAXRECLEN)
   {
-    ms_log (2, "Record length of %d is out of range allowed: %d to %d)\n",
+    ms_log (2, "Record length of %" PRId64 " is out of range allowed: %d to %d)\n",
             reclen, MINRECLEN, MAXRECLEN);
 
     return MS_OUTOFRANGE;
   }
-
   /* Check if more data is required, return hint */
-  if (reclen > recbuflen)
+  else if ((uint64_t)reclen > recbuflen)
   {
-    if (verbose > 2)
-      ms_log (0, "Detected %d byte record, need %d more bytes\n",
-              reclen, (int)(reclen - recbuflen));
+    uint64_t need = reclen - recbuflen;
 
-    return (int)(reclen - recbuflen);
+    if (verbose > 2)
+      ms_log (0, "Detected %" PRId64 " byte record, need %" PRIu64 " more bytes\n",
+              reclen, need);
+
+    return (need > MAXRECLEN) ? MAXRECLEN : (int)need;
   }
 
   /* Unpack record */
   if (formatversion == 3)
   {
-    retcode = msr3_unpack_mseed3 (record, reclen, ppmsr, flags, verbose);
+    retcode = msr3_unpack_mseed3 (record, (int)reclen, ppmsr, flags, verbose);
   }
   else if (formatversion == 2)
   {
-    retcode = msr3_unpack_mseed2 (record, reclen, ppmsr, flags, verbose);
+    retcode = msr3_unpack_mseed2 (record, (int)reclen, ppmsr, flags, verbose);
   }
   else
   {
@@ -147,7 +148,7 @@ msr3_parse (char *record, uint64_t recbuflen, MS3Record **ppmsr,
   {
     msr3_free (ppmsr);
 
-    return retcode;
+    return (int)retcode;
   }
 
   return MS_NOERROR;
@@ -174,12 +175,12 @@ msr3_parse (char *record, uint64_t recbuflen, MS3Record **ppmsr,
  *
  * \ref MessageOnError - this function logs a message on error
  *********************************************************************/
-int
+int64_t
 ms3_detect (const char *record, uint64_t recbuflen, uint8_t *formatversion)
 {
   uint8_t swapflag = 0; /* Byte swapping flag */
   uint8_t foundlen = 0; /* Found record length */
-  int32_t reclen = -1; /* Size of record in bytes */
+  int64_t reclen = -1; /* Size of record in bytes */
 
   uint16_t blkt_offset; /* Byte offset for next blockette */
   uint16_t blkt_type;
@@ -188,7 +189,8 @@ ms3_detect (const char *record, uint64_t recbuflen, uint8_t *formatversion)
 
   if (!record || !formatversion)
   {
-    ms_log (2, "Required argument not defined: 'record' or 'formatversion'\n");
+    ms_log (2, "%s(): Required input not defined: 'record' or 'formatversion'\n",
+            __func__);
     return -1;
   }
 
@@ -235,13 +237,13 @@ ms3_detect (const char *record, uint64_t recbuflen, uint8_t *formatversion)
 
       /* Found a 1000 blockette, not truncated */
       if (blkt_type == 1000 &&
-          (int)(blkt_offset + 8) <= recbuflen)
+          (uint64_t)(blkt_offset + 8) <= recbuflen)
       {
         foundlen = 1;
 
         /* Field 3 of B1000 is a uint8_t value describing the record
          * length as 2^(value).  Calculate 2-raised with a shift. */
-        reclen = (unsigned int)1 << *pMS2B1000_RECLEN (record + blkt_offset);
+        reclen = (uint64_t)1 << *pMS2B1000_RECLEN (record + blkt_offset);
 
         break;
       }
@@ -264,7 +266,7 @@ ms3_detect (const char *record, uint64_t recbuflen, uint8_t *formatversion)
       nextfsdh = record + 64;
 
       /* Check for record header or blank/noise record at MINRECLEN byte offsets */
-      while (((nextfsdh - record) + 48) < recbuflen)
+      while (((uint64_t)(nextfsdh - record) + 48) < recbuflen)
       {
         if (MS2_ISVALIDHEADER (nextfsdh))
         {
@@ -311,10 +313,10 @@ ms3_detect (const char *record, uint64_t recbuflen, uint8_t *formatversion)
  * \ref MessageOnError - this function logs a message on error
  ***************************************************************************/
 int
-ms_parse_raw3 (char *record, int maxreclen, int8_t details)
+ms_parse_raw3 (const char *record, int maxreclen, int8_t details)
 {
   MS3Record msr;
-  char *X;
+  const char *X;
   uint8_t b;
 
   int retval = 0;
@@ -324,13 +326,14 @@ ms_parse_raw3 (char *record, int maxreclen, int8_t details)
 
   if (!record)
   {
-    ms_log (2, "Required argument not defined: 'record'\n");
+    ms_log (2, "%s(): Required input not defined: 'record'\n", __func__);
     return 1;
   }
 
   if (maxreclen < MINRECLEN)
   {
-    ms_log (2, "The maxreclen value cannot be smaller than MINRECLEN\n");
+    ms_log (2, "%s(): The maxreclen value cannot be smaller than MINRECLEN\n",
+            __func__);
     return 1;
   }
 
@@ -465,7 +468,7 @@ ms_parse_raw3 (char *record, int maxreclen, int8_t details)
     ms_log (0, "                    CRC: 0x%X\n", HO4u(*pMS3FSDH_CRC (record), swapflag));
     ms_log (0, "   length of identifier: %u\n", *pMS3FSDH_SIDLENGTH (record));
     ms_log (0, "length of extra headers: %u\n", HO2u(*pMS3FSDH_EXTRALENGTH (record), swapflag));
-    ms_log (0, " length of data payload: %u\n", HO2u(*pMS3FSDH_DATALENGTH (record), swapflag));
+    ms_log (0, " length of data payload: %u\n", HO4u(*pMS3FSDH_DATALENGTH (record), swapflag));
   } /* Done printing raw header details */
 
   /* Print extra headers */
@@ -476,12 +479,12 @@ ms_parse_raw3 (char *record, int maxreclen, int8_t details)
     ms_log (0, "          extra headers:\n");
     if ((MS3FSDH_LENGTH + sidlength + msr.extralength) <= maxreclen)
     {
-      msr.extra = record + MS3FSDH_LENGTH + sidlength;
+      msr.extra = (char *)record + MS3FSDH_LENGTH + sidlength;
       mseh_print (&msr, 10);
     }
     else
     {
-      ms_log (0, "      [buffer does not contain all extra headers]\n");
+      ms_log (0, "      [buffer does not contain extra headers]\n");
     }
   }
 
@@ -521,11 +524,11 @@ ms_parse_raw3 (char *record, int maxreclen, int8_t details)
  * \ref MessageOnError - this function logs a message on error
  ***************************************************************************/
 int
-ms_parse_raw2 (char *record, int maxreclen, int8_t details, int8_t swapflag)
+ms_parse_raw2 (const char *record, int maxreclen, int8_t details, int8_t swapflag)
 {
   double nomsamprate;
-  char sid[21] = {0};
-  char *X;
+  char sid[LM_SIDLEN] = {0};
+  const char *X;
   uint8_t b;
   int retval = 0;
   int b1000encoding = -1;
@@ -535,13 +538,13 @@ ms_parse_raw2 (char *record, int maxreclen, int8_t details, int8_t swapflag)
 
   if (!record)
   {
-    ms_log (2, "Required argument not defined: 'record'\n");
+    ms_log (2, "%s(): Required input not defined: 'record'\n", __func__);
     return 1;
   }
 
   if (maxreclen < 48)
   {
-    ms_log (2, "The maxreclen value cannot be smaller than 48\n");
+    ms_log (2, "%s(): The maxreclen value cannot be smaller than 48\n", __func__);
     return 1;
   }
 
@@ -972,7 +975,7 @@ ms_parse_raw2 (char *record, int maxreclen, int8_t details, int8_t swapflag)
           ms_log (0, "               step duration: %u\n", HO4u(*pMS2B300_STEPDURATION (record + blkt_offset), swapflag));
           ms_log (0, "           interval duration: %u\n", HO4u(*pMS2B300_INTERVALDURATION (record + blkt_offset), swapflag));
           ms_log (0, "            signal amplitude: %g\n", HO4f(*pMS2B300_AMPLITUDE (record + blkt_offset), swapflag));
-          ms_log (0, "        input signal channel: %.3s", pMS2B300_INPUTCHANNEL (record + blkt_offset));
+          ms_log (0, "        input signal channel: %.3s\n", pMS2B300_INPUTCHANNEL (record + blkt_offset));
           if (details > 1)
             ms_log (0, "               reserved byte: %u\n", *pMS2B300_RESERVED (record + blkt_offset));
           ms_log (0, "         reference amplitude: %u\n", HO4u(*pMS2B300_REFERENCEAMPLITUDE (record + blkt_offset), swapflag));
@@ -1014,7 +1017,7 @@ ms_parse_raw2 (char *record, int maxreclen, int8_t details, int8_t swapflag)
           ms_log (0, "        calibration duration: %u\n", HO4u(*pMS2B310_DURATION (record + blkt_offset), swapflag));
           ms_log (0, "               signal period: %g\n", HO4f(*pMS2B310_PERIOD (record + blkt_offset), swapflag));
           ms_log (0, "            signal amplitude: %g\n", HO4f(*pMS2B310_AMPLITUDE (record + blkt_offset), swapflag));
-          ms_log (0, "        input signal channel: %.3s", pMS2B310_INPUTCHANNEL (record + blkt_offset));
+          ms_log (0, "        input signal channel: %.3s\n", pMS2B310_INPUTCHANNEL (record + blkt_offset));
           if (details > 1)
             ms_log (0, "               reserved byte: %u\n", *pMS2B310_RESERVED2 (record + blkt_offset));
           ms_log (0, "         reference amplitude: %u\n", HO4u(*pMS2B310_REFERENCEAMPLITUDE (record + blkt_offset), swapflag));
@@ -1051,7 +1054,7 @@ ms_parse_raw2 (char *record, int maxreclen, int8_t details, int8_t swapflag)
 
           ms_log (0, "        calibration duration: %u\n", HO4u(*pMS2B320_DURATION (record + blkt_offset), swapflag));
           ms_log (0, "      peak-to-peak amplitude: %g\n", HO4f(*pMS2B320_PTPAMPLITUDE (record + blkt_offset), swapflag));
-          ms_log (0, "        input signal channel: %.3s", pMS2B320_INPUTCHANNEL (record + blkt_offset));
+          ms_log (0, "        input signal channel: %.3s\n", pMS2B320_INPUTCHANNEL (record + blkt_offset));
           if (details > 1)
             ms_log (0, "               reserved byte: %u\n", *pMS2B320_RESERVED2 (record + blkt_offset));
           ms_log (0, "         reference amplitude: %u\n", HO4u(*pMS2B320_REFERENCEAMPLITUDE (record + blkt_offset), swapflag));
@@ -1087,7 +1090,7 @@ ms_parse_raw2 (char *record, int maxreclen, int8_t details, int8_t swapflag)
 
           ms_log (0, "        calibration duration: %u\n", HO4u(*pMS2B390_DURATION (record + blkt_offset), swapflag));
           ms_log (0, "            signal amplitude: %g\n", HO4f(*pMS2B390_AMPLITUDE (record + blkt_offset), swapflag));
-          ms_log (0, "        input signal channel: %.3s", pMS2B390_INPUTCHANNEL (record + blkt_offset));
+          ms_log (0, "        input signal channel: %.3s\n", pMS2B390_INPUTCHANNEL (record + blkt_offset));
           if (details > 1)
             ms_log (0, "               reserved byte: %u\n", *pMS2B390_RESERVED2 (record + blkt_offset));
         }
