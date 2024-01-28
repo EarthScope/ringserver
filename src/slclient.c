@@ -1,4 +1,4 @@
-/**************************************************************************
+d/**************************************************************************
  * slclient.c
  *
  * SeedLink client thread specific routines.
@@ -34,8 +34,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2023:
- * @author Chad Trabant, IRIS Data Management Center
+ * Copyright (C) 2024:
+ * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
 /* Unsupported protocol features:

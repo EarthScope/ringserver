@@ -15,8 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
- * @author Chad Trabant, IRIS Data Management Center
+ * Copyright (C) 2024:
+ * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
 #ifndef RINGSERVER_H
@@ -30,7 +30,7 @@ extern "C" {
 #endif
 
 #define PACKAGE   "ringserver"
-#define VERSION   "2023.SL4"
+#define VERSION   "2024.SL4"
 
 /* Thread data flags */
 #define TDF_SPAWNING    (1<<0)          /* Thread is now spawning   */
