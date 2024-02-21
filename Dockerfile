@@ -18,6 +18,7 @@ RUN apt update \
     && apt install -y --no-install-recommends \
         build-essential \
         automake \
+        netbase \
     && rm -rf /var/lib/apt/lists/*
 
 # Build executable
@@ -28,6 +29,8 @@ RUN cd /build && CFLAGS="-O2" make
 FROM debian:bookworm-slim
 RUN apt update \
     && apt upgrade -y \
+    && apt install -y --no-install-recommends \
+        netbase \
     && rm -rf /var/lib/apt/lists/*
 # Copy executable and default config from build image
 COPY --from=buildenv /build/ringserver /ringserver
