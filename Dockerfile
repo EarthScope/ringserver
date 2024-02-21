@@ -12,17 +12,23 @@
 
 # Build ringserver in a separate container,
 # so resulting container does not include compiler tools
-FROM centos:7 as buildenv
-# Install compiler
-RUN yum install -y gcc make
+FROM debian:bookworm-slim as buildenv
+RUN apt update \
+    && apt upgrade -y \
+    && apt install -y --no-install-recommends \
+        build-essential \
+        automake \
+    && rm -rf /var/lib/apt/lists/*
+
 # Build executable
 COPY . /build
 RUN cd /build && CFLAGS="-O2" make
 
 # Build ringserver container
-FROM centos:7
-# Install updates
-RUN yum upgrade -y
+FROM debian:bookworm-slim
+RUN apt update \
+    && apt upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
 # Copy executable and default config from build image
 COPY --from=buildenv /build/ringserver /ringserver
 COPY --from=buildenv /build/doc/ring.conf /ring.conf
