@@ -42,6 +42,7 @@ RUN apt update \
 # Copy executable and default config from build image
 COPY --from=buildenv /build/ringserver /ringserver
 COPY --from=buildenv /build/doc/ring.conf /ring.conf
+COPY ./entrypoint.sh /
 
 # Add non-root user
 ARG UID=10000
@@ -63,8 +64,8 @@ EXPOSE 16000
 # Drop to regular user
 USER $USERNAME
 
-# Default command is "ringserver"
-ENTRYPOINT [ "/ringserver" ]
+# Set default command line arguments expanded in ./entrypoint.sh
+ENV NETWORK_PORT=16000
+ENV CONFIG_FILE="/ring.conf"
 
-# Default arguments
-CMD [ "/ring.conf", "-L", "16000" ]
+ENTRYPOINT [ "/entrypoint.sh" ]
