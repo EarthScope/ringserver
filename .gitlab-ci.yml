@@ -1,0 +1,4 @@
+include:
+  - project: earthscope/infrastructure/gitlab-ci
+    ref: "latest"
+    file: project-template-image.yml
