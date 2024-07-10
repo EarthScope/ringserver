@@ -2,3 +2,6 @@ include:
   - project: earthscope/infrastructure/gitlab-ci
     ref: "latest"
     file: project-template-image.yml
+
+variables:
+  CONTAINER_REGISTRY_PLATFORM: AWS-PUB
