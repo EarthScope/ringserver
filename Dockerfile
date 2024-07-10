@@ -1,19 +1,5 @@
 # Basic Dockerfile to run ringserver in a container
-# 
-# Build container using this command:
-#     docker build -t ringserver:latest .
-#
-# Run container, using host networking (may not work on non-Linux):
-#     docker run --network="host" --rm -it ringserver
-#
-# Run container, using bridge networking (likely impossible to submit data):
-#     docker run --network="bridge" -p 18000:18000 --rm -it ringserver
-#
-# Run container, using Docker Compose using persistant ring storage:
-#     mkdir -p ring
-#     sudo chown 10000 ring
-#     docker compose up
-#
+
 ARG BASE=debian:bookworm-slim
 
 # Build ringserver in a separate container, so resulting container does not 
@@ -58,6 +44,8 @@ RUN mkdir -p /data/ring && \
 WORKDIR /data
 
 # Expose default SeedLink and DataLink ports
+# Seedlink port 180000 is configured in ring.conf
+# Datalink port 160000 is configured with ENV below
 EXPOSE 18000
 EXPOSE 16000
 
