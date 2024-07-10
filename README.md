@@ -18,7 +18,7 @@ For usage infromation see the [ringserver manual](doc/ringserver.md) in the
 
 ## Download release versions
 
-The [releases](https://github.com/iris-edu/ringserver/releases) area contains
+The [releases](https://github.com/EarthScope/ringserver/releases) area contains
 release versions for download.
 
 ## Building and Installing 
@@ -35,6 +35,88 @@ See the Makefile for instructions.
 
 For further installation simply copy the resulting binary and man page
 (in the 'doc' directory) to appropriate directories.
+
+## Ringserver Container Image
+
+If you prefer to work with ringserver as a container, that is fully supported.
+Recent releases have containers available publicy at:
+
+[aws ecs](url)
+
+To pull this image with Docker and tag it locally as "ringserver" for convenience:
+
+```
+docker pull (url):latest
+docker tag (url):latest ringserver:latest
+```
+
+To run the default configuration of ringserver with Docker which listens locally on ports 16000 and 18000:
+
+```
+docker run -p 16000:16000 -p 18000:18000 ringserver
+```
+
+If you want the ring contents to persist container recreations, you will need to attach a [volume](https://docs.docker.com/storage/volumes/) to store the ring files. This can be done in several ways. Below illustrates using a subdirectory in the current working directory. Note that by default the container runs ringserver as user id 10000 so the directory on the local file system where the ring files are stored needs to be writable by that user id.
+
+```
+mkdir -p ring
+sudo chown -R 10000 ring
+docker run -p 16000:16000 -p 18000:18000 -v ./ring:/data/ring ringserver
+```
+
+### Command Line Options
+
+To view all ringserver command line options:
+
+```
+docker run ringserver --h
+```
+
+All ringserver command line options are supported as either options passed to `docker run` as demonstrated with "-h" above, or environment variables that can be passed to the container when run.
+See the entrypoint.sh script for the currnet mapping of command line options to the names of the environmental variables.
+An example of running ringserver with 1 MB ring file instead of the default 1 GB using an environment variable:
+
+```
+mkdir -p ring
+sudo chown -R 10000 ring
+docker run -p 16000:16000 -p 18000:18000 -v ./ring:/data/ring -e RING_SIZE=1048576 ringserver
+```
+
+### Running with a Custom Configuration File
+
+Some configuration settings are not avalable via command line options and must be specified in a configuration file.
+The default configuration that is built into the container is located in doc/ring.conf in this repository.
+To specify a different configuration file stored on the local file system, you can combine volumes and environment variables described above:
+
+```
+mkdir -p local_config
+cp -a doc/ring.conf local_config/
+mkdir -p ring
+sudo chown -R 10000 ring
+docker run -p 16000:16000 -p 18000:18000 -v ./ring:/data/ring -v ./local_config/ring.conf:/ring.conf ringserver
+```
+
+
+### Building a Container Image Locally
+
+A Dockerfile is included for building a container to run ringserver in.
+To build:
+
+```
+docker build -t ringserver:latest .
+```
+
+### Running Locally with Compose
+
+A `compose.yml` file is included for running ringserver locally using Docker Compose.
+This will create a compose service that listens on ports 16000 and 18000 and writes the ring file to the ./ring directory where the docker compose command is run.
+To start it:
+
+```
+mkdir -p ring
+sudo chown -R 10000 ring
+docker compose up -d
+```
 
 ## Licensing 
 
