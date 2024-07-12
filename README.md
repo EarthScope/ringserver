@@ -69,7 +69,7 @@ docker run -p 16000:16000 -p 18000:18000 -v ./ring:/data/ring ringserver
 To view all ringserver command line options:
 
 ```
-docker run ringserver --h
+docker run ringserver -h
 ```
 
 All ringserver command line options are supported as either options passed to `docker run` as demonstrated with "-h" above, or environment variables that can be passed to the container when run.
