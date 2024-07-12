@@ -53,7 +53,7 @@ EXPOSE 16000
 USER $USERNAME
 
 # Set default command line arguments expanded in ./entrypoint.sh
-ENV NETWORK_PORT=16000
+ENV LISTEN_PORT=16000
 ENV CONFIG_FILE="/ring.conf"
 
 ENTRYPOINT [ "/entrypoint.sh" ]
