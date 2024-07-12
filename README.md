@@ -61,7 +61,7 @@ If you want the ring contents to persist container recreations, you will need to
 ```
 mkdir -p ring
 sudo chown -R 10000 ring
-docker run -p 16000:16000 -p 18000:18000 -v ./ring:/data/ring ringserver
+docker run -p 16000:16000 -p 18000:18000 -v ${PWD}/ring:/data/ring ringserver
 ```
 
 ### Command Line Options
@@ -79,7 +79,7 @@ An example of running ringserver with 1 MB ring file instead of the default 1 GB
 ```
 mkdir -p ring
 sudo chown -R 10000 ring
-docker run -p 16000:16000 -p 18000:18000 -v ./ring:/data/ring -e RING_SIZE=1048576 ringserver
+docker run -p 16000:16000 -p 18000:18000 -v ${PWD}/ring:/data/ring -e RING_SIZE=1048576 ringserver
 ```
 
 ### Running with a Custom Configuration File
@@ -93,7 +93,7 @@ mkdir -p local_config
 cp -a doc/ring.conf local_config/
 mkdir -p ring
 sudo chown -R 10000 ring
-docker run -p 16000:16000 -p 18000:18000 -v ./ring:/data/ring -v ./local_config/ring.conf:/ring.conf ringserver
+docker run -p 16000:16000 -p 18000:18000 -v ${PWD}/ring:/data/ring -v ${PWD}/local_config/ring.conf:/ring.conf ringserver
 ```
 
 
