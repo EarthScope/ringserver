@@ -41,13 +41,13 @@ For further installation simply copy the resulting binary and man page
 If you prefer to work with ringserver as a container, that is fully supported.
 Recent releases have containers available publicy at:
 
-[aws ecs](url)
+[FIXME: Add final ECR URL after publishing first image](some_url)
 
 To pull this image with Docker and tag it locally as "ringserver" for convenience:
 
 ```
-docker pull (url):latest
-docker tag (url):latest ringserver:latest
+docker pull (FIXME: final ECR URL):latest
+docker tag (FIXME: final ECR URL):latest ringserver:latest
 ```
 
 To run the default configuration of ringserver with Docker which listens locally on ports 16000 and 18000:
