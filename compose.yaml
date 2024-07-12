@@ -4,7 +4,7 @@ services:
   ringserver:
     image: ringserver
     volumes:
-      - ./ring:/data/ring
+      - ${PWD}/ring:/data/ring
     ports:
       - "16000:16000"
       - "18000:18000"
