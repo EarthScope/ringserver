@@ -64,6 +64,12 @@ sudo chown -R 10000 ring
 docker run -p 16000:16000 -p 18000:18000 -v ${PWD}/ring:/data/ring ringserver
 ```
 
+### Container Image Versioning
+
+The container image version tag uses the same version as ring server with an additional ".n" suffix that indicates the build number of the container.
+For example: `2020.075.2` is the second build of the container for ringserver version 2020.075.
+The most recent build of the most recent version will be tagged `latest`.
+
 ### Command Line Options
 
 To view all ringserver command line options:
