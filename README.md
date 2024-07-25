@@ -13,7 +13,7 @@ such as the SeedLink protocol, built-in miniSEED file scanner and built-in
 miniSEED archiver.  These are format-specific enhancements built on the core
 transport that is agnostic to data format.
 
-For usage infromation see the [ringserver manual](doc/ringserver.md) in the
+For usage infromation see the [ringserver manual](https://github.com/EarthScope/ringserver/tree/main/doc) in the
 'doc' directory.
 
 ## Download release versions
