@@ -64,6 +64,12 @@ sudo chown -R 10000 ring
 docker run -p 16000:16000 -p 18000:18000 -v ${PWD}/ring:/data/ring ringserver
 ```
 
+Note: Docker for Mac does not allow for volumes to be bound to containers by default. This default confirguation can be changed in the "File Sharing" section of the Docker settings, in which a user can specify directories that can be bound to docker containers. If you are recieving the error:
+```
+Error response from daemon: error while creating mount source path '/host_mnt/PATH/ringserver/ring': mkdir /host_mnt/PATH: operation not permitted
+```
+verify that the directories used for volumes can be bound to a docker container.
+
 ### Container Image Versioning
 
 The container image version tag uses the same version as ring server with an additional ".n" suffix that indicates the build number of the container.
