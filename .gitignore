@@ -1,0 +1,4 @@
+# Locally stored ring buffer data
+ring/
+# Local config file(s)
+local_config/
