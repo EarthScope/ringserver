@@ -1,4 +1,4 @@
-d/**************************************************************************
+/**************************************************************************
  * slclient.c
  *
  * SeedLink client thread specific routines.
@@ -12,13 +12,16 @@ d/**************************************************************************
  * when IDs are encountered that are too large to map into a sequence
  * number.
  *
- * The SeedLink protocol is designed around a multi-ring backend
- * whereas the ringserver implements a single ring.  This is important
- * because a client will request data from network-station rings and
- * optionally specify starting sequence numbers for each ring to
- * resume a connection.  This is handled in this client by determining
- * the most recent packet ID requested by the client and setting the
- * ring to that position.
+ * The SeedLink protocol is designed with the concept of a station ID
+ * where sequenences may be specific to each station ID.  Ringserver
+ * implements a single buffer with a shared set of sequences for all
+ * streams in the buffer.  This detail is important because a client
+ * can request data from multiple station IDs with each specifying a
+ * starting sequence number to resume a connection.  This is handled
+ * in this client-handler by determining the most recent sequence
+ * requested by the client and setting the ring to that position.  The
+ * rationale is that the client has already received all data up to
+ * the most recent sequence requested during a previous connection.
  *
  * This file is part of the ringserver.
  *
@@ -37,12 +40,6 @@ d/**************************************************************************
  * Copyright (C) 2024:
  * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
-
-/* Unsupported protocol features:
- * CAT listing (oh the irony)
- * INFO GAPS
- * INFO ALL
- */
 
 #include <errno.h>
 #include <fcntl.h>
@@ -68,7 +65,7 @@ d/**************************************************************************
 #include "slclient.h"
 
 /* Define list of valid characters for selectors and station & network codes */
-#define VALIDSELECTCHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?!-"
+#define VALIDSELECTCHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_-.:!"
 #define VALIDSTAIDCHARS  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_"
 
 /* Define the number of no-action loops that trigger the throttle */
@@ -80,11 +77,11 @@ static int SendReply (ClientInfo *cinfo, char *reply, ErrorCode code, char *extr
 static int SendRecord (RingPacket *packet, char *record, int reclen,
                        void *vcinfo);
 static void SendInfoRecord (char *record, int reclen, void *vcinfo);
-static void FreeStaNode (void *rbnode);
-static void FreeNetStaNode (void *rbnode);
+static void FreeReqStationID (void *rbnode);
+static void FreeListStationID (void *rbnode);
 static int StaKeyCompare (const void *a, const void *b);
-static SLStaNode *GetStaNode (RBTree *tree, char *staid);
-static SLNetStaNode *GetNetStaNode (RBTree *tree, char *staid);
+static ReqStationID *GetReqStationID (RBTree *tree, char *staid);
+static ListStationID *GetListStationID (RBTree *tree, char *staid);
 static int StationToRegex (const char *net_sta, const char *selectors,
                            char **matchregex, char **rejectregex);
 static int SelectToRegex (const char *net_sta, const char *select,
@@ -103,7 +100,7 @@ int
 SLHandleCmd (ClientInfo *cinfo)
 {
   SLInfo *slinfo;
-  SLStaNode *stanode;
+  ReqStationID *stationid;
   int64_t readid;
   int64_t retval;
 
@@ -121,7 +118,11 @@ SLHandleCmd (ClientInfo *cinfo)
 
     cinfo->extinfo = slinfo;
 
-    slinfo->stations = RBTreeCreate (StaKeyCompare, free, FreeStaNode);
+    /* Default protocol expectation */
+    slinfo->proto_major = 3;
+    slinfo->proto_minor = 0;
+
+    slinfo->stations = RBTreeCreate (StaKeyCompare, free, FreeReqStationID);
   }
 
   slinfo = (SLInfo *)cinfo->extinfo;
@@ -183,10 +184,10 @@ SLHandleCmd (ClientInfo *cinfo)
 
       while ((rbnode = (RBNode *)StackPop (stack)))
       {
-        stanode = (SLStaNode *)rbnode->data;
+        stationid = (ReqStationID *)rbnode->data;
 
         /* Configure regexes for this station */
-        if (StationToRegex ((const char *)rbnode->key, stanode->selectors,
+        if (StationToRegex ((const char *)rbnode->key, stationid->selectors,
                             &(cinfo->matchstr), &(cinfo->rejectstr)))
         {
           lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
@@ -197,39 +198,39 @@ SLHandleCmd (ClientInfo *cinfo)
         /* Track the widest time window requested */
 
         /* Set or expand the global starttime */
-        if (stanode->starttime != NSTERROR)
+        if (stationid->starttime != NSTERROR)
         {
           if (!cinfo->starttime)
-            cinfo->starttime = stanode->starttime;
-          else if (cinfo->starttime > stanode->starttime)
-            cinfo->starttime = stanode->starttime;
+            cinfo->starttime = stationid->starttime;
+          else if (cinfo->starttime > stationid->starttime)
+            cinfo->starttime = stationid->starttime;
         }
 
         /* Set or expand the global endtime */
-        if (stanode->endtime != NSTERROR)
+        if (stationid->endtime != NSTERROR)
         {
           if (!cinfo->endtime)
-            cinfo->endtime = stanode->endtime;
-          else if (cinfo->endtime < stanode->endtime)
-            cinfo->endtime = stanode->endtime;
+            cinfo->endtime = stationid->endtime;
+          else if (cinfo->endtime < stationid->endtime)
+            cinfo->endtime = stationid->endtime;
         }
 
         /* Track the newest packet ID while validating their existence */
-        if (stanode->packetid)
-          retval = RingRead (cinfo->reader, stanode->packetid, &cinfo->packet, 0);
+        if (stationid->packetid)
+          retval = RingRead (cinfo->reader, stationid->packetid, &cinfo->packet, 0);
         else
           retval = 0;
 
         /* Requested packet must be valid and have a matching data start time
          * Limit packet time matching to integer seconds to match SeedLink syntax limits */
-        if (retval == stanode->packetid &&
-            (stanode->datastart == NSTERROR ||
-             (int64_t)(MS_NSTIME2EPOCH (stanode->datastart)) == (int64_t)(MS_NSTIME2EPOCH (cinfo->packet.datastart))))
+        if (retval == stationid->packetid &&
+            (stationid->datastart == NSTERROR ||
+             (int64_t)(MS_NSTIME2EPOCH (stationid->datastart)) == (int64_t)(MS_NSTIME2EPOCH (cinfo->packet.datastart))))
         {
           /* Use this packet ID if it is newer than any previous newest */
           if (newesttime == 0 || cinfo->packet.pkttime > newesttime)
           {
-            slinfo->startid = stanode->packetid;
+            slinfo->startid = stationid->packetid;
             newesttime = cinfo->packet.pkttime;
           }
         }
@@ -395,7 +396,7 @@ SLStreamPackets (ClientInfo *cinfo)
     if ((stream = GetStreamNode (cinfo->streams, &cinfo->streams_lock,
                                  cinfo->packet.streamid, &newstream)) == 0)
     {
-      lprintf (0, "[%s] Error with GetStreamNode for %s",
+      lprintf (0, "[%s] Error with GetStreamNode() for %s",
                cinfo->hostname, cinfo->packet.streamid);
       return -1;
     }
@@ -515,14 +516,14 @@ HandleNegotiation (ClientInfo *cinfo)
 {
   SLInfo *slinfo;
   char sendbuffer[400];
-  SLStaNode *stanode;
+  ReqStationID *stationid;
   int fields;
 
   nstime_t starttime = NSTERROR;
   nstime_t endtime = NSTERROR;
-  char starttimestr[51];
-  char endtimestr[51];
-  char pattern[9];
+  char starttimestr[51] = {0};
+  char endtimestr[51] = {0};
+  char selector[32] = {0};
   int64_t startpacket = -1;
 
   char *ptr;
@@ -600,19 +601,6 @@ HandleNegotiation (ClientInfo *cinfo)
       return -1;
   }
 
-  /* GETCAPABILITIES (v4.0) - Return capabilities */
-  else if (!strncasecmp (cinfo->recvbuf, "GETCAPABILITIES", 15))
-  {
-    lprintf (2, "[%s] Received GETCAPABILITIES", cinfo->hostname);
-
-    snprintf (sendbuffer, sizeof (sendbuffer),
-              "%s\r\n",
-              SLCAPABILITIESv4);
-
-    if (SendData (cinfo, sendbuffer, strlen (sendbuffer)))
-      return -1;
-  }
-
   /* CAPABILITIES (v3.x) - Parse capabilities flags */
   else if (!strncasecmp (cinfo->recvbuf, "CAPABILITIES", 12))
   {
@@ -624,7 +612,7 @@ HandleNegotiation (ClientInfo *cinfo)
       return -1;
   }
 
-  /* CAT (v3.x) - Return ASCII list of stations */
+  /* CAT (v3.x) - Return text list of stations */
   else if (!strncasecmp (cinfo->recvbuf, "CAT", 3))
   {
     snprintf (sendbuffer, sizeof (sendbuffer),
@@ -643,7 +631,7 @@ HandleNegotiation (ClientInfo *cinfo)
       return -1;
   }
 
-  /* STATION (v3.x and v4.0) - Select specified network and station */
+  /* STATION (v3.x and v4.0) - Select specified station */
   else if (!strncasecmp (cinfo->recvbuf, "STATION", 7))
   {
     OKGO = 1;
@@ -657,7 +645,7 @@ HandleNegotiation (ClientInfo *cinfo)
       fields = sscanf (cinfo->recvbuf, "%*s %20s %c", slinfo->reqstaid, &junk);
       slinfo->reqstaid[sizeof(slinfo->reqstaid) - 1] = '\0';
 
-      /* Make sure we got a station code and optionally a network code */
+      /* Make sure we got a station ID */
       if (fields != 1)
       {
         if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "STATION requires 1 argument"))
@@ -682,12 +670,18 @@ HandleNegotiation (ClientInfo *cinfo)
 
         OKGO = 0;
       }
+      /* Use wildcard network if not specified */
+      else if (fields == 1)
+      {
+        reqnet[0] = '*';
+        reqnet[1] = '\0';
+      }
 
-      /* Combine network and station into station ID */
+      /* Combine network and station codes into station ID */
       snprintf (slinfo->reqstaid, sizeof (slinfo->reqstaid), "%s_%s", reqnet, reqsta);
     }
 
-    fprintf (stderr, "DEBUG staid: '%s'", slinfo->reqstaid);
+    fprintf (stderr, "DEBUG staid: '%s'\n", slinfo->reqstaid);
 
     /* Sanity check, only allowed characters in station ID */
     if (OKGO && strspn (slinfo->reqstaid, VALIDSTAIDCHARS) != strlen (slinfo->reqstaid))
@@ -704,11 +698,11 @@ HandleNegotiation (ClientInfo *cinfo)
     if (OKGO)
     {
       /* Add to the stations list */
-      if (!GetStaNode (slinfo->stations, slinfo->reqstaid))
+      if (GetReqStationID (slinfo->stations, slinfo->reqstaid) == NULL)
       {
-        lprintf (0, "[%s] Error in GetStaNode for command STATION", cinfo->hostname);
+        lprintf (0, "[%s] Error in GetReqStationID() for command STATION", cinfo->hostname);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetStaNode()"))
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetReqStationID()"))
           return -1;
       }
 
@@ -726,8 +720,7 @@ HandleNegotiation (ClientInfo *cinfo)
     OKGO = 1;
 
     /* Parse pattern from request */
-    pattern[0] = '\0';
-    fields = sscanf (cinfo->recvbuf, "%*s %8s %c", pattern, &junk);
+    fields = sscanf (cinfo->recvbuf, "%*s %31s %c", selector, &junk);
 
     /* Make sure we got a single pattern */
     if (fields != 1)
@@ -738,15 +731,15 @@ HandleNegotiation (ClientInfo *cinfo)
       OKGO = 0;
     }
 
-    /* Truncate pattern at a '.', DECTOL subtypes are accepted but not supported */
-    if (OKGO && (ptr = strrchr (pattern, '.')))
+    /* For SeedLink 3.x, truncate pattern at a '.', DECTOL subtypes, which are accepted but not supported */
+    if (OKGO && slinfo->proto_major == 3 && (ptr = strrchr (selector, '.')))
       *ptr = '\0';
 
     /* Sanity check, only allowed characters */
-    if (OKGO && strspn (pattern, VALIDSELECTCHARS) != strlen (pattern))
+    if (OKGO && strspn (selector, VALIDSELECTCHARS) != strlen (selector))
     {
       lprintf (0, "[%s] Error, select pattern contains illegal characters: '%s'",
-               cinfo->hostname, pattern);
+               cinfo->hostname, selector);
 
       if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Selector contains illegal characters"))
         return -1;
@@ -754,34 +747,22 @@ HandleNegotiation (ClientInfo *cinfo)
       OKGO = 0;
     }
 
-    /* Sanity check, pattern can only be [!][LL][CCC], 2, 3, 4, 5 or 6 characters */
-    if (OKGO && (strlen (pattern) < 2 || strlen (pattern) > 6))
-    {
-      lprintf (0, "[%s] Error, selector not 2-6 characters: %s",
-               cinfo->hostname, pattern);
-
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Selector must be 2-6 characters"))
-        return -1;
-
-      OKGO = 0;
-    }
-
-    /* If modifying a STATION add selector to it's Node */
+    /* If modifying a STATION add selector to it's entry */
     if (OKGO && cinfo->state == STATE_STATION)
     {
-      /* Find the appropriate StaNode */
-      if (!(stanode = GetStaNode (slinfo->stations, slinfo->reqstaid)))
+      /* Find the appropriate station ID */
+      if (!(stationid = GetReqStationID (slinfo->stations, slinfo->reqstaid)))
       {
-        lprintf (0, "[%s] Error in GetStaNode for command SELECT", cinfo->hostname);
+        lprintf (0, "[%s] Error in GetReqStationID() for command SELECT", cinfo->hostname);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetStaNode()"))
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetReqStationID()"))
           return -1;
       }
       else
       {
         /* Add selector to the StaNode.selectors, maximum of SLMAXSELECTLEN bytes */
         /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
-        if (AddToString (&(stanode->selectors), pattern, ",", (pattern[0] == '!') ? 0 : 1, SLMAXSELECTLEN))
+        if (AddToString (&(stationid->selectors), selector, ",", (selector[0] == '!') ? 0 : 1, SLMAXSELECTLEN))
         {
           lprintf (0, "[%s] Error for command SELECT (cannot AddToString), too many selectors for %s",
                    cinfo->hostname, slinfo->reqstaid);
@@ -799,9 +780,9 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Otherwise add selector to global list */
     else if (OKGO)
     {
-      /* Add selector to the SLStaNode.selectors, maximum of SLMAXSELECTLEN bytes */
+      /* Add selector to the ReqStationID.selectors, maximum of SLMAXSELECTLEN bytes */
       /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
-      if (AddToString (&(slinfo->selectors), pattern, ",", (pattern[0] == '!') ? 0 : 1, SLMAXSELECTLEN))
+      if (AddToString (&(slinfo->selectors), selector, ",", (selector[0] == '!') ? 0 : 1, SLMAXSELECTLEN))
       {
         lprintf (0, "[%s] Error for command SELECT (cannot AddToString), too many global selectors",
                  cinfo->hostname);
@@ -817,9 +798,9 @@ HandleNegotiation (ClientInfo *cinfo)
     }
   } /* End of SELECT */
 
-  /* DATA|FETCH (v3.x and 4.0) - Request data from a specific packet */
+  /* DATA (v3.x and 4.0) or FETCH (v3.x) - Request data from a specific packet */
   else if (!strncasecmp (cinfo->recvbuf, "DATA", 4) ||
-           !strncasecmp (cinfo->recvbuf, "FETCH", 5))
+           (!strncasecmp (cinfo->recvbuf, "FETCH", 5) && slinfo->proto_major == 3))
   {
     /* Parse packet sequence, start and end times from request */
     starttimestr[0] = '\0';
@@ -827,7 +808,7 @@ HandleNegotiation (ClientInfo *cinfo)
 
     if (slinfo->proto_major == 4)
     {
-      /* DATA|FETCH [seq_decimal [start [end]]] */
+      /* DATA [seq_decimal [start [end]]] */
       fields = sscanf (cinfo->recvbuf, "%*s %" SCNd64 " %50s %50s %c",
                        &startpacket, starttimestr, endtimestr, &junk);
     }
@@ -849,8 +830,8 @@ HandleNegotiation (ClientInfo *cinfo)
       startpacket = (startpacket == 1) ? cinfo->ringparams->maxpktid : (startpacket - 1);
 
     /* Make sure we got no extra arguments */
-    if ((slinfo->proto_major == 3 && fields > 2) ||
-        (slinfo->proto_major == 4 && fields > 3))
+    if ((slinfo->proto_major == 4 && fields > 3) ||
+        (slinfo->proto_major == 3 && fields > 2))
     {
       if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Too many arguments for DATA/FETCH"))
         return -1;
@@ -893,23 +874,23 @@ HandleNegotiation (ClientInfo *cinfo)
     {
       if (fields >= 1)
       {
-        /* Find the appropriate SLStaNode and store the requested ID and time */
-        if (!(stanode = GetStaNode (slinfo->stations, slinfo->reqstaid)))
+        /* Find the appropriate station ID and store the requested ID and time */
+        if (!(stationid = GetReqStationID (slinfo->stations, slinfo->reqstaid)))
         {
-          lprintf (0, "[%s] Error in GetStaNode for command DATA|FETCH",
+          lprintf (0, "[%s] Error in GetReqStationID() for command DATA|FETCH",
                    cinfo->hostname);
 
-          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetStaNode()"))
+          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetReqStationID()"))
             return -1;
 
           OKGO = 0;
         }
         else
         {
-          stanode->packetid = startpacket;
-          stanode->datastart = starttime;
-          stanode->starttime = starttime;
-          stanode->endtime = endtime;
+          stationid->packetid = startpacket;
+          stationid->datastart = starttime;
+          stationid->starttime = starttime;
+          stationid->endtime = endtime;
         }
       }
 
@@ -946,7 +927,7 @@ HandleNegotiation (ClientInfo *cinfo)
   } /* End of DATA|FETCH */
 
   /* TIME (v3.x) - Request data in time window */
-  else if (!strncasecmp (cinfo->recvbuf, "TIME", 4))
+  else if (!strncasecmp (cinfo->recvbuf, "TIME", 4) && slinfo->proto_major == 3)
   {
     OKGO = 1;
 
@@ -1014,21 +995,21 @@ HandleNegotiation (ClientInfo *cinfo)
     {
       if (fields >= 1)
       {
-        /* Find the appropriate SLStaNode and store the requested times */
-        if (!(stanode = GetStaNode (slinfo->stations, slinfo->reqstaid)))
+        /* Find the appropriate station ID and store the requested times */
+        if (!(stationid = GetReqStationID (slinfo->stations, slinfo->reqstaid)))
         {
-          lprintf (0, "[%s] Error in GetStaNode for command TIME",
+          lprintf (0, "[%s] Error in GetReqStationID() for command TIME",
                    cinfo->hostname);
 
-          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetStaNode()"))
+          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetReqStationID()"))
             return -1;
 
           OKGO = 0;
         }
         else
         {
-          stanode->starttime = starttime;
-          stanode->endtime = endtime;
+          stationid->starttime = starttime;
+          stationid->endtime = endtime;
         }
       }
 
@@ -1271,57 +1252,57 @@ HandleInfo (ClientInfo *cinfo)
     Stack *streams;
     RingStream *stream;
 
-    RBTree *netsta;
-    Stack *netstas;
-    SLNetStaNode *netstanode;
+    RBTree *stationid_tree;
+    Stack *stationid_stack;
+    ListStationID *stationid;
     RBNode *tnode;
 
-    char net[10];
-    char sta[10];
-    char staid[22];
+    char net[16] = {0};
+    char sta[16] = {0};
+    char staid[32] = {0};
 
     /* Get copy of streams as a Stack */
     if (!(streams = GetStreamsStack (cinfo->ringparams, cinfo->reader)))
     {
-      lprintf (0, "[%s] Error getting streams", cinfo->hostname);
+      lprintf (0, "[%s] Error getting streams stack", cinfo->hostname);
       errflag = 1;
     }
     else
     {
-      netsta = RBTreeCreate (StaKeyCompare, free, FreeNetStaNode);
+      stationid_tree = RBTreeCreate (StaKeyCompare, free, FreeListStationID);
 
-      /* Loop through the streams and build a network-station tree */
+      /* Loop through the streams and build a station ID tree */
       while ((stream = (RingStream *)StackPop (streams)))
       {
         /* Split the streamid to get the network and station codes,
            assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
-        if (SplitStreamID (stream->streamid, '_', 10, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
+        if (SplitStreamID (stream->streamid, '_', 15, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
         {
           lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
           return -1;
         }
 
-        /* Combine network and station into station ID */
+        /* Create station ID as combination of network and station codes */
         snprintf (staid, sizeof (staid), "%s_%s", net, sta);
 
-        /* Find or create new netsta entry */
-        netstanode = GetNetStaNode (netsta, staid);
+        /* Find or create new stationid entry */
+        stationid = GetListStationID (stationid_tree, staid);
 
-        /* Check and update network-station values */
-        if (netstanode)
+        /* Check and update station ID values */
+        if (stationid)
         {
-          strncpy (netstanode->net, net, sizeof (netstanode->net) - 1);
-          strncpy (netstanode->sta, sta, sizeof (netstanode->sta) - 1);
+          strncpy (stationid->net, net, sizeof (stationid->net) - 1);
+          strncpy (stationid->sta, sta, sizeof (stationid->sta) - 1);
 
-          if (!netstanode->earliestdstime || netstanode->earliestdstime > stream->earliestdstime)
+          if (!stationid->earliestdstime || stationid->earliestdstime > stream->earliestdstime)
           {
-            netstanode->earliestdstime = stream->earliestdstime;
-            netstanode->earliestid = stream->earliestid;
+            stationid->earliestdstime = stream->earliestdstime;
+            stationid->earliestid = stream->earliestid;
           }
-          if (!netstanode->latestdstime || netstanode->latestdstime < stream->latestdstime)
+          if (!stationid->latestdstime || stationid->latestdstime < stream->latestdstime)
           {
-            netstanode->latestdstime = stream->latestdstime;
-            netstanode->latestid = stream->latestid;
+            stationid->latestdstime = stream->latestdstime;
+            stationid->latestid = stream->latestid;
           }
         }
         else
@@ -1337,14 +1318,14 @@ HandleInfo (ClientInfo *cinfo)
       /* Free the remaining stream Stack memory */
       StackDestroy (streams, free);
 
-      /* Create Stack of network-station entries */
-      netstas = StackCreate ();
-      RBBuildStack (netsta, netstas);
+      /* Create Stack of station ID entries */
+      stationid_stack = StackCreate ();
+      RBBuildStack (stationid_tree, stationid_stack);
 
       /* Loop through array entries adding "station" elements */
-      while ((tnode = (RBNode *)StackPop (netstas)))
+      while ((tnode = (RBNode *)StackPop (stationid_stack)))
       {
-        netstanode = (SLNetStaNode *)tnode->data;
+        stationid = (ListStationID *)tnode->data;
 
         if (!(station = mxmlNewElement (seedlink, "station")))
         {
@@ -1353,17 +1334,17 @@ HandleInfo (ClientInfo *cinfo)
         }
         else
         {
-          mxmlElementSetAttr (station, "name", netstanode->sta);
-          mxmlElementSetAttr (station, "network", netstanode->net);
-          mxmlElementSetAttrf (station, "description", "%s Station", netstanode->net);
-          mxmlElementSetAttrf (station, "begin_seq", "%06" PRIX64, netstanode->earliestid);
-          mxmlElementSetAttrf (station, "end_seq", "%06" PRIX64, netstanode->latestid);
+          mxmlElementSetAttr (station, "name", stationid->sta);
+          mxmlElementSetAttr (station, "network", stationid->net);
+          mxmlElementSetAttrf (station, "description", "%s Station", stationid->net);
+          mxmlElementSetAttrf (station, "begin_seq", "%06" PRIX64, stationid->earliestid);
+          mxmlElementSetAttrf (station, "end_seq", "%06" PRIX64, stationid->latestid);
         }
       }
 
-      /* Cleanup network-station structures */
-      RBTreeDestroy (netsta);
-      StackDestroy (netstas, 0);
+      /* Free temporary structures */
+      RBTreeDestroy (stationid_tree);
+      StackDestroy (stationid_stack, 0);
     }
   } /* End of STATIONS request processing */
   /* STREAMS */
@@ -1374,16 +1355,16 @@ HandleInfo (ClientInfo *cinfo)
     Stack *streams;
     RingStream *stream;
 
-    RBTree *netsta;
-    Stack *netstas;
-    SLNetStaNode *netstanode;
+    RBTree *stationid_tree;
+    Stack *stationid_stack;
+    ListStationID *stationid;
     RBNode *tnode;
 
-    char net[10];
-    char sta[10];
-    char loc[10];
-    char chan[10];
-    char staid[22];
+    char net[16] = {0};
+    char sta[16] = {0};
+    char loc[16] = {0};
+    char chan[16] = {0};
+    char staid[32];
 
     /* Get streams as a Stack (this is copied data) */
     if (!(streams = GetStreamsStack (cinfo->ringparams, cinfo->reader)))
@@ -1393,43 +1374,43 @@ HandleInfo (ClientInfo *cinfo)
     }
     else
     {
-      netsta = RBTreeCreate (StaKeyCompare, free, FreeNetStaNode);
+      stationid_tree = RBTreeCreate (StaKeyCompare, free, FreeListStationID);
 
-      /* Loop through the streams and build a network-station tree with associated streams */
+      /* Loop through the streams and build a station ID tree with associated streams */
       while ((stream = (RingStream *)StackPop (streams)))
       {
         /* Split the streamid to get the network and station codes,
            assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
-        if (SplitStreamID (stream->streamid, '_', 10, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
+        if (SplitStreamID (stream->streamid, '_', 15, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
         {
           lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
           return -1;
         }
 
-        /* Combine network and station into station ID */
+        /* Create station ID as combination of network and station codes */
         snprintf (staid, sizeof (staid), "%s_%s", net, sta);
 
-        /* Find or create new netsta entry */
-        netstanode = GetNetStaNode (netsta, staid);
+        /* Find or create new station ID entry */
+        stationid = GetListStationID (stationid_tree, staid);
 
-        if (netstanode)
+        if (stationid)
         {
           /* Add stream to associated streams stack */
-          StackUnshift (netstanode->streams, stream);
+          StackUnshift (stationid->streams, stream);
 
-          strncpy (netstanode->net, net, sizeof (netstanode->net) - 1);
-          strncpy (netstanode->sta, sta, sizeof (netstanode->sta) - 1);
+          strncpy (stationid->net, net, sizeof (stationid->net) - 1);
+          strncpy (stationid->sta, sta, sizeof (stationid->sta) - 1);
 
-          /* Check and update network-station earliest/latest values */
-          if (!netstanode->earliestdstime || netstanode->earliestdstime > stream->earliestdstime)
+          /* Check and update station ID earliest/latest values */
+          if (!stationid->earliestdstime || stationid->earliestdstime > stream->earliestdstime)
           {
-            netstanode->earliestdstime = stream->earliestdstime;
-            netstanode->earliestid = stream->earliestid;
+            stationid->earliestdstime = stream->earliestdstime;
+            stationid->earliestid = stream->earliestid;
           }
-          if (!netstanode->latestdstime || netstanode->latestdstime < stream->latestdstime)
+          if (!stationid->latestdstime || stationid->latestdstime < stream->latestdstime)
           {
-            netstanode->latestdstime = stream->latestdstime;
-            netstanode->latestid = stream->latestid;
+            stationid->latestdstime = stream->latestdstime;
+            stationid->latestid = stream->latestid;
           }
         }
         else
@@ -1439,14 +1420,14 @@ HandleInfo (ClientInfo *cinfo)
         }
       }
 
-      /* Create Stack of network-station entries */
-      netstas = StackCreate ();
-      RBBuildStack (netsta, netstas);
+      /* Create Stack of station ID entries */
+      stationid_stack = StackCreate ();
+      RBBuildStack (stationid_tree, stationid_stack);
 
-      /* Traverse network-station entries creating "station" elements */
-      while ((tnode = (RBNode *)StackPop (netstas)))
+      /* Traverse station ID entries creating "station" elements */
+      while ((tnode = (RBNode *)StackPop (stationid_stack)))
       {
-        netstanode = (SLNetStaNode *)tnode->data;
+        stationid = (ListStationID *)tnode->data;
 
         if (!(station = mxmlNewElement (seedlink, "station")))
         {
@@ -1455,19 +1436,19 @@ HandleInfo (ClientInfo *cinfo)
         }
         else
         {
-          mxmlElementSetAttr (station, "name", netstanode->sta);
-          mxmlElementSetAttr (station, "network", netstanode->net);
-          mxmlElementSetAttrf (station, "description", "%s Station", netstanode->net);
-          mxmlElementSetAttrf (station, "begin_seq", "%06" PRIX64, netstanode->earliestid);
-          mxmlElementSetAttrf (station, "end_seq", "%06" PRIX64, netstanode->latestid);
+          mxmlElementSetAttr (station, "name", stationid->sta);
+          mxmlElementSetAttr (station, "network", stationid->net);
+          mxmlElementSetAttrf (station, "description", "%s Station", stationid->net);
+          mxmlElementSetAttrf (station, "begin_seq", "%06" PRIX64, stationid->earliestid);
+          mxmlElementSetAttrf (station, "end_seq", "%06" PRIX64, stationid->latestid);
           mxmlElementSetAttr (station, "stream_check", "enabled");
 
           /* Traverse associated streams to find locations and channels creating "stream" elements */
-          while ((stream = (RingStream *)StackPop (netstanode->streams)))
+          while ((stream = (RingStream *)StackPop (stationid->streams)))
           {
             /* Split the streamid to get the network, station, location & channel codes
                assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
-            if (SplitStreamID (stream->streamid, '_', 10, net, sta, loc, chan, NULL, NULL, NULL) != 4)
+            if (SplitStreamID (stream->streamid, '_', 15, net, sta, loc, chan, NULL, NULL, NULL) != 4)
             {
               lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
               return -1;
@@ -1497,9 +1478,9 @@ HandleInfo (ClientInfo *cinfo)
         }
       }
 
-      /* Cleanup network-station structures */
-      RBTreeDestroy (netsta);
-      StackDestroy (netstas, 0);
+      /* Free temporary structures */
+      RBTreeDestroy (stationid_tree);
+      StackDestroy (stationid_stack, 0);
       StackDestroy (streams, 0);
     }
   } /* End of STREAMS request processing */
@@ -1849,9 +1830,9 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
     uint64_t upktid = packet->pktid;
     uint8_t ustationidlen = 0;
     int stationid_printed;
-    char net[10];
-    char sta[10];
-    char staid[22];
+    char net[16];
+    char sta[16];
+    char staid[32];
 
     /* Split the streamid to get the network and station codes,
      * assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
@@ -1860,6 +1841,8 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
       lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, packet->streamid);
       return -1;
     }
+
+    //TODO remove FDSN: from network code if present
 
     /* Combine network and station into station ID */
     if ((stationid_printed = snprintf (staid, sizeof (staid), "%s_%s", net, sta)) <= 0)
@@ -1953,42 +1936,42 @@ SendInfoRecord (char *record, int reclen, void *vcinfo)
 } /* End of SendInfoRecord() */
 
 /***************************************************************************
- * FreeStaNode:
+ * FreeReqStationID:
  *
- * Free all memory associated with a SLStaNode.
+ * Free all memory associated with a ReqStationID.
  *
  ***************************************************************************/
 static void
-FreeStaNode (void *rbnode)
+FreeReqStationID (void *rbnode)
 {
-  SLStaNode *stanode = (SLStaNode *)rbnode;
+  ReqStationID *stationid = (ReqStationID *)rbnode;
 
-  if (stanode->selectors)
-    free (stanode->selectors);
+  if (stationid->selectors)
+    free (stationid->selectors);
 
   free (rbnode);
 
   return;
-} /* End of FreeStaNode() */
+} /* End of FreeReqStationID() */
 
 /***************************************************************************
- * FreeNetStaNode:
+ * FreeListStationID:
  *
- * Free all memory associated with a SLNetStaNode.
+ * Free all memory associated with a ListStationID.
  *
  ***************************************************************************/
 static void
-FreeNetStaNode (void *rbnode)
+FreeListStationID (void *rbnode)
 {
-  SLNetStaNode *netstanode = (SLNetStaNode *)rbnode;
+  ListStationID *stationid = (ListStationID *)rbnode;
 
-  if (netstanode->streams)
-    StackDestroy (netstanode->streams, free);
+  if (stationid->streams)
+    StackDestroy (stationid->streams, free);
 
   free (rbnode);
 
   return;
-} /* End of FreeNetStaNode() */
+} /* End of FreeListStationID() */
 
 /***************************************************************************
  * StaKeyCompare:
@@ -2014,24 +1997,24 @@ StaKeyCompare (const void *a, const void *b)
 } /* End of StaKeyCompare() */
 
 /***************************************************************************
- * GetStaNode:
+ * GetReqStationID:
  *
  * Search the specified binary tree for a given entry.  If the entry does not
  * exist create it and add it to the tree.
  *
  * Return a pointer to the entry or 0 for error.
  ***************************************************************************/
-static SLStaNode *
-GetStaNode (RBTree *tree, char *staid)
+static ReqStationID *
+GetReqStationID (RBTree *tree, char *staid)
 {
   char *newkey = NULL;
-  SLStaNode *stanode = 0;
+  ReqStationID *stationid = 0;
   RBNode *rbnode;
 
-  /* Search for a matching SLStaNode entry */
+  /* Search for a matching entry */
   if ((rbnode = RBFind (tree, staid)))
   {
-    stanode = (SLStaNode *)rbnode->data;
+    stationid = (ReqStationID *)rbnode->data;
   }
   else
   {
@@ -2041,43 +2024,43 @@ GetStaNode (RBTree *tree, char *staid)
       return 0;
     }
 
-    if ((stanode = (SLStaNode *)malloc (sizeof (SLStaNode))) == NULL)
+    if ((stationid = (ReqStationID *)malloc (sizeof (ReqStationID))) == NULL)
     {
       lprintf (0, "%s: Error allocating new node", __func__);
       return 0;
     }
 
-    stanode->starttime = NSTERROR;
-    stanode->endtime = NSTERROR;
-    stanode->packetid = 0;
-    stanode->datastart = NSTERROR;
-    stanode->selectors = NULL;
+    stationid->starttime = NSTERROR;
+    stationid->endtime = NSTERROR;
+    stationid->packetid = SL_UNSETSEQUENCE;
+    stationid->datastart = NSTERROR;
+    stationid->selectors = NULL;
 
-    RBTreeInsert (tree, newkey, stanode, 0);
+    RBTreeInsert (tree, newkey, stationid, 0);
   }
 
-  return stanode;
-} /* End of GetStaNode() */
+  return stationid;
+} /* End of GetReqStationID() */
 
 /***************************************************************************
- * GetNetStaNode:
+ * GetListStationID:
  *
  * Search the specified binary tree for a given entry.  If the entry does not
  * exist create it and add it to the tree.
  *
  * Return a pointer to the entry or 0 for error.
  ***************************************************************************/
-static SLNetStaNode *
-GetNetStaNode (RBTree *tree, char *staid)
+static ListStationID *
+GetListStationID (RBTree *tree, char *staid)
 {
   char *newkey = NULL;
-  SLNetStaNode *netstanode = 0;
+  ListStationID *stationid= NULL;
   RBNode *rbnode;
 
-  /* Search for a matching SLNetStaNode entry */
+  /* Search for a matching ListStationID entry */
   if ((rbnode = RBFind (tree, staid)))
   {
-    netstanode = (SLNetStaNode *)rbnode->data;
+    stationid = (ListStationID *)rbnode->data;
   }
   else
   {
@@ -2087,21 +2070,22 @@ GetNetStaNode (RBTree *tree, char *staid)
       return 0;
     }
 
-    if ((netstanode = (SLNetStaNode *)calloc (1, sizeof (SLNetStaNode))) == NULL)
+    if ((stationid = (ListStationID *)calloc (1, sizeof (ListStationID))) == NULL)
     {
       lprintf (0, "%s: Error allocating new node", __func__);
       return 0;
     }
 
     /* Initialize Stack of associated streams */
-    netstanode->streams = StackCreate ();
+    stationid->streams = StackCreate ();
 
-    RBTreeInsert (tree, newkey, netstanode, 0);
+    RBTreeInsert (tree, newkey, stationid, 0);
   }
 
-  return netstanode;
-} /* End of GetNetStaNode() */
+  return stationid;
+} /* End of GetListStationID() */
 
+//TODO, debug this for -S IU_KONO:BHZ
 /***************************************************************************
  * StationToRegex:
  *

@@ -86,27 +86,27 @@ typedef struct SLInfo
   char reqstaid[51];     /* Requested station ID, used during negotiation */
 } SLInfo;
 
-/* Requested station IDs, used as the data for B-tree of stations */
-typedef struct SLStaNode
+/* Requested station IDs, used as the data for B-tree at SL.stations */
+typedef struct ReqStationID
 {
   nstime_t starttime; /* Requested start time for StaID */
   nstime_t endtime;   /* Requested end time for StaID */
   int64_t packetid;   /* Requested packet ID */
   nstime_t datastart; /* Data start time of requested packet */
   char *selectors;    /* List of SeedLink stream ID selectors */
-} SLStaNode;
+} ReqStationID;
 
-/* Stream listings, used as the data for B-tree of network-stations */
-typedef struct SLNetStaNode
+/* Station ID listings, used for INFO requests */
+typedef struct ListStationID
 {
-  char net[10];            /* Network code parsed from stream ID */
-  char sta[10];            /* Station code parsed from stream ID */
-  nstime_t earliestdstime; /* Data start time of earliest packet for StaID */
-  int64_t earliestid;      /* Earliest packet ID for StaID */
-  nstime_t latestdstime;   /* Data start time of latest packet for StaID */
-  int64_t latestid;        /* Latest packet ID for StaID */
+  char net[16];            /* Network code from Station ID, if available */
+  char sta[16];            /* Station code from Station ID, if available */
+  nstime_t earliestdstime; /* Data start time of earliest packet Station ID */
+  int64_t earliestid;      /* Earliest packet ID Station ID */
+  nstime_t latestdstime;   /* Data start time of latest packet Station ID */
+  int64_t latestid;        /* Latest packet ID Station ID */
   Stack *streams;          /* Stack of associated streams */
-} SLNetStaNode;
+} ListStationID;
 
 extern int SLHandleCmd (ClientInfo *cinfo);
 extern int SLStreamPackets (ClientInfo *cinfo);
