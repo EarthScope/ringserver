@@ -55,7 +55,7 @@ extern "C" {
 #define MAXSTREAMID 60
 
 /* Ring parameters, stored at the beginning of the packet buffer file */
-typedef struct RingParams_s
+typedef struct RingParams
 {
   char      signature[4];     /* RING_SIGNATURE */
   uint16_t  version;          /* RING_VERSION */
@@ -93,7 +93,7 @@ typedef struct RingParams_s
 
 /* Ring packet header structure, data follows header in the ring */
 /* RW tagged values are set when packets are added to the ring */
-typedef struct RingPacket_s
+typedef struct RingPacket
 {
   int64_t   pktid;           /* RW: Packet ID */
   int64_t   offset;          /* RW: Offset in ring */
@@ -106,7 +106,7 @@ typedef struct RingPacket_s
 } RingPacket;
 
 /* Ring stream structure used for the stream index */
-typedef struct RingStream_s
+typedef struct RingStream
 {
   char        streamid[MAXSTREAMID]; /* Packet stream ID */
   nstime_t    earliestdstime;/* Earliest packet data start time */
@@ -120,7 +120,7 @@ typedef struct RingStream_s
 } RingStream;
 
 /* Ring reader parameters */
-typedef struct RingReader_s
+typedef struct RingReader
 {
   RingParams *ringparams;    /* Ring parameters for this reader */
   int64_t     pktid;         /* Current packet ID position in ring */

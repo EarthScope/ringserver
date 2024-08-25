@@ -47,7 +47,8 @@ extern "C" {
 #define STATE_STREAM        4  /* Data streaming */
 
 /* Connection information for client threads */
-typedef struct ClientInfo_s {
+typedef struct ClientInfo
+{
   int         socket;       /* Socket descriptor */
   int         socketerr;    /* Socket error flag */
   char       *sendbuf;      /* Client specific send buffer */
@@ -103,7 +104,8 @@ typedef struct ClientInfo_s {
 } ClientInfo;
 
 /* Structure used as the data for B-tree of stream tracking */
-typedef struct StreamNode_s {
+typedef struct StreamNode
+{
   char      streamid[MAXSTREAMID]; /* Stream ID */
   uint64_t  txpackets;      /* Total packets transmitted */
   uint64_t  txbytes;        /* Total bytes transmitted */

@@ -41,24 +41,24 @@
 #define SDAYLAYOUT  "%n.%s.%Y:%j"
 #define HSDAYLAYOUT "%h/%n.%s.%Y:%j"
 
-typedef struct DataStreamGroup_s
+typedef struct DataStreamGroup
 {
   char   *defkey;
   int     filed;
   time_t  modtime;
   char    filename[MAX_FILENAME_LEN];
   char    postpath[MAX_FILENAME_LEN];
-  struct  DataStreamGroup_s *next;
+  struct  DataStreamGroup *next;
 }
 DataStreamGroup;
 
-typedef struct DataStream_s
+typedef struct DataStream
 {
   char   *path;
   int     idletimeout;
   int     maxopenfiles;
   int     openfilecount;
-  struct  DataStreamGroup_s *grouproot;
+  struct  DataStreamGroup *grouproot;
 }
 DataStream;
 

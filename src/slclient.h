@@ -33,7 +33,7 @@ extern "C"
 /* The total length of SLSERVERVER should be <= 98 bytes for compatibility
    with libslink versions < 2.0. */
 #define SLCAPABILITIES_ID "SLPROTO:4.0 SLPROTO:3.1 CAP WS:13"
-#define SLSERVERVER "SeedLink v4.0 (" VERSION " RingServer) :: " SLCAPABILITIES_ID
+#define SLSERVERVER "SeedLink v4.0 (RingServer/" VERSION ") :: " SLCAPABILITIES_ID
 
 /* Server capabilities for v4 */
 #define SLCAPABILITIESv4 "SLPROTO:4.0 SLPROTO:3.1 TIME WS:13"
@@ -44,6 +44,9 @@ extern "C"
 
 #define SLMAXREGEXLEN 1048576 /* Maximum length of match/reject regex pattern */
 #define SLMAXSELECTLEN 2048   /* Maximum length of per-station/global selector buffer */
+
+#define SL_UNSETSEQUENCE INT64_MAX         /* Unset sequence value */
+#define SL_ALLDATASEQUENCE (INT64_MAX - 1) /* All data sequence value */
 
 #define SLINFO_ID 1
 #define SLINFO_CAPABILITIES 2
@@ -67,7 +70,7 @@ typedef enum
 } ErrorCode;
 
 /* Structure to hold SeedLink specific parameters */
-typedef struct SLInfo_s
+typedef struct SLInfo
 {
   uint8_t proto_major;   /* Major protocol version */
   uint8_t proto_minor;   /* Minor protocol version */
@@ -84,20 +87,20 @@ typedef struct SLInfo_s
 } SLInfo;
 
 /* Requested station IDs, used as the data for B-tree of stations */
-typedef struct SLStaNode_s
+typedef struct SLStaNode
 {
   nstime_t starttime; /* Requested start time for StaID */
   nstime_t endtime;   /* Requested end time for StaID */
   int64_t packetid;   /* Requested packet ID */
   nstime_t datastart; /* Data start time of requested packet */
-  char *selectors;    /* List of SeedLink selectors for StaID */
+  char *selectors;    /* List of SeedLink stream ID selectors */
 } SLStaNode;
 
 /* Stream listings, used as the data for B-tree of network-stations */
-typedef struct SLNetStaNode_s
+typedef struct SLNetStaNode
 {
   char net[10];            /* Network code parsed from stream ID */
-  char sta[10];            /* Station code parsed from stream ID*/
+  char sta[10];            /* Station code parsed from stream ID */
   nstime_t earliestdstime; /* Data start time of earliest packet for StaID */
   int64_t earliestid;      /* Earliest packet ID for StaID */
   nstime_t latestdstime;   /* Data start time of latest packet for StaID */

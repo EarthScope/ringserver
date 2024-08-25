@@ -38,7 +38,7 @@ extern "C" {
 /* Maximum filename length */
 #define MSSCAN_MAXFILENAME 512
 
-typedef struct MSScanInfo_s {
+typedef struct MSScanInfo {
   /* Configuration parameters */
   char  dirname[512];     /* Base directory to scan */
   int   maxrecur;         /* Maximum level of directory recursion */

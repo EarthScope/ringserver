@@ -30,7 +30,7 @@ extern "C" {
 #endif
 
 #define PACKAGE   "ringserver"
-#define VERSION   "2024.SL4"
+#define VERSION   "4.0.0"
 
 /* Thread data flags */
 #define TDF_SPAWNING    (1<<0)          /* Thread is now spawning   */
@@ -61,7 +61,7 @@ struct thread_data {
 
 #define PROTO_ALL (PROTO_DATALINK | PROTO_SEEDLINK | PROTO_HTTP)
 
-/* Doubly-linkable structure to list server threads */
+/* Doubly-linked structure of server threads */
 struct sthread {
   struct thread_data *td;
   unsigned int    type;
@@ -70,7 +70,7 @@ struct sthread {
   struct sthread *next;
 };
 
-/* Doubly-linkable structure to list client threads */
+/* Doubly-linked structure of client threads */
 struct cthread {
   struct thread_data *td;
   struct cthread *prev;
@@ -78,7 +78,7 @@ struct cthread {
 };
 
 /* A structure for server listening parameters */
-typedef struct ListenPortParams_s
+typedef struct ListenPortParams
 {
   char portstr[11];      /* Port number to listen on as string */
   uint8_t protocols;     /* Protocol flags for this connection */
