@@ -54,6 +54,11 @@ extern "C" {
 /* Define a maximum stream ID string length */
 #define MAXSTREAMID 60
 
+/* Macros for updating different patterns */
+#define RingLimit(reader, pattern) UpdatePattern (&(reader)->limit, &(reader)->limit_data, pattern, "ring limit")
+#define RingMatch(reader, pattern) UpdatePattern (&(reader)->match, &(reader)->match_data, pattern, "ring match")
+#define RingReject(reader, pattern) UpdatePattern (&(reader)->reject, &(reader)->reject_data, pattern, "ring reject")
+
 /* Ring parameters, stored at the beginning of the packet buffer file */
 typedef struct RingParams
 {
@@ -149,9 +154,8 @@ extern int64_t RingReadNext (RingReader *reader, RingPacket *packet, char *packe
 extern int64_t RingPosition (RingReader *reader, int64_t pktid, nstime_t pkttime);
 extern int64_t RingAfter (RingReader *reader, nstime_t reftime, int whence);
 extern int64_t RingAfterRev (RingReader *reader, nstime_t reftime, int64_t pktlimit, int whence);
-extern int RingLimit (RingReader *reader, char *pattern);
-extern int RingMatch (RingReader *reader, char *pattern);
-extern int RingReject (RingReader *reader, char *pattern);
+extern int UpdatePattern (pcre2_code **code, pcre2_match_data **data,
+                          const char *pattern, const char *description);
 extern Stack* GetStreamsStack (RingParams *ringparams, RingReader *reader);
 
 

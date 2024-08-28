@@ -1593,163 +1593,64 @@ RingAfterRev (RingReader *reader, nstime_t reftime, int64_t pktlimit,
 } /* End of RingAfterRev() */
 
 /***************************************************************************
- * RingLimit:
+ * UpdatePattern:
  *
- * Compile the supplied limit pattern and assign it to the reader.
+ * Compile the supplied regex pattern (and data) and assign to the
+ * provided pointers.
+ *
+ * The description is used in error messages to describe the pattern.
  *
  * Returns 0 on success and -1 on error.
  ***************************************************************************/
 int
-RingLimit (RingReader *reader, char *pattern)
+UpdatePattern (pcre2_code **code, pcre2_match_data **data,
+               const char *pattern, const char *description)
 {
   int errcode;
   PCRE2_SIZE erroffset;
   PCRE2_UCHAR buffer[256];
 
-  if (!reader)
+  if (!code || !data)
     return -1;
 
   /* Compile pattern and assign to reader */
   if (pattern)
   {
     /* Free existing compiled expression */
-    if (reader->limit)
-      pcre2_code_free (reader->limit);
-    if (reader->limit_data)
-      pcre2_match_data_free (reader->limit_data);
+    if (*code)
+      pcre2_code_free (*code);
+    if (*data)
+      pcre2_match_data_free (*data);
 
     /* Compile regex */
-    reader->limit = pcre2_compile ((PCRE2_SPTR)pattern, PCRE2_ZERO_TERMINATED,
-                                   PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
-    if (reader->limit == NULL)
+    *code = pcre2_compile ((PCRE2_SPTR)pattern, PCRE2_ZERO_TERMINATED,
+                           PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
+
+    if (*code == NULL)
     {
       pcre2_get_error_message (errcode, buffer, sizeof (buffer));
-      lprintf (0, "%s(): Error compiling ring limit expression at %zu: %s",
-               __func__, erroffset, buffer);
+      lprintf (0, "%s(): Error compiling %s expression at %zu: %s",
+               __func__, (description ? description : ""),
+               erroffset, buffer);
       return -1;
     }
 
-    reader->limit_data = pcre2_match_data_create_from_pattern (reader->limit, NULL);
+    *data = pcre2_match_data_create_from_pattern (*code, NULL);
   }
   /* If no pattern, clear any existing regex */
   else
   {
-    if (reader->limit)
-      pcre2_code_free (reader->limit);
-    reader->limit = NULL;
-    if (reader->limit_data)
-      pcre2_match_data_free (reader->limit_data);
-    reader->limit_data = NULL;
+    if (*code)
+      pcre2_code_free (*code);
+    *code = NULL;
+
+    if (*data)
+      pcre2_match_data_free (*data);
+    *data = NULL;
   }
 
   return 0;
-} /* End of RingLimit() */
-
-/***************************************************************************
- * RingMatch:
- *
- * Compile the supplied match pattern and assign it to the reader.
- *
- * Returns 0 on success and -1 on error.
- ***************************************************************************/
-int
-RingMatch (RingReader *reader, char *pattern)
-{
-  int errcode;
-  PCRE2_SIZE erroffset;
-  PCRE2_UCHAR buffer[256];
-
-  if (!reader)
-    return -1;
-
-  /* Compile pattern and assign to reader */
-  if (pattern)
-  {
-    /* Free existing complied expression */
-    if (reader->match)
-      pcre2_code_free (reader->match);
-    if (reader->match_data)
-      pcre2_match_data_free (reader->match_data);
-
-    /* Compile regex */
-    reader->match = pcre2_compile ((PCRE2_SPTR)pattern, PCRE2_ZERO_TERMINATED,
-                                   PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
-    if (reader->match == NULL)
-    {
-      pcre2_get_error_message (errcode, buffer, sizeof (buffer));
-      lprintf (0, "%s(): Error compiling ring match expression at %zu: %s",
-               __func__, erroffset, buffer);
-      return -1;
-    }
-
-    reader->match_data = pcre2_match_data_create_from_pattern (reader->match, NULL);
-  }
-  /* If no pattern, clear any existing regex */
-  else
-  {
-    if (reader->match)
-      pcre2_code_free (reader->match);
-    reader->match = NULL;
-    if (reader->match_data)
-      pcre2_match_data_free (reader->match_data);
-    reader->match_data = NULL;
-  }
-
-  return 0;
-} /* End of RingMatch() */
-
-/***************************************************************************
- * RingReject:
- *
- * Compile the supplied reject pattern and assign it to the reader.
- *
- * Returns 0 on success and -1 on error.
- ***************************************************************************/
-int
-RingReject (RingReader *reader, char *pattern)
-{
-  int errcode;
-  PCRE2_SIZE erroffset;
-  PCRE2_UCHAR buffer[256];
-
-  if (!reader)
-    return -1;
-
-  /* Compile pattern and assign to reader */
-  if (pattern)
-  {
-    /* Free existing complied expression */
-    if (reader->reject)
-      pcre2_code_free (reader->reject);
-    if (reader->reject_data)
-      pcre2_match_data_free (reader->reject_data);
-
-    /* Compile regex */
-    reader->reject = pcre2_compile ((PCRE2_SPTR)pattern, PCRE2_ZERO_TERMINATED,
-                                    PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
-    if (reader->reject == NULL)
-    {
-      pcre2_get_error_message (errcode, buffer, sizeof (buffer));
-      lprintf (0, "%s(): Error compiling ring reject expression at %zu: %s",
-               __func__, erroffset, buffer);
-      return -1;
-    }
-
-    reader->reject_data = pcre2_match_data_create_from_pattern (reader->reject, NULL);
-  }
-  /* If no pattern, clear any existing regex */
-  else
-  {
-    if (reader->reject)
-      pcre2_code_free (reader->reject);
-    reader->reject = NULL;
-    if (reader->reject_data)
-      pcre2_match_data_free (reader->reject_data);
-    reader->reject_data = NULL;
-  }
-
-  return 0;
-} /* End of RingReject() */
+} /* End of UpdatePattern() */
 
 /***************************************************************************
  * StreamStackNodeCmp:
