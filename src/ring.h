@@ -43,7 +43,7 @@ extern "C" {
 
 /* Static ring parameters */
 #define RING_SIGNATURE "RING"
-#define RING_VERSION  1
+#define RING_VERSION  2
 
 /* Ring relative positioning values */
 #define RINGCURRENT  -1
