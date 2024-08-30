@@ -35,8 +35,16 @@ extern "C" {
 
 #define DLMAXREGEXLEN  1048576  /* Maximum regex pattern size */
 
+/* Structure to hold DataLink specific parameters */
+typedef struct DLInfo
+{
+  pcre2_code *legacy_mseed_streamid_match;      /* Compiled match expression */
+  pcre2_match_data *legacy_mseed_streamid_data; /* Match data results */
+} DLInfo;
+
 extern int DLHandleCmd (ClientInfo *cinfo);
 extern int DLStreamPackets (ClientInfo *cinfo);
+extern void DLFree (ClientInfo *cinfo);
 
 #ifdef __cplusplus
 }

@@ -54,6 +54,10 @@ extern "C" {
 /* Define a maximum stream ID string length */
 #define MAXSTREAMID 60
 
+/* A regex pattern to match legacy stream IDs for miniSEED using SEED codes
+   of the form:  NN_SSSSS_LL_CCC/MSEED */
+#define LEGACY_MSEED_STREAMID_PATTERN "^[0-9A-Z]{1,2}_[0-9A-Z]{1,5}_[0-9A-Z]{0,2}_[0-9A-Z]{3}/MSEED$"
+
 /* Macros for updating different patterns */
 #define RingLimit(reader, pattern) UpdatePattern (&(reader)->limit, &(reader)->limit_data, pattern, "ring limit")
 #define RingMatch(reader, pattern) UpdatePattern (&(reader)->match, &(reader)->match_data, pattern, "ring match")

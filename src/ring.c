@@ -1868,9 +1868,9 @@ AddStreamIdx (RBTree *streamidx, RingStream *stream, Key **ppkey)
   if (!newkey || !newdata)
     return 0;
 
-  /* Populate the new key and data node */
-  *newkey = FVNhash64 (stream->streamid);
+  /* Populate the new data node and key */
   memcpy (newdata, stream, sizeof (RingStream));
+  *newkey = FVNhash64 (newdata->streamid);
 
   /* Add to the stream index */
   RBTreeInsert (streamidx, newkey, newdata, 0);

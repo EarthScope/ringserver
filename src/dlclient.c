@@ -68,8 +68,32 @@ static int SelectedStreams (RingParams *ringparams, RingReader *reader);
 int
 DLHandleCmd (ClientInfo *cinfo)
 {
+  DLInfo *dlinfo;
+
   if (!cinfo)
     return -1;
+
+  /* Allocate and initialize DataLink specific information */
+  if (!cinfo->extinfo)
+  {
+    if (!(dlinfo = (DLInfo *)calloc (1, sizeof (DLInfo))))
+    {
+      lprintf (0, "[%s] Error allocating DLInfo", cinfo->hostname);
+      return -1;
+    }
+
+    cinfo->extinfo = dlinfo;
+
+    /* Compile the legacy miniSEED stream ID pattern */
+    if (UpdatePattern (&dlinfo->legacy_mseed_streamid_match,
+                       &dlinfo->legacy_mseed_streamid_data,
+                       LEGACY_MSEED_STREAMID_PATTERN, "legacy miniSEED stream ID pattern"))
+    {
+      return -1;
+    }
+  }
+
+  dlinfo = (DLInfo *)cinfo->extinfo;
 
   /* Determine if this is a data submission and handle */
   if (!strncmp (cinfo->recvbuf, "WRITE", 5))
@@ -203,6 +227,34 @@ DLStreamPackets (ClientInfo *cinfo)
 
   return (readid) ? cinfo->packet.datasize : 0;
 } /* End of DLStreamPackets() */
+
+/***********************************************************************
+ * DLFree:
+ *
+ * Free all memory specific to a DataLink client.
+ *
+ ***********************************************************************/
+void
+DLFree (ClientInfo *cinfo)
+{
+  DLInfo *dlinfo;
+
+  if (!cinfo || !cinfo->extinfo)
+    return;
+
+  dlinfo = (DLInfo *)cinfo->extinfo;
+
+  /* Free the legacy miniSEED stream ID matching data */
+  if (dlinfo->legacy_mseed_streamid_match)
+    pcre2_code_free (dlinfo->legacy_mseed_streamid_match);
+  if (dlinfo->legacy_mseed_streamid_data)
+    pcre2_match_data_free (dlinfo->legacy_mseed_streamid_data);
+
+  free (dlinfo);
+  cinfo->extinfo = NULL;
+
+  return;
+} /* End of SLFree() */
 
 /***************************************************************************
  * HandleNegotiation:
@@ -602,11 +654,13 @@ HandleNegotiation (ClientInfo *cinfo)
  *
  * The command syntax is: "WRITE <streamid> <hpdatastart> <hpdataend> <flags> <datasize>"
  *
- * The stream ID is used verbatim by the ringserver.  The hpdatastart
- * and hpdataend are high-precision time stamps (hptime), microseconds
- * since the POSIX epoch.  The data size is the size in bytes of the data
- * portion following the header.  The flags are single character indicators
- * and interpreted the following way:
+ * Legacy stream IDs for legacy miniSEED of the form: NN_SSSSS_LL_CCC/MSEED
+ * are converted to FDSN Source ID form: FDSN:NN_SSSSS_LL_C_C_C/MSEED.
+ * Otherwise the stream ID is used verbatim by the ringserver.
+ * The hpdatastart and hpdataend are high-precision time stamps (hptime),
+ * microseconds since the POSIX epoch.  The data size is the size in bytes
+ * of the data portion following the header.  The flags are single character
+ * indicators and interpreted the following way:
  *
  * flags:
  * 'N' = no acknowledgement is requested
@@ -617,6 +671,7 @@ HandleNegotiation (ClientInfo *cinfo)
 static int
 HandleWrite (ClientInfo *cinfo)
 {
+  DLInfo *dlinfo;
   StreamNode *stream;
   char replystr[200];
   char streamid[101];
@@ -628,8 +683,10 @@ HandleWrite (ClientInfo *cinfo)
   MS3Record *msr = NULL;
   char *type;
 
-  if (!cinfo)
+  if (!cinfo || !cinfo->extinfo)
     return -1;
+
+  dlinfo = (DLInfo *)cinfo->extinfo;
 
   /* Parse command parameters: WRITE <streamid> <datastart> <dataend> <flags> <datasize> */
   if (sscanf (cinfo->recvbuf, "%*s %100s %" SCNd64 " %" SCNd64 " %100s %u",
@@ -644,6 +701,34 @@ HandleWrite (ClientInfo *cinfo)
     return -1;
   }
 
+  /* Translate legacy stream ID: NN_SSSSS_LL_CCC/MSEED
+   * to an FDSN Source ID: FDSN:NN_SSSSS_LL_C_C_C/MSEED */
+  if (dlinfo->legacy_mseed_streamid_match != NULL &&
+      pcre2_match (dlinfo->legacy_mseed_streamid_match, (PCRE2_SPTR8)streamid,
+                   PCRE2_ZERO_TERMINATED, 0, 0,
+                   dlinfo->legacy_mseed_streamid_data, NULL) > 0)
+  {
+    char *prechannel = strrchr (streamid, '_');
+
+    snprintf (cinfo->packet.streamid, sizeof (cinfo->packet.streamid),
+              "FDSN:%.*s_%c_%c_%c%s",
+              (int)(prechannel - streamid), streamid,
+              prechannel[1], prechannel[2], prechannel[3],
+              &prechannel[4]);
+
+    lprintf (3, "Translating legacy stream ID: %s -> %s",
+             streamid, cinfo->packet.streamid);
+  }
+  /* Otherwise copy stream ID verbatim */
+  else
+  {
+    /* Copy the stream ID verbatim */
+    memcpy (cinfo->packet.streamid, streamid, sizeof (cinfo->packet.streamid));
+
+    /* Make sure the streamid is terminated */
+    cinfo->packet.streamid[sizeof (cinfo->packet.streamid) - 1] = '\0';
+  }
+
   /* Wire protocol for DataLink uses time stamps in as microseconds since the epoch,
    * convert these to the nanosecond ticks used internally. */
   cinfo->packet.datastart = MS_HPTIME2NSTIME (cinfo->packet.datastart);
@@ -652,24 +737,20 @@ HandleWrite (ClientInfo *cinfo)
   /* Check that client is allowed to write this stream ID if limit is present */
   if (cinfo->reader->limit)
   {
-    if (pcre2_match (cinfo->reader->limit, (PCRE2_SPTR8)streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+    if (pcre2_match (cinfo->reader->limit, (PCRE2_SPTR8)cinfo->packet.streamid,
+                     PCRE2_ZERO_TERMINATED, 0, 0,
                      cinfo->reader->limit_data, NULL) < 0)
     {
       lprintf (1, "[%s] Error, permission denied for WRITE of stream ID: %s",
-               cinfo->hostname, streamid);
+               cinfo->hostname, cinfo->packet.streamid);
 
-      snprintf (replystr, sizeof (replystr), "Error, permission denied for WRITE of stream ID: %s", streamid);
+      snprintf (replystr, sizeof (replystr), "Error, permission denied for WRITE of stream ID: %s",
+                cinfo->packet.streamid);
       SendPacket (cinfo, "ERROR", replystr, 0, 1, 1);
 
       return -1;
     }
   }
-
-  /* Copy the stream ID */
-  memcpy (cinfo->packet.streamid, streamid, sizeof (cinfo->packet.streamid));
-
-  /* Make sure the streamid is terminated */
-  cinfo->packet.streamid[sizeof (cinfo->packet.streamid) - 1] = '\0';
 
   /* Make sure this packet data would fit into the ring */
   if (cinfo->packet.datasize > cinfo->ringparams->pktsize)
@@ -696,7 +777,7 @@ HandleWrite (ClientInfo *cinfo)
     char filename[100];
     char *fn;
 
-    if ((type = strrchr (streamid, '/')))
+    if ((type = strrchr (cinfo->packet.streamid, '/')))
     {
       if (!strncmp (++type, "MSEED", 5))
       {
@@ -704,10 +785,10 @@ HandleWrite (ClientInfo *cinfo)
         if (msr3_parse (cinfo->packetdata, cinfo->packet.datasize, &msr, 0, 0) == MS_NOERROR)
         {
           /* Check for file name in streamid: "filename::streamid/MSEED" */
-          if ((fn = strstr (streamid, "::")))
+          if ((fn = strstr (cinfo->packet.streamid, "::")))
           {
-            strncpy (filename, streamid, (fn - streamid));
-            filename[(fn - streamid)] = '\0';
+            strncpy (filename, cinfo->packet.streamid, (fn - cinfo->packet.streamid));
+            filename[(fn - cinfo->packet.streamid)] = '\0';
             fn = filename;
           }
 

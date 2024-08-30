@@ -467,6 +467,9 @@ ClientThread (void *arg)
   if (cinfo->type == CLIENT_SEEDLINK && cinfo->extinfo)
     SLFree (cinfo);
 
+  if (cinfo->type == CLIENT_DATALINK && cinfo->extinfo)
+    DLFree (cinfo);
+
   lprintf (1, "Client disconnected: %s", cinfo->hostname);
 
   /* Set thread CLOSED status */
