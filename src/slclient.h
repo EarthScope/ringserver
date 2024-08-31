@@ -38,11 +38,11 @@ extern "C"
 /* Server capabilities for v4 */
 #define SLCAPABILITIESv4 "SLPROTO:4.0 SLPROTO:3.1 TIME WS:13"
 
-#define SLHEADSIZE 8             /* SeedLink header size */
-#define SLHEADSIZE_EXT 17        /* Extended SeedLink header fixed size */
-#define SLINFORECSIZE 512        /* miniSEED record size for INFO packets */
+#define SLHEADSIZE_V3 8       /* SeedLink header size */
+#define SLHEADSIZE_V4 17      /* Extended SeedLink header fixed size */
+#define SLINFORECSIZE 512     /* miniSEED record size for INFO packets */
 
-#define SLMAXREGEXLEN 1048576 /* Maximum length of match/reject regex pattern */
+#define SLMAXREGEXLEN 2097152 /* Maximum length of match/reject regex pattern */
 #define SLMAXSELECTLEN 2048   /* Maximum length of per-station/global selector buffer */
 
 #define SL_UNSETSEQUENCE INT64_MAX         /* Unset sequence value */
@@ -99,8 +99,9 @@ typedef struct ReqStationID
 /* Station ID listings, used for INFO requests */
 typedef struct ListStationID
 {
-  char net[16];            /* Network code from Station ID, if available */
-  char sta[16];            /* Station code from Station ID, if available */
+  char staid[MAXSTREAMID]; /* Station ID */
+  char network[16];        /* Network code from Station ID, if available */
+  char station[16];        /* Station code from Station ID, if available */
   nstime_t earliestdstime; /* Data start time of earliest packet Station ID */
   int64_t earliestid;      /* Earliest packet ID Station ID */
   nstime_t latestdstime;   /* Data start time of latest packet Station ID */

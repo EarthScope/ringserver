@@ -65,7 +65,7 @@
 #include "slclient.h"
 
 /* Define list of valid characters for selectors and station & network codes */
-#define VALIDSELECTCHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_-.:!"
+#define VALIDSELECTCHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_-!"
 #define VALIDSTAIDCHARS  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_"
 
 /* Define the number of no-action loops that trigger the throttle */
@@ -82,9 +82,9 @@ static void FreeListStationID (void *rbnode);
 static int StaKeyCompare (const void *a, const void *b);
 static ReqStationID *GetReqStationID (RBTree *tree, char *staid);
 static ListStationID *GetListStationID (RBTree *tree, char *staid);
-static int StationToRegex (const char *net_sta, const char *selectors,
+static int StationToRegex (const char *staid, const char *selectors,
                            char **matchregex, char **rejectregex);
-static int SelectToRegex (const char *net_sta, const char *select,
+static int SelectToRegex (const char *staid, const char *select,
                           char **regex);
 
 /***********************************************************************
@@ -497,7 +497,9 @@ SLFree (ClientInfo *cinfo)
 
   RBTreeDestroy (slinfo->stations);
   slinfo->stations = 0;
+
   free (slinfo);
+  cinfo->extinfo = NULL;
 
   return;
 } /* End of SLFree() */
@@ -523,7 +525,7 @@ HandleNegotiation (ClientInfo *cinfo)
   nstime_t endtime = NSTERROR;
   char starttimestr[51] = {0};
   char endtimestr[51] = {0};
-  char selector[32] = {0};
+  char selector[64] = {0};
   int64_t startpacket = -1;
 
   char *ptr;
@@ -720,7 +722,7 @@ HandleNegotiation (ClientInfo *cinfo)
     OKGO = 1;
 
     /* Parse pattern from request */
-    fields = sscanf (cinfo->recvbuf, "%*s %31s %c", selector, &junk);
+    fields = sscanf (cinfo->recvbuf, "%*s %63s %c", selector, &junk);
 
     /* Make sure we got a single pattern */
     if (fields != 1)
@@ -731,9 +733,59 @@ HandleNegotiation (ClientInfo *cinfo)
       OKGO = 0;
     }
 
-    /* For SeedLink 3.x, truncate pattern at a '.', DECTOL subtypes, which are accepted but not supported */
-    if (OKGO && slinfo->proto_major == 3 && (ptr = strrchr (selector, '.')))
+    /* For SeedLink v4, check for unsupported filter (conversion) requests */
+    if (OKGO && slinfo->proto_major == 4 && (ptr = strrchr (selector, ':')))
+    {
+      /* Any filter except "native" is not supported */
+      if (strcmp (ptr + 1, "native") != 0)
+      {
+        lprintf (0, "[%s] Error, SELECT filter '%s' not supported", cinfo->hostname, ptr + 1);
+
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Filter not supported"))
+          return -1;
+
+        OKGO = 0;
+      }
+
       *ptr = '\0';
+    }
+
+    /* Truncate pattern at a '.', subtypes are accepted but not supported */
+    if (OKGO && (ptr = strrchr (selector, '.')))
+    {
+      *ptr = '\0';
+    }
+
+    /* Convert v3 style LLCCC selectors to v4 style (FDSN Source ID) for consistency */
+    if (OKGO && slinfo->proto_major == 3)
+    {
+      char newselector[sizeof (selector)];
+      char *negate = (selector[0] == '!') ? "!" : "";
+      char *v3selector = (selector[0] == '!') ? selector + 1 : selector;
+
+      if (strlen (v3selector) == 5)
+      {
+        snprintf (newselector, sizeof (newselector), "%s%c%c_%c_%c_%c",
+                  negate, v3selector[0], v3selector[1], v3selector[2], v3selector[3], v3selector[4]);
+      }
+      else if (strlen (v3selector) == 3)
+      {
+        snprintf (newselector, sizeof (newselector), "%s??_%c_%c_%c",
+                  negate, v3selector[0], v3selector[1], v3selector[2]);
+      }
+      else
+      {
+        lprintf (0, "[%s] Error, SELECT pattern '%s' is not a valid SeedLink v3 LLCCC or CCC pattern",
+                 cinfo->hostname, selector);
+
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Invalid selector pattern"))
+          return -1;
+
+        OKGO = 0;
+      }
+
+      strncpy (selector, newselector, sizeof (selector));
+    }
 
     /* Sanity check, only allowed characters */
     if (OKGO && strspn (selector, VALIDSELECTCHARS) != strlen (selector))
@@ -760,7 +812,7 @@ HandleNegotiation (ClientInfo *cinfo)
       }
       else
       {
-        /* Add selector to the StaNode.selectors, maximum of SLMAXSELECTLEN bytes */
+        /* Add selector to the station ID selectors, maximum of SLMAXSELECTLEN bytes */
         /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
         if (AddToString (&(stationid->selectors), selector, ",", (selector[0] == '!') ? 0 : 1, SLMAXSELECTLEN))
         {
@@ -780,7 +832,7 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Otherwise add selector to global list */
     else if (OKGO)
     {
-      /* Add selector to the ReqStationID.selectors, maximum of SLMAXSELECTLEN bytes */
+      /* Add selector to the  global selectors, maximum of SLMAXSELECTLEN bytes */
       /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
       if (AddToString (&(slinfo->selectors), selector, ",", (selector[0] == '!') ? 0 : 1, SLMAXSELECTLEN))
       {
@@ -1078,16 +1130,16 @@ static int
 HandleInfo (ClientInfo *cinfo)
 {
   SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
-  mxml_node_t *xmldoc = 0;
-  mxml_node_t *seedlink = 0;
+  mxml_node_t *xmldoc = NULL;
+  mxml_node_t *seedlink = NULL;
   char string[200];
-  char *xmlstr = 0;
+  char *xmlstr = NULL;
   int xmllength;
-  char *level = 0;
+  char *level = NULL;
   int infolevel = 0;
   char errflag = 0;
 
-  char *record = 0;
+  char *record = NULL;
   int8_t swapflag;
 
   uint16_t year = 0;
@@ -1259,7 +1311,7 @@ HandleInfo (ClientInfo *cinfo)
 
     char net[16] = {0};
     char sta[16] = {0};
-    char staid[32] = {0};
+    char staid[MAXSTREAMID] = {0};
 
     /* Get copy of streams as a Stack */
     if (!(streams = GetStreamsStack (cinfo->ringparams, cinfo->reader)))
@@ -1274,16 +1326,26 @@ HandleInfo (ClientInfo *cinfo)
       /* Loop through the streams and build a station ID tree */
       while ((stream = (RingStream *)StackPop (streams)))
       {
-        /* Split the streamid to get the network and station codes,
-           assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
-        if (SplitStreamID (stream->streamid, '_', 15, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
-        {
-          lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
-          return -1;
-        }
+        net[0] = '\0';
+        sta[0] = '\0';
 
-        /* Create station ID as combination of network and station codes */
-        snprintf (staid, sizeof (staid), "%s_%s", net, sta);
+        /* Extract network and station codes from FDSN Source ID (streamid) */
+        if (strncmp (stream->streamid, "FDSN:", 5) == 0)
+        {
+          if (ms_sid2nslc (stream->streamid, net, sta, NULL, NULL))
+          {
+            lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
+            return -1;
+          }
+
+          /* Create station ID as combination of network and station codes */
+          snprintf (staid, sizeof (staid), "%s_%s", net, sta);
+        }
+        /* Otherwise use the stream ID as the station ID */
+        else
+        {
+          strncpy (staid, stream->streamid, sizeof (staid) - 1);
+        }
 
         /* Find or create new stationid entry */
         stationid = GetListStationID (stationid_tree, staid);
@@ -1291,8 +1353,9 @@ HandleInfo (ClientInfo *cinfo)
         /* Check and update station ID values */
         if (stationid)
         {
-          strncpy (stationid->net, net, sizeof (stationid->net) - 1);
-          strncpy (stationid->sta, sta, sizeof (stationid->sta) - 1);
+          strncpy (stationid->staid, staid, sizeof (stationid->staid) - 1);
+          strncpy (stationid->network, net, sizeof (stationid->network) - 1);
+          strncpy (stationid->station, sta, sizeof (stationid->station) - 1);
 
           if (!stationid->earliestdstime || stationid->earliestdstime > stream->earliestdstime)
           {
@@ -1334,9 +1397,9 @@ HandleInfo (ClientInfo *cinfo)
         }
         else
         {
-          mxmlElementSetAttr (station, "name", stationid->sta);
-          mxmlElementSetAttr (station, "network", stationid->net);
-          mxmlElementSetAttrf (station, "description", "%s Station", stationid->net);
+          mxmlElementSetAttr (station, "name", (stationid->station[0] != '\0') ? stationid->station : stationid->staid);
+          mxmlElementSetAttr (station, "network", (stationid->network[0] != '\0') ? stationid->network : "");
+          mxmlElementSetAttrf (station, "description", "Station ID %s", stationid->staid);
           mxmlElementSetAttrf (station, "begin_seq", "%06" PRIX64, stationid->earliestid);
           mxmlElementSetAttrf (station, "end_seq", "%06" PRIX64, stationid->latestid);
         }
@@ -1364,7 +1427,7 @@ HandleInfo (ClientInfo *cinfo)
     char sta[16] = {0};
     char loc[16] = {0};
     char chan[16] = {0};
-    char staid[32];
+    char staid[MAXSTREAMID] = {0};
 
     /* Get streams as a Stack (this is copied data) */
     if (!(streams = GetStreamsStack (cinfo->ringparams, cinfo->reader)))
@@ -1379,16 +1442,26 @@ HandleInfo (ClientInfo *cinfo)
       /* Loop through the streams and build a station ID tree with associated streams */
       while ((stream = (RingStream *)StackPop (streams)))
       {
-        /* Split the streamid to get the network and station codes,
-           assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
-        if (SplitStreamID (stream->streamid, '_', 15, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
-        {
-          lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
-          return -1;
-        }
+        net[0] = '\0';
+        sta[0] = '\0';
 
-        /* Create station ID as combination of network and station codes */
-        snprintf (staid, sizeof (staid), "%s_%s", net, sta);
+        /* Extract network and station codes from FDSN Source ID (streamid) */
+        if (strncmp (stream->streamid, "FDSN:", 5) == 0)
+        {
+          if (ms_sid2nslc (stream->streamid, net, sta, NULL, NULL))
+          {
+            lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
+            return -1;
+          }
+
+          /* Create station ID as combination of network and station codes */
+          snprintf (staid, sizeof (staid), "%s_%s", net, sta);
+        }
+        /* Otherwise use the stream ID as the station ID */
+        else
+        {
+          strncpy (staid, stream->streamid, sizeof (staid) - 1);
+        }
 
         /* Find or create new station ID entry */
         stationid = GetListStationID (stationid_tree, staid);
@@ -1398,8 +1471,9 @@ HandleInfo (ClientInfo *cinfo)
           /* Add stream to associated streams stack */
           StackUnshift (stationid->streams, stream);
 
-          strncpy (stationid->net, net, sizeof (stationid->net) - 1);
-          strncpy (stationid->sta, sta, sizeof (stationid->sta) - 1);
+          strncpy (stationid->staid, staid, sizeof (stationid->staid) - 1);
+          strncpy (stationid->network, net, sizeof (stationid->network) - 1);
+          strncpy (stationid->station, sta, sizeof (stationid->station) - 1);
 
           /* Check and update station ID earliest/latest values */
           if (!stationid->earliestdstime || stationid->earliestdstime > stream->earliestdstime)
@@ -1436,9 +1510,9 @@ HandleInfo (ClientInfo *cinfo)
         }
         else
         {
-          mxmlElementSetAttr (station, "name", stationid->sta);
-          mxmlElementSetAttr (station, "network", stationid->net);
-          mxmlElementSetAttrf (station, "description", "%s Station", stationid->net);
+          mxmlElementSetAttr (station, "name", (stationid->station[0] != '\0') ? stationid->station : stationid->staid);
+          mxmlElementSetAttr (station, "network", (stationid->network[0] != '\0') ? stationid->network : "");
+          mxmlElementSetAttrf (station, "description", "Station ID %s", stationid->staid);
           mxmlElementSetAttrf (station, "begin_seq", "%06" PRIX64, stationid->earliestid);
           mxmlElementSetAttrf (station, "end_seq", "%06" PRIX64, stationid->latestid);
           mxmlElementSetAttr (station, "stream_check", "enabled");
@@ -1446,9 +1520,17 @@ HandleInfo (ClientInfo *cinfo)
           /* Traverse associated streams to find locations and channels creating "stream" elements */
           while ((stream = (RingStream *)StackPop (stationid->streams)))
           {
-            /* Split the streamid to get the network, station, location & channel codes
-               assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
-            if (SplitStreamID (stream->streamid, '_', 15, net, sta, loc, chan, NULL, NULL, NULL) != 4)
+            char *ptr;
+            loc[0] = '\0';
+            chan[0] = '\0';
+
+            /* Truncate stream ID at suffix */
+            if ((ptr = strchr (stream->streamid, '/')))
+              *ptr = '\0';
+
+            /* Extract network, station, location, and channel codes from FDSN Source ID (streamid) */
+            if (strncmp (stream->streamid, "FDSN:", 5) == 0 &&
+                ms_sid2nslc (stream->streamid, net, sta, loc, chan))
             {
               lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
               return -1;
@@ -1829,31 +1911,29 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
     uint32_t ureclen = reclen;
     uint64_t upktid = packet->pktid;
     uint8_t ustationidlen = 0;
-    int stationid_printed;
     char net[16];
     char sta[16];
-    char staid[32];
+    char staid[MAXSTREAMID];
 
-    /* Split the streamid to get the network and station codes,
-     * assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
-    if (SplitStreamID (packet->streamid, '_', 10, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
+    /* Extract network and station codes from FDSN Source ID (streamid) */
+    if (strncmp (packet->streamid, "FDSN:", 5) == 0)
     {
-      lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, packet->streamid);
-      return -1;
-    }
+      if (ms_sid2nslc (packet->streamid, net, sta, NULL, NULL))
+      {
+        lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, packet->streamid);
+        return -1;
+      }
 
-    //TODO remove FDSN: from network code if present
-
-    /* Combine network and station into station ID */
-    if ((stationid_printed = snprintf (staid, sizeof (staid), "%s_%s", net, sta)) <= 0)
-    {
-      lprintf (0, "[%s] Error building station ID from %s + %s", cinfo->hostname, net, sta);
-      return -1;
+      /* Create station ID as combination of network and station codes */
+      snprintf (staid, sizeof (staid), "%s_%s", net, sta);
     }
+    /* Otherwise use the stream ID as the station ID */
     else
     {
-      ustationidlen = stationid_printed;
+      strncpy (staid, packet->streamid, sizeof (staid) - 1);
     }
+
+    ustationidlen = (uint8_t)strlen (staid);
 
     /* V4 header values are in little-endan byte order */
     if (ms_bigendianhost ())
@@ -1878,7 +1958,7 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
     memcpy (header + 16, &ustationidlen, 1);
     memcpy (header + 17, staid, ustationidlen);
 
-    headerlen = SLHEADSIZE_EXT + ustationidlen;
+    headerlen = SLHEADSIZE_V4 + ustationidlen;
   }
   else /* Create v3 header */
   {
@@ -1891,7 +1971,7 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
 
     /* Create SeedLink header: signature + sequence number */
     snprintf (header, sizeof (header), "SL%06" PRIX64, packet->pktid);
-    headerlen = SLHEADSIZE;
+    headerlen = SLHEADSIZE_V3;
   }
 
   if (SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){headerlen, reclen}, 2))
@@ -1916,18 +1996,18 @@ SendInfoRecord (char *record, int reclen, void *vcinfo)
 {
   ClientInfo *cinfo = (ClientInfo *)vcinfo;
   SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
-  char header[SLHEADSIZE];
+  char header[SLHEADSIZE_V3];
 
   if (!record || !vcinfo)
     return;
 
   /* Create INFO signature according to termination flag */
   if (slinfo->terminfo)
-    memcpy (header, "SLINFO  ", SLHEADSIZE);
+    memcpy (header, "SLINFO  ", SLHEADSIZE_V3);
   else
-    memcpy (header, "SLINFO *", SLHEADSIZE);
+    memcpy (header, "SLINFO *", SLHEADSIZE_V3);
 
-  SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE, reclen}, 2);
+  SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE_V3, reclen}, 2);
 
   /* Update the time of the last packet exchange */
   cinfo->lastxchange = NSnow ();
@@ -2008,7 +2088,7 @@ static ReqStationID *
 GetReqStationID (RBTree *tree, char *staid)
 {
   char *newkey = NULL;
-  ReqStationID *stationid = 0;
+  ReqStationID *stationid = NULL;
   RBNode *rbnode;
 
   /* Search for a matching entry */
@@ -2085,20 +2165,20 @@ GetListStationID (RBTree *tree, char *staid)
   return stationid;
 } /* End of GetListStationID() */
 
-//TODO, debug this for -S IU_KONO:BHZ
+
 /***************************************************************************
  * StationToRegex:
  *
- * Update match and reject regexes for the specified station ID (NET_STA)
- * and selector list (comma delimited).
+ * Update match and reject regexes for the specified station ID
+ * and (comma delimited) selector list.
  *
  * Return 0 on success and -1 on error.
  ***************************************************************************/
 static int
-StationToRegex (const char *net_sta, const char *selectors,
+StationToRegex (const char *staid, const char *selectors,
                 char **matchregex, char **rejectregex)
 {
-  char *selectorlist;
+  char *selectorlist = NULL;
   char *selector, *nextselector;
   int matched;
 
@@ -2112,7 +2192,7 @@ StationToRegex (const char *net_sta, const char *selectors,
   if (selectors)
   {
     /* Copy selectors list so we can modify it while parsing */
-    if (!(selectorlist = strdup (selectors)))
+    if ((selectorlist = strdup (selectors)) == NULL)
     {
       lprintf (0, "Cannot allocate memory to duplicate selectors");
       return -1;
@@ -2125,7 +2205,7 @@ StationToRegex (const char *net_sta, const char *selectors,
     selector = selectorlist;
     while (selector)
     {
-      /* Find deliminting comma */
+      /* Find delimiting comma */
       nextselector = strchr (selector, ',');
 
       /* Terminate string at comma and set pointer for next selector */
@@ -2139,9 +2219,9 @@ StationToRegex (const char *net_sta, const char *selectors,
            implies all data for the specified station with the execption of the
            negated selection, therefore we need to match all channels from the
            station and then reject those in the negated selector */
-        if (!matched && net_sta)
+        if (!matched && staid)
         {
-          if (SelectToRegex (net_sta, NULL, matchregex))
+          if (SelectToRegex (staid, NULL, matchregex))
           {
             lprintf (0, "Error with SelectToRegex");
             if (selectorlist)
@@ -2152,7 +2232,7 @@ StationToRegex (const char *net_sta, const char *selectors,
           matched++;
         }
 
-        if (SelectToRegex (net_sta, &selector[1], rejectregex))
+        if (SelectToRegex (staid, &selector[1], rejectregex))
         {
           lprintf (0, "Error with SelectToRegex");
           if (selectorlist)
@@ -2163,7 +2243,7 @@ StationToRegex (const char *net_sta, const char *selectors,
       /* Handle regular selector */
       else
       {
-        if (SelectToRegex (net_sta, selector, matchregex))
+        if (SelectToRegex (staid, selector, matchregex))
         {
           lprintf (0, "Error with SelectToRegex");
           if (selectorlist)
@@ -2177,13 +2257,12 @@ StationToRegex (const char *net_sta, const char *selectors,
       selector = nextselector;
     }
 
-    if (selectorlist)
-      free (selectorlist);
+    free (selectorlist);
   }
   /* Otherwise update regex for station without selectors */
   else
   {
-    if (SelectToRegex (net_sta, NULL, matchregex))
+    if (SelectToRegex (staid, NULL, matchregex))
     {
       lprintf (0, "Error with SelectToRegex");
       return -1;
@@ -2215,32 +2294,30 @@ StationToRegex (const char *net_sta, const char *selectors,
  * Return 0 on success and -1 on error.
  ***************************************************************************/
 static int
-SelectToRegex (const char *net_sta, const char *select, char **regex)
+SelectToRegex (const char *staid, const char *select, char **regex)
 {
   const char *ptr;
-  char pattern[50];
+  char pattern[200] = {0};
   char *build = pattern;
-  int idx;
-  int length;
   int retval;
 
   if (!regex)
     return -1;
 
-  /* Start pattern with a '^' */
-  *build++ = '^';
-
   /* Sanity check lengths of input strings */
-  if (net_sta && strlen (net_sta) > 20)
+  if (staid && strlen (staid) > 50)
     return -1;
-  if (select && strlen (select) > 7)
+  if (select && strlen (select) > 50)
     return -1;
 
-  if (net_sta)
+  /* Add starting '^' anchor and FDSN Source ID prefix */
+  memcpy (build, "^(?:FDSN:)?", 11);
+  build += 11;
+
+  /* Copy station pattern if provided, translating globbing wildcards to regex */
+  if (staid)
   {
-    /* Translate network */
-    ptr = net_sta;
-    while (*ptr)
+    for (ptr = staid; *ptr; ptr++)
     {
       if (*ptr == '?')
       {
@@ -2255,10 +2332,9 @@ SelectToRegex (const char *net_sta, const char *select, char **regex)
       {
         *build++ = *ptr;
       }
-
-      ptr++;
     }
   }
+  /* Otherwise add wildcard */
   else
   {
     *build++ = '.';
@@ -2268,87 +2344,39 @@ SelectToRegex (const char *net_sta, const char *select, char **regex)
   /* Add separator */
   *build++ = '_';
 
+  /* Copy stream pattern if provided, translating globbing wildcards to regex */
   if (select)
   {
-    /* Ingore selector after any period, DECOTL subtypes are not supported */
-    if ((ptr = strrchr (select, '.')))
-      length = ptr - select;
-    else
-      length = strlen (select);
+    /* Skip '-' at the beginning of the selector representing empty location codes */
+    while (*select == '-')
+      select++;
 
-    /* If location and channel are specified */
-    if (length == 5)
+    for (ptr = select; *ptr; ptr++)
     {
-      /* Translate location, '-' means space location which is collapsed */
-      for (ptr = select, idx = 0; idx < 2; idx++, ptr++)
+      if (*ptr == '?')
       {
-        if (*ptr == '?')
-          *build++ = '.';
-        else if (*ptr != '-')
-          *build++ = *ptr;
+        *build++ = '.';
       }
-
-      /* Add separator */
-      *build++ = '_';
-
-      /* Translate channel */
-      for (ptr = &select[2], idx = 0; idx < 3; idx++, ptr++)
+      else if (*ptr == '*')
       {
-        if (*ptr == '?')
-          *build++ = '.';
-        else
-          *build++ = *ptr;
+        *build++ = '.';
+        *build++ = '*';
       }
-    }
-    /* If only location is specified */
-    else if (length == 2)
-    {
-      /* Translate location, '-' means space location which is collapsed */
-      for (ptr = select, idx = 0; idx < 2; idx++, ptr++)
+      else
       {
-        if (*ptr == '?')
-          *build++ = '.';
-        else if (*ptr != '-')
-          *build++ = *ptr;
-      }
-
-      /* Add separator */
-      *build++ = '_';
-    }
-    /* If only channel is specified */
-    else if (length == 3)
-    {
-      /* Add wildcard for location and separator */
-      *build++ = '.';
-      *build++ = '*';
-      *build++ = '_';
-
-      /* Translate channel */
-      for (ptr = select, idx = 0; idx < 3; idx++, ptr++)
-      {
-        if (*ptr == '?')
-          *build++ = '.';
-        else
-          *build++ = *ptr;
+        *build++ = *ptr;
       }
     }
   }
+  /* Otherwise add wildcard if station ID was added */
   else
   {
     *build++ = '.';
     *build++ = '*';
   }
 
-  /* Add final catch-all for remaining stream ID parts if not already done */
-  if (select)
-  {
-    *build++ = '.';
-    *build++ = '*';
-  }
-
-  /* End pattern with a '$' and terminate */
-  *build++ = '$';
-  *build++ = '\0';
+  /* Finish with optional /MSEED suffix and 2 or 3 annotation and a '$' anchor */
+  memcpy (build, "(?:/MSEED)?[23]?$", 17);
 
   /* Add new pattern to regex string, expanding as needed up to SLMAXREGEXLEN bytes*/
   if ((retval = AddToString (regex, pattern, "|", 0, SLMAXREGEXLEN)))
