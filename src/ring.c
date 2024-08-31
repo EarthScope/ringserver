@@ -339,14 +339,14 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     (*ringparams)->corruptflag = 0;
     (*ringparams)->fluxflag = 0;
     (*ringparams)->earliestid = 0;
-    (*ringparams)->earliestptime = NSTERROR;
-    (*ringparams)->earliestdstime = NSTERROR;
-    (*ringparams)->earliestdetime = NSTERROR;
+    (*ringparams)->earliestptime = NSTUNSET;
+    (*ringparams)->earliestdstime = NSTUNSET;
+    (*ringparams)->earliestdetime = NSTUNSET;
     (*ringparams)->earliestoffset = -1;
     (*ringparams)->latestid = 0;
-    (*ringparams)->latestptime = NSTERROR;
-    (*ringparams)->latestdstime = NSTERROR;
-    (*ringparams)->latestdetime = NSTERROR;
+    (*ringparams)->latestptime = NSTUNSET;
+    (*ringparams)->latestdstime = NSTUNSET;
+    (*ringparams)->latestdetime = NSTUNSET;
     (*ringparams)->latestoffset = -1;
     (*ringparams)->txpacketrate = 0.0;
     (*ringparams)->txbyterate = 0.0;
@@ -481,18 +481,18 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
            (*ringparams)->earliestid, (*ringparams)->earliestoffset);
   ms_nstime2timestr ((*ringparams)->earliestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   earliest packet creation time: %s",
-           ((*ringparams)->earliestptime == NSTERROR) ? "NONE" : timestr);
+           ((*ringparams)->earliestptime == NSTUNSET) ? "NONE" : timestr);
   ms_nstime2timestr ((*ringparams)->earliestdstime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   earliest packet data start time: %s",
-           ((*ringparams)->earliestdstime == NSTERROR) ? "NONE" : timestr);
+           ((*ringparams)->earliestdstime == NSTUNSET) ? "NONE" : timestr);
   lprintf (2, "   latest packet ID: %" PRId64 ", offset: %" PRId64,
            (*ringparams)->latestid, (*ringparams)->latestoffset);
   ms_nstime2timestr ((*ringparams)->latestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   latest packet creation time: %s",
-           ((*ringparams)->latestptime == NSTERROR) ? "NONE" : timestr);
+           ((*ringparams)->latestptime == NSTUNSET) ? "NONE" : timestr);
   ms_nstime2timestr ((*ringparams)->latestdstime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   latest packet data start time: %s",
-           ((*ringparams)->latestdstime == NSTERROR) ? "NONE" : timestr);
+           ((*ringparams)->latestdstime == NSTUNSET) ? "NONE" : timestr);
 
   return 0;
 } /* End of RingInitialize() */
@@ -1223,7 +1223,7 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
  *
  * Set the ring reading position to the specified packet ID, checking
  * that the ID is a valid packet in the ring.  If the pkttime value is
- * not NSTERROR it will also be checked and should match the requested
+ * not NSTUNSET it will also be checked and should match the requested
  * packet ID.  The current read position is not changed if any errors
  * occur.
  *
@@ -1269,8 +1269,8 @@ RingPosition (RingReader *reader, int64_t pktid, nstime_t pkttime)
     return 0;
   }
 
-  /* Check for matching pkttime if not NSTERROR */
-  if (pkttime != NSTERROR)
+  /* Check for matching pkttime if not NSTUNSET */
+  if (pkttime != NSTUNSET)
   {
     if (pkttime != pkt->pkttime)
     {
@@ -1329,8 +1329,8 @@ RingAfter (RingReader *reader, nstime_t reftime, int whence)
 {
   RingParams *ringparams;
   RingPacket *pkt0 = 0, *pkt1 = 0;
-  nstime_t pkttime0 = NSTERROR;
-  nstime_t pkttime1 = NSTERROR;
+  nstime_t pkttime0 = NSTUNSET;
+  nstime_t pkttime1 = NSTUNSET;
   nstime_t datastart, dataend;
   int64_t pktid0, pktid1;
   int64_t skipped = 0;
@@ -1479,8 +1479,8 @@ RingAfterRev (RingReader *reader, nstime_t reftime, int64_t pktlimit,
   RingParams *ringparams;
   RingPacket *pkt = 0;
   RingPacket *spkt = 0;
-  nstime_t pkttime = NSTERROR;
-  nstime_t spkttime = NSTERROR;
+  nstime_t pkttime = NSTUNSET;
+  nstime_t spkttime = NSTUNSET;
   nstime_t datastart, dataend;
   int64_t pktid, spktid;
   int64_t count = 0;

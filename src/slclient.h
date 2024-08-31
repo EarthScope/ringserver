@@ -46,7 +46,6 @@ extern "C"
 #define SLMAXSELECTLEN 2048   /* Maximum length of per-station/global selector buffer */
 
 #define SL_UNSETSEQUENCE INT64_MAX         /* Unset sequence value */
-#define SL_ALLDATASEQUENCE (INT64_MAX - 1) /* All data sequence value */
 
 #define SLINFO_ID 1
 #define SLINFO_CAPABILITIES 2

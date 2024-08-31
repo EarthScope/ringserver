@@ -2976,11 +2976,11 @@ PrintHandler ()
   ms_nstime2timestr (ringparams->earliestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   earliest packet ID: %" PRId64 ", offset: %" PRId64 ", time: %s",
            ringparams->earliestid, ringparams->earliestoffset,
-           (ringparams->earliestptime == NSTERROR) ? "NONE" : timestr);
+           (ringparams->earliestptime == NSTUNSET) ? "NONE" : timestr);
   ms_nstime2timestr (ringparams->latestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   latest packet ID: %" PRId64 ", offset: %" PRId64 ", time: %s",
            ringparams->latestid, ringparams->latestoffset,
-           (ringparams->latestptime == NSTERROR) ? "NONE" : timestr);
+           (ringparams->latestptime == NSTUNSET) ? "NONE" : timestr);
   lprintf (2, "   TX packet rate: %g, TX byte rate: %g",
            ringparams->txpacketrate, ringparams->txbyterate);
   lprintf (2, "   RX packet rate: %g, RX byte rate: %g",

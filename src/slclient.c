@@ -198,7 +198,7 @@ SLHandleCmd (ClientInfo *cinfo)
         /* Track the widest time window requested */
 
         /* Set or expand the global starttime */
-        if (stationid->starttime != NSTERROR)
+        if (stationid->starttime != NSTUNSET)
         {
           if (!cinfo->starttime)
             cinfo->starttime = stationid->starttime;
@@ -207,7 +207,7 @@ SLHandleCmd (ClientInfo *cinfo)
         }
 
         /* Set or expand the global endtime */
-        if (stationid->endtime != NSTERROR)
+        if (stationid->endtime != NSTUNSET)
         {
           if (!cinfo->endtime)
             cinfo->endtime = stationid->endtime;
@@ -224,7 +224,7 @@ SLHandleCmd (ClientInfo *cinfo)
         /* Requested packet must be valid and have a matching data start time
          * Limit packet time matching to integer seconds to match SeedLink syntax limits */
         if (retval == stationid->packetid &&
-            (stationid->datastart == NSTERROR ||
+            (stationid->datastart == NSTUNSET ||
              (int64_t)(MS_NSTIME2EPOCH (stationid->datastart)) == (int64_t)(MS_NSTIME2EPOCH (cinfo->packet.datastart))))
         {
           /* Use this packet ID if it is newer than any previous newest */
@@ -245,7 +245,7 @@ SLHandleCmd (ClientInfo *cinfo)
     /* Position ring to starting packet ID if specified */
     if (slinfo->startid > 0)
     {
-      retval = RingPosition (cinfo->reader, slinfo->startid, NSTERROR);
+      retval = RingPosition (cinfo->reader, slinfo->startid, NSTUNSET);
 
       if (retval < 0)
       {
@@ -290,7 +290,7 @@ SLHandleCmd (ClientInfo *cinfo)
     }
 
     /* Set ring position based on time if start time specified and not a packet ID */
-    if (cinfo->starttime && cinfo->starttime != NSTERROR && !slinfo->startid)
+    if (cinfo->starttime && cinfo->starttime != NSTUNSET && !slinfo->startid)
     {
       char timestr[31];
 
@@ -408,7 +408,7 @@ SLStreamPackets (ClientInfo *cinfo)
     }
 
     /* Perform time-windowing end time checks */
-    if (cinfo->endtime != 0 && cinfo->endtime != NSTERROR)
+    if (cinfo->endtime != 0 && cinfo->endtime != NSTUNSET)
     {
       /* Track count of number of channels for time-windowing */
       slinfo->timewinchannels += newstream;
@@ -521,8 +521,8 @@ HandleNegotiation (ClientInfo *cinfo)
   ReqStationID *stationid;
   int fields;
 
-  nstime_t starttime = NSTERROR;
-  nstime_t endtime = NSTERROR;
+  nstime_t starttime = NSTUNSET;
+  nstime_t endtime = NSTUNSET;
   char starttimestr[51] = {0};
   char endtimestr[51] = {0};
   char selector[64] = {0};
@@ -869,7 +869,7 @@ HandleNegotiation (ClientInfo *cinfo)
       if (strcmp (seqstr, "ALL") == 0)
         startpacket = RINGEARLIEST;
       else
-        startpacket = stroull (seqstr, NULL, 10);
+        startpacket = strtoull (seqstr, NULL, 10);
     }
     else /* Protocol 3.x */
     {
@@ -2117,10 +2117,10 @@ GetReqStationID (RBTree *tree, char *staid)
       return 0;
     }
 
-    stationid->starttime = NSTERROR;
-    stationid->endtime = NSTERROR;
-    stationid->packetid = SL_UNSETSEQUENCE;
-    stationid->datastart = NSTERROR;
+    stationid->starttime = NSTUNSET;
+    stationid->endtime = NSTUNSET;
+    stationid->packetid = RINGCURRENT;
+    stationid->datastart = NSTUNSET;
     stationid->selectors = NULL;
 
     RBTreeInsert (tree, newkey, stationid, 0);

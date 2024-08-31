@@ -100,9 +100,9 @@ ClientThread (void *arg)
 
   /* Initialize RingReader parameters */
   reader.pktid = 0;
-  reader.pkttime = NSTERROR;
-  reader.datastart = NSTERROR;
-  reader.dataend = NSTERROR;
+  reader.pkttime = NSTUNSET;
+  reader.datastart = NSTUNSET;
+  reader.dataend = NSTUNSET;
   reader.limit = NULL;
   reader.limit_data = NULL;
   reader.match = NULL;

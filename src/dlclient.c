@@ -345,7 +345,7 @@ HandleNegotiation (ClientInfo *cinfo)
       /* Process SET positioning */
       if (!strncmp (subcmd, "SET", 3))
       {
-        nstime = NSTERROR;
+        nstime = NSTUNSET;
 
         /* Process SET <pktid> [time] */
         if (IsAllDigits (value))
@@ -1007,23 +1007,23 @@ HandleInfo (ClientInfo *cinfo, int socket)
     mxmlElementSetAttrf (status, "EarliestPacketID", "%" PRId64, cinfo->ringparams->earliestid);
     ms_nstime2timestr (cinfo->ringparams->earliestptime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "EarliestPacketCreationTime",
-                        (cinfo->ringparams->earliestptime != NSTERROR) ? string : "-");
+                        (cinfo->ringparams->earliestptime != NSTUNSET) ? string : "-");
     ms_nstime2timestr (cinfo->ringparams->earliestdstime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "EarliestPacketDataStartTime",
-                        (cinfo->ringparams->earliestdstime != NSTERROR) ? string : "-");
+                        (cinfo->ringparams->earliestdstime != NSTUNSET) ? string : "-");
     ms_nstime2timestr (cinfo->ringparams->earliestdetime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "EarliestPacketDataEndTime",
-                        (cinfo->ringparams->earliestdetime != NSTERROR) ? string : "-");
+                        (cinfo->ringparams->earliestdetime != NSTUNSET) ? string : "-");
     mxmlElementSetAttrf (status, "LatestPacketID", "%" PRId64, cinfo->ringparams->latestid);
     ms_nstime2timestr (cinfo->ringparams->latestptime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "LatestPacketCreationTime",
-                        (cinfo->ringparams->latestptime != NSTERROR) ? string : "-");
+                        (cinfo->ringparams->latestptime != NSTUNSET) ? string : "-");
     ms_nstime2timestr (cinfo->ringparams->latestdstime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "LatestPacketDataStartTime",
-                        (cinfo->ringparams->latestdstime != NSTERROR) ? string : "-");
+                        (cinfo->ringparams->latestdstime != NSTUNSET) ? string : "-");
     ms_nstime2timestr (cinfo->ringparams->latestdetime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "LatestPacketDataEndTime",
-                        (cinfo->ringparams->latestdetime != NSTERROR) ? string : "-");
+                        (cinfo->ringparams->latestdetime != NSTUNSET) ? string : "-");
   }
 
   /* Add contents to the XML structure depending on info request */
@@ -1304,13 +1304,13 @@ HandleInfo (ClientInfo *cinfo, int socket)
         mxmlElementSetAttrf (conn, "PacketID", "%" PRId64, tcinfo->reader->pktid);
         ms_nstime2timestr (tcinfo->reader->pkttime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
         mxmlElementSetAttr (conn, "PacketCreationTime",
-                            (tcinfo->reader->pkttime != NSTERROR) ? string : "-");
+                            (tcinfo->reader->pkttime != NSTUNSET) ? string : "-");
         ms_nstime2timestr (tcinfo->reader->datastart, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
         mxmlElementSetAttr (conn, "PacketDataStartTime",
-                            (tcinfo->reader->datastart != NSTERROR) ? string : "-");
+                            (tcinfo->reader->datastart != NSTUNSET) ? string : "-");
         ms_nstime2timestr (tcinfo->reader->dataend, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
         mxmlElementSetAttr (conn, "PacketDataEndTime",
-                            (tcinfo->reader->dataend != NSTERROR) ? string : "-");
+                            (tcinfo->reader->dataend != NSTUNSET) ? string : "-");
         mxmlElementSetAttrf (conn, "TXPacketCount", "%" PRId64, tcinfo->txpackets[0]);
         mxmlElementSetAttrf (conn, "TXPacketRate", "%.1f", tcinfo->txpacketrate);
         mxmlElementSetAttrf (conn, "TXByteCount", "%" PRId64, tcinfo->txbytes[0]);
