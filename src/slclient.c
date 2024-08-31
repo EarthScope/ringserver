@@ -526,7 +526,7 @@ HandleNegotiation (ClientInfo *cinfo)
   char starttimestr[51] = {0};
   char endtimestr[51] = {0};
   char selector[64] = {0};
-  int64_t startpacket = -1;
+  int64_t startpacket = RINGCURRENT;
 
   char *ptr;
   char OKGO = 1;
@@ -860,9 +860,16 @@ HandleNegotiation (ClientInfo *cinfo)
 
     if (slinfo->proto_major == 4)
     {
+      char seqstr[21] = {0};
+
       /* DATA [seq_decimal [start [end]]] */
-      fields = sscanf (cinfo->recvbuf, "%*s %" SCNd64 " %50s %50s %c",
-                       &startpacket, starttimestr, endtimestr, &junk);
+      fields = sscanf (cinfo->recvbuf, "%*s %20s %50s %50s %c",
+                       seqstr, starttimestr, endtimestr, &junk);
+
+      if (strcmp (seqstr, "ALL") == 0)
+        startpacket = RINGEARLIEST;
+      else
+        startpacket = stroull (seqstr, NULL, 10);
     }
     else /* Protocol 3.x */
     {
