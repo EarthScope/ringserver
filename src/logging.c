@@ -63,7 +63,7 @@ lprintf (int level, char *fmt, ...)
   struct tm *tp;
   time_t curtime;
 
-  char *day[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+  char *day[]   = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
   char *month[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
                    "Aug", "Sep", "Oct", "Nov", "Dec"};
 
@@ -72,7 +72,7 @@ lprintf (int level, char *fmt, ...)
 
     /* Build local time string and generate final output */
     curtime = time (NULL);
-    tp = localtime (&curtime);
+    tp      = localtime (&curtime);
 
     va_start (argptr, fmt);
     rv = vsnprintf (message, sizeof (message), fmt, argptr);
@@ -104,7 +104,7 @@ lprint (char *message)
 
   /* Set ptr to last character in the message string */
   length = strlen (message);
-  ptr = message + (length - 1);
+  ptr    = message + (length - 1);
 
   /* Trim trailing newline characters */
   while (*ptr == '\n' && ptr != message)
@@ -152,8 +152,8 @@ WriteTLog (ClientInfo *cinfo, int reset)
   char txfilename[500];
   char rxfilename[500];
   char *modestr = "";
-  FILE *txfp = 0;
-  FILE *rxfp = 0;
+  FILE *txfp    = 0;
+  FILE *rxfp    = 0;
 
   /* If the base directory is not specified we are done */
   if (!TLogParams.tlogbasedir)
@@ -277,7 +277,7 @@ WriteTLog (ClientInfo *cinfo, int reset)
         /* Reset counts if requested */
         if (reset)
         {
-          streamnode->txbytes = 0;
+          streamnode->txbytes   = 0;
           streamnode->txpackets = 0;
         }
       }
@@ -292,7 +292,7 @@ WriteTLog (ClientInfo *cinfo, int reset)
         /* Reset counts if requested */
         if (reset)
         {
-          streamnode->rxbytes = 0;
+          streamnode->rxbytes   = 0;
           streamnode->rxpackets = 0;
         }
       }
@@ -357,8 +357,8 @@ CalcIntWin (time_t reftime, int interval, time_t *startint, time_t *endint)
     return -1;
 
   /* Round down to current day */
-  reftm.tm_sec = 0;
-  reftm.tm_min = 0;
+  reftm.tm_sec  = 0;
+  reftm.tm_min  = 0;
   reftm.tm_hour = 0;
 
   /* Calculate the new, rounded epoch time */

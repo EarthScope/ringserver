@@ -66,7 +66,7 @@
 
 /* Define list of valid characters for selectors and station & network codes */
 #define VALIDSELECTCHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_-!"
-#define VALIDSTAIDCHARS  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_"
+#define VALIDSTAIDCHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_"
 
 /* Define the number of no-action loops that trigger the throttle */
 #define THROTTLE_TRIGGER 10
@@ -231,7 +231,7 @@ SLHandleCmd (ClientInfo *cinfo)
           if (newesttime == 0 || cinfo->packet.pkttime > newesttime)
           {
             slinfo->startid = stationid->packetid;
-            newesttime = cinfo->packet.pkttime;
+            newesttime      = cinfo->packet.pkttime;
           }
         }
       }
@@ -521,12 +521,12 @@ HandleNegotiation (ClientInfo *cinfo)
   ReqStationID *stationid;
   int fields;
 
-  nstime_t starttime = NSTUNSET;
-  nstime_t endtime = NSTUNSET;
+  nstime_t starttime    = NSTUNSET;
+  nstime_t endtime      = NSTUNSET;
   char starttimestr[51] = {0};
-  char endtimestr[51] = {0};
-  char selector[64] = {0};
-  int64_t startpacket = RINGCURRENT;
+  char endtimestr[51]   = {0};
+  char selector[64]     = {0};
+  int64_t startpacket   = RINGCURRENT;
 
   char *ptr;
   char OKGO = 1;
@@ -644,8 +644,8 @@ HandleNegotiation (ClientInfo *cinfo)
     if (slinfo->proto_major == 4)
     {
       /* STATION stationID */
-      fields = sscanf (cinfo->recvbuf, "%*s %20s %c", slinfo->reqstaid, &junk);
-      slinfo->reqstaid[sizeof(slinfo->reqstaid) - 1] = '\0';
+      fields                                          = sscanf (cinfo->recvbuf, "%*s %20s %c", slinfo->reqstaid, &junk);
+      slinfo->reqstaid[sizeof (slinfo->reqstaid) - 1] = '\0';
 
       /* Make sure we got a station ID */
       if (fields != 1)
@@ -760,7 +760,7 @@ HandleNegotiation (ClientInfo *cinfo)
     if (OKGO && slinfo->proto_major == 3)
     {
       char newselector[sizeof (selector)];
-      char *negate = (selector[0] == '!') ? "!" : "";
+      char *negate     = (selector[0] == '!') ? "!" : "";
       char *v3selector = (selector[0] == '!') ? selector + 1 : selector;
 
       if (strlen (v3selector) == 5)
@@ -856,7 +856,7 @@ HandleNegotiation (ClientInfo *cinfo)
   {
     /* Parse packet sequence, start and end times from request */
     starttimestr[0] = '\0';
-    endtimestr[0] = '\0';
+    endtimestr[0]   = '\0';
 
     if (slinfo->proto_major == 4)
     {
@@ -946,10 +946,10 @@ HandleNegotiation (ClientInfo *cinfo)
         }
         else
         {
-          stationid->packetid = startpacket;
+          stationid->packetid  = startpacket;
           stationid->datastart = starttime;
           stationid->starttime = starttime;
-          stationid->endtime = endtime;
+          stationid->endtime   = endtime;
         }
       }
 
@@ -971,9 +971,9 @@ HandleNegotiation (ClientInfo *cinfo)
       /* If no stations yet we are in all-station mode */
       if (slinfo->stationcount == 0 && fields >= 1)
       {
-        slinfo->startid = startpacket;
+        slinfo->startid  = startpacket;
         cinfo->starttime = starttime;
-        cinfo->endtime = endtime;
+        cinfo->endtime   = endtime;
       }
 
       /* If FETCH the connection is dial-up */
@@ -992,7 +992,7 @@ HandleNegotiation (ClientInfo *cinfo)
 
     /* Parse start and end time from request */
     starttimestr[0] = '\0';
-    endtimestr[0] = '\0';
+    endtimestr[0]   = '\0';
 
     /* TIME [start_time [end_time]] */
     fields = sscanf (cinfo->recvbuf, "%*s %50s %50s %c",
@@ -1068,7 +1068,7 @@ HandleNegotiation (ClientInfo *cinfo)
         else
         {
           stationid->starttime = starttime;
-          stationid->endtime = endtime;
+          stationid->endtime   = endtime;
         }
       }
 
@@ -1087,7 +1087,7 @@ HandleNegotiation (ClientInfo *cinfo)
       if (slinfo->stationcount == 0 && fields >= 1)
       {
         cinfo->starttime = starttime;
-        cinfo->endtime = endtime;
+        cinfo->endtime   = endtime;
       }
 
       /* Trigger ring configuration and data flow */
@@ -1136,24 +1136,24 @@ HandleNegotiation (ClientInfo *cinfo)
 static int
 HandleInfo (ClientInfo *cinfo)
 {
-  SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
-  mxml_node_t *xmldoc = NULL;
+  SLInfo *slinfo        = (SLInfo *)cinfo->extinfo;
+  mxml_node_t *xmldoc   = NULL;
   mxml_node_t *seedlink = NULL;
   char string[200];
   char *xmlstr = NULL;
   int xmllength;
-  char *level = NULL;
+  char *level   = NULL;
   int infolevel = 0;
-  char errflag = 0;
+  char errflag  = 0;
 
   char *record = NULL;
   int8_t swapflag;
 
   uint16_t year = 0;
   uint16_t yday = 0;
-  uint8_t hour = 0;
-  uint8_t min = 0;
-  uint8_t sec = 0;
+  uint8_t hour  = 0;
+  uint8_t min   = 0;
+  uint8_t sec   = 0;
   uint32_t nsec = 0;
 
   if (!strncasecmp (cinfo->recvbuf, "INFO", 4))
@@ -1316,8 +1316,8 @@ HandleInfo (ClientInfo *cinfo)
     ListStationID *stationid;
     RBNode *tnode;
 
-    char net[16] = {0};
-    char sta[16] = {0};
+    char net[16]            = {0};
+    char sta[16]            = {0};
     char staid[MAXSTREAMID] = {0};
 
     /* Get copy of streams as a Stack */
@@ -1367,12 +1367,12 @@ HandleInfo (ClientInfo *cinfo)
           if (!stationid->earliestdstime || stationid->earliestdstime > stream->earliestdstime)
           {
             stationid->earliestdstime = stream->earliestdstime;
-            stationid->earliestid = stream->earliestid;
+            stationid->earliestid     = stream->earliestid;
           }
           if (!stationid->latestdstime || stationid->latestdstime < stream->latestdstime)
           {
             stationid->latestdstime = stream->latestdstime;
-            stationid->latestid = stream->latestid;
+            stationid->latestid     = stream->latestid;
           }
         }
         else
@@ -1430,10 +1430,10 @@ HandleInfo (ClientInfo *cinfo)
     ListStationID *stationid;
     RBNode *tnode;
 
-    char net[16] = {0};
-    char sta[16] = {0};
-    char loc[16] = {0};
-    char chan[16] = {0};
+    char net[16]            = {0};
+    char sta[16]            = {0};
+    char loc[16]            = {0};
+    char chan[16]           = {0};
     char staid[MAXSTREAMID] = {0};
 
     /* Get streams as a Stack (this is copied data) */
@@ -1486,12 +1486,12 @@ HandleInfo (ClientInfo *cinfo)
           if (!stationid->earliestdstime || stationid->earliestdstime > stream->earliestdstime)
           {
             stationid->earliestdstime = stream->earliestdstime;
-            stationid->earliestid = stream->earliestid;
+            stationid->earliestid     = stream->earliestid;
           }
           if (!stationid->latestdstime || stationid->latestdstime < stream->latestdstime)
           {
             stationid->latestdstime = stream->latestdstime;
-            stationid->latestid = stream->latestid;
+            stationid->latestid     = stream->latestid;
           }
         }
         else
@@ -1528,7 +1528,7 @@ HandleInfo (ClientInfo *cinfo)
           while ((stream = (RingStream *)StackPop (stationid->streams)))
           {
             char *ptr;
-            loc[0] = '\0';
+            loc[0]  = '\0';
             chan[0] = '\0';
 
             /* Truncate stream ID at suffix */
@@ -1593,7 +1593,7 @@ HandleInfo (ClientInfo *cinfo)
         continue;
       }
 
-      tcinfo = (ClientInfo *)loopctp->td->td_prvtptr;
+      tcinfo  = (ClientInfo *)loopctp->td->td_prvtptr;
       tslinfo = (tcinfo->type == CLIENT_SEEDLINK) ? (SLInfo *)tcinfo->extinfo : 0;
 
       if (!(station = mxmlNewElement (seedlink, "station")))
@@ -1730,36 +1730,36 @@ HandleInfo (ClientInfo *cinfo)
     /* Build Fixed Section Data Header */
     memcpy (pMS2FSDH_SEQNUM (record), "000000", 6);
     *pMS2FSDH_DATAQUALITY (record) = 'D';
-    *pMS2FSDH_RESERVED (record) = ' ';
+    *pMS2FSDH_RESERVED (record)    = ' ';
     memcpy (pMS2FSDH_STATION (record), "INFO ", 5);
     memcpy (pMS2FSDH_LOCATION (record), "  ", 2);
     memcpy (pMS2FSDH_CHANNEL (record), (errflag) ? "ERR" : "INF", 3);
     memcpy (pMS2FSDH_NETWORK (record), "XX", 2);
-    *pMS2FSDH_YEAR (record) = HO2u (year, swapflag);
-    *pMS2FSDH_DAY (record) = HO2u (yday, swapflag);
-    *pMS2FSDH_HOUR (record) = hour;
-    *pMS2FSDH_MIN (record) = min;
-    *pMS2FSDH_SEC (record) = sec;
-    *pMS2FSDH_UNUSED (record) = 0;
-    *pMS2FSDH_FSEC (record) = 0;
-    *pMS2FSDH_NUMSAMPLES (record) = 0;
-    *pMS2FSDH_SAMPLERATEFACT (record) = 0;
-    *pMS2FSDH_SAMPLERATEMULT (record) = 0;
-    *pMS2FSDH_ACTFLAGS (record) = 0;
-    *pMS2FSDH_IOFLAGS (record) = 0;
-    *pMS2FSDH_DQFLAGS (record) = 0;
-    *pMS2FSDH_NUMBLOCKETTES (record) = 1;
-    *pMS2FSDH_TIMECORRECT (record) = 0;
-    *pMS2FSDH_DATAOFFSET (record) = HO2u (56, swapflag);
+    *pMS2FSDH_YEAR (record)            = HO2u (year, swapflag);
+    *pMS2FSDH_DAY (record)             = HO2u (yday, swapflag);
+    *pMS2FSDH_HOUR (record)            = hour;
+    *pMS2FSDH_MIN (record)             = min;
+    *pMS2FSDH_SEC (record)             = sec;
+    *pMS2FSDH_UNUSED (record)          = 0;
+    *pMS2FSDH_FSEC (record)            = 0;
+    *pMS2FSDH_NUMSAMPLES (record)      = 0;
+    *pMS2FSDH_SAMPLERATEFACT (record)  = 0;
+    *pMS2FSDH_SAMPLERATEMULT (record)  = 0;
+    *pMS2FSDH_ACTFLAGS (record)        = 0;
+    *pMS2FSDH_IOFLAGS (record)         = 0;
+    *pMS2FSDH_DQFLAGS (record)         = 0;
+    *pMS2FSDH_NUMBLOCKETTES (record)   = 1;
+    *pMS2FSDH_TIMECORRECT (record)     = 0;
+    *pMS2FSDH_DATAOFFSET (record)      = HO2u (56, swapflag);
     *pMS2FSDH_BLOCKETTEOFFSET (record) = HO2u (48, swapflag);
 
     /* Build Blockette 1000 */
-    *pMS2B1000_TYPE (record + 48) = HO2u (1000, swapflag);
-    *pMS2B1000_NEXT (record + 48) = 0;
-    *pMS2B1000_ENCODING (record + 48) = DE_ASCII;
+    *pMS2B1000_TYPE (record + 48)      = HO2u (1000, swapflag);
+    *pMS2B1000_NEXT (record + 48)      = 0;
+    *pMS2B1000_ENCODING (record + 48)  = DE_ASCII;
     *pMS2B1000_BYTEORDER (record + 48) = 1; /* 1 = big endian */
-    *pMS2B1000_RECLEN (record + 48) = 9;    /* 2^9 = 512 byte record */
-    *pMS2B1000_RESERVED (record + 48) = 0;
+    *pMS2B1000_RECLEN (record + 48)    = 9; /* 2^9 = 512 byte record */
+    *pMS2B1000_RESERVED (record + 48)  = 0;
 
     /* Pack all XML into 512-byte records and send to client */
     if (!cinfo->socketerr)
@@ -1906,17 +1906,17 @@ static int
 SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
 {
   ClientInfo *cinfo = (ClientInfo *)vcinfo;
-  SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
-  char header[40] = {0};
-  int headerlen = 0;
+  SLInfo *slinfo    = (SLInfo *)cinfo->extinfo;
+  char header[40]   = {0};
+  int headerlen     = 0;
 
   if (!record || !vcinfo)
     return -1;
 
   if (slinfo->proto_major == 4) /* Create v4 header */
   {
-    uint32_t ureclen = reclen;
-    uint64_t upktid = packet->pktid;
+    uint32_t ureclen      = reclen;
+    uint64_t upktid       = packet->pktid;
     uint8_t ustationidlen = 0;
     char net[16];
     char sta[16];
@@ -2002,7 +2002,7 @@ static void
 SendInfoRecord (char *record, int reclen, void *vcinfo)
 {
   ClientInfo *cinfo = (ClientInfo *)vcinfo;
-  SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
+  SLInfo *slinfo    = (SLInfo *)cinfo->extinfo;
   char header[SLHEADSIZE_V3];
 
   if (!record || !vcinfo)
@@ -2094,7 +2094,7 @@ StaKeyCompare (const void *a, const void *b)
 static ReqStationID *
 GetReqStationID (RBTree *tree, char *staid)
 {
-  char *newkey = NULL;
+  char *newkey            = NULL;
   ReqStationID *stationid = NULL;
   RBNode *rbnode;
 
@@ -2118,8 +2118,8 @@ GetReqStationID (RBTree *tree, char *staid)
     }
 
     stationid->starttime = NSTUNSET;
-    stationid->endtime = NSTUNSET;
-    stationid->packetid = RINGCURRENT;
+    stationid->endtime   = NSTUNSET;
+    stationid->packetid  = RINGCURRENT;
     stationid->datastart = NSTUNSET;
     stationid->selectors = NULL;
 
@@ -2140,8 +2140,8 @@ GetReqStationID (RBTree *tree, char *staid)
 static ListStationID *
 GetListStationID (RBTree *tree, char *staid)
 {
-  char *newkey = NULL;
-  ListStationID *stationid= NULL;
+  char *newkey             = NULL;
+  ListStationID *stationid = NULL;
   RBNode *rbnode;
 
   /* Search for a matching ListStationID entry */
@@ -2171,7 +2171,6 @@ GetListStationID (RBTree *tree, char *staid)
 
   return stationid;
 } /* End of GetListStationID() */
-
 
 /***************************************************************************
  * StationToRegex:
@@ -2305,7 +2304,7 @@ SelectToRegex (const char *staid, const char *select, char **regex)
 {
   const char *ptr;
   char pattern[200] = {0};
-  char *build = pattern;
+  char *build       = pattern;
   int retval;
 
   if (!regex)

@@ -135,14 +135,14 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
   int nread;
   int rv;
 
-  char upgradeHeader[100] = "";
-  char connectionHeader[100] = "";
-  char secWebSocketKeyHeader[100] = "";
-  char secWebSocketVersionHeader[100] = "";
+  char upgradeHeader[100]              = "";
+  char connectionHeader[100]           = "";
+  char secWebSocketKeyHeader[100]      = "";
+  char secWebSocketVersionHeader[100]  = "";
   char secWebSocketProtocolHeader[100] = "";
 
   char *response = NULL;
-  char *value = NULL;
+  char *value    = NULL;
   int responsebytes;
 
   /* Decode percent-encoding in URL */
@@ -831,7 +831,7 @@ ParseHeader (char *header, char **value)
 
   /* Find first non-space character backwards from end of value and terminate */
   length = strlen (*value);
-  cp = *value + length - 1;
+  cp     = *value + length - 1;
   while (*cp == ' ' && cp != *value)
     cp--;
 
@@ -871,8 +871,8 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly)
   char *cp;
   int matchlen = 0;
 
-  int level = 0;
-  char levelstream[100] = {0};
+  int level                 = 0;
+  char levelstream[100]     = {0};
   char prevlevelstream[100] = {0};
   int splitcount;
   char delim = '_';
@@ -968,7 +968,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly)
   {
     /* Count streams */
     streamcount = 0;
-    streamnode = streams->top;
+    streamnode  = streams->top;
     while (streamnode)
     {
       streamcount++;
@@ -1312,7 +1312,7 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
   struct cthread *loopctp;
   ClientInfo *tcinfo;
   nstime_t nsnow;
-  int totalcount = 0;
+  int totalcount    = 0;
   int selectedcount = 0;
   char conninfo[1024];
   char *conntype;
@@ -1326,7 +1326,7 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
   char *cp;
   int matchlen = 0;
 
-  pcre2_code *match_code = NULL;
+  pcre2_code *match_code       = NULL;
   pcre2_match_data *match_data = NULL;
   int errcode;
   PCRE2_SIZE erroffset;
@@ -1482,11 +1482,11 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   FILE *fp = NULL;
   struct stat filestat;
   char *contenttype = "application/octet-stream";
-  char *response = NULL;
-  char *webpath = NULL;
-  char *filename = NULL;
-  char *indexfile = NULL;
-  char *cp = NULL;
+  char *response    = NULL;
+  char *webpath     = NULL;
+  char *filename    = NULL;
+  char *indexfile   = NULL;
+  char *cp          = NULL;
   char filebuffer[65535];
   size_t bytes;
   size_t length;
@@ -1612,9 +1612,9 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
                     char *secWebSocketVersionHeader,
                     char *secWebSocketProtocolHeader)
 {
-  char *response = NULL;
+  char *response              = NULL;
   char subprotocolheader[100] = "";
-  unsigned char *keybuf = NULL;
+  unsigned char *keybuf       = NULL;
   uint8_t digest[20];
 
   int keybufsize;
@@ -1745,7 +1745,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   }
 
   /* Allocate space for key + 36 bytes for magic string */
-  keylength = strlen (secWebSocketKeyHeader);
+  keylength  = strlen (secWebSocketKeyHeader);
   keybufsize = keylength + 36;
   if (!(keybuf = (unsigned char *)malloc (keybufsize)))
   {
@@ -1898,9 +1898,9 @@ sha1digest (uint8_t *digest, char *hexdigest, const uint8_t *data, size_t databy
 
   int32_t wcount;
   uint32_t temp;
-  uint64_t databits = ((uint64_t)databytes) * 8;
-  uint32_t loopcount = (databytes + 8) / 64 + 1;
-  uint32_t tailbytes = 64 * loopcount - databytes;
+  uint64_t databits     = ((uint64_t)databytes) * 8;
+  uint32_t loopcount    = (databytes + 8) / 64 + 1;
+  uint32_t tailbytes    = 64 * loopcount - databytes;
   uint8_t datatail[128] = {0};
 
   if (!digest && !hexdigest)
@@ -1912,15 +1912,15 @@ sha1digest (uint8_t *digest, char *hexdigest, const uint8_t *data, size_t databy
   /* Pre-processing of data tail (includes padding to fill out 512-bit chunk):
      Add bit '1' to end of message (big-endian)
      Add 64-bit message length in bits at very end (big-endian) */
-  datatail[0] = 0x80;
-  datatail[tailbytes - 8] = (uint8_t) (databits >> 56 & 0xFF);
-  datatail[tailbytes - 7] = (uint8_t) (databits >> 48 & 0xFF);
-  datatail[tailbytes - 6] = (uint8_t) (databits >> 40 & 0xFF);
-  datatail[tailbytes - 5] = (uint8_t) (databits >> 32 & 0xFF);
-  datatail[tailbytes - 4] = (uint8_t) (databits >> 24 & 0xFF);
-  datatail[tailbytes - 3] = (uint8_t) (databits >> 16 & 0xFF);
-  datatail[tailbytes - 2] = (uint8_t) (databits >> 8 & 0xFF);
-  datatail[tailbytes - 1] = (uint8_t) (databits >> 0 & 0xFF);
+  datatail[0]             = 0x80;
+  datatail[tailbytes - 8] = (uint8_t)(databits >> 56 & 0xFF);
+  datatail[tailbytes - 7] = (uint8_t)(databits >> 48 & 0xFF);
+  datatail[tailbytes - 6] = (uint8_t)(databits >> 40 & 0xFF);
+  datatail[tailbytes - 5] = (uint8_t)(databits >> 32 & 0xFF);
+  datatail[tailbytes - 4] = (uint8_t)(databits >> 24 & 0xFF);
+  datatail[tailbytes - 3] = (uint8_t)(databits >> 16 & 0xFF);
+  datatail[tailbytes - 2] = (uint8_t)(databits >> 8 & 0xFF);
+  datatail[tailbytes - 1] = (uint8_t)(databits >> 0 & 0xFF);
 
   /* Process each 512-bit chunk */
   for (lidx = 0; lidx < loopcount; lidx++)
@@ -1990,11 +1990,11 @@ sha1digest (uint8_t *digest, char *hexdigest, const uint8_t *data, size_t databy
         k = 0xCA62C1D6;
       }
       temp = SHA1ROTATELEFT (a, 5) + f + e + k + W[idx];
-      e = d;
-      d = c;
-      c = SHA1ROTATELEFT (b, 30);
-      b = a;
-      a = temp;
+      e    = d;
+      d    = c;
+      c    = SHA1ROTATELEFT (b, 30);
+      b    = a;
+      a    = temp;
     }
 
     H[0] += a;
@@ -2009,10 +2009,10 @@ sha1digest (uint8_t *digest, char *hexdigest, const uint8_t *data, size_t databy
   {
     for (idx = 0; idx < 5; idx++)
     {
-      digest[idx * 4 + 0] = (uint8_t) (H[idx] >> 24);
-      digest[idx * 4 + 1] = (uint8_t) (H[idx] >> 16);
-      digest[idx * 4 + 2] = (uint8_t) (H[idx] >> 8);
-      digest[idx * 4 + 3] = (uint8_t) (H[idx]);
+      digest[idx * 4 + 0] = (uint8_t)(H[idx] >> 24);
+      digest[idx * 4 + 1] = (uint8_t)(H[idx] >> 16);
+      digest[idx * 4 + 2] = (uint8_t)(H[idx] >> 8);
+      digest[idx * 4 + 3] = (uint8_t)(H[idx]);
     }
   }
 

@@ -157,9 +157,9 @@ MS_ScanThread (void *arg)
   struct stat st;
   double iostatsinterval;
   int iostatscount = 0;
-  int scanerror = 0;
+  int scanerror    = 0;
 
-  mytdp = (struct thread_data *)arg;
+  mytdp   = (struct thread_data *)arg;
   mssinfo = (MSScanInfo *)mytdp->td_prvtptr;
 
   mssinfo->filetree = RBTreeCreate (MSS_KeyCompare, free, free);
@@ -175,9 +175,9 @@ MS_ScanThread (void *arg)
   }
 
   /* Initilize timers */
-  treq.tv_sec = (time_t)mssinfo->scansleep;
-  treq.tv_nsec = (long)0;
-  treq0.tv_sec = (time_t)mssinfo->scansleep0;
+  treq.tv_sec   = (time_t)mssinfo->scansleep;
+  treq.tv_nsec  = (long)0;
+  treq0.tv_sec  = (time_t)mssinfo->scansleep0;
   treq0.tv_nsec = (long)0;
 
   statetime = time (NULL);
@@ -188,10 +188,10 @@ MS_ScanThread (void *arg)
   /* Initialize rate variables */
   mssinfo->rxpackets[0] = mssinfo->rxpackets[1] = 0;
   mssinfo->rxbytes[0] = mssinfo->rxbytes[1] = 0;
-  mssinfo->rxpacketrate = 0.0;
-  mssinfo->rxbyterate = 0.0;
-  mssinfo->scantime = 0.0;
-  mssinfo->ratetime = NSnow ();
+  mssinfo->rxpacketrate                     = 0.0;
+  mssinfo->rxbyterate                       = 0.0;
+  mssinfo->scantime                         = 0.0;
+  mssinfo->ratetime                         = NSnow ();
 
   /* Set thread active status */
   pthread_mutex_lock (&(mytdp->td_lock));
@@ -205,14 +205,14 @@ MS_ScanThread (void *arg)
   /* Start scan sequence */
   while (mytdp->td_flags != TDF_CLOSE && scanerror == 0)
   {
-    scantime = time (NULL);
+    scantime                 = time (NULL);
     mssinfo->scanrecordsread = 0;
 
     if (mssinfo->iostats && mssinfo->iostats == iostatscount)
     {
       gettimeofday (&scanstarttime, NULL);
-      mssinfo->scanfileschecked = 0;
-      mssinfo->scanfilesread = 0;
+      mssinfo->scanfileschecked   = 0;
+      mssinfo->scanfilesread      = 0;
       mssinfo->scanrecordswritten = 0;
     }
 
@@ -281,11 +281,11 @@ MS_ScanThread (void *arg)
 
       /* Calculate the reception rates */
       mssinfo->rxpacketrate = (double)(mssinfo->rxpackets[0] - mssinfo->rxpackets[1]) / mssinfo->scantime;
-      mssinfo->rxbyterate = (double)(mssinfo->rxbytes[0] - mssinfo->rxbytes[1]) / mssinfo->scantime;
+      mssinfo->rxbyterate   = (double)(mssinfo->rxbytes[0] - mssinfo->rxbytes[1]) / mssinfo->scantime;
 
       /* Shift current values to history values */
       mssinfo->rxpackets[1] = mssinfo->rxpackets[0];
-      mssinfo->rxbytes[1] = mssinfo->rxbytes[0];
+      mssinfo->rxbytes[1]   = mssinfo->rxbytes[0];
 
       mssinfo->ratetime = nsnow;
     }
@@ -646,8 +646,8 @@ AddFile (RBTree *filetree, ino_t inode, char *filename, time_t modtime)
   newfkey->inode = inode;
   memcpy (newfkey->filename, filename, filelen + 1);
 
-  newfnode->offset = 0;
-  newfnode->modtime = modtime;
+  newfnode->offset    = 0;
+  newfnode->modtime   = modtime;
   newfnode->idledelay = 0;
 
   RBTreeInsert (filetree, newfkey, newfnode, 0);
@@ -670,7 +670,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
 {
   int fd;
   int nread;
-  int reccnt = 0;
+  int reccnt     = 0;
   int reachedmax = 0;
   int detlen;
   int flags;
@@ -681,7 +681,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
   lprintf (3, "[MSeedScan] Processing file %s", filename);
 
   /* Set the throttling sleep time */
-  treq.tv_sec = (time_t)0;
+  treq.tv_sec  = (time_t)0;
   treq.tv_nsec = (long)mssinfo->throttlensec;
 
 /* Set open flags */
@@ -849,7 +849,7 @@ PruneFiles (RBTree *filetree, time_t scantime)
 
   while ((tnode = (RBNode *)StackPop (stack)))
   {
-    fkey = (FileKey *)tnode->key;
+    fkey  = (FileKey *)tnode->key;
     fnode = (FileNode *)tnode->data;
 
     if (fnode->scantime < scantime)
@@ -881,7 +881,7 @@ PrintFileList (RBTree *filetree, FILE *fp)
 
   while ((tnode = (RBNode *)StackPop (stack)))
   {
-    fkey = (FileKey *)tnode->key;
+    fkey  = (FileKey *)tnode->key;
     fnode = (FileNode *)tnode->data;
 
     fprintf (fp, "%s\t%llu\t%lld\t%lld\n",
@@ -995,7 +995,7 @@ RecoverState (RBTree *filetree, char *statefile)
 
     if (fnode)
     {
-      fnode->offset = (off_t)offset;
+      fnode->offset   = (off_t)offset;
       fnode->scantime = 0;
     }
 
@@ -1035,8 +1035,8 @@ WriteRecord (MSScanInfo *mssinfo, char *record, int reclen)
   memset (&packet, 0, sizeof (RingPacket));
   strncpy (packet.streamid, streamid, sizeof (packet.streamid) - 1);
   packet.datastart = mssinfo->msr->starttime;
-  packet.dataend = msr3_endtime (mssinfo->msr);
-  packet.datasize = mssinfo->msr->reclen;
+  packet.dataend   = msr3_endtime (mssinfo->msr);
+  packet.datasize  = mssinfo->msr->reclen;
 
   /* Add the packet to the ring */
   if ((rv = RingWrite (mssinfo->ringparams, &packet, record, packet.datasize)))
@@ -1176,14 +1176,14 @@ CalcDayTime (int year, int day)
 
   shortyear = year - 1900;
 
-  a4 = (shortyear >> 2) + 475 - !(shortyear & 3);
-  a100 = a4 / 25 - (a4 % 25 < 0);
-  a400 = a100 >> 2;
+  a4                    = (shortyear >> 2) + 475 - !(shortyear & 3);
+  a100                  = a4 / 25 - (a4 % 25 < 0);
+  a400                  = a100 >> 2;
   intervening_leap_days = (a4 - 492) - (a100 - 19) + (a400 - 4);
 
   days = (365 * (shortyear - 70) + intervening_leap_days + (day - 1));
 
-  daytime = (time_t) (60 * (60 * (24 * days)));
+  daytime = (time_t)(60 * (60 * (24 * days)));
 
   return daytime;
 } /* End of CalcDayTime() */
@@ -1219,7 +1219,7 @@ BudFileDayTime (char *filename)
       isdigit (*(filename + length - 1)))
   {
     iyear = strtol ((filename + length - 8), NULL, 10);
-    iday = strtol ((filename + length - 3), NULL, 10);
+    iday  = strtol ((filename + length - 3), NULL, 10);
 
     daytime = CalcDayTime (iyear, iday);
   }
@@ -1247,14 +1247,14 @@ SortEDirEntries (EDIR *edirp)
   if (!edirp)
     return -1;
 
-  top = edirp->ents;
+  top         = edirp->ents;
   totalmerges = 0;
-  insize = 1;
+  insize      = 1;
 
   for (;;)
   {
-    p = top;
-    top = NULL;
+    p    = top;
+    top  = NULL;
     tail = NULL;
 
     nmerges = 0; /* count number of merges we do in this pass */
@@ -1265,7 +1265,7 @@ SortEDirEntries (EDIR *edirp)
       totalmerges++;
 
       /* step `insize' places along from p */
-      q = p;
+      q     = p;
       psize = 0;
       for (i = 0; i < insize; i++)
       {
@@ -1314,7 +1314,7 @@ SortEDirEntries (EDIR *edirp)
           top = e;
 
         e->prev = tail;
-        tail = e;
+        tail    = e;
       }
 
       /* now p has stepped `insize' places along, and q has too */
@@ -1395,7 +1395,7 @@ EOpenDir (const char *dirname)
 
     strncpy (ede->d_name, de->d_name, sizeof (ede->d_name));
     ede->d_ino = de->d_ino;
-    ede->prev = prevede;
+    ede->prev  = prevede;
 
     /* Add new enhanced directory entry to the list */
     if (prevede == 0)

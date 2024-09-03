@@ -101,13 +101,13 @@ SplitStreamID (char *streamid, char delim, int maxlength,
   }
 
   /* Find delimeters, convert to terminators and set pointer array */
-  ptr = id;
+  ptr    = id;
   ids[0] = ptr;
   for (idx = 1; idx < 6 && *ptr != '\0'; ptr++)
   {
     if (*ptr == delim)
     {
-      *ptr = '\0';
+      *ptr     = '\0';
       ids[idx] = ptr + 1;
       idx++;
     }

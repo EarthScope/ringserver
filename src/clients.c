@@ -23,28 +23,28 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <netdb.h>
+#include <netinet/in.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <netdb.h>
-#include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <unistd.h>
 
-#include "ringserver.h"
 #include "clients.h"
 #include "dlclient.h"
-#include "slclient.h"
 #include "generic.h"
 #include "http.h"
 #include "logging.h"
 #include "rbtree.h"
+#include "ringserver.h"
+#include "slclient.h"
 
 /* Progressive throttle stepping and maximum in microseconds */
-#define THROTTLE_STEPPING 100000  /* 1/10 second */
-#define THROTTLE_MAXIMUM  500000  /* 1/2 second */
+#define THROTTLE_STEPPING 100000 /* 1/10 second */
+#define THROTTLE_MAXIMUM 500000  /* 1/2 second */
 
 static int ClientRecv (ClientInfo *cinfo);
 
@@ -79,8 +79,8 @@ ClientThread (void *arg)
   int nread;
 
   struct sockaddr_storage saddr = {0};
-  socklen_t saddrlen = sizeof(saddr);
-  int serverport = -1;
+  socklen_t saddrlen            = sizeof (saddr);
+  int serverport                = -1;
 
   /* Throttle related */
   uint32_t throttleusec = 0; /* Throttle time in microseconds */
@@ -95,19 +95,19 @@ ClientThread (void *arg)
   cinfo = (ClientInfo *)mytdp->td_prvtptr;
 
   /* Glue together linked structures */
-  cinfo->reader = &reader;
+  cinfo->reader     = &reader;
   reader.ringparams = cinfo->ringparams;
 
   /* Initialize RingReader parameters */
-  reader.pktid = 0;
-  reader.pkttime = NSTUNSET;
-  reader.datastart = NSTUNSET;
-  reader.dataend = NSTUNSET;
-  reader.limit = NULL;
-  reader.limit_data = NULL;
-  reader.match = NULL;
-  reader.match_data = NULL;
-  reader.reject = NULL;
+  reader.pktid       = 0;
+  reader.pkttime     = NSTUNSET;
+  reader.datastart   = NSTUNSET;
+  reader.dataend     = NSTUNSET;
+  reader.limit       = NULL;
+  reader.limit_data  = NULL;
+  reader.match       = NULL;
+  reader.match_data  = NULL;
+  reader.reject      = NULL;
   reader.reject_data = NULL;
 
   /* Set initial state */
@@ -144,7 +144,7 @@ ClientThread (void *arg)
 
   /* Initialize stream tracking binary tree */
   pthread_mutex_lock (&(cinfo->streams_lock));
-  cinfo->streams = RBTreeCreate (KeyCompare, free, free);
+  cinfo->streams      = RBTreeCreate (KeyCompare, free, free);
   cinfo->streamscount = 0;
   pthread_mutex_unlock (&(cinfo->streams_lock));
 
@@ -378,7 +378,7 @@ ClientThread (void *arg)
         FD_ZERO (&readset);
         FD_SET (cinfo->socket, &readset);
 
-        timeout.tv_sec = 0;
+        timeout.tv_sec  = 0;
         timeout.tv_usec = throttleusec;
 
         select (cinfo->socket + 1, &readset, NULL, NULL, &timeout);
@@ -388,7 +388,7 @@ ClientThread (void *arg)
          enough to determine the type. */
       else
       {
-        timereq.tv_sec = 0;
+        timereq.tv_sec  = 0;
         timereq.tv_nsec = throttleusec * 1000;
 
         nanosleep (&timereq, NULL);
@@ -440,7 +440,7 @@ ClientThread (void *arg)
   /* Release stream tracking binary tree */
   pthread_mutex_lock (&(cinfo->streams_lock));
   RBTreeDestroy (cinfo->streams);
-  cinfo->streams = 0;
+  cinfo->streams      = 0;
   cinfo->streamscount = 0;
   pthread_mutex_unlock (&(cinfo->streams_lock));
 
@@ -500,7 +500,7 @@ ClientRecv (ClientInfo *cinfo)
   if (cinfo->websocket)
   {
     cinfo->wsmaskidx = 0;
-    nread = RecvWSFrame (cinfo, &wslength, &cinfo->wsmask.one);
+    nread            = RecvWSFrame (cinfo, &wslength, &cinfo->wsmask.one);
 
     if (nread < 0)
     {
@@ -609,7 +609,7 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[], int bufcount)
     if (totalbuflen < 126) /* If payload length < 126 store in bits 1-7 of byte 2 */
     {
       wsframelen = 2;
-      length8 = totalbuflen;
+      length8    = totalbuflen;
       wsframe[1] |= length8;
     }
     else if (totalbuflen < (1 << 16)) /* If payload length < 16-bit int store in next two bytes */
@@ -760,7 +760,7 @@ RecvData (ClientInfo *cinfo, char *buffer, size_t buflen)
         FD_SET (cinfo->socket, &readset);
 
         /* Timeout 10 seconds */
-        timeout.tv_sec = 10;
+        timeout.tv_sec  = 10;
         timeout.tv_usec = 0;
 
         selret = select (cinfo->socket + 1, &readset, NULL, NULL, &timeout);
@@ -824,7 +824,7 @@ RecvData (ClientInfo *cinfo, char *buffer, size_t buflen)
 int
 RecvCmd (ClientInfo *cinfo)
 {
-  int nread = 0;
+  int nread      = 0;
   int nreadtotal = 0;
   int nrecv;
   int pass;
@@ -878,7 +878,7 @@ RecvCmd (ClientInfo *cinfo)
         FD_SET (cinfo->socket, &readset);
 
         /* Timeout 10 seconds */
-        timeout.tv_sec = 10;
+        timeout.tv_sec  = 10;
         timeout.tv_usec = 0;
 
         selret = select (cinfo->socket + 1, &readset, NULL, NULL, &timeout);
@@ -939,7 +939,7 @@ RecvCmd (ClientInfo *cinfo)
 
         /* Reset to read header body string */
         nread = 0;
-        pass = 2;
+        pass  = 2;
       }
       else
       {
@@ -1032,7 +1032,7 @@ RecvLine (ClientInfo *cinfo)
         FD_SET (cinfo->socket, &readset);
 
         /* Timeout 10 seconds */
-        timeout.tv_sec = 10;
+        timeout.tv_sec  = 10;
         timeout.tv_usec = 0;
 
         selret = select (cinfo->socket + 1, &readset, NULL, NULL, &timeout);
@@ -1168,7 +1168,7 @@ GetStreamNode (RBTree *tree, pthread_mutex_t *plock, char *streamid, int *new)
   if ((rbnode = RBFind (tree, &key)))
   {
     stream = (StreamNode *)rbnode->data;
-    *new = 0;
+    *new   = 0;
   }
   else
   {
@@ -1188,12 +1188,12 @@ GetStreamNode (RBTree *tree, pthread_mutex_t *plock, char *streamid, int *new)
 
     /* Initialize the new StreamNode */
     strncpy (stream->streamid, streamid, sizeof (stream->streamid) - 1);
-    *(stream->streamid + sizeof(stream->streamid) - 1) = '\0';
-    stream->txpackets = 0;
-    stream->txbytes = 0;
-    stream->rxpackets = 0;
-    stream->rxbytes = 0;
-    stream->endtimereached = 0;
+    *(stream->streamid + sizeof (stream->streamid) - 1) = '\0';
+    stream->txpackets                                   = 0;
+    stream->txbytes                                     = 0;
+    stream->rxpackets                                   = 0;
+    stream->rxbytes                                     = 0;
+    stream->endtimereached                              = 0;
 
     /* Add the new entry while locking the tree */
     pthread_mutex_lock (plock);

@@ -293,7 +293,7 @@ HandleNegotiation (ClientInfo *cinfo)
     if (strlen (cinfo->recvbuf) > 3)
     {
       strncpy (cinfo->clientid, cinfo->recvbuf + 3, sizeof (cinfo->clientid) - 1);
-      *(cinfo->clientid + sizeof(cinfo->clientid) - 1) = '\0';
+      *(cinfo->clientid + sizeof (cinfo->clientid) - 1) = '\0';
       lprintf (2, "[%s] Received ID (%s)", cinfo->hostname, cinfo->clientid);
     }
     else
@@ -328,8 +328,8 @@ HandleNegotiation (ClientInfo *cinfo)
                      subcmd, value, subvalue, &junk);
 
     /* Make sure the subcommand, value and subvalue fields are terminated */
-    subcmd[sizeof (subcmd) - 1] = '\0';
-    value[sizeof (value) - 1] = '\0';
+    subcmd[sizeof (subcmd) - 1]     = '\0';
+    value[sizeof (value) - 1]       = '\0';
     subvalue[sizeof (subvalue) - 1] = '\0';
 
     /* Make sure we got a single pattern or no pattern */
@@ -428,7 +428,7 @@ HandleNegotiation (ClientInfo *cinfo)
           }
           else if (cinfo->timewinlimit < 1.0)
           {
-            int64_t pktlimit = (int64_t) (cinfo->timewinlimit * cinfo->ringparams->maxpackets);
+            int64_t pktlimit = (int64_t)(cinfo->timewinlimit * cinfo->ringparams->maxpackets);
 
             pktid = RingAfterRev (cinfo->reader, nstime, pktlimit, 1);
           }
@@ -732,7 +732,7 @@ HandleWrite (ClientInfo *cinfo)
   /* Wire protocol for DataLink uses time stamps in as microseconds since the epoch,
    * convert these to the nanosecond ticks used internally. */
   cinfo->packet.datastart = MS_HPTIME2NSTIME (cinfo->packet.datastart);
-  cinfo->packet.dataend = MS_HPTIME2NSTIME (cinfo->packet.dataend);
+  cinfo->packet.dataend   = MS_HPTIME2NSTIME (cinfo->packet.dataend);
 
   /* Check that client is allowed to write this stream ID if limit is present */
   if (cinfo->reader->limit)
@@ -789,7 +789,7 @@ HandleWrite (ClientInfo *cinfo)
           {
             strncpy (filename, cinfo->packet.streamid, (fn - cinfo->packet.streamid));
             filename[(fn - cinfo->packet.streamid)] = '\0';
-            fn = filename;
+            fn                                      = filename;
           }
 
           /* Write miniSEED record to disk */
@@ -873,7 +873,7 @@ HandleWrite (ClientInfo *cinfo)
 static int
 HandleRead (ClientInfo *cinfo)
 {
-  int64_t reqid = 0;
+  int64_t reqid  = 0;
   int64_t readid = 0;
   char replystr[100];
 
@@ -936,9 +936,9 @@ HandleInfo (ClientInfo *cinfo, int socket)
   char string[200];
   char *xmlstr = 0;
   int xmllength;
-  char *type = NULL;
+  char *type      = NULL;
   char *matchexpr = 0;
-  char errflag = 0;
+  char errflag    = 0;
 
   if (!cinfo)
     return -1;
@@ -1185,12 +1185,12 @@ HandleInfo (ClientInfo *cinfo, int socket)
     mxml_node_t *connlist, *conn;
     nstime_t nsnow;
     int selectedcount = 0;
-    int totalcount = 0;
+    int totalcount    = 0;
     struct cthread *loopctp;
     ClientInfo *tcinfo;
     char *conntype;
 
-    pcre2_code *match_code = NULL;
+    pcre2_code *match_code       = NULL;
     pcre2_match_data *match_data = NULL;
     int errcode;
     PCRE2_SIZE erroffset;
@@ -1225,7 +1225,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
         pcre2_get_error_message (errcode, buffer, sizeof (buffer));
         lprintf (0, "%s(): Error compiling expression at %zu: %s",
                  __func__, erroffset, buffer);
-        errflag = 1;
+        errflag   = 1;
         matchexpr = 0;
       }
 
@@ -1524,9 +1524,9 @@ SendRingPacket (ClientInfo *cinfo)
     return -1;
 
   /* Create microsecond values for wire protocol from nanosecond values */
-  int64_t uspkttime = (cinfo->packet.pkttime) ? MS_NSTIME2HPTIME (cinfo->packet.pkttime) : 0;
+  int64_t uspkttime   = (cinfo->packet.pkttime) ? MS_NSTIME2HPTIME (cinfo->packet.pkttime) : 0;
   int64_t usdatastart = (cinfo->packet.datastart) ? MS_NSTIME2HPTIME (cinfo->packet.datastart) : 0;
-  int64_t usdataend = (cinfo->packet.dataend) ? MS_NSTIME2HPTIME (cinfo->packet.dataend) : 0;
+  int64_t usdataend   = (cinfo->packet.dataend) ? MS_NSTIME2HPTIME (cinfo->packet.dataend) : 0;
 
   /* Create packet header: "PACKET <streamid> <pktid> <hppackettime> <hpdatatime> <size>" */
   headerlen = snprintf (header, sizeof (header),

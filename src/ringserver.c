@@ -62,11 +62,13 @@
 /* A structure to list IP addresses ranges */
 typedef struct IPNet_s
 {
-  union {
+  union
+  {
     struct in_addr in_addr;
     struct in6_addr in6_addr;
   } network;
-  union {
+  union
+  {
     struct in_addr in_addr;
     struct in6_addr in6_addr;
   } netmask;
@@ -77,16 +79,16 @@ typedef struct IPNet_s
 
 /* Global variables defined here */
 pthread_mutex_t sthreads_lock = PTHREAD_MUTEX_INITIALIZER;
-struct sthread *sthreads = NULL; /* Server threads list */
+struct sthread *sthreads      = NULL; /* Server threads list */
 pthread_mutex_t cthreads_lock = PTHREAD_MUTEX_INITIALIZER;
-struct cthread *cthreads = NULL; /* Client threads list */
+struct cthread *cthreads      = NULL; /* Client threads list */
 
 char *serverid = NULL;    /* Server ID */
-char *webroot = NULL;     /* Web content root directory */
+char *webroot  = NULL;    /* Web content root directory */
 nstime_t serverstarttime; /* Server start time */
-int clientcount = 0;      /* Track number of connected clients */
+int clientcount  = 0;     /* Track number of connected clients */
 int resolvehosts = 1;     /* Flag to control resolving of client hostnames */
-int shutdownsig = 0;      /* Shutdown signal */
+int shutdownsig  = 0;     /* Shutdown signal */
 
 /* Local functions and variables */
 static struct thread_data *InitThreadData (void *prvtptr);
@@ -108,31 +110,31 @@ static void *SignalThread (void *arg);
 static void PrintHandler ();
 static void Usage (int level);
 
-static char *configfile = NULL;                      /* Configuration file */
-static time_t configfilemtime = 0;                   /* Modification time of configuration file */
-static uint32_t maxclients = 600;                    /* Enforce maximum number of clients */
-static uint32_t maxclientsperip = 0;                 /* Enforce maximum number of clients per IP */
-static uint32_t clienttimeout = 3600;                /* Drop clients if no exchange within this limit */
-static char *ringdir = NULL;                         /* Directory for ring files */
-static uint64_t ringsize = 1073741824;               /* Size of ring buffer file (1 gigabyte) */
-static uint64_t maxpktid = 0xFFFFFF;                 /* Maximum packet ID (2^16 = 16,777,215) */
-static uint32_t pktsize = sizeof (RingPacket) + 512; /* Ring packet size */
-static uint8_t memorymapring = 1;                    /* Flag to control mmap'ing of packet buffer */
-static uint8_t volatilering = 0;                     /* Flag to control if ring is volatile or not */
-static uint8_t autorecovery = 1;                     /* Flag to control auto recovery from corruption */
-static float timewinlimit = 1.0;                     /* Time window search limit in percent */
-static char *mseedarchive = NULL;                    /* miniSEED archive definition */
-static int mseedidleto = 300;                        /* miniSEED idle file timeout */
-static sigset_t globalsigset;                        /* Signal set for signal handling */
+static char *configfile         = NULL;                      /* Configuration file */
+static time_t configfilemtime   = 0;                         /* Modification time of configuration file */
+static uint32_t maxclients      = 600;                       /* Enforce maximum number of clients */
+static uint32_t maxclientsperip = 0;                         /* Enforce maximum number of clients per IP */
+static uint32_t clienttimeout   = 3600;                      /* Drop clients if no exchange within this limit */
+static char *ringdir            = NULL;                      /* Directory for ring files */
+static uint64_t ringsize        = 1073741824;                /* Size of ring buffer file (1 gigabyte) */
+static uint64_t maxpktid        = 0xFFFFFF;                  /* Maximum packet ID (2^16 = 16,777,215) */
+static uint32_t pktsize         = sizeof (RingPacket) + 512; /* Ring packet size */
+static uint8_t memorymapring    = 1;                         /* Flag to control mmap'ing of packet buffer */
+static uint8_t volatilering     = 0;                         /* Flag to control if ring is volatile or not */
+static uint8_t autorecovery     = 1;                         /* Flag to control auto recovery from corruption */
+static float timewinlimit       = 1.0;                       /* Time window search limit in percent */
+static char *mseedarchive       = NULL;                      /* miniSEED archive definition */
+static int mseedidleto          = 300;                       /* miniSEED idle file timeout */
+static sigset_t globalsigset;                                /* Signal set for signal handling */
 
 static int tcpprotonumber = -1;
 
 static RingParams *ringparams = NULL;
 
-static IPNet *limitips = NULL;
-static IPNet *matchips = NULL;
-static IPNet *rejectips = NULL;
-static IPNet *writeips = NULL;
+static IPNet *limitips   = NULL;
+static IPNet *matchips   = NULL;
+static IPNet *rejectips  = NULL;
+static IPNet *writeips   = NULL;
 static IPNet *trustedips = NULL;
 
 static char *httpheaders = NULL;
@@ -153,7 +155,7 @@ main (int argc, char *argv[])
   struct cthread *ctp;
   struct cthread *loopctp;
   char statusstr[100];
-  int tlogwrite = 0;
+  int tlogwrite   = 0;
   int servercount = 0;
 
   double txpacketrate;
@@ -226,7 +228,7 @@ main (int argc, char *argv[])
     }
     else
     {
-      ringfilename[0] = '\0';
+      ringfilename[0]   = '\0';
       streamfilename[0] = '\0';
     }
 
@@ -334,7 +336,7 @@ main (int argc, char *argv[])
   }
 
   /* Set loop interval check tick to 1/4 second */
-  timereq.tv_sec = 0;
+  timereq.tv_sec  = 0;
   timereq.tv_nsec = 250000000;
 
   /* Watchdog loop: monitors the server and client threads
@@ -426,14 +428,14 @@ main (int argc, char *argv[])
 
     /* Loop through server thread list to monitor threads, print status and perform cleanup */
     pthread_mutex_lock (&sthreads_lock);
-    loopstp = sthreads;
+    loopstp     = sthreads;
     servercount = 0;
     while (loopstp)
     {
-      char *threadtype = "";
+      char *threadtype             = "";
       void *(*threadfunc) (void *) = 0;
 
-      stp = loopstp;
+      stp     = loopstp;
       loopstp = loopstp->next;
 
       if (stp->type == LISTEN_THREAD)
@@ -576,7 +578,7 @@ main (int argc, char *argv[])
     loopctp = cthreads;
     while (loopctp)
     {
-      ctp = loopctp;
+      ctp     = loopctp;
       loopctp = loopctp->next;
 
       sprintf (statusstr, "Client thread %lu Flags:", (unsigned long int)ctp->td->td_id);
@@ -665,9 +667,9 @@ main (int argc, char *argv[])
 
     /* Update count and byte rate ring parameters */
     ringparams->txpacketrate = txpacketrate;
-    ringparams->txbyterate = txbyterate;
+    ringparams->txbyterate   = txbyterate;
     ringparams->rxpacketrate = rxpacketrate;
-    ringparams->rxbyterate = rxbyterate;
+    ringparams->rxbyterate   = rxbyterate;
 
     /* Check for config file updates */
     if (configfile && !lstat (configfile, &cfstat))
@@ -710,7 +712,7 @@ main (int argc, char *argv[])
     }
 
     configreset = 0;
-    chktime = curtime;
+    chktime     = curtime;
   } /* End of main watchdog loop */
 
   /* Shutdown ring buffer */
@@ -765,7 +767,7 @@ InitThreadData (void *prvtptr)
     return 0;
   }
 
-  rtdp->td_id = 0;
+  rtdp->td_id    = 0;
   rtdp->td_flags = TDF_SPAWNING;
 
   rtdp->td_prvtptr = prvtptr;
@@ -797,11 +799,11 @@ ListenThread (void *arg)
 
   struct sockaddr_storage addr_storage;
   struct sockaddr *paddr = (struct sockaddr *)&addr_storage;
-  socklen_t addrlen = sizeof (addr_storage);
-  int one = 1;
+  socklen_t addrlen      = sizeof (addr_storage);
+  int one                = 1;
 
   mytdp = (struct thread_data *)arg;
-  lpp = (ListenPortParams *)mytdp->td_prvtptr;
+  lpp   = (ListenPortParams *)mytdp->td_prvtptr;
 
   /* Set thread active status */
   pthread_mutex_lock (&(mytdp->td_lock));
@@ -913,9 +915,9 @@ ListenThread (void *arg)
       break;
     }
 
-    cinfo->socket = clientsocket;
-    cinfo->protocols = lpp->protocols;
-    cinfo->type = CLIENT_UNDETERMINED;
+    cinfo->socket     = clientsocket;
+    cinfo->protocols  = lpp->protocols;
+    cinfo->type       = CLIENT_UNDETERMINED;
     cinfo->ringparams = ringparams;
 
     /* Store client socket address structure */
@@ -992,11 +994,11 @@ ListenThread (void *arg)
         break;
       }
 
-      cinfo->mswrite->path = mseedarchive;
-      cinfo->mswrite->idletimeout = mseedidleto;
-      cinfo->mswrite->maxopenfiles = 50;
+      cinfo->mswrite->path          = mseedarchive;
+      cinfo->mswrite->idletimeout   = mseedidleto;
+      cinfo->mswrite->maxopenfiles  = 50;
       cinfo->mswrite->openfilecount = 0;
-      cinfo->mswrite->grouproot = NULL;
+      cinfo->mswrite->grouproot     = NULL;
     }
 
     /* Create new client thread */
@@ -1034,14 +1036,14 @@ ListenThread (void *arg)
         break;
       }
 
-      ctp->td = tdp;
+      ctp->td   = tdp;
       ctp->prev = 0;
 
       /* Add ctp to the beginning of the client threads list (cthreads) */
       pthread_mutex_lock (&cthreads_lock);
       if (cthreads)
       {
-        ctp->next = cthreads;
+        ctp->next      = cthreads;
         cthreads->prev = ctp;
       }
       else
@@ -1093,21 +1095,21 @@ InitServerSocket (char *portstr, uint8_t protocols)
   if (protocols & FAMILY_IPv4)
   {
     hints.ai_family = AF_INET;
-    familystr = "IPv4";
+    familystr       = "IPv4";
   }
   else if (protocols & FAMILY_IPv6)
   {
     hints.ai_family = AF_INET6;
-    familystr = "IPv6";
+    familystr       = "IPv6";
   }
   else
   {
     hints.ai_family = AF_UNSPEC;
-    familystr = "IPvUnspecified";
+    familystr       = "IPvUnspecified";
   }
 
   hints.ai_socktype = SOCK_STREAM;
-  hints.ai_flags = AI_PASSIVE;
+  hints.ai_flags    = AI_PASSIVE;
 
   if ((gaierror = getaddrinfo (NULL, portstr, &hints, &addr)))
   {
@@ -1236,8 +1238,8 @@ ProcessParam (int argcount, char **argvec)
     {
       strncpy (lpp.portstr, GetOptVal (argcount, argvec, optind++), sizeof (lpp.portstr));
       lpp.portstr[sizeof (lpp.portstr) - 1] = '\0';
-      lpp.protocols = PROTO_ALL;
-      lpp.socket = -1;
+      lpp.protocols                         = PROTO_ALL;
+      lpp.socket                            = -1;
 
       if (!AddListenThreads (&lpp))
       {
@@ -1249,8 +1251,8 @@ ProcessParam (int argcount, char **argvec)
     {
       strncpy (lpp.portstr, GetOptVal (argcount, argvec, optind++), sizeof (lpp.portstr));
       lpp.portstr[sizeof (lpp.portstr) - 1] = '\0';
-      lpp.protocols = PROTO_DATALINK;
-      lpp.socket = -1;
+      lpp.protocols                         = PROTO_DATALINK;
+      lpp.socket                            = -1;
 
       if (!AddListenThreads (&lpp))
       {
@@ -1262,8 +1264,8 @@ ProcessParam (int argcount, char **argvec)
     {
       strncpy (lpp.portstr, GetOptVal (argcount, argvec, optind++), sizeof (lpp.portstr));
       lpp.portstr[sizeof (lpp.portstr) - 1] = '\0';
-      lpp.protocols = PROTO_SEEDLINK;
-      lpp.socket = -1;
+      lpp.protocols                         = PROTO_SEEDLINK;
+      lpp.socket                            = -1;
 
       if (!AddListenThreads (&lpp))
       {
@@ -1469,7 +1471,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
   char line[200];
   char *ptr, *chr;
   struct stat cfstat;
-  IPNet *ipnet = 0;
+  IPNet *ipnet     = 0;
   IPNet *nextipnet = 0;
   ListenPortParams lpp;
 
@@ -1661,8 +1663,8 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
       }
 
       lpp.portstr[sizeof (lpp.portstr) - 1] = '\0';
-      lpp.protocols = PROTO_ALL;
-      lpp.socket = -1;
+      lpp.protocols                         = PROTO_ALL;
+      lpp.socket                            = -1;
 
       /* Parse optional protocol flags to limit allowed protocols */
       if (rv == 2)
@@ -1701,8 +1703,8 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
 
       strncpy (lpp.portstr, svalue, sizeof (lpp.portstr));
       lpp.portstr[sizeof (lpp.portstr) - 1] = '\0';
-      lpp.protocols = PROTO_DATALINK;
-      lpp.socket = -1;
+      lpp.protocols                         = PROTO_DATALINK;
+      lpp.socket                            = -1;
 
       if (!AddListenThreads (&lpp))
       {
@@ -1720,8 +1722,8 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
 
       strncpy (lpp.portstr, svalue, sizeof (lpp.portstr));
       lpp.portstr[sizeof (lpp.portstr) - 1] = '\0';
-      lpp.protocols = PROTO_SEEDLINK;
-      lpp.socket = -1;
+      lpp.protocols                         = PROTO_SEEDLINK;
+      lpp.socket                            = -1;
 
       if (!AddListenThreads (&lpp))
       {
@@ -1923,7 +1925,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
         lprintf (0, "Error with LimitIP config file line: %s", ptr);
         return -1;
       }
-      svalue[sizeof (svalue) - 1] = '\0';
+      svalue[sizeof (svalue) - 1]     = '\0';
       limitstr[sizeof (limitstr) - 1] = '\0';
 
       if (AddIPNet (&limitips, svalue, limitstr))
@@ -2124,7 +2126,7 @@ ConfigMSWrite (char *value)
 {
   char archive[513];
   char *layout = 0;
-  char *path = 0;
+  char *path   = 0;
 
   /* Parse layout specification if present */
   if ((path = strchr (value, '@')))
@@ -2195,7 +2197,7 @@ AddListenThreads (ListenPortParams *lpp)
 {
   uint8_t protocols;
   uint8_t families = 0;
-  int threads = 0;
+  int threads      = 0;
 
   if (!lpp)
     return 0;
@@ -2283,13 +2285,13 @@ AddMSeedScanThread (char *configstr)
 
   /* Set miniSEED scanning defaults */
   memset (&mssinfo, 0, sizeof (MSScanInfo)); /* Init struct to zeros */
-  mssinfo.maxrecur = -1;                     /* Maximum level of directory recursion, -1 is no limit */
-  mssinfo.scansleep0 = 1;                    /* Sleep between scans interval when no records found */
-  mssinfo.idledelay = 60;                    /* Check idle files every idledelay scans */
-  mssinfo.idlesec = 7200;                    /* Files are idle if not modified for idlesec */
+  mssinfo.maxrecur     = -1;                 /* Maximum level of directory recursion, -1 is no limit */
+  mssinfo.scansleep0   = 1;                  /* Sleep between scans interval when no records found */
+  mssinfo.idledelay    = 60;                 /* Check idle files every idledelay scans */
+  mssinfo.idlesec      = 7200;               /* Files are idle if not modified for idlesec */
   mssinfo.throttlensec = 100;                /* Nanoseconds to sleep after reading each record */
-  mssinfo.filemaxrecs = 100;                 /* Maximum records to read from each file per scan */
-  mssinfo.stateint = 300;                    /* State saving interval in seconds */
+  mssinfo.filemaxrecs  = 100;                /* Maximum records to read from each file per scan */
+  mssinfo.stateint     = 300;                /* State saving interval in seconds */
 
   /* Skip initial whitespace */
   while (isspace ((int)(*configstr)))
@@ -2441,7 +2443,7 @@ AddServerThread (unsigned int type, void *params)
       stp = stp->next;
     }
 
-    stp->next = nstp;
+    stp->next  = nstp;
     nstp->prev = stp;
   }
   else
@@ -2490,7 +2492,7 @@ CalcSize (char *sizestr)
   if (parsestr[termchar] == 'K' || parsestr[termchar] == 'k')
   {
     parsestr[termchar] = '\0';
-    size = strtoull (parsestr, NULL, 10);
+    size               = strtoull (parsestr, NULL, 10);
     if (!size)
     {
       lprintf (0, "CalcSize(): Error converting %s to integer", parsestr);
@@ -2502,7 +2504,7 @@ CalcSize (char *sizestr)
   else if (parsestr[termchar] == 'M' || parsestr[termchar] == 'm')
   {
     parsestr[termchar] = '\0';
-    size = strtoull (parsestr, NULL, 10);
+    size               = strtoull (parsestr, NULL, 10);
     if (!size)
     {
       lprintf (0, "CalcSize(): Error converting %s to integer", parsestr);
@@ -2514,7 +2516,7 @@ CalcSize (char *sizestr)
   else if (parsestr[termchar] == 'G' || parsestr[termchar] == 'g')
   {
     parsestr[termchar] = '\0';
-    size = strtoull (parsestr, NULL, 10);
+    size               = strtoull (parsestr, NULL, 10);
     if (!size)
     {
       lprintf (0, "CalcSize(): Error converting %s to integer", parsestr);
@@ -2592,11 +2594,11 @@ CalcStats (ClientInfo *cinfo)
   {
     /* Calculate the transmission rates */
     cinfo->txpacketrate = (double)(cinfo->txpackets[0] - cinfo->txpackets[1]) / deltasec;
-    cinfo->txbyterate = (double)(cinfo->txbytes[0] - cinfo->txbytes[1]) / deltasec;
+    cinfo->txbyterate   = (double)(cinfo->txbytes[0] - cinfo->txbytes[1]) / deltasec;
 
     /* Shift current values to history values */
     cinfo->txpackets[1] = cinfo->txpackets[0];
-    cinfo->txbytes[1] = cinfo->txbytes[0];
+    cinfo->txbytes[1]   = cinfo->txbytes[0];
   }
 
   /* Reception */
@@ -2604,11 +2606,11 @@ CalcStats (ClientInfo *cinfo)
   {
     /* Calculate the reception rates */
     cinfo->rxpacketrate = (double)(cinfo->rxpackets[0] - cinfo->rxpackets[1]) / deltasec;
-    cinfo->rxbyterate = (double)(cinfo->rxbytes[0] - cinfo->rxbytes[1]) / deltasec;
+    cinfo->rxbyterate   = (double)(cinfo->rxbytes[0] - cinfo->rxbytes[1]) / deltasec;
 
     /* Shift current values to history values */
     cinfo->rxpackets[1] = cinfo->rxpackets[0];
-    cinfo->rxbytes[1] = cinfo->rxbytes[0];
+    cinfo->rxbytes[1]   = cinfo->rxbytes[0];
   }
 
   /* Update time stamp of history values */
@@ -2635,10 +2637,10 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
   struct sockaddr_in6 *sockaddr6;
   IPNet *newipnet;
   char net[100] = {0};
-  char *end = NULL;
+  char *end     = NULL;
   char *prefixstr;
   unsigned long int prefix = 0;
-  uint32_t v4netmask = 0;
+  uint32_t v4netmask       = 0;
   int rv;
   int idx;
   int jdx;
@@ -2677,7 +2679,7 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
 
     if (v4netmask > 0)
     {
-      if (ntohl(v4netmask) & (~ntohl(v4netmask) >> 1))
+      if (ntohl (v4netmask) & (~ntohl (v4netmask) >> 1))
       {
         lprintf (0, "AddIPNet(): Invalid IPv4 netmask: %s", prefixstr);
         return -1;
@@ -2699,8 +2701,8 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
   /* Convert address portion to binary address, resolving if possible */
   memset (&hints, 0, sizeof (hints));
   hints.ai_socktype = SOCK_STREAM;
-  hints.ai_family = AF_UNSPEC;     /* Either IPv4 and/or IPv6 */
-  hints.ai_flags = AI_ADDRCONFIG;  /* Only return entries that could actually connect */
+  hints.ai_family   = AF_UNSPEC;     /* Either IPv4 and/or IPv6 */
+  hints.ai_flags    = AI_ADDRCONFIG; /* Only return entries that could actually connect */
 
   if ((rv = getaddrinfo (net, NULL, &hints, &addrlist)) != 0)
   {
@@ -2734,10 +2736,10 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
       /* Swap calculated netmask to network order, if a (swapped) mask not available */
       if (v4netmask == 0)
       {
-        newipnet->netmask.in_addr.s_addr = htonl(newipnet->netmask.in_addr.s_addr);
+        newipnet->netmask.in_addr.s_addr = htonl (newipnet->netmask.in_addr.s_addr);
       }
 
-      sockaddr = (struct sockaddr_in *)addr->ai_addr;
+      sockaddr                         = (struct sockaddr_in *)addr->ai_addr;
       newipnet->network.in_addr.s_addr = sockaddr->sin_addr.s_addr;
 
       /* Calculate network: AND the address and netmask */
@@ -2758,11 +2760,11 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
             newipnet->netmask.in6_addr.s6_addr[jdx] = 0xFFu;
           else
             newipnet->netmask.in6_addr.s6_addr[jdx] = (uint8_t)(0xFFu << (8 - idx));
-	}
+        }
       }
 
       sockaddr6 = (struct sockaddr_in6 *)addr->ai_addr;
-      memcpy (&newipnet->network.in6_addr.s6_addr, &sockaddr6->sin6_addr.s6_addr, sizeof(struct sockaddr_in6));
+      memcpy (&newipnet->network.in6_addr.s6_addr, &sockaddr6->sin6_addr.s6_addr, sizeof (struct sockaddr_in6));
 
       /* Calculate network: AND the address and netmask */
       for (idx = 0; idx < 16; idx++)
@@ -2783,14 +2785,13 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
 
     /* Push the new entry on the top of the list */
     newipnet->next = *pplist;
-    *pplist = newipnet;
+    *pplist        = newipnet;
   }
 
   freeaddrinfo (addrlist);
 
   return 0;
 } /* End of AddIPNet() */
-
 
 /***************************************************************************
  * MatchIP:
@@ -2803,8 +2804,8 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
 static IPNet *
 MatchIP (IPNet *list, struct sockaddr *addr)
 {
-  IPNet *net = list;
-  struct in_addr *testnet = &((struct sockaddr_in *)addr)->sin_addr;
+  IPNet *net                = list;
+  struct in_addr *testnet   = &((struct sockaddr_in *)addr)->sin_addr;
   struct in6_addr *testnet6 = &((struct sockaddr_in6 *)addr)->sin6_addr;
 
   if (!list)

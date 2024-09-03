@@ -31,11 +31,11 @@
 #include <fcntl.h>
 #include <glob.h>
 #include <string.h>
-#include <unistd.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <libmseed.h>
 
@@ -89,22 +89,22 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
   char definition[MAX_FILENAME_LEN];
   char pathformat[MAX_FILENAME_LEN];
   char globmatch[MAX_FILENAME_LEN];
-  int fnlen = 0;
+  int fnlen       = 0;
   int nondefflags = 0;
   int writebytes;
   int writeloops;
   int rv;
 
-  char network[10] ={0};
-  char station[10] = {0};
+  char network[10]  = {0};
+  char station[10]  = {0};
   char location[10] = {0};
-  char channel[10] = {0};
+  char channel[10]  = {0};
 
   uint16_t year = 0;
   uint16_t yday = 0;
-  uint8_t hour = 0;
-  uint8_t min = 0;
-  uint8_t sec = 0;
+  uint8_t hour  = 0;
+  uint8_t min   = 0;
+  uint8_t sec   = 0;
   uint32_t nsec = 0;
 
   /* Special case for stream shutdown */
@@ -118,9 +118,9 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
   }
 
   /* Build file path and name from pathformat */
-  filename[0] = '\0';
+  filename[0]   = '\0';
   definition[0] = '\0';
-  globmatch[0] = '\0';
+  globmatch[0]  = '\0';
 
   if (postpath)
     snprintf (pathformat, sizeof (pathformat), "%s/%s", datastream->path, postpath);
@@ -186,7 +186,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
     while ((w = strpbrk (p, "%#")) != NULL)
     {
       def = (*w == '%');
-      *w = '\0';
+      *w  = '\0';
 
       strncat (filename, p, (sizeof (filename) - fnlen));
       fnlen = strlen (filename);
@@ -214,7 +214,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case 's':
         strncat (filename, station, (sizeof (filename) - fnlen));
@@ -229,7 +229,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case 'l':
         strncat (filename, location, (sizeof (filename) - fnlen));
@@ -244,7 +244,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case 'c':
         strncat (filename, channel, (sizeof (filename) - fnlen));
@@ -259,11 +259,11 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case 'q':
-        memset (tstr, 0, sizeof(tstr));
-        mseh_get_string(msr, "FDSN.DataQuality", tstr, 1);
+        memset (tstr, 0, sizeof (tstr));
+        mseh_get_string (msr, "FDSN.DataQuality", tstr, 1);
         strncat (filename, tstr, (sizeof (filename) - fnlen));
         if (def)
           strncat (definition, tstr, (sizeof (definition) - fnlen));
@@ -276,7 +276,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case 'Y':
         snprintf (tstr, sizeof (tstr), "%04d", year);
@@ -292,7 +292,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case 'y':
         tdy = year;
@@ -313,7 +313,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case 'j':
         snprintf (tstr, sizeof (tstr), "%03d", yday);
@@ -329,7 +329,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case 'H':
         snprintf (tstr, sizeof (tstr), "%02d", hour);
@@ -345,7 +345,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case 'M':
         snprintf (tstr, sizeof (tstr), "%02d", min);
@@ -361,7 +361,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case 'S':
         snprintf (tstr, sizeof (tstr), "%02d", sec);
@@ -377,7 +377,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case 'F':
         snprintf (tstr, sizeof (tstr), "%09d", nsec);
@@ -393,7 +393,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case 'D':
         curtime = time (NULL);
@@ -417,7 +417,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case 'L':
         snprintf (tstr, sizeof (tstr), "%d", msr->reclen);
@@ -433,7 +433,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case 'r':
         snprintf (tstr, sizeof (tstr), "%ld", (long int)(msr->samprate + 0.5));
@@ -449,7 +449,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case 'R':
         snprintf (tstr, sizeof (tstr), "%.6f", msr->samprate);
@@ -465,7 +465,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case 'h':
         if (!hostname)
@@ -482,14 +482,14 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       case '%':
         strncat (filename, "%", (sizeof (filename) - fnlen));
         strncat (globmatch, "%", (sizeof (globmatch) - globlen));
-        fnlen = strlen (filename);
+        fnlen   = strlen (filename);
         globlen = strlen (globmatch);
-        p = w + 1;
+        p       = w + 1;
         break;
       case '#':
         strncat (filename, "#", (sizeof (filename) - fnlen));
@@ -500,7 +500,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
-        p = w + 1;
+        p     = w + 1;
         break;
       default:
         lprintf (0, "[%s] unknown file name format code: %c",
@@ -560,7 +560,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
   ds_strparse (NULL, NULL, &fnlist);
 
   /* Make sure the filename and definition are NULL terminated */
-  *(filename + sizeof (filename) - 1) = '\0';
+  *(filename + sizeof (filename) - 1)     = '\0';
   *(definition + sizeof (definition) - 1) = '\0';
 
   /* Check for previously used stream entry, otherwise create it */
@@ -632,14 +632,14 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
 int
 ds_closeidle (DataStream *datastream, int idletimeout, char *ident)
 {
-  int count = 0;
+  int count                    = 0;
   DataStreamGroup *searchgroup = NULL;
-  DataStreamGroup *prevgroup = NULL;
-  DataStreamGroup *nextgroup = NULL;
+  DataStreamGroup *prevgroup   = NULL;
+  DataStreamGroup *nextgroup   = NULL;
   time_t curtime;
 
   searchgroup = datastream->grouproot;
-  curtime = time (NULL);
+  curtime     = time (NULL);
 
   /* Traverse the stream chain */
   while (searchgroup != NULL)
@@ -702,14 +702,14 @@ static DataStreamGroup *
 ds_getstream (DataStream *datastream, const char *defkey, char *filename,
               char *postpath, int nondefflags, const char *globmatch, char *ident)
 {
-  DataStreamGroup *foundgroup = NULL;
+  DataStreamGroup *foundgroup  = NULL;
   DataStreamGroup *searchgroup = NULL;
-  DataStreamGroup *prevgroup = NULL;
+  DataStreamGroup *prevgroup   = NULL;
   time_t curtime;
   char *matchedfilename = 0;
 
   searchgroup = datastream->grouproot;
-  curtime = time (NULL);
+  curtime     = time (NULL);
 
   /* Traverse the stream chain looking for matching streams */
   while (searchgroup != NULL)
@@ -731,7 +731,7 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
       break;
     }
 
-    prevgroup = searchgroup;
+    prevgroup   = searchgroup;
     searchgroup = nextgroup;
   }
 
@@ -791,8 +791,8 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
     foundgroup = (DataStreamGroup *)malloc (sizeof (DataStreamGroup));
 
     memset (foundgroup, 0, sizeof (DataStreamGroup));
-    foundgroup->defkey = strdup (defkey);
-    foundgroup->filed = 0;
+    foundgroup->defkey  = strdup (defkey);
+    foundgroup->filed   = 0;
     foundgroup->modtime = curtime;
     strncpy (foundgroup->filename, filename, sizeof (foundgroup->filename));
     if (postpath)
@@ -880,9 +880,9 @@ ds_openfile (DataStream *datastream, const char *filename, char *ident)
   static char rlimit = 0;
   struct rlimit rlim;
   int idletimeout = datastream->idletimeout;
-  int oret = 0;
-  int flags = (O_RDWR | O_CREAT | O_APPEND);
-  mode_t mode = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH); /* Mode 0666 */
+  int oret        = 0;
+  int flags       = (O_RDWR | O_CREAT | O_APPEND);
+  mode_t mode     = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH); /* Mode 0666 */
 
   if (!datastream)
     return -1;
@@ -957,7 +957,7 @@ ds_openfile (DataStream *datastream, const char *filename, char *ident)
 static void
 ds_shutdown (DataStream *datastream, char *ident)
 {
-  DataStreamGroup *curgroup = NULL;
+  DataStreamGroup *curgroup  = NULL;
   DataStreamGroup *prevgroup = NULL;
 
   curgroup = datastream->grouproot;
@@ -965,7 +965,7 @@ ds_shutdown (DataStream *datastream, char *ident)
   while (curgroup != NULL)
   {
     prevgroup = curgroup;
-    curgroup = curgroup->next;
+    curgroup  = curgroup->next;
 
     lprintf (3, "[%s] Shutting down stream with key: %s (%s)",
              ident, prevgroup->defkey, prevgroup->postpath);
@@ -1005,7 +1005,7 @@ ds_strparse (const char *string, const char *delim, DSstrlist **list)
 {
   const char *beg; /* beginning of element */
   const char *del; /* delimiter */
-  int stop = 0;
+  int stop  = 0;
   int count = 0;
   int total;
 
@@ -1015,7 +1015,7 @@ ds_strparse (const char *string, const char *delim, DSstrlist **list)
   if (string != NULL && delim != NULL)
   {
     total = strlen (string);
-    beg = string;
+    beg   = string;
 
     while (!stop)
     {
@@ -1026,11 +1026,11 @@ ds_strparse (const char *string, const char *delim, DSstrlist **list)
       /* Delimiter not found or empty */
       if (del == NULL || strlen (delim) == 0)
       {
-        del = string + strlen (string);
+        del  = string + strlen (string);
         stop = 1;
       }
 
-      tmplist = (DSstrlist *)malloc (sizeof (DSstrlist));
+      tmplist       = (DSstrlist *)malloc (sizeof (DSstrlist));
       tmplist->next = 0;
 
       tmplist->element = (char *)malloc (del - beg + 1);
@@ -1041,12 +1041,12 @@ ds_strparse (const char *string, const char *delim, DSstrlist **list)
       if (count++ == 0)
       {
         curlist = tmplist;
-        *list = curlist;
+        *list   = curlist;
       }
       else
       {
         curlist->next = tmplist;
-        curlist = curlist->next;
+        curlist       = curlist->next;
       }
 
       /* Update 'beg' */
