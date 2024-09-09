@@ -63,6 +63,7 @@
 #include "ring.h"
 #include "ringserver.h"
 #include "slclient.h"
+#include "infojson.h"
 
 /* Define list of valid characters for selectors and station & network codes */
 #define VALIDSELECTCHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_-!"
@@ -72,11 +73,14 @@
 #define THROTTLE_TRIGGER 10
 
 static int HandleNegotiation (ClientInfo *cinfo);
-static int HandleInfo (ClientInfo *cinfo);
+static int HandleInfo_v3 (ClientInfo *cinfo);
+static int HandleInfo_v4 (ClientInfo *cinfo);
 static int SendReply (ClientInfo *cinfo, char *reply, ErrorCode code, char *extreply);
-static int SendRecord (RingPacket *packet, char *record, int reclen,
+static int SendPacket (uint64_t pktid, char *payload, uint32_t payloadlen,
+                       const char *staid, char format, char subformat, void *vcinfo);
+static int SendRecord (RingPacket *packet, char *record, uint32_t reclen,
                        void *vcinfo);
-static void SendInfoRecord (char *record, int reclen, void *vcinfo);
+static void SendInfoRecord (char *record, uint32_t reclen, void *vcinfo);
 static void FreeReqStationID (void *rbnode);
 static void FreeListStationID (void *rbnode);
 static int StaKeyCompare (const void *a, const void *b);
@@ -130,9 +134,19 @@ SLHandleCmd (ClientInfo *cinfo)
   /* Determine if this is an INFO request and handle */
   if (!strncasecmp (cinfo->recvbuf, "INFO", 4))
   {
-    if (HandleInfo (cinfo))
+    if (slinfo->proto_major == 4)
     {
-      return -1;
+      if (HandleInfo_v4 (cinfo))
+      {
+        return -1;
+      }
+    }
+    else
+    {
+      if (HandleInfo_v3 (cinfo))
+      {
+        return -1;
+      }
     }
   }
 
@@ -546,7 +560,7 @@ HandleNegotiation (ClientInfo *cinfo)
 
     /* Create and send server version information */
     bytes = snprintf (sendbuffer, sizeof (sendbuffer),
-                      SLSERVERVER "\r\n%s\r\n", serverid);
+                      SLSERVER_ID "\r\n%s\r\n", serverid);
 
     if (bytes >= sizeof (sendbuffer))
     {
@@ -644,7 +658,8 @@ HandleNegotiation (ClientInfo *cinfo)
     if (slinfo->proto_major == 4)
     {
       /* STATION stationID */
-      fields                                          = sscanf (cinfo->recvbuf, "%*s %20s %c", slinfo->reqstaid, &junk);
+      fields = sscanf (cinfo->recvbuf, "%*s %20s %c", slinfo->reqstaid, &junk);
+
       slinfo->reqstaid[sizeof (slinfo->reqstaid) - 1] = '\0';
 
       /* Make sure we got a station ID */
@@ -1124,17 +1139,19 @@ HandleNegotiation (ClientInfo *cinfo)
 } /* End of HandleNegotiation */
 
 /***************************************************************************
- * HandleInfo:
+ * HandleInfo_v3:
  *
- * Handle SeedLink INFO request.  Protocol INFO levels are:
+ * Handle SeedLink v3 INFO request.  Protocol INFO levels are:
  * ID, CAPABILITIES, STATIONS, STREAMS, GAPS, CONNECTIONS, ALL
  *
  * Levels GAPS and ALL are not supported.
  *
+ * The response is an XML document encoded in one or more miniSEED records.
+ *
  * Returns 0 on success and -1 on error which should disconnect.
  ***************************************************************************/
 static int
-HandleInfo (ClientInfo *cinfo)
+HandleInfo_v3 (ClientInfo *cinfo)
 {
   SLInfo *slinfo        = (SLInfo *)cinfo->extinfo;
   mxml_node_t *xmldoc   = NULL;
@@ -1207,7 +1224,7 @@ HandleInfo (ClientInfo *cinfo)
   ms_nstime2timestr (serverstarttime, string, ISOMONTHDAY_Z, NONE);
 
   /* All responses, even the error response contain these attributes */
-  mxmlElementSetAttr (seedlink, "software", SLSERVERVER);
+  mxmlElementSetAttr (seedlink, "software", SLSERVER_ID);
   mxmlElementSetAttr (seedlink, "organization", serverid);
   mxmlElementSetAttr (seedlink, "started", string);
 
@@ -1594,7 +1611,7 @@ HandleInfo (ClientInfo *cinfo)
       }
 
       tcinfo  = (ClientInfo *)loopctp->td->td_prvtptr;
-      tslinfo = (tcinfo->type == CLIENT_SEEDLINK) ? (SLInfo *)tcinfo->extinfo : 0;
+      tslinfo = (tcinfo->type == CLIENT_SEEDLINK) ? (SLInfo *)tcinfo->extinfo : NULL;
 
       if (!(station = mxmlNewElement (seedlink, "station")))
       {
@@ -1818,7 +1835,116 @@ HandleInfo (ClientInfo *cinfo)
     free (record);
 
   return (cinfo->socketerr) ? -1 : 0;
-} /* End of HandleInfo */
+} /* End of HandleInfo_v3 */
+
+/***************************************************************************
+ * HandleInfo_v4:
+ *
+ * Handle SeedLink v4 INFO request.  Protocol INFO levels are:
+ * ID, FORMATS, CAPABILITIES, STATIONS, STREAMS, CONNECTIONS.
+ *
+ * The response is an JSON document encoded.
+ *
+ * Returns 0 on success and -1 on error which should disconnect.
+ ***************************************************************************/
+static int
+HandleInfo_v4 (ClientInfo *cinfo)
+{
+  SLInfo *slinfo    = (SLInfo *)cinfo->extinfo;
+  char *json_string = NULL;
+  char *level       = NULL;
+  int errflag       = 0;
+
+  if (!strncasecmp (cinfo->recvbuf, "INFO", 4))
+  {
+    /* Set level pointer to start of level identifier */
+    level = cinfo->recvbuf + 4;
+
+    /* Skip any spaces between INFO and level identifier */
+    while (*level == ' ')
+      level++;
+  }
+  else if (*level == '\0' || *level == '\r' || *level == '\n')
+  {
+    lprintf (0, "[%s] INFO requesteed without a level", cinfo->hostname);
+    return -1;
+  }
+  else
+  {
+    lprintf (0, "[%s] %s() cannot detect INFO", __func__, cinfo->hostname);
+    return -1;
+  }
+
+  /* Parse INFO request to determine level */
+  if (!strncasecmp (level, "ID", 2))
+  {
+    /* This is used to "ping" the server so only report at high verbosity */
+    lprintf (2, "[%s] Received INFO ID request", cinfo->hostname);
+
+    json_string = info_json (cinfo, SLSERVER_ID, INFO_ID);
+  }
+  else if (!strncasecmp (level, "CAPABILITIES", 12))
+  {
+    lprintf (1, "[%s] Received INFO CAPABILITIES request", cinfo->hostname);
+
+    json_string = info_json (cinfo, SLSERVER_ID, INFO_CAPABILITIES);
+  }
+  else if (!strncasecmp (level, "FORMATS", 7))
+  {
+    lprintf (1, "[%s] Received INFO FORMATS request", cinfo->hostname);
+
+    json_string = info_json (cinfo, SLSERVER_ID, INFO_FORMATS | INFO_FILTERS);
+  }
+  else if (!strncasecmp (level, "STATIONS", 8))
+  {
+    lprintf (1, "[%s] Received INFO STATIONS request", cinfo->hostname);
+
+    json_string = info_json (cinfo, SLSERVER_ID, INFO_STATIONS);
+  }
+  else if (!strncasecmp (level, "STREAMS", 7))
+  {
+    lprintf (1, "[%s] Received INFO STREAMS request", cinfo->hostname);
+
+    json_string = info_json (cinfo, SLSERVER_ID, INFO_STREAMS);
+  }
+  else if (!strncasecmp (level, "CONNECTIONS", 11))
+  {
+    if (!cinfo->trusted)
+    {
+      lprintf (1, "[%s] Refusing INFO CONNECTIONS request from un-trusted client", cinfo->hostname);
+      json_string = error_json (cinfo, SLSERVER_ID, "UNAUTHORIZED", "Client is not authorized to request connections");
+      errflag = 1;
+    }
+    else
+    {
+      lprintf (1, "[%s] Received INFO CONNECTIONS request", cinfo->hostname);
+      json_string = info_json (cinfo, SLSERVER_ID, INFO_CONNECTIONS);
+    }
+  }
+  /* Unrecognized INFO request */
+  else
+  {
+    json_string = error_json (cinfo, SLSERVER_ID, "ARGUMENTS", "Unrecognized INFO level");
+    errflag = 1;
+
+    lprintf (0, "[%s] Unrecognized INFO level: %s", cinfo->hostname, level);
+  }
+
+  /* Send INFO response to client */
+  if (json_string)
+  {
+    SendPacket (0, json_string, strlen (json_string), "", 'J', (errflag) ? 'E' : 'I', cinfo);
+  }
+  else
+  {
+    lprintf (0, "[%s] Error creating INFO response", cinfo->hostname);
+  }
+
+  /* Free allocated response buffer */
+  free (json_string);
+
+  return (cinfo->socketerr) ? -1 : 0;
+} /* End of HandleInfo_v4 */
 
 /***************************************************************************
  * SendReply:
@@ -1894,6 +2020,75 @@ SendReply (ClientInfo *cinfo, char *reply, ErrorCode code, char *extreply)
 } /* End of SendReply() */
 
 /***************************************************************************
+ * SendPacket:
+ *
+ * Send 'length' bytes from 'payload' to 'cinfo->socket' and prefix
+ * with an appropriate SeedLink header.
+ *
+ * Returns 0 on success and -1 on error, the ClientInfo.socketerr value
+ * is set on socket errors.
+ ***************************************************************************/
+static int
+SendPacket (uint64_t pktid, char *payload, uint32_t payloadlen,
+            const char *staid, char format, char subformat, void *vcinfo)
+{
+  ClientInfo *cinfo = (ClientInfo *)vcinfo;
+  SLInfo *slinfo    = (SLInfo *)cinfo->extinfo;
+  char header[40]   = {0};
+  size_t headerlen  = 0;
+  uint8_t l_staidlen;
+
+  if (!payload || !vcinfo)
+    return -1;
+
+  if (slinfo->proto_major == 4) /* Create v4 header */
+  {
+    l_staidlen = (staid) ? (uint8_t)strlen (staid) : 0;
+
+    /* V4 header values are in little-endan byte order */
+    if (ms_bigendianhost ())
+    {
+      ms_gswap4 (&payloadlen);
+      ms_gswap8 (&pktid);
+    }
+
+    /* Construct v4 header */
+    memcpy (header, "SE", 2);
+    memcpy (header + 2, &format, 1);
+    memcpy (header + 3, &subformat, 1);
+    memcpy (header + 4, &payloadlen, 4);
+    memcpy (header + 8, &pktid, 8);
+    memcpy (header + 16, &l_staidlen, 1);
+    memcpy (header + 17, staid, l_staidlen);
+
+    headerlen = SLHEADSIZE_V4 + l_staidlen;
+  }
+  else /* Create v3 header */
+  {
+    /* Check that sequence number is not too big */
+    if (pktid > 0xFFFFFF)
+    {
+      lprintf (0, "[%s] sequence number too large for SeedLink: %" PRId64,
+               cinfo->hostname, pktid);
+    }
+
+    /* Create SeedLink header: signature + sequence number */
+    snprintf (header, sizeof (header), "SL%06" PRIX64, pktid);
+    headerlen = SLHEADSIZE_V3;
+  }
+
+  fprintf (stderr, "DEBUG, sending packet length %u, header length: %zu, sum: %zu\n", payloadlen, headerlen, payloadlen + headerlen);
+
+  if (SendDataMB (cinfo, (void *[]){header, payload}, (size_t[]){headerlen, payloadlen}, 2))
+    return -1;
+
+  /* Update the time of the last packet exchange */
+  cinfo->lastxchange = NSnow ();
+
+  return 0;
+} /* End of SendPacket() */
+
+/***************************************************************************
  * SendRecord:
  *
  * Send 'reclen' bytes from 'record' to 'cinfo->socket' and prefix
@@ -1903,24 +2098,24 @@ SendReply (ClientInfo *cinfo, char *reply, ErrorCode code, char *extreply)
  * is set on socket errors.
  ***************************************************************************/
 static int
-SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
+SendRecord (RingPacket *packet, char *record, uint32_t reclen, void *vcinfo)
 {
   ClientInfo *cinfo = (ClientInfo *)vcinfo;
   SLInfo *slinfo    = (SLInfo *)cinfo->extinfo;
-  char header[40]   = {0};
-  int headerlen     = 0;
+
+  char staid[MAXSTREAMID] = {0};
+
+  char format    = ' ';
+  char subformat = 'D'; /* All miniSEED records are data/generic */
 
   if (!record || !vcinfo)
     return -1;
 
-  if (slinfo->proto_major == 4) /* Create v4 header */
+  /* Prepare details needed for v4 protocol header */
+  if (slinfo->proto_major == 4)
   {
-    uint32_t ureclen      = reclen;
-    uint64_t upktid       = packet->pktid;
-    uint8_t ustationidlen = 0;
     char net[16];
     char sta[16];
-    char staid[MAXSTREAMID];
 
     /* Extract network and station codes from FDSN Source ID (streamid) */
     if (strncmp (packet->streamid, "FDSN:", 5) == 0)
@@ -1940,54 +2135,16 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
       strncpy (staid, packet->streamid, sizeof (staid) - 1);
     }
 
-    ustationidlen = (uint8_t)strlen (staid);
-
-    /* V4 header values are in little-endan byte order */
-    if (ms_bigendianhost ())
-    {
-      ms_gswap4 (&ureclen);
-      ms_gswap8 (&upktid);
-    }
-
-    /* Construct v4 header */
-    memcpy (header, "SE", 2);
-
     if (MS3_ISVALIDHEADER (record))
-      memcpy (header + 2, "3", 1);
+      format = '3';
     else if (MS2_ISVALIDHEADER (record))
-      memcpy (header + 2, "2", 1);
+      format = '2';
     else
       return -1;
-
-    memcpy (header + 3, "D", 1); /* Payload format subcode, D = data */
-    memcpy (header + 4, &ureclen, 4);
-    memcpy (header + 8, &upktid, 8);
-    memcpy (header + 16, &ustationidlen, 1);
-    memcpy (header + 17, staid, ustationidlen);
-
-    headerlen = SLHEADSIZE_V4 + ustationidlen;
-  }
-  else /* Create v3 header */
-  {
-    /* Check that sequence number is not too big */
-    if (packet->pktid > 0xFFFFFF)
-    {
-      lprintf (0, "[%s] sequence number too large for SeedLink: %" PRId64,
-               cinfo->hostname, packet->pktid);
-    }
-
-    /* Create SeedLink header: signature + sequence number */
-    snprintf (header, sizeof (header), "SL%06" PRIX64, packet->pktid);
-    headerlen = SLHEADSIZE_V3;
   }
 
-  if (SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){headerlen, reclen}, 2))
-    return -1;
-
-  /* Update the time of the last packet exchange */
-  cinfo->lastxchange = NSnow ();
-
-  return 0;
+  return SendPacket (packet->pktid, record, reclen, staid,
+                     format, subformat, vcinfo);
 } /* End of SendRecord() */
 
 /***************************************************************************
@@ -1999,7 +2156,7 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
  * The ClientInfo.socketerr value is set on socket errors.
  ***************************************************************************/
 static void
-SendInfoRecord (char *record, int reclen, void *vcinfo)
+SendInfoRecord (char *record, uint32_t reclen, void *vcinfo)
 {
   ClientInfo *cinfo = (ClientInfo *)vcinfo;
   SLInfo *slinfo    = (SLInfo *)cinfo->extinfo;

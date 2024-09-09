@@ -1318,8 +1318,6 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
   char *conntype;
   char conntime[50];
   char packettime[50];
-  char datastart[50];
-  char dataend[50];
   char lagstr[5];
 
   char matchstr[50];
@@ -1418,9 +1416,11 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
     }
 
     ms_nstime2timestr (tcinfo->conntime, conntime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-    ms_nstime2timestr (tcinfo->reader->pkttime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-    ms_nstime2timestr (tcinfo->reader->datastart, datastart, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-    ms_nstime2timestr (tcinfo->reader->dataend, dataend, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+
+    if (tcinfo->reader->pkttime == NSTUNSET)
+      strncpy (packettime, "-", sizeof (packettime));
+    else
+      ms_nstime2timestr (tcinfo->reader->pkttime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
 
     if (tcinfo->reader->pktid <= 0)
       strncpy (lagstr, "-", sizeof (lagstr));

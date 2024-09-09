@@ -32,11 +32,12 @@ extern "C"
 
 /* The total length of SLSERVERVER should be <= 98 bytes for compatibility
    with libslink versions < 2.0. */
+#define SLSERVERVER "RingServer/" VERSION
 #define SLCAPABILITIES_ID "SLPROTO:4.0 SLPROTO:3.1 CAP WS:13"
-#define SLSERVERVER "SeedLink v4.0 (RingServer/" VERSION ") :: " SLCAPABILITIES_ID
+#define SLSERVER_ID "SeedLink v4.0 (" SLSERVERVER ") :: " SLCAPABILITIES_ID
 
 /* Server capabilities for v4 */
-#define SLCAPABILITIESv4 "SLPROTO:4.0 SLPROTO:3.1 TIME WS:13"
+#define SLCAPABILITIESv4 "SLPROTO:4.0 SLPROTO:3.1 TIME WS:13 SEQWILDCARD"
 
 #define SLHEADSIZE_V3 8       /* SeedLink header size */
 #define SLHEADSIZE_V4 17      /* Extended SeedLink header fixed size */
@@ -45,15 +46,11 @@ extern "C"
 #define SLMAXREGEXLEN 2097152 /* Maximum length of match/reject regex pattern */
 #define SLMAXSELECTLEN 2048   /* Maximum length of per-station/global selector buffer */
 
-#define SL_UNSETSEQUENCE INT64_MAX         /* Unset sequence value */
-
 #define SLINFO_ID 1
 #define SLINFO_CAPABILITIES 2
 #define SLINFO_STATIONS 3
 #define SLINFO_STREAMS 4
-#define SLINFO_GAPS 5
-#define SLINFO_CONNECTIONS 6
-#define SLINFO_ALL 7
+#define SLINFO_CONNECTIONS 5
 
 /* Error codes */
 typedef enum
