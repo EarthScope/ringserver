@@ -64,6 +64,7 @@
 #include "ringserver.h"
 #include "slclient.h"
 #include "infojson.h"
+#include "infoxml.h"
 
 /* Define list of valid characters for selectors and station & network codes */
 #define VALIDSELECTCHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_-!"
@@ -82,10 +83,8 @@ static int SendRecord (RingPacket *packet, char *record, uint32_t reclen,
                        void *vcinfo);
 static void SendInfoRecord (char *record, uint32_t reclen, void *vcinfo);
 static void FreeReqStationID (void *rbnode);
-static void FreeListStationID (void *rbnode);
 static int StaKeyCompare (const void *a, const void *b);
 static ReqStationID *GetReqStationID (RBTree *tree, char *staid);
-static ListStationID *GetListStationID (RBTree *tree, char *staid);
 static int StationToRegex (const char *staid, const char *selectors,
                            char **matchregex, char **rejectregex);
 static int SelectToRegex (const char *staid, const char *select,
@@ -1141,10 +1140,8 @@ HandleNegotiation (ClientInfo *cinfo)
 /***************************************************************************
  * HandleInfo_v3:
  *
- * Handle SeedLink v3 INFO request.  Protocol INFO levels are:
- * ID, CAPABILITIES, STATIONS, STREAMS, GAPS, CONNECTIONS, ALL
- *
- * Levels GAPS and ALL are not supported.
+ * Handle SeedLink v3 INFO request.  Supported INFO levels are:
+ * ID, CAPABILITIES, STATIONS, STREAMS, CONNECTIONS
  *
  * The response is an XML document encoded in one or more miniSEED records.
  *
@@ -1153,14 +1150,10 @@ HandleNegotiation (ClientInfo *cinfo)
 static int
 HandleInfo_v3 (ClientInfo *cinfo)
 {
-  SLInfo *slinfo        = (SLInfo *)cinfo->extinfo;
-  mxml_node_t *xmldoc   = NULL;
-  mxml_node_t *seedlink = NULL;
-  char string[200];
+  SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
   char *xmlstr = NULL;
   int xmllength;
   char *level   = NULL;
-  int infolevel = 0;
   char errflag  = 0;
 
   char *record = NULL;
@@ -1200,45 +1193,19 @@ HandleInfo_v3 (ClientInfo *cinfo)
     return -1;
   }
 
-  /* Initialize the XML response structure */
-  if (!(xmldoc = mxmlNewXML ("1.0")))
-  {
-    lprintf (0, "[%s] Error creating XML document", cinfo->hostname);
-    if (record)
-      free (record);
-    return -1;
-  }
-
-  /* Create seedlink XML element */
-  if (!(seedlink = mxmlNewElement (xmldoc, "seedlink")))
-  {
-    lprintf (0, "[%s] Error creating seedlink XML element", cinfo->hostname);
-    if (xmldoc)
-      mxmlRelease (xmldoc);
-    if (record)
-      free (record);
-    return -1;
-  }
-
-  /* Convert server start time to YYYY-MM-DD HH:MM:SSZ */
-  ms_nstime2timestr (serverstarttime, string, ISOMONTHDAY_Z, NONE);
-
-  /* All responses, even the error response contain these attributes */
-  mxmlElementSetAttr (seedlink, "software", SLSERVER_ID);
-  mxmlElementSetAttr (seedlink, "organization", serverid);
-  mxmlElementSetAttr (seedlink, "started", string);
-
   /* Parse INFO request to determine level */
   if (!strncasecmp (level, "ID", 2))
   {
     /* This is used to "ping" the server so only report at high verbosity */
     lprintf (2, "[%s] Received INFO ID request", cinfo->hostname);
-    infolevel = SLINFO_ID;
+
+    xmlstr = info_xml_slv3_id (cinfo, SLSERVER_ID);
   }
   else if (!strncasecmp (level, "CAPABILITIES", 12))
   {
     lprintf (1, "[%s] Received INFO CAPABILITIES request", cinfo->hostname);
-    infolevel = SLINFO_CAPABILITIES;
+
+    xmlstr = info_xml_slv3_capabilities (cinfo, SLSERVER_ID);
   }
   else if (!strncasecmp (level, "STATIONS", 8))
   {
@@ -1250,7 +1217,8 @@ HandleInfo_v3 (ClientInfo *cinfo)
     else
     {
       lprintf (1, "[%s] Received INFO STATIONS request", cinfo->hostname);
-      infolevel = SLINFO_STATIONS;
+
+      xmlstr = info_xml_slv3_stations (cinfo, SLSERVER_ID, 0);
     }
   }
   else if (!strncasecmp (level, "STREAMS", 7))
@@ -1263,13 +1231,9 @@ HandleInfo_v3 (ClientInfo *cinfo)
     else
     {
       lprintf (1, "[%s] Received INFO STREAMS request", cinfo->hostname);
-      infolevel = SLINFO_STREAMS;
+
+      xmlstr = info_xml_slv3_stations (cinfo, SLSERVER_ID, 1);
     }
-  }
-  else if (!strncasecmp (level, "GAPS", 7))
-  {
-    lprintf (1, "[%s] Received INFO GAPS request, unsupported", cinfo->hostname);
-    errflag = 1;
   }
   else if (!strncasecmp (level, "CONNECTIONS", 11))
   {
@@ -1281,456 +1245,23 @@ HandleInfo_v3 (ClientInfo *cinfo)
     else
     {
       lprintf (1, "[%s] Received INFO CONNECTIONS request", cinfo->hostname);
-      infolevel = SLINFO_CONNECTIONS;
+
+      xmlstr = info_xml_slv3_connections (cinfo, SLSERVER_ID);
     }
-  }
-  else if (!strncasecmp (level, "ALL", 3))
-  {
-    lprintf (1, "[%s] Received INFO ALL request, unsupported", cinfo->hostname);
-    errflag = 1;
   }
   /* Unrecognized INFO request */
   else
   {
-    lprintf (0, "[%s] Unrecognized INFO level: %s", cinfo->hostname, level);
+    lprintf (0, "[%s] Unrecognized/unsupported INFO level: %s", cinfo->hostname, level);
+
+    xmlstr = info_xml_slv3_id (cinfo, SLSERVER_ID);
     errflag = 1;
   }
 
-  /* Add contents to the XML structure depending on info level */
 
-  /* CAPABILITIES */
-  if (infolevel == SLINFO_CAPABILITIES)
+  /* Pack XML into miniSEED and send to client */
+  if (xmlstr)
   {
-    int idx;
-    mxml_node_t *capability;
-    char *caps[10] = {"dialup", "multistation", "window-extraction", "info:id",
-                      "info:capabilities", "info:stations", "info:streams",
-                      "info:gaps", "info:connections", "info:all"};
-
-    lprintf (1, "[%s] Received INFO CAPABILITIES request", cinfo->hostname);
-    infolevel = SLINFO_CAPABILITIES;
-
-    for (idx = 0; idx < 10; idx++)
-    {
-      if (!(capability = mxmlNewElement (seedlink, "capability")))
-      {
-        lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-        errflag = 1;
-      }
-
-      mxmlElementSetAttr (capability, "name", caps[idx]);
-    }
-  } /* End of CAPABILITIES request processing */
-  /* STATIONS */
-  else if (infolevel == SLINFO_STATIONS)
-  {
-    mxml_node_t *station;
-    Stack *streams;
-    RingStream *stream;
-
-    RBTree *stationid_tree;
-    Stack *stationid_stack;
-    ListStationID *stationid;
-    RBNode *tnode;
-
-    char net[16]            = {0};
-    char sta[16]            = {0};
-    char staid[MAXSTREAMID] = {0};
-
-    /* Get copy of streams as a Stack */
-    if (!(streams = GetStreamsStack (cinfo->ringparams, cinfo->reader)))
-    {
-      lprintf (0, "[%s] Error getting streams stack", cinfo->hostname);
-      errflag = 1;
-    }
-    else
-    {
-      stationid_tree = RBTreeCreate (StaKeyCompare, free, FreeListStationID);
-
-      /* Loop through the streams and build a station ID tree */
-      while ((stream = (RingStream *)StackPop (streams)))
-      {
-        net[0] = '\0';
-        sta[0] = '\0';
-
-        /* Extract network and station codes from FDSN Source ID (streamid) */
-        if (strncmp (stream->streamid, "FDSN:", 5) == 0)
-        {
-          if (ms_sid2nslc (stream->streamid, net, sta, NULL, NULL))
-          {
-            lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
-            return -1;
-          }
-
-          /* Create station ID as combination of network and station codes */
-          snprintf (staid, sizeof (staid), "%s_%s", net, sta);
-        }
-        /* Otherwise use the stream ID as the station ID */
-        else
-        {
-          strncpy (staid, stream->streamid, sizeof (staid) - 1);
-        }
-
-        /* Find or create new stationid entry */
-        stationid = GetListStationID (stationid_tree, staid);
-
-        /* Check and update station ID values */
-        if (stationid)
-        {
-          strncpy (stationid->staid, staid, sizeof (stationid->staid) - 1);
-          strncpy (stationid->network, net, sizeof (stationid->network) - 1);
-          strncpy (stationid->station, sta, sizeof (stationid->station) - 1);
-
-          if (!stationid->earliestdstime || stationid->earliestdstime > stream->earliestdstime)
-          {
-            stationid->earliestdstime = stream->earliestdstime;
-            stationid->earliestid     = stream->earliestid;
-          }
-          if (!stationid->latestdstime || stationid->latestdstime < stream->latestdstime)
-          {
-            stationid->latestdstime = stream->latestdstime;
-            stationid->latestid     = stream->latestid;
-          }
-        }
-        else
-        {
-          lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
-          return -1;
-        }
-
-        /* Free the popped Stack entry */
-        free (stream);
-      }
-
-      /* Free the remaining stream Stack memory */
-      StackDestroy (streams, free);
-
-      /* Create Stack of station ID entries */
-      stationid_stack = StackCreate ();
-      RBBuildStack (stationid_tree, stationid_stack);
-
-      /* Loop through array entries adding "station" elements */
-      while ((tnode = (RBNode *)StackPop (stationid_stack)))
-      {
-        stationid = (ListStationID *)tnode->data;
-
-        if (!(station = mxmlNewElement (seedlink, "station")))
-        {
-          lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-          errflag = 1;
-        }
-        else
-        {
-          mxmlElementSetAttr (station, "name", (stationid->station[0] != '\0') ? stationid->station : stationid->staid);
-          mxmlElementSetAttr (station, "network", (stationid->network[0] != '\0') ? stationid->network : "");
-          mxmlElementSetAttrf (station, "description", "Station ID %s", stationid->staid);
-          mxmlElementSetAttrf (station, "begin_seq", "%06" PRIX64, stationid->earliestid);
-          mxmlElementSetAttrf (station, "end_seq", "%06" PRIX64, stationid->latestid);
-        }
-      }
-
-      /* Free temporary structures */
-      RBTreeDestroy (stationid_tree);
-      StackDestroy (stationid_stack, 0);
-    }
-  } /* End of STATIONS request processing */
-  /* STREAMS */
-  else if (infolevel == SLINFO_STREAMS)
-  {
-    mxml_node_t *station;
-    mxml_node_t *streamxml;
-    Stack *streams;
-    RingStream *stream;
-
-    RBTree *stationid_tree;
-    Stack *stationid_stack;
-    ListStationID *stationid;
-    RBNode *tnode;
-
-    char net[16]            = {0};
-    char sta[16]            = {0};
-    char loc[16]            = {0};
-    char chan[16]           = {0};
-    char staid[MAXSTREAMID] = {0};
-
-    /* Get streams as a Stack (this is copied data) */
-    if (!(streams = GetStreamsStack (cinfo->ringparams, cinfo->reader)))
-    {
-      lprintf (0, "[%s] Error getting streams", cinfo->hostname);
-      errflag = 1;
-    }
-    else
-    {
-      stationid_tree = RBTreeCreate (StaKeyCompare, free, FreeListStationID);
-
-      /* Loop through the streams and build a station ID tree with associated streams */
-      while ((stream = (RingStream *)StackPop (streams)))
-      {
-        net[0] = '\0';
-        sta[0] = '\0';
-
-        /* Extract network and station codes from FDSN Source ID (streamid) */
-        if (strncmp (stream->streamid, "FDSN:", 5) == 0)
-        {
-          if (ms_sid2nslc (stream->streamid, net, sta, NULL, NULL))
-          {
-            lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
-            return -1;
-          }
-
-          /* Create station ID as combination of network and station codes */
-          snprintf (staid, sizeof (staid), "%s_%s", net, sta);
-        }
-        /* Otherwise use the stream ID as the station ID */
-        else
-        {
-          strncpy (staid, stream->streamid, sizeof (staid) - 1);
-        }
-
-        /* Find or create new station ID entry */
-        stationid = GetListStationID (stationid_tree, staid);
-
-        if (stationid)
-        {
-          /* Add stream to associated streams stack */
-          StackUnshift (stationid->streams, stream);
-
-          strncpy (stationid->staid, staid, sizeof (stationid->staid) - 1);
-          strncpy (stationid->network, net, sizeof (stationid->network) - 1);
-          strncpy (stationid->station, sta, sizeof (stationid->station) - 1);
-
-          /* Check and update station ID earliest/latest values */
-          if (!stationid->earliestdstime || stationid->earliestdstime > stream->earliestdstime)
-          {
-            stationid->earliestdstime = stream->earliestdstime;
-            stationid->earliestid     = stream->earliestid;
-          }
-          if (!stationid->latestdstime || stationid->latestdstime < stream->latestdstime)
-          {
-            stationid->latestdstime = stream->latestdstime;
-            stationid->latestid     = stream->latestid;
-          }
-        }
-        else
-        {
-          lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
-          return -1;
-        }
-      }
-
-      /* Create Stack of station ID entries */
-      stationid_stack = StackCreate ();
-      RBBuildStack (stationid_tree, stationid_stack);
-
-      /* Traverse station ID entries creating "station" elements */
-      while ((tnode = (RBNode *)StackPop (stationid_stack)))
-      {
-        stationid = (ListStationID *)tnode->data;
-
-        if (!(station = mxmlNewElement (seedlink, "station")))
-        {
-          lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-          errflag = 1;
-        }
-        else
-        {
-          mxmlElementSetAttr (station, "name", (stationid->station[0] != '\0') ? stationid->station : stationid->staid);
-          mxmlElementSetAttr (station, "network", (stationid->network[0] != '\0') ? stationid->network : "");
-          mxmlElementSetAttrf (station, "description", "Station ID %s", stationid->staid);
-          mxmlElementSetAttrf (station, "begin_seq", "%06" PRIX64, stationid->earliestid);
-          mxmlElementSetAttrf (station, "end_seq", "%06" PRIX64, stationid->latestid);
-          mxmlElementSetAttr (station, "stream_check", "enabled");
-
-          /* Traverse associated streams to find locations and channels creating "stream" elements */
-          while ((stream = (RingStream *)StackPop (stationid->streams)))
-          {
-            char *ptr;
-            loc[0]  = '\0';
-            chan[0] = '\0';
-
-            /* Truncate stream ID at suffix */
-            if ((ptr = strchr (stream->streamid, '/')))
-              *ptr = '\0';
-
-            /* Extract network, station, location, and channel codes from FDSN Source ID (streamid) */
-            if (strncmp (stream->streamid, "FDSN:", 5) == 0 &&
-                ms_sid2nslc (stream->streamid, net, sta, loc, chan))
-            {
-              lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
-              return -1;
-            }
-
-            if (!(streamxml = mxmlNewElement (station, "stream")))
-            {
-              lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-              errflag = 1;
-            }
-            else
-            {
-              mxmlElementSetAttr (streamxml, "location", loc);
-              mxmlElementSetAttr (streamxml, "seedname", chan);
-              mxmlElementSetAttr (streamxml, "type", "D");
-
-              /* Convert earliest and latest times to YYYY-MM-DDTHH:MM:SSZ and add them */
-              ms_nstime2timestr (stream->earliestdstime, string, ISOMONTHDAY_Z, NONE);
-              mxmlElementSetAttr (streamxml, "begin_time", string);
-              ms_nstime2timestr (stream->latestdetime, string, ISOMONTHDAY_Z, NONE);
-              mxmlElementSetAttr (streamxml, "end_time", string);
-            }
-
-            /* Free the RingStream entry, this is a copy from GetStreamsStack() above */
-            free (stream);
-          }
-        }
-      }
-
-      /* Free temporary structures */
-      RBTreeDestroy (stationid_tree);
-      StackDestroy (stationid_stack, 0);
-      StackDestroy (streams, 0);
-    }
-  } /* End of STREAMS request processing */
-  /* CONNECTIONS */
-  else if (infolevel == SLINFO_CONNECTIONS)
-  {
-    struct cthread *loopctp;
-    mxml_node_t *station, *connection, *window, *selector;
-    ClientInfo *tcinfo;
-    SLInfo *tslinfo;
-
-    /* Loop through client connections, lock client list while looping  */
-    pthread_mutex_lock (&cthreads_lock);
-    loopctp = cthreads;
-    while (loopctp)
-    {
-      /* Skip if client thread is not in ACTIVE state */
-      if (!(loopctp->td->td_flags & TDF_ACTIVE))
-      {
-        loopctp = loopctp->next;
-        continue;
-      }
-
-      tcinfo  = (ClientInfo *)loopctp->td->td_prvtptr;
-      tslinfo = (tcinfo->type == CLIENT_SEEDLINK) ? (SLInfo *)tcinfo->extinfo : NULL;
-
-      if (!(station = mxmlNewElement (seedlink, "station")))
-      {
-        lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-        errflag = 1;
-      }
-      else
-      {
-        mxmlElementSetAttr (station, "name", "CLIENT");
-        if (tcinfo->type == CLIENT_DATALINK)
-          mxmlElementSetAttr (station, "network", "DL");
-        else if (tcinfo->type == CLIENT_SEEDLINK)
-          mxmlElementSetAttr (station, "network", "SL");
-        else
-          mxmlElementSetAttr (station, "network", "RS");
-        mxmlElementSetAttr (station, "description", "Ringserver Client");
-        mxmlElementSetAttrf (station, "begin_seq", "%06" PRIX64, tcinfo->ringparams->earliestid);
-        mxmlElementSetAttrf (station, "end_seq", "%06" PRIX64, tcinfo->ringparams->latestid);
-        mxmlElementSetAttr (station, "stream_check", "enabled");
-
-        /* Add a "connection" element */
-        if (!(connection = mxmlNewElement (station, "connection")))
-        {
-          lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-          errflag = 1;
-        }
-        else
-        {
-          mxmlElementSetAttr (connection, "host", tcinfo->ipstr);
-          mxmlElementSetAttr (connection, "port", tcinfo->portstr);
-
-          /* Convert connect time to YYYY-MM-DDTHH:MM:SSZ */
-          ms_nstime2timestr (tcinfo->conntime, string, ISOMONTHDAY_Z, NONE);
-          mxmlElementSetAttr (connection, "ctime", string);
-          mxmlElementSetAttr (connection, "begin_seq", "0");
-
-          if (tcinfo->reader->pktid <= 0)
-            mxmlElementSetAttr (connection, "current_seq", "unset");
-          else
-            mxmlElementSetAttrf (connection, "current_seq", "%06" PRIX64, tcinfo->reader->pktid);
-
-          mxmlElementSetAttr (connection, "sequence_gaps", "0");
-          mxmlElementSetAttrf (connection, "txcount", "%" PRIu64, tcinfo->txpackets[0]);
-          mxmlElementSetAttrf (connection, "totBytes", "%" PRIu64, tcinfo->txbytes[0]);
-          mxmlElementSetAttr (connection, "begin_seq_valid", "yes");
-          mxmlElementSetAttr (connection, "realtime", "yes");
-          mxmlElementSetAttr (connection, "end_of_data", "no");
-
-          /* Add "window" element if start or end times are set */
-          if (tcinfo->starttime || tcinfo->endtime)
-          {
-            if (!(window = mxmlNewElement (connection, "window")))
-            {
-              lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-              errflag = 1;
-            }
-            else
-            {
-              /* Convert start & end time to YYYY-MM-DD HH:MM:SS or "unset" */
-              if (tcinfo->starttime)
-                ms_nstime2timestr (tcinfo->starttime, string, ISOMONTHDAY_Z, NONE);
-              else
-                strncpy (string, "unset", sizeof (string));
-
-              mxmlElementSetAttr (window, "begin_time", string);
-
-              if (tcinfo->endtime)
-                ms_nstime2timestr (tcinfo->endtime, string, ISOMONTHDAY_Z, NONE);
-              else
-                strncpy (string, "unset", sizeof (string));
-
-              mxmlElementSetAttr (window, "end_time", string);
-            }
-          }
-
-          /* Add "selector" element if match or reject strings are set */
-          if (tcinfo->matchstr || tcinfo->rejectstr)
-          {
-            if (!(selector = mxmlNewElement (connection, "selector")))
-            {
-              lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-              errflag = 1;
-            }
-            else
-            {
-              if (tslinfo && tslinfo->selectors)
-                mxmlElementSetAttr (selector, "pattern", tslinfo->selectors);
-              if (tcinfo->matchstr)
-                mxmlElementSetAttr (selector, "match", tcinfo->matchstr);
-              if (tcinfo->rejectstr)
-                mxmlElementSetAttr (selector, "reject", tcinfo->rejectstr);
-            }
-          }
-        }
-      }
-
-      loopctp = loopctp->next;
-    }
-    pthread_mutex_unlock (&cthreads_lock);
-
-  } /* End of CONNECTIONS request processing */
-
-  /* Convert to XML string, pack into miniSEED and send to client */
-  if (xmldoc)
-  {
-    /* Do not wrap the output XML */
-    mxmlSetWrapMargin (0);
-
-    /* Convert to XML string */
-    if (!(xmlstr = mxmlSaveAllocString (xmldoc, MXML_NO_CALLBACK)))
-    {
-      lprintf (0, "[%s] Error with mxmlSaveAllocString()", cinfo->hostname);
-      if (xmldoc)
-        mxmlRelease (xmldoc);
-      if (record)
-        free (record);
-      return -1;
-    }
-
     /* Trim final newline character if present */
     xmllength = strlen (xmlstr);
     if (xmlstr[xmllength - 1] == '\n')
@@ -1773,7 +1304,7 @@ HandleInfo_v3 (ClientInfo *cinfo)
     /* Build Blockette 1000 */
     *pMS2B1000_TYPE (record + 48)      = HO2u (1000, swapflag);
     *pMS2B1000_NEXT (record + 48)      = 0;
-    *pMS2B1000_ENCODING (record + 48)  = DE_ASCII;
+    *pMS2B1000_ENCODING (record + 48)  = DE_TEXT;
     *pMS2B1000_BYTEORDER (record + 48) = 1; /* 1 = big endian */
     *pMS2B1000_RECLEN (record + 48)    = 9; /* 2^9 = 512 byte record */
     *pMS2B1000_RESERVED (record + 48)  = 0;
@@ -1825,9 +1356,6 @@ HandleInfo_v3 (ClientInfo *cinfo)
   }
 
   /* Free allocated memory */
-  if (xmldoc)
-    mxmlRelease (xmldoc);
-
   if (xmlstr)
     free (xmlstr);
 
@@ -1850,7 +1378,6 @@ HandleInfo_v3 (ClientInfo *cinfo)
 static int
 HandleInfo_v4 (ClientInfo *cinfo)
 {
-  SLInfo *slinfo    = (SLInfo *)cinfo->extinfo;
   char *json_string = NULL;
   char *level       = NULL;
   int errflag       = 0;
@@ -2199,25 +1726,6 @@ FreeReqStationID (void *rbnode)
 } /* End of FreeReqStationID() */
 
 /***************************************************************************
- * FreeListStationID:
- *
- * Free all memory associated with a ListStationID.
- *
- ***************************************************************************/
-static void
-FreeListStationID (void *rbnode)
-{
-  ListStationID *stationid = (ListStationID *)rbnode;
-
-  if (stationid->streams)
-    StackDestroy (stationid->streams, free);
-
-  free (rbnode);
-
-  return;
-} /* End of FreeListStationID() */
-
-/***************************************************************************
  * StaKeyCompare:
  *
  * Compare two station or channel binary tree keys passed as void pointers.
@@ -2285,49 +1793,6 @@ GetReqStationID (RBTree *tree, char *staid)
 
   return stationid;
 } /* End of GetReqStationID() */
-
-/***************************************************************************
- * GetListStationID:
- *
- * Search the specified binary tree for a given entry.  If the entry does not
- * exist create it and add it to the tree.
- *
- * Return a pointer to the entry or 0 for error.
- ***************************************************************************/
-static ListStationID *
-GetListStationID (RBTree *tree, char *staid)
-{
-  char *newkey             = NULL;
-  ListStationID *stationid = NULL;
-  RBNode *rbnode;
-
-  /* Search for a matching ListStationID entry */
-  if ((rbnode = RBFind (tree, staid)))
-  {
-    stationid = (ListStationID *)rbnode->data;
-  }
-  else
-  {
-    if ((newkey = strdup (staid)) == NULL)
-    {
-      lprintf (0, "%s: Error allocating new key", __func__);
-      return 0;
-    }
-
-    if ((stationid = (ListStationID *)calloc (1, sizeof (ListStationID))) == NULL)
-    {
-      lprintf (0, "%s: Error allocating new node", __func__);
-      return 0;
-    }
-
-    /* Initialize Stack of associated streams */
-    stationid->streams = StackCreate ();
-
-    RBTreeInsert (tree, newkey, stationid, 0);
-  }
-
-  return stationid;
-} /* End of GetListStationID() */
 
 /***************************************************************************
  * StationToRegex:

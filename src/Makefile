@@ -8,7 +8,7 @@ BIN = ringserver
 
 SRCS = stack.c rbtree.c logging.c clients.c slclient.c dlclient.c \
        http.c dsarchive.c mseedscan.c generic.c ring.c ringserver.c \
-       infojson.c cJSON.c
+       infojson.c infoxml.c cJSON.c
 OBJS = $(SRCS:.c=.o)
 
 # Standard compiler parameters

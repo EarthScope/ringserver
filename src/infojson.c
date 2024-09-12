@@ -474,9 +474,6 @@ info_add_connections (cJSON *root)
   char *conntype;
   char conntime[50];
   char packettime[50];
-  char lagstr[5];
-
-  char string[32];
 
   cJSON *connections;
   cJSON *clients;
@@ -523,6 +520,10 @@ info_add_connections (cJSON *root)
       else
         conntype = "SeedLink";
     }
+    else if (tcinfo->type == CLIENT_HTTP)
+    {
+      conntype = "HTTP";
+    }
     else
     {
       conntype = "Unknown";
@@ -532,11 +533,6 @@ info_add_connections (cJSON *root)
 
     if (tcinfo->reader->pkttime != NSTUNSET)
       ms_nstime2timestr (tcinfo->reader->pkttime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-
-    if (tcinfo->reader->pktid <= 0)
-      strncpy (lagstr, "-", sizeof (lagstr));
-    else
-      snprintf (lagstr, sizeof (lagstr), "%d%%", tcinfo->percentlag);
 
     if ((connection = cJSON_CreateObject ()) == NULL)
     {
@@ -551,39 +547,29 @@ info_add_connections (cJSON *root)
     cJSON_AddStringToObject (connection, "client_id", tcinfo->clientid);
     cJSON_AddStringToObject (connection, "connect_time", conntime);
 
-    snprintf (string, sizeof (string), "%" PRId64, tcinfo->reader->pktid);
-    cJSON_AddStringToObject (connection, "current_packet", string);
+    cJSON_AddNumberToObject (connection, "current_packet", tcinfo->reader->pktid);
 
     if (tcinfo->reader->pkttime != NSTUNSET)
       cJSON_AddStringToObject (connection, "packet_time", packettime);
 
-    cJSON_AddStringToObject (connection, "lag_percent", lagstr);
-    snprintf (string, sizeof (string), "%.1f", (double)MS_NSTIME2EPOCH ((nsnow - tcinfo->lastxchange)));
-    cJSON_AddStringToObject (connection, "lag_seconds", string);
+    cJSON_AddNumberToObject (connection, "lag_percent", (tcinfo->reader->pktid <= 0) ? 0 : tcinfo->percentlag);
+    cJSON_AddNumberToObject (connection, "lag_seconds", (double)MS_NSTIME2EPOCH ((nsnow - tcinfo->lastxchange)));
 
-    snprintf (string, sizeof (string), "%" PRId64, tcinfo->txpackets[0]);
-    cJSON_AddStringToObject (connection, "transmit_packets", string);
-    snprintf (string, sizeof (string), "%.1f", tcinfo->txpacketrate);
-    cJSON_AddStringToObject (connection, "transmit_packet_rate", string);
-    snprintf (string, sizeof (string), "%" PRId64, tcinfo->txbytes[0]);
-    cJSON_AddStringToObject (connection, "transmit_bytes", string);
-    snprintf (string, sizeof (string), "%.1f", tcinfo->txbyterate);
-    cJSON_AddStringToObject (connection, "transmit_byte_rate", string);
+    cJSON_AddNumberToObject (connection, "transmit_packets", tcinfo->txpackets[0]);
+    cJSON_AddNumberToObject (connection, "transmit_packet_rate", tcinfo->txpacketrate);
+    cJSON_AddNumberToObject (connection, "transmit_bytes", tcinfo->txbytes[0]);
+    cJSON_AddNumberToObject (connection, "transmit_byte_rate", tcinfo->txbyterate);
 
-    snprintf (string, sizeof (string), "%" PRId64, tcinfo->rxpackets[0]);
-    cJSON_AddStringToObject (connection, "receive_packets", string);
-    snprintf (string, sizeof (string), "%.1f", tcinfo->rxpacketrate);
-    cJSON_AddStringToObject (connection, "receive_packet_rate", string);
-    snprintf (string, sizeof (string), "%" PRId64, tcinfo->rxbytes[0]);
-    cJSON_AddStringToObject (connection, "receive_bytes", string);
-    snprintf (string, sizeof (string), "%.1f", tcinfo->rxbyterate);
-    cJSON_AddStringToObject (connection, "receive_byte_rate", string);
+    cJSON_AddNumberToObject (connection, "receive_packets", tcinfo->rxpackets[0]);
+    cJSON_AddNumberToObject (connection, "receive_packet_rate", tcinfo->rxpacketrate);
+    cJSON_AddNumberToObject (connection, "receive_bytes", tcinfo->rxbytes[0]);
+    cJSON_AddNumberToObject (connection, "receive_byte_rate", tcinfo->rxbyterate);
+    cJSON_AddNumberToObject (connection, "stream_count", (double)tcinfo->streamscount);
 
-    snprintf (string, sizeof (string), "%d", tcinfo->streamscount);
-    cJSON_AddStringToObject (connection, "stream_count", string);
-
-    cJSON_AddStringToObject (connection, "match", tcinfo->matchstr ? tcinfo->matchstr : "-");
-    cJSON_AddStringToObject (connection, "reject", tcinfo->rejectstr ? tcinfo->rejectstr : "-");
+    if (tcinfo->matchstr)
+      cJSON_AddStringToObject (connection, "match", tcinfo->matchstr);
+    if (tcinfo->rejectstr)
+      cJSON_AddStringToObject (connection, "reject", tcinfo->rejectstr);
 
     loopctp = loopctp->next;
   }
@@ -595,8 +581,10 @@ info_add_connections (cJSON *root)
 /***************************************************************************
  * info_json:
  *
- * Return a JSON document with server details.  Which elements are included
- * is controlled by the elements bitmask.
+ * Return a JSON document with server details, conforming to the SeedLink
+ * v4 JSON info schema.
+ *
+ * Which elements are includedis controlled by the elements bitmask.
  *
  * The returned string is minified JSON document and allocated on the heap
  * that must be freed by the caller.
@@ -675,7 +663,8 @@ info_json (ClientInfo *cinfo, const char *software, InfoElements elements)
 /***************************************************************************
  * error_json:
  *
- * Return a JSON document with an error code and message.
+ * Return a JSON document with an error code and message, conforming to
+ * the SeedLink v4 JSON error schema.
  *
  * The returned string is minified JSON document and allocated on the heap
  * that must be freed by the caller.
