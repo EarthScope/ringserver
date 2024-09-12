@@ -45,7 +45,8 @@ typedef enum
   INFO_CONNECTIONS  = 1u << 8,
 } InfoElements;
 
-extern char *info_json (ClientInfo *cinfo, const char *software, InfoElements elements);
+extern char *info_json (ClientInfo *cinfo, const char *software,
+                        InfoElements elements, const char *matchexpr);
 extern char *error_json (ClientInfo *cinfo, const char *software,
                          const char *code, const char *message);
 

@@ -209,7 +209,8 @@ info_add_filters (cJSON *root)
  * Returns pointer to JSON object added on success and NULL on error.
  ***************************************************************************/
 static cJSON *
-info_add_stations (ClientInfo *cinfo, cJSON *root, int include_streams)
+info_add_stations (ClientInfo *cinfo, cJSON *root, int include_streams,
+                   const char *matchexpr)
 {
   Stack *ringstreams;
   RingStream *ringstream;
@@ -253,6 +254,31 @@ info_add_stations (ClientInfo *cinfo, cJSON *root, int include_streams)
   char *type        = NULL;
   char string32[32] = {0};
 
+  pcre2_code *match_code       = NULL;
+  pcre2_match_data *match_data = NULL;
+  int errcode;
+  PCRE2_SIZE erroffset;
+  PCRE2_UCHAR buffer[256];
+
+  /* Compile match regex if provided */
+  if (matchexpr)
+  {
+    match_code = pcre2_compile ((PCRE2_SPTR)matchexpr, PCRE2_ZERO_TERMINATED,
+                                PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
+
+    if (match_code == NULL)
+    {
+      pcre2_get_error_message (errcode, buffer, sizeof (buffer));
+
+      lprintf (0, "[%s] Error compiling match expression at %zu: %s",
+               cinfo->hostname, erroffset, buffer);
+
+      return NULL;
+    }
+
+    match_data = pcre2_match_data_create_from_pattern (match_code, NULL);
+  }
+
   /* Get copy of streams as a Stack, sorted by stream ID */
   if ((ringstreams = GetStreamsStack (cinfo->ringparams, cinfo->reader)) == NULL)
   {
@@ -270,6 +296,14 @@ info_add_stations (ClientInfo *cinfo, cJSON *root, int include_streams)
   /* Build Stacks of stations and optionally streams */
   while ((ringstream = (RingStream *)StackPop (ringstreams)))
   {
+    /* Skip if stream ID does not match provided expression */
+    if (match_code &&
+        pcre2_match (match_code, (PCRE2_SPTR8)ringstream->streamid, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0)
+    {
+      free (ringstream);
+      continue;
+    }
+
     /* Truncate stream ID at type suffix */
     if ((type = strchr (ringstream->streamid, '/')))
       *type++ = '\0';
@@ -280,6 +314,7 @@ info_add_stations (ClientInfo *cinfo, cJSON *root, int include_streams)
       if (ms_sid2nslc (ringstream->streamid, net, sta, loc, chan))
       {
         lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, ringstream->streamid);
+        free (ringstream);
         error = 1;
         break;
       }
@@ -308,6 +343,7 @@ info_add_stations (ClientInfo *cinfo, cJSON *root, int include_streams)
       if (station_details == NULL)
       {
         lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
+        free (ringstream);
         error = 1;
         break;
       }
@@ -321,6 +357,7 @@ info_add_stations (ClientInfo *cinfo, cJSON *root, int include_streams)
         if ((station_details->streams = StackCreate ()) == NULL)
         {
           lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
+          free (ringstream);
           error = 1;
           break;
         }
@@ -348,6 +385,7 @@ info_add_stations (ClientInfo *cinfo, cJSON *root, int include_streams)
       if (stream_details == NULL)
       {
         lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
+        free (ringstream);
         error = 1;
         break;
       }
@@ -454,6 +492,11 @@ info_add_stations (ClientInfo *cinfo, cJSON *root, int include_streams)
 
   StackDestroy (station_stack, free);
 
+  if (match_code)
+    pcre2_code_free (match_code);
+  if (match_data)
+    pcre2_match_data_free (match_data);
+
   return stations;
 }
 
@@ -465,7 +508,7 @@ info_add_stations (ClientInfo *cinfo, cJSON *root, int include_streams)
  * Returns pointer to JSON object added on success and NULL on error.
  ***************************************************************************/
 static cJSON *
-info_add_connections (cJSON *root)
+info_add_connections (ClientInfo *cinfo, cJSON *root, const char *matchexpr)
 {
   struct cthread *loopctp;
   ClientInfo *tcinfo;
@@ -478,6 +521,34 @@ info_add_connections (cJSON *root)
   cJSON *connections;
   cJSON *clients;
   cJSON *connection;
+
+  pcre2_code *match_code       = NULL;
+  pcre2_match_data *match_data = NULL;
+  int errcode;
+  PCRE2_SIZE erroffset;
+  PCRE2_UCHAR buffer[256];
+
+  /* Compile match expression if provided */
+  if (matchexpr)
+  {
+    match_code = pcre2_compile ((PCRE2_SPTR)matchexpr, PCRE2_ZERO_TERMINATED,
+                                PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
+
+    if (match_code == NULL)
+    {
+      pcre2_get_error_message (errcode, buffer, sizeof (buffer));
+
+      lprintf (0, "[%s] Error compiling match expression at %zu: %s",
+               cinfo->hostname, erroffset, buffer);
+
+      return NULL;
+    }
+
+fprintf (stderr, "DEBUG: compiled matchexpr=%p\n", matchexpr);
+
+    match_data = pcre2_match_data_create_from_pattern (match_code, NULL);
+  }
+
 
   if ((connections = cJSON_AddObjectToObject (root, "connections")) == NULL)
   {
@@ -496,14 +567,24 @@ info_add_connections (cJSON *root)
   loopctp = cthreads;
   while (loopctp)
   {
+    tcinfo = (ClientInfo *)loopctp->td->td_prvtptr;
+
+    /* Skip if client does not match provided expression */
+    if (match_code)
+      if (pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->hostname, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0 &&
+          pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->ipstr, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0 &&
+          pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->clientid, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0)
+      {
+        loopctp = loopctp->next;
+        continue;
+      }
+
     /* Skip if client thread is not in ACTIVE state */
     if (!(loopctp->td->td_flags & TDF_ACTIVE))
     {
       loopctp = loopctp->next;
       continue;
     }
-
-    tcinfo = (ClientInfo *)loopctp->td->td_prvtptr;
 
     /* Determine connection type */
     if (tcinfo->type == CLIENT_DATALINK)
@@ -575,6 +656,11 @@ info_add_connections (cJSON *root)
   }
   pthread_mutex_unlock (&cthreads_lock);
 
+  if (match_code)
+    pcre2_code_free (match_code);
+  if (match_data)
+    pcre2_match_data_free (match_data);
+
   return connections;
 }
 
@@ -592,7 +678,8 @@ info_add_connections (cJSON *root)
  * Returns pointer to JSON strng on success and NULL on error.
  ***************************************************************************/
 char *
-info_json (ClientInfo *cinfo, const char *software, InfoElements elements)
+info_json (ClientInfo *cinfo, const char *software, InfoElements elements,
+           const char *matchexpr)
 {
   if (!cinfo)
     return NULL;
@@ -632,21 +719,21 @@ info_json (ClientInfo *cinfo, const char *software, InfoElements elements)
   }
 
   if (elements & INFO_STATIONS &&
-      info_add_stations (cinfo, root, 0) == NULL)
+      info_add_stations (cinfo, root, 0, matchexpr) == NULL)
   {
     cJSON_Delete (root);
     return NULL;
   }
 
   if (elements & INFO_STREAMS &&
-      info_add_stations (cinfo, root, 1) == NULL)
+      info_add_stations (cinfo, root, 1, matchexpr) == NULL)
   {
     cJSON_Delete (root);
     return NULL;
   }
 
   if (elements & INFO_CONNECTIONS &&
-      info_add_connections (root) == NULL)
+      info_add_connections (cinfo, root, matchexpr) == NULL)
   {
     cJSON_Delete (root);
     return NULL;

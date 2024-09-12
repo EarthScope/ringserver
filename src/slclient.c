@@ -697,8 +697,6 @@ HandleNegotiation (ClientInfo *cinfo)
       snprintf (slinfo->reqstaid, sizeof (slinfo->reqstaid), "%s_%s", reqnet, reqsta);
     }
 
-    fprintf (stderr, "DEBUG staid: '%s'\n", slinfo->reqstaid);
-
     /* Sanity check, only allowed characters in station ID */
     if (OKGO && strspn (slinfo->reqstaid, VALIDSTAIDCHARS) != strlen (slinfo->reqstaid))
     {
@@ -1177,7 +1175,7 @@ HandleInfo_v3 (ClientInfo *cinfo)
   }
   else if (*level == '\0' || *level == '\r' || *level == '\n')
   {
-    lprintf (0, "[%s] HandleInfo: INFO specified without a level", cinfo->hostname);
+    lprintf (0, "[%s] HandleInfo: INFO requested without a level", cinfo->hostname);
     return -1;
   }
   else
@@ -1379,62 +1377,89 @@ static int
 HandleInfo_v4 (ClientInfo *cinfo)
 {
   char *json_string = NULL;
-  char *level       = NULL;
-  int errflag       = 0;
+  char item[64]     = {0};
+  char station[64]  = {0};
+  char stream[64]   = {0};
+  char *matchregex  = NULL;
+  char *rejectregex = NULL;
+  char junk;
+  int fields;
+  int errflag = 0;
 
-  if (!strncasecmp (cinfo->recvbuf, "INFO", 4))
-  {
-    /* Set level pointer to start of level identifier */
-    level = cinfo->recvbuf + 4;
-
-    /* Skip any spaces between INFO and level identifier */
-    while (*level == ' ')
-      level++;
-  }
-  else if (*level == '\0' || *level == '\r' || *level == '\n')
-  {
-    lprintf (0, "[%s] INFO requesteed without a level", cinfo->hostname);
-    return -1;
-  }
-  else
+  if (strncasecmp (cinfo->recvbuf, "INFO", 4) != 0)
   {
     lprintf (0, "[%s] %s() cannot detect INFO", __func__, cinfo->hostname);
     return -1;
   }
 
-  /* Parse INFO request to determine level */
-  if (!strncasecmp (level, "ID", 2))
+  /* Parse INFO item and optional station and stream patterns */
+  fields = sscanf (cinfo->recvbuf, "%*s %63s %63s %63s %c", item, station, stream, &junk);
+
+  fprintf (stderr, "DEBUG: fields=%d item='%s' station='%s' stream='%s'\n", fields, item, station, stream);
+
+  if (fields == 0)
+  {
+    lprintf (0, "[%s] INFO requested without a level", cinfo->hostname);
+
+    json_string = error_json (cinfo, SLSERVER_ID, "ARGUMENTS", "No INFO item specified");
+    errflag = 1;
+  }
+  else if (!strncasecmp (item, "ID", 2))
   {
     /* This is used to "ping" the server so only report at high verbosity */
     lprintf (2, "[%s] Received INFO ID request", cinfo->hostname);
 
-    json_string = info_json (cinfo, SLSERVER_ID, INFO_ID);
+    json_string = info_json (cinfo, SLSERVER_ID, INFO_ID, NULL);
   }
-  else if (!strncasecmp (level, "CAPABILITIES", 12))
+  else if (!strncasecmp (item, "CAPABILITIES", 12))
   {
     lprintf (1, "[%s] Received INFO CAPABILITIES request", cinfo->hostname);
 
-    json_string = info_json (cinfo, SLSERVER_ID, INFO_CAPABILITIES);
+    json_string = info_json (cinfo, SLSERVER_ID, INFO_CAPABILITIES, NULL);
   }
-  else if (!strncasecmp (level, "FORMATS", 7))
+  else if (!strncasecmp (item, "FORMATS", 7))
   {
     lprintf (1, "[%s] Received INFO FORMATS request", cinfo->hostname);
 
-    json_string = info_json (cinfo, SLSERVER_ID, INFO_FORMATS | INFO_FILTERS);
+    json_string = info_json (cinfo, SLSERVER_ID, INFO_FORMATS | INFO_FILTERS, NULL);
   }
-  else if (!strncasecmp (level, "STATIONS", 8))
+  else if (!strncasecmp (item, "STATIONS", 8))
   {
     lprintf (1, "[%s] Received INFO STATIONS request", cinfo->hostname);
 
-    json_string = info_json (cinfo, SLSERVER_ID, INFO_STATIONS);
+    /* Configure regex for matching included station and stream patterns */
+    if (station[0] != '\0')
+    {
+      if (StationToRegex (station, (stream[0] != '\0') ? stream : NULL,
+                          &matchregex, &rejectregex))
+      {
+        lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
+        SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error with StationToRegex()");
+        return -1;
+      }
+    }
+
+    json_string = info_json (cinfo, SLSERVER_ID, INFO_STATIONS, matchregex);
   }
-  else if (!strncasecmp (level, "STREAMS", 7))
+  else if (!strncasecmp (item, "STREAMS", 7))
   {
     lprintf (1, "[%s] Received INFO STREAMS request", cinfo->hostname);
 
-    json_string = info_json (cinfo, SLSERVER_ID, INFO_STREAMS);
+    /* Configure regex for matching included station and stream patterns */
+    if (station[0] != '\0')
+    {
+      if (StationToRegex (station, (stream[0] != '\0') ? stream : NULL,
+                          &matchregex, &rejectregex))
+      {
+        lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
+        SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error with StationToRegex()");
+        return -1;
+      }
+    }
+
+    json_string = info_json (cinfo, SLSERVER_ID, INFO_STREAMS, matchregex);
   }
-  else if (!strncasecmp (level, "CONNECTIONS", 11))
+  else if (!strncasecmp (item, "CONNECTIONS", 11))
   {
     if (!cinfo->trusted)
     {
@@ -1445,16 +1470,18 @@ HandleInfo_v4 (ClientInfo *cinfo)
     else
     {
       lprintf (1, "[%s] Received INFO CONNECTIONS request", cinfo->hostname);
-      json_string = info_json (cinfo, SLSERVER_ID, INFO_CONNECTIONS);
+
+      json_string = info_json (cinfo, SLSERVER_ID, INFO_CONNECTIONS,
+                               (station[0] != '\0') ? station : NULL);
     }
   }
   /* Unrecognized INFO request */
   else
   {
-    json_string = error_json (cinfo, SLSERVER_ID, "ARGUMENTS", "Unrecognized INFO level");
+    json_string = error_json (cinfo, SLSERVER_ID, "ARGUMENTS", "Unrecognized INFO item");
     errflag = 1;
 
-    lprintf (0, "[%s] Unrecognized INFO level: %s", cinfo->hostname, level);
+    lprintf (0, "[%s] Unrecognized INFO item: %s", cinfo->hostname, item);
   }
 
   /* Send INFO response to client */
@@ -1467,8 +1494,10 @@ HandleInfo_v4 (ClientInfo *cinfo)
     lprintf (0, "[%s] Error creating INFO response", cinfo->hostname);
   }
 
-  /* Free allocated response buffer */
+  /* Free allocated memory */
   free (json_string);
+  free (matchregex);
+  free (rejectregex);
 
   return (cinfo->socketerr) ? -1 : 0;
 } /* End of HandleInfo_v4 */

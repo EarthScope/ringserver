@@ -52,7 +52,7 @@ info_xml_slv3_id (ClientInfo *cinfo, const char *software)
   char *xml_string = NULL;
 
   /* Generate JSON formatted document for INFO ID level */
-  if ((json_string = info_json (cinfo, software, INFO_ID)) == NULL)
+  if ((json_string = info_json (cinfo, software, INFO_ID, NULL)) == NULL)
   {
     return NULL;
   }
@@ -120,7 +120,7 @@ info_xml_slv3_capabilities (ClientInfo *cinfo, const char *software)
                          "info:connections"};
 
   /* Generate JSON formatted document for INFO ID level */
-  if ((json_string = info_json (cinfo, software, INFO_ID)) == NULL)
+  if ((json_string = info_json (cinfo, software, INFO_ID, NULL)) == NULL)
   {
     return NULL;
   }
@@ -206,7 +206,8 @@ info_xml_slv3_stations (ClientInfo *cinfo, const char *software, int include_str
 
   /* Generate JSON formatted document for INFO STREAMS or STATIONS level */
   if ((json_string = info_json (cinfo, software,
-                                (include_streams) ? INFO_STREAMS : INFO_STATIONS)) == NULL)
+                                (include_streams) ? INFO_STREAMS : INFO_STATIONS,
+                                NULL)) == NULL)
   {
     return NULL;
   }
@@ -346,7 +347,7 @@ info_xml_slv3_connections (ClientInfo *cinfo, const char *software)
   char *network;
 
   /* Generate JSON formatted document for INFO CONNECTIONS level */
-  if ((json_string = info_json (cinfo, software, INFO_CONNECTIONS)) == NULL)
+  if ((json_string = info_json (cinfo, software, INFO_CONNECTIONS, NULL)) == NULL)
   {
     return NULL;
   }
