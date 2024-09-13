@@ -42,7 +42,7 @@ struct TLogParams_s {
 };
 
 /* Global logging parameters declared in logging.c */
-extern int verbose;
+extern uint8_t verbose;
 extern struct TLogParams_s TLogParams;
 
 #if defined(__GNUC__) || defined(__clang__)

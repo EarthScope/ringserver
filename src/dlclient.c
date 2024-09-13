@@ -52,7 +52,7 @@ static int HandleWrite (ClientInfo *cinfo);
 static int HandleRead (ClientInfo *cinfo);
 static int HandleInfo (ClientInfo *cinfo, int socket);
 static int SendPacket (ClientInfo *cinfo, char *header, char *data,
-                       int64_t value, int addvalue, int addsize);
+                       uint64_t value, int addvalue, int addsize);
 static int SendRingPacket (ClientInfo *cinfo);
 static int SelectedStreams (RingParams *ringparams, RingReader *reader);
 
@@ -141,7 +141,7 @@ DLHandleCmd (ClientInfo *cinfo)
     /* Set read position to next packet if position not set */
     if (cinfo->reader->pktid == 0)
     {
-      cinfo->reader->pktid = RINGNEXT;
+      cinfo->reader->pktid = RINGID_NEXT;
     }
 
     cinfo->state = STATE_STREAM;
@@ -187,7 +187,7 @@ DLHandleCmd (ClientInfo *cinfo)
 int
 DLStreamPackets (ClientInfo *cinfo)
 {
-  int64_t readid;
+  uint64_t readid;
 
   if (!cinfo)
     return -1;
@@ -195,12 +195,12 @@ DLStreamPackets (ClientInfo *cinfo)
   /* Read next packet from ring */
   readid = RingReadNext (cinfo->reader, &cinfo->packet, cinfo->packetdata);
 
-  if (readid < 0)
+  if (readid == RINGID_ERROR)
   {
     lprintf (0, "[%s] Error reading next packet from ring", cinfo->hostname);
     return -1;
   }
-  else if (readid > 0)
+  else if (readid != 0)
   {
     lprintf (3, "[%s] Read %s (%u bytes) packet ID %" PRId64 " from ring",
              cinfo->hostname, cinfo->packet.streamid,
@@ -225,7 +225,7 @@ DLStreamPackets (ClientInfo *cinfo)
     return 0;
   }
 
-  return (readid) ? cinfo->packet.datasize : 0;
+  return (readid) ? (int)cinfo->packet.datasize : 0;
 } /* End of DLStreamPackets() */
 
 /***********************************************************************
@@ -278,7 +278,7 @@ static int
 HandleNegotiation (ClientInfo *cinfo)
 {
   char sendbuffer[255];
-  int size;
+  size_t size;
   int fields;
   int selected;
 
@@ -318,7 +318,7 @@ HandleNegotiation (ClientInfo *cinfo)
     char subcmd[11];
     char value[31];
     char subvalue[31];
-    int64_t pktid = 0;
+    uint64_t pktid = 0;
     nstime_t nstime;
 
     OKGO = 1;
@@ -350,7 +350,7 @@ HandleNegotiation (ClientInfo *cinfo)
         /* Process SET <pktid> [time] */
         if (IsAllDigits (value))
         {
-          pktid = strtoll (value, NULL, 10);
+          pktid = (uint64_t)strtoull (value, NULL, 10);
 
           if (fields == 3)
           {
@@ -362,12 +362,12 @@ HandleNegotiation (ClientInfo *cinfo)
         /* Process SET EARLIEST */
         else if (!strncmp (value, "EARLIEST", 8))
         {
-          pktid = RINGEARLIEST;
+          pktid = RINGID_EARLIEST;
         }
         /* Process SET LATEST */
         else if (!strncmp (value, "LATEST", 6))
         {
-          pktid = RINGLATEST;
+          pktid = RINGID_LATEST;
         }
         else
         {
@@ -381,25 +381,23 @@ HandleNegotiation (ClientInfo *cinfo)
         /* If no errors with the set value do the positioning */
         if (OKGO)
         {
-          if ((pktid = RingPosition (cinfo->reader, pktid, nstime)) <= 0)
+          pktid = RingPosition (cinfo->reader, pktid, nstime);
+
+          if (pktid == RINGID_ERROR)
           {
-            if (pktid == 0)
-            {
-              if (SendPacket (cinfo, "ERROR", "Packet not found", 0, 1, 1))
-                return -1;
-            }
-            else
-            {
-              lprintf (0, "[%s] Error with RingPosition (pktid: %" PRId64 ", nstime: %" PRId64 ")",
-                       cinfo->hostname, pktid, nstime);
-              if (SendPacket (cinfo, "ERROR", "Error positioning reader", 0, 1, 1))
-                return -1;
-            }
+            lprintf (0, "[%s] Error with RingPosition (pktid: %" PRIu64 ", nstime: %" PRId64 ")",
+                     cinfo->hostname, pktid, nstime);
+            if (SendPacket (cinfo, "ERROR", "Error positioning reader", 0, 1, 1))
+              return -1;
+          }
+          else if (pktid == 0)
+          {
+            if (SendPacket (cinfo, "ERROR", "Packet not found", 0, 1, 1))
+              return -1;
           }
           else
           {
-            snprintf (sendbuffer, sizeof (sendbuffer),
-                      "Positioned to packet ID %" PRId64, pktid);
+            snprintf (sendbuffer, sizeof (sendbuffer), "Positioned to packet ID %" PRIu64, pktid);
             if (SendPacket (cinfo, "OK", sendbuffer, pktid, 1, 1))
               return -1;
           }
@@ -414,8 +412,7 @@ HandleNegotiation (ClientInfo *cinfo)
 
         if (nstime == 0 && errno == EINVAL)
         {
-          lprintf (0, "[%s] Error parsing POSITION AFTER time: %s",
-                   cinfo->hostname, value);
+          lprintf (0, "[%s] Error parsing POSITION AFTER time: %s", cinfo->hostname, value);
           if (SendPacket (cinfo, "ERROR", "Error with POSITION AFTER time", 0, 1, 1))
             return -1;
         }
@@ -428,7 +425,7 @@ HandleNegotiation (ClientInfo *cinfo)
           }
           else if (cinfo->timewinlimit < 1.0)
           {
-            int64_t pktlimit = (int64_t)(cinfo->timewinlimit * cinfo->ringparams->maxpackets);
+            uint64_t pktlimit = (uint64_t)(cinfo->timewinlimit * cinfo->ringparams->maxpackets);
 
             pktid = RingAfterRev (cinfo->reader, nstime, pktlimit, 1);
           }
@@ -439,23 +436,25 @@ HandleNegotiation (ClientInfo *cinfo)
             return -1;
           }
 
-          if (pktid == 0)
-          {
-            if (SendPacket (cinfo, "ERROR", "Packet not found", 0, 1, 1))
-              return -1;
-          }
-          else if (pktid < 0)
+          if (pktid == RINGID_ERROR)
           {
             lprintf (0, "[%s] Error with RingAfter[Rev] (nstime: %" PRId64 ")",
                      cinfo->hostname, nstime);
             if (SendPacket (cinfo, "ERROR", "Error positioning reader", 0, 1, 1))
               return -1;
           }
+          else if (pktid == 0)
+          {
+            if (SendPacket (cinfo, "ERROR", "Packet not found", 0, 1, 1))
+              return -1;
+          }
+          else
+          {
+            snprintf (sendbuffer, sizeof (sendbuffer), "Positioned to packet ID %" PRIu64, pktid);
+            if (SendPacket (cinfo, "OK", sendbuffer, pktid, 1, 1))
+              return -1;
+          }
         }
-
-        snprintf (sendbuffer, sizeof (sendbuffer), "Positioned to packet ID %" PRId64, pktid);
-        if (SendPacket (cinfo, "OK", sendbuffer, pktid, 1, 1))
-          return -1;
       }
       else
       {
@@ -472,7 +471,7 @@ HandleNegotiation (ClientInfo *cinfo)
     OKGO = 1;
 
     /* Parse size from request */
-    fields = sscanf (cinfo->recvbuf, "%*s %d %c", &size, &junk);
+    fields = sscanf (cinfo->recvbuf, "%*s %zu %c", &size, &junk);
 
     /* Make sure we got a single pattern or no pattern */
     if (fields > 1)
@@ -493,12 +492,12 @@ HandleNegotiation (ClientInfo *cinfo)
       selected = SelectedStreams (cinfo->ringparams, cinfo->reader);
       snprintf (sendbuffer, sizeof (sendbuffer), "%d streams selected after match",
                 selected);
-      if (SendPacket (cinfo, "OK", sendbuffer, selected, 1, 1))
+      if (SendPacket (cinfo, "OK", sendbuffer, (selected >= 0) ? (uint64_t)selected : 0, 1, 1))
         return -1;
     }
     else if (size > DLMAXREGEXLEN)
     {
-      lprintf (0, "[%s] match expression too large (%d)", cinfo->hostname, size);
+      lprintf (0, "[%s] match expression too large (%zu)", cinfo->hostname, size);
 
       snprintf (sendbuffer, sizeof (sendbuffer), "match expression too large, must be <= %d",
                 DLMAXREGEXLEN);
@@ -541,7 +540,7 @@ HandleNegotiation (ClientInfo *cinfo)
         selected = SelectedStreams (cinfo->ringparams, cinfo->reader);
         snprintf (sendbuffer, sizeof (sendbuffer), "%d streams selected after match",
                   selected);
-        if (SendPacket (cinfo, "OK", sendbuffer, selected, 1, 1))
+        if (SendPacket (cinfo, "OK", sendbuffer, (selected >= 0) ? (uint64_t)selected : 0, 1, 1))
           return -1;
       }
     }
@@ -553,7 +552,7 @@ HandleNegotiation (ClientInfo *cinfo)
     OKGO = 1;
 
     /* Parse size from request */
-    fields = sscanf (cinfo->recvbuf, "%*s %d %c", &size, &junk);
+    fields = sscanf (cinfo->recvbuf, "%*s %zu %c", &size, &junk);
 
     /* Make sure we got a single pattern or no pattern */
     if (fields > 1)
@@ -574,12 +573,12 @@ HandleNegotiation (ClientInfo *cinfo)
       selected = SelectedStreams (cinfo->ringparams, cinfo->reader);
       snprintf (sendbuffer, sizeof (sendbuffer), "%d streams selected after reject",
                 selected);
-      if (SendPacket (cinfo, "OK", sendbuffer, selected, 1, 1))
+      if (SendPacket (cinfo, "OK", sendbuffer, (selected >= 0) ? (uint64_t)selected : 0, 1, 1))
         return -1;
     }
     else if (size > DLMAXREGEXLEN)
     {
-      lprintf (0, "[%s] reject expression too large (%d)", cinfo->hostname, size);
+      lprintf (0, "[%s] reject expression too large (%zu)", cinfo->hostname, size);
 
       snprintf (sendbuffer, sizeof (sendbuffer), "reject expression too large, must be <= %d",
                 DLMAXREGEXLEN);
@@ -622,7 +621,7 @@ HandleNegotiation (ClientInfo *cinfo)
         selected = SelectedStreams (cinfo->ringparams, cinfo->reader);
         snprintf (sendbuffer, sizeof (sendbuffer), "%d streams selected after reject",
                   selected);
-        if (SendPacket (cinfo, "OK", sendbuffer, selected, 1, 1))
+        if (SendPacket (cinfo, "OK", sendbuffer, (selected >= 0) ? (uint64_t)selected : 0, 1, 1))
           return -1;
       }
     }
@@ -873,15 +872,15 @@ HandleWrite (ClientInfo *cinfo)
 static int
 HandleRead (ClientInfo *cinfo)
 {
-  int64_t reqid  = 0;
-  int64_t readid = 0;
+  uint64_t reqid  = 0;
+  uint64_t readid = 0;
   char replystr[100];
 
   if (!cinfo)
     return -1;
 
   /* Parse command parameters: READ <pktid> */
-  if (sscanf (cinfo->recvbuf, "%*s %" PRId64, &reqid) != 1)
+  if (sscanf (cinfo->recvbuf, "%*s %" PRIu64, &reqid) != 1)
   {
     lprintf (1, "[%s] Error parsing READ parameters: %.100s",
              cinfo->hostname, cinfo->recvbuf);
@@ -891,7 +890,7 @@ HandleRead (ClientInfo *cinfo)
   }
 
   /* Read the packet from the ring */
-  if ((readid = RingRead (cinfo->reader, reqid, &cinfo->packet, cinfo->packetdata)) < 0)
+  if ((readid = RingRead (cinfo->reader, reqid, &cinfo->packet, cinfo->packetdata)) == RINGID_ERROR)
   {
     lprintf (1, "[%s] Error with RingRead", cinfo->hostname);
 
@@ -902,7 +901,7 @@ HandleRead (ClientInfo *cinfo)
   /* Return packet not found error message if needed */
   if (readid == 0)
   {
-    snprintf (replystr, sizeof (replystr), "Packet %" PRId64 " not found in ring", reqid);
+    snprintf (replystr, sizeof (replystr), "Packet %" PRIu64 " not found in ring", reqid);
     if (SendPacket (cinfo, "ERROR", replystr, 0, 1, 1))
       return -1;
   }
@@ -1423,12 +1422,13 @@ HandleInfo (ClientInfo *cinfo, int socket)
  ***************************************************************************/
 static int
 SendPacket (ClientInfo *cinfo, char *header, char *data,
-            int64_t value, int addvalue, int addsize)
+            uint64_t value, int addvalue, int addsize)
 {
   char *wirepacket = 0;
   char headerstr[255];
-  int headerlen;
-  int datalen;
+  uint8_t headerlen_u8;
+  size_t headerlen;
+  size_t datalen;
 
   if (!cinfo || !header)
     return -1;
@@ -1440,11 +1440,11 @@ SendPacket (ClientInfo *cinfo, char *header, char *data,
   if (addvalue || addsize)
   {
     if (addvalue && addsize)
-      snprintf (headerstr, sizeof (headerstr), "%s %" PRId64 " %u", header, value, datalen);
+      snprintf (headerstr, sizeof (headerstr), "%s %" PRIu64 " %zu", header, value, datalen);
     else if (addvalue)
-      snprintf (headerstr, sizeof (headerstr), "%s %" PRId64, header, value);
+      snprintf (headerstr, sizeof (headerstr), "%s %" PRIu64, header, value);
     else
-      snprintf (headerstr, sizeof (headerstr), "%s %u", header, datalen);
+      snprintf (headerstr, sizeof (headerstr), "%s %zu", header, datalen);
 
     header = headerstr;
   }
@@ -1452,9 +1452,9 @@ SendPacket (ClientInfo *cinfo, char *header, char *data,
   /* Determine length of header and sanity check it */
   headerlen = strlen (header);
 
-  if (headerlen > 255)
+  if (headerlen > UINT8_MAX)
   {
-    lprintf (0, "[%s] SendPacket(): Header length is too large: %d",
+    lprintf (0, "[%s] SendPacket(): Header length is too large: %zu",
              cinfo->hostname, headerlen);
     return -1;
   }
@@ -1477,7 +1477,8 @@ SendPacket (ClientInfo *cinfo, char *header, char *data,
   /* Populate pre-header sequence of wire packet */
   wirepacket[0] = 'D';
   wirepacket[1] = 'L';
-  wirepacket[2] = (uint8_t)headerlen;
+  headerlen_u8  = (uint8_t)headerlen;
+  memcpy (wirepacket + 2, &headerlen_u8, 1);
 
   /* Copy header and packet data into wire packet */
   memcpy (&wirepacket[3], header, headerlen);
@@ -1517,7 +1518,8 @@ SendRingPacket (ClientInfo *cinfo)
 {
   StreamNode *stream;
   char header[255];
-  int headerlen;
+  uint8_t headerlen_u8;
+  size_t headerlen;
   int newstream = 0;
 
   if (!cinfo)
@@ -1529,15 +1531,15 @@ SendRingPacket (ClientInfo *cinfo)
   int64_t usdataend   = (cinfo->packet.dataend) ? MS_NSTIME2HPTIME (cinfo->packet.dataend) : 0;
 
   /* Create packet header: "PACKET <streamid> <pktid> <hppackettime> <hpdatatime> <size>" */
-  headerlen = snprintf (header, sizeof (header),
-                        "PACKET %s %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %u",
-                        cinfo->packet.streamid, cinfo->packet.pktid, uspkttime,
-                        usdatastart, usdataend, cinfo->packet.datasize);
+  headerlen = (size_t)snprintf (header, sizeof (header),
+                                "PACKET %s %" PRIu64 " %" PRId64 " %" PRId64 " %" PRId64 " %u",
+                                cinfo->packet.streamid, cinfo->packet.pktid, uspkttime,
+                                usdatastart, usdataend, cinfo->packet.datasize);
 
   /* Sanity check header length */
-  if (headerlen > 255)
+  if (headerlen > UINT8_MAX)
   {
-    lprintf (0, "[%s] SendRingPacket(): Header length is too large: %d",
+    lprintf (0, "[%s] SendRingPacket(): Header length is too large: %zu",
              cinfo->hostname, headerlen);
     return -1;
   }
@@ -1545,7 +1547,7 @@ SendRingPacket (ClientInfo *cinfo)
   /* Make sure send buffer is large enough for wire packet */
   if (cinfo->sendbuflen < (3 + headerlen + cinfo->packet.datasize))
   {
-    lprintf (0, "[%s] SendRingPacket(): Send buffer not large enough (%d bytes), need %d bytes",
+    lprintf (0, "[%s] SendRingPacket(): Send buffer not large enough (%zu bytes), need %zu bytes",
              cinfo->hostname, cinfo->sendbuflen, 3 + headerlen + cinfo->packet.datasize);
     return -1;
   }
@@ -1553,7 +1555,8 @@ SendRingPacket (ClientInfo *cinfo)
   /* Populate pre-header sequence of wire packet */
   cinfo->sendbuf[0] = 'D';
   cinfo->sendbuf[1] = 'L';
-  cinfo->sendbuf[2] = (uint8_t)headerlen;
+  headerlen_u8      = (uint8_t)headerlen;
+  memcpy (cinfo->sendbuf + 2, &headerlen_u8, 1);
 
   /* Copy header and packet data into wire packet */
   memcpy (&cinfo->sendbuf[3], header, headerlen);

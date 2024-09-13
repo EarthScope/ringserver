@@ -126,7 +126,7 @@ static void PruneFiles (RBTree *filetree, time_t scantime);
 static void PrintFileList (RBTree *filetree, FILE *fd);
 static int SaveState (RBTree *filetree, char *statefile);
 static int RecoverState (RBTree *filetree, char *statefile);
-static int WriteRecord (MSScanInfo *mssinfo, char *record, int reclen);
+static int WriteRecord (MSScanInfo *mssinfo, char *record, uint64_t reclen);
 static int Initialize (MSScanInfo *mssinfo);
 static int MSS_KeyCompare (const void *a, const void *b);
 static time_t CalcDayTime (int year, int day);
@@ -668,11 +668,11 @@ static off_t
 ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
              off_t newsize, time_t newmodtime)
 {
+  ssize_t nread;
+  ssize_t detlen;
   int fd;
-  int nread;
   int reccnt     = 0;
   int reachedmax = 0;
-  int detlen;
   int flags;
   uint8_t msversion;
   off_t newoffset = fnode->offset;
@@ -730,7 +730,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
     }
 
     /* Check buffer for miniSEED */
-    detlen = ms3_detect (mssinfo->readbuffer, nread, &msversion);
+    detlen = ms3_detect (mssinfo->readbuffer, (uint64_t)nread, &msversion);
 
     /* If miniSEED not detected or length could not be determined */
     if (detlen <= 0)
@@ -755,8 +755,8 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
     /* Record is larger than packet payload maximum, aka read buffer size */
     else if (detlen > mssinfo->readbuffersize)
     {
-      lprintf (0, "[MSeedScan] %s: Record length (%d) at offset %lld, larger than packet payload size (%u), ignoring file",
-               filename, detlen, (long long)newoffset, mssinfo->readbuffersize);
+      lprintf (0, "[MSeedScan] %s: Record length (%" PRId64 ") at offset %" PRId64 ", larger than packet payload size (%u), ignoring file",
+               filename, (int64_t)detlen, (int64_t)newoffset, mssinfo->readbuffersize);
       close (fd);
       return -1;
     }
@@ -769,7 +769,9 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
     /* Read the rest of the record */
     if (detlen > nread)
     {
-      if (pread (fd, mssinfo->readbuffer + nread, detlen - nread, newoffset + nread) != detlen - nread)
+      if (pread (fd, mssinfo->readbuffer + nread,
+                 (size_t)(detlen - nread),
+                 newoffset + nread) != detlen - nread)
       {
         if (!(shutdownsig && errno == EINTR))
         {
@@ -790,7 +792,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
     mssinfo->scanrecordsread++;
 
     /* Write record to ring buffer */
-    if (WriteRecord (mssinfo, mssinfo->readbuffer, detlen))
+    if (WriteRecord (mssinfo, mssinfo->readbuffer, (uint64_t)detlen))
     {
       return -newoffset;
     }
@@ -1015,7 +1017,7 @@ RecoverState (RBTree *filetree, char *statefile)
  * Returns 0 on success, and -1 on failure
  ***************************************************************************/
 static int
-WriteRecord (MSScanInfo *mssinfo, char *record, int reclen)
+WriteRecord (MSScanInfo *mssinfo, char *record, uint64_t reclen)
 {
   char streamid[100];
   RingPacket packet;
@@ -1036,7 +1038,7 @@ WriteRecord (MSScanInfo *mssinfo, char *record, int reclen)
   strncpy (packet.streamid, streamid, sizeof (packet.streamid) - 1);
   packet.datastart = mssinfo->msr->starttime;
   packet.dataend   = msr3_endtime (mssinfo->msr);
-  packet.datasize  = mssinfo->msr->reclen;
+  packet.datasize  = (uint32_t)mssinfo->msr->reclen;
 
   /* Add the packet to the ring */
   if ((rv = RingWrite (mssinfo->ringparams, &packet, record, packet.datasize)))

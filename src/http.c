@@ -127,10 +127,10 @@ urldecode (char *dst, const char *src)
 int
 HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 {
-  size_t headlen;
   char method[10];
   char path[100];
   char version[100];
+  int headlen;
   int fields;
   int nread;
   int rv;
@@ -177,7 +177,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     if (headlen > 0)
     {
-      SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+      SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
     }
     else
     {
@@ -260,7 +260,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     {
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
-                       (size_t[]){MIN (headlen, cinfo->sendbuflen), (response) ? responsebytes : 0},
+                       (size_t[]){MIN ((size_t)headlen, cinfo->sendbuflen), (response) ? (size_t)responsebytes : 0},
                        2);
     }
     else
@@ -308,7 +308,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     {
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
-                       (size_t[]){MIN (headlen, cinfo->sendbuflen), (response) ? responsebytes : 0},
+                       (size_t[]){MIN ((size_t)headlen, cinfo->sendbuflen), (response) ? (size_t)responsebytes : 0},
                        2);
     }
     else
@@ -338,7 +338,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                           "\r\n",
                           (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
-      rv = SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+      rv = SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
 
       return (rv) ? -1 : 1;
     }
@@ -370,7 +370,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     {
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
-                       (size_t[]){MIN (headlen, cinfo->sendbuflen), (response) ? responsebytes : 0},
+                       (size_t[]){MIN ((size_t)headlen, cinfo->sendbuflen), (response) ? (size_t)responsebytes : 0},
                        2);
     }
     else
@@ -400,7 +400,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                           "\r\n",
                           (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
-      rv = SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+      rv = SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
 
       return (rv) ? -1 : 1;
     }
@@ -432,7 +432,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     {
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
-                       (size_t[]){MIN (headlen, cinfo->sendbuflen), (response) ? responsebytes : 0},
+                       (size_t[]){MIN ((size_t)headlen, cinfo->sendbuflen), (response) ? (size_t)responsebytes : 0},
                        2);
     }
     else
@@ -463,7 +463,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+        SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
       }
       else
       {
@@ -513,7 +513,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+        SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
       }
       else
       {
@@ -568,7 +568,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                           "<body><h1>Not Found</h1></body></html>",
                           (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
-      rv = SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+      rv = SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
 
       return (rv) ? -1 : 1;
     }
@@ -860,10 +860,10 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly)
   Stack *streams;
   StackNode *streamnode;
   RingStream *ringstream;
-  int streamcount;
+  size_t streamcount;
   size_t streamlistsize;
-  size_t headlen;
   size_t streaminfolen;
+  int headlen;
   char streaminfo[200];
   char earliest[50];
   char latest[50];
@@ -918,7 +918,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly)
 
         if (headlen > 0)
         {
-          SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+          SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
         }
         else
         {
@@ -952,7 +952,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly)
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+        SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
       }
       else
       {
@@ -1000,7 +1000,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly)
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+        SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
       }
       else
       {
@@ -1075,7 +1075,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly)
 
       /* Add streaminfo entry to buffer */
       streaminfolen = strlen (streaminfo);
-      if ((streamlistsize - (cp - *streamlist)) > streaminfolen)
+      if ((streamlistsize - (size_t)(cp - *streamlist)) > streaminfolen)
       {
         memcpy (cp, streaminfo, streaminfolen);
         cp += streaminfolen;
@@ -1094,14 +1094,14 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly)
                             "Connection: close\r\n"
                             "%s"
                             "\r\n"
-                            "Stream list buffer too small: %zu bytes for %d streams",
+                            "Stream list buffer too small: %zu bytes for %zu streams",
                             (cinfo->httpheaders) ? cinfo->httpheaders : "",
                             streamlistsize,
                             streamcount);
 
         if (headlen > 0)
         {
-          SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+          SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
         }
         else
         {
@@ -1617,8 +1617,8 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   unsigned char *keybuf       = NULL;
   uint8_t digest[20];
 
-  int keybufsize;
-  int keylength;
+  size_t keybufsize;
+  size_t keylength;
 
   if (!cinfo || !version)
     return -1;
@@ -1749,7 +1749,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   keybufsize = keylength + 36;
   if (!(keybuf = (unsigned char *)malloc (keybufsize)))
   {
-    lprintf (0, "Cannot allocate memory for decoded key buffer (%d bytes)", keybufsize);
+    lprintf (0, "Cannot allocate memory for decoded key buffer (%zu bytes)", keybufsize);
     return -1;
   }
 

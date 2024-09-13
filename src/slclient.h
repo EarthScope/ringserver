@@ -74,7 +74,7 @@ typedef struct SLInfo
   int dialup;            /* Connection is in dialup/fetch mode */
   int batch;             /* Connection is in batch mode */
   int terminfo;          /* Terminating INFO packet flag */
-  int64_t startid;       /* Starting packet ID */
+  uint64_t startid;      /* Starting packet ID */
   char *selectors;       /* List of SeedLink selectors */
   int stationcount;      /* Number of stations requested with STATION */
   int timewinchannels;   /* Count of channels for time window completion check */
@@ -87,7 +87,7 @@ typedef struct ReqStationID
 {
   nstime_t starttime; /* Requested start time for StaID */
   nstime_t endtime;   /* Requested end time for StaID */
-  int64_t packetid;   /* Requested packet ID */
+  uint64_t packetid;  /* Requested packet ID */
   nstime_t datastart; /* Data start time of requested packet */
   char *selectors;    /* List of SeedLink stream ID selectors */
 } ReqStationID;
@@ -99,9 +99,9 @@ typedef struct ListStationID
   char network[16];        /* Network code from Station ID, if available */
   char station[16];        /* Station code from Station ID, if available */
   nstime_t earliestdstime; /* Data start time of earliest packet Station ID */
-  int64_t earliestid;      /* Earliest packet ID Station ID */
+  uint64_t earliestid;     /* Earliest packet ID Station ID */
   nstime_t latestdstime;   /* Data start time of latest packet Station ID */
-  int64_t latestid;        /* Latest packet ID Station ID */
+  uint64_t latestid;       /* Latest packet ID Station ID */
   Stack *streams;          /* Stack of associated streams */
 } ListStationID;
 

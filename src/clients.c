@@ -379,7 +379,7 @@ ClientThread (void *arg)
         FD_SET (cinfo->socket, &readset);
 
         timeout.tv_sec  = 0;
-        timeout.tv_usec = throttleusec;
+        timeout.tv_usec = (suseconds_t)throttleusec;
 
         select (cinfo->socket + 1, &readset, NULL, NULL, &timeout);
       }
@@ -572,7 +572,7 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[], int bufcount)
   int idx;
 
   uint8_t wsframe[10];
-  int wsframelen;
+  size_t wsframelen;
   uint8_t length8;
   uint16_t length16;
   uint64_t length64;
@@ -673,7 +673,7 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[], int bufcount)
         /* Create a limited, printable buffer for the diagnostic message */
         char pbuffer[100];
         char *cp;
-        int maxlength = (buflen[idx] < sizeof (pbuffer)) ? buflen[idx] : sizeof (pbuffer);
+        size_t maxlength = (buflen[idx] < sizeof (pbuffer)) ? buflen[idx] : sizeof (pbuffer);
 
         strncpy (pbuffer, (char *)buffer[idx], maxlength - 1);
         pbuffer[sizeof (pbuffer) - 1] = '\0';
@@ -731,10 +731,10 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[], int bufcount)
 int
 RecvData (ClientInfo *cinfo, char *buffer, size_t buflen)
 {
-  int nrecv;
-  int nread = 0;
-  int idx;
+  ssize_t nrecv;
+  size_t nread = 0;
   char *bptr = buffer;
+  int idx;
 
   fd_set readset;
   struct timeval timeout;
@@ -786,7 +786,7 @@ RecvData (ClientInfo *cinfo, char *buffer, size_t buflen)
     if (nrecv > 0)
     {
       bptr += nrecv;
-      nread += nrecv;
+      nread += (size_t) nrecv;
     }
   }
 
@@ -824,9 +824,9 @@ RecvData (ClientInfo *cinfo, char *buffer, size_t buflen)
 int
 RecvCmd (ClientInfo *cinfo)
 {
-  int nread      = 0;
-  int nreadtotal = 0;
-  int nrecv;
+  size_t nread      = 0;
+  size_t nreadtotal = 0;
+  ssize_t nrecv;
   int pass;
   int idx;
   uint8_t nreq;
@@ -886,7 +886,7 @@ RecvCmd (ClientInfo *cinfo)
         if (selret == 0)
         {
           lprintf (0, "[%s] Timeout receiving DataLink command: %.*s",
-                   cinfo->hostname, nread, cinfo->recvbuf);
+                   cinfo->hostname, (int)nread, cinfo->recvbuf);
           return -2;
         }
         else if (selret == -1 && errno != EINTR)
@@ -908,8 +908,8 @@ RecvCmd (ClientInfo *cinfo)
     /* Update recv count and byte count */
     if (nrecv > 0)
     {
-      nread += nrecv;
-      nreadtotal += nrecv;
+      nread += (size_t)nrecv;
+      nreadtotal += (size_t)nrecv;
     }
 
     /* Determine read parameters from pre-header of 3 bytes: 'DL<size>' */
@@ -991,8 +991,8 @@ RecvLine (ClientInfo *cinfo)
 {
   char *bptr = NULL;
   char peek;
-  int nread = 0;
-  int nrecv;
+  size_t nread = 0;
+  ssize_t nrecv;
 
   fd_set readset;
   struct timeval timeout;
@@ -1093,7 +1093,7 @@ RecvLine (ClientInfo *cinfo)
     /* Check for a full buffer */
     if (nread >= cinfo->recvbuflen)
     {
-      lprintf (0, "[%s] Received data too long for line, max %d bytes",
+      lprintf (0, "[%s] Received data too long for line, max %zu bytes",
                cinfo->hostname, cinfo->recvbuflen);
       return -2;
     }
@@ -1221,9 +1221,9 @@ GetStreamNode (RBTree *tree, pthread_mutex_t *plock, char *streamid, int *new)
  * string would grow beyond maximum length.
  ***************************************************************************/
 int
-AddToString (char **string, char *add, char *delim, int where, int maxlen)
+AddToString (char **string, char *add, char *delim, size_t where, size_t maxlen)
 {
-  int length;
+  size_t length;
   char *ptr;
 
   if (!string || !add)

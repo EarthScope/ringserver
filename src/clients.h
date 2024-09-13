@@ -52,9 +52,9 @@ typedef struct ClientInfo
   int         socket;       /* Socket descriptor */
   int         socketerr;    /* Socket error flag */
   char       *sendbuf;      /* Client specific send buffer */
-  int         sendbuflen;   /* Length of send buffer */
+  size_t      sendbuflen;   /* Length of send buffer */
   char       *recvbuf;      /* Client specific receive buffer */
-  int         recvbuflen;   /* Length of receive buffer */
+  size_t      recvbuflen;   /* Length of receive buffer */
   RingPacket  packet;       /* Client specific ring packet header */
   char       *packetdata;   /* Client specific packet buffer, size of RingParams.pktsize */
   struct sockaddr *addr;    /* client socket structure */
@@ -82,7 +82,7 @@ typedef struct ClientInfo
   char       *matchstr;     /* Regular expression string to match streams */
   char       *rejectstr;    /* Regular expression string to reject streams */
   char       *httpheaders;  /* Fixed headers to add to HTTP responses */
-  int64_t     lastid;       /* Last packet ID sent to client */
+  uint64_t    lastid;       /* Last packet ID sent to client */
   nstime_t    starttime;    /* Requested start time */
   nstime_t    endtime;      /* Requested end time */
   DataStream *mswrite;      /* miniSEED data write parameters */
@@ -132,7 +132,7 @@ extern StreamNode *GetStreamNode (RBTree *tree, pthread_mutex_t *plock,
 				  char *streamid, int *new);
 
 extern int  AddToString (char **string, char *source, char *delim,
-			 int where, int maxlen);
+			 size_t where, size_t maxlen);
 
 #ifdef __cplusplus
 }

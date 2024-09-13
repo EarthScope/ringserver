@@ -89,9 +89,9 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
   char definition[MAX_FILENAME_LEN];
   char pathformat[MAX_FILENAME_LEN];
   char globmatch[MAX_FILENAME_LEN];
-  int fnlen       = 0;
+  size_t fnlen    = 0;
   int nondefflags = 0;
-  int writebytes;
+  size_t writebytes;
   int writeloops;
   int rv;
 
@@ -168,7 +168,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
 
   while (fnptr != 0)
   {
-    int globlen = 0;
+    size_t globlen = 0;
     int tdy;
     char *w, *p, def;
 
@@ -578,10 +578,10 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
     writeloops = 0;
     while (writeloops < 10)
     {
-      rv = write (foundgroup->filed, msr->record + writebytes, msr->reclen - writebytes);
+      rv = write (foundgroup->filed, msr->record + writebytes, (size_t)msr->reclen - writebytes);
 
       if (rv > 0)
-        writebytes += rv;
+        writebytes += (size_t)rv;
 
       /* Done if the entire record was written */
       if (writebytes == msr->reclen)
@@ -905,7 +905,7 @@ ds_openfile (DataStream *datastream, const char *filename, char *ident)
         if (datastream->maxopenfiles > rlim.rlim_max)
           rlim.rlim_cur = rlim.rlim_max;
         else
-          rlim.rlim_cur = datastream->maxopenfiles;
+          rlim.rlim_cur = (rlim_t)datastream->maxopenfiles;
 
         lprintf (3, "[%s] Setting open file limit to %" PRId64,
                  ident, (int64_t)rlim.rlim_cur);
@@ -1033,7 +1033,7 @@ ds_strparse (const char *string, const char *delim, DSstrlist **list)
       tmplist       = (DSstrlist *)malloc (sizeof (DSstrlist));
       tmplist->next = 0;
 
-      tmplist->element = (char *)malloc (del - beg + 1);
+      tmplist->element = (char *)malloc ((size_t)(del - beg + 1));
       strncpy (tmplist->element, beg, (del - beg));
       tmplist->element[(del - beg)] = '\0';
 

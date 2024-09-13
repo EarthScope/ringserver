@@ -38,7 +38,7 @@
 #include "ringserver.h"
 
 /* Global logging parameters */
-int verbose;
+uint8_t verbose;
 
 struct TLogParams_s TLogParams = {0, 0, 1, 1, 86400, 0, 0, 0};
 

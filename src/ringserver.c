@@ -1774,43 +1774,35 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     }
     else if (!strncasecmp ("Verbosity", ptr, 9))
     {
-      if (sscanf (ptr, "%*s %u", &uvalue) != 1)
+      if (sscanf (ptr, "%*s %" SCNu8, &verbose) != 1)
       {
         lprintf (0, "Error with Verbosity config file line: %s", ptr);
         return -1;
       }
-
-      verbose = uvalue;
     }
     else if (!strncasecmp ("MaxClientsPerIP", ptr, 15))
     {
-      if (sscanf (ptr, "%*s %u", &uvalue) != 1)
+      if (sscanf (ptr, "%*s %" SCNu32, &maxclientsperip) != 1)
       {
         lprintf (0, "Error with MaxClientsPerIP config file line: %s", ptr);
         return -1;
       }
-
-      maxclientsperip = uvalue;
     }
     else if (!strncasecmp ("MaxClients", ptr, 10))
     {
-      if (sscanf (ptr, "%*s %u", &uvalue) != 1)
+      if (sscanf (ptr, "%*s %" SCNu32, &maxclients) != 1)
       {
         lprintf (0, "Error with MaxClients config file line: %s", ptr);
         return -1;
       }
-
-      maxclients = uvalue;
     }
     else if (!strncasecmp ("ClientTimeout", ptr, 13))
     {
-      if (sscanf (ptr, "%*s %u", &uvalue) != 1)
+      if (sscanf (ptr, "%*s %" SCNu32, &clienttimeout) != 1)
       {
         lprintf (0, "Error with ClientTimeout config file line: %s", ptr);
         return -1;
       }
-
-      clienttimeout = uvalue;
     }
     else if (!strncasecmp ("ResolveHostnames", ptr, 16))
     {
@@ -2561,8 +2553,8 @@ CalcStats (ClientInfo *cinfo)
 {
   nstime_t nsnow = NSnow ();
   double deltasec;
-  int64_t ulatestid;
-  int64_t upktid;
+  uint64_t ulatestid;
+  uint64_t upktid;
 
   if (!cinfo)
     return -1;

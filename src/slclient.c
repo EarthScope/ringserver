@@ -104,8 +104,8 @@ SLHandleCmd (ClientInfo *cinfo)
 {
   SLInfo *slinfo;
   ReqStationID *stationid;
-  int64_t readid;
-  int64_t retval;
+  uint64_t readid;
+  uint64_t retval;
 
   if (!cinfo)
     return -1;
@@ -260,7 +260,7 @@ SLHandleCmd (ClientInfo *cinfo)
     {
       retval = RingPosition (cinfo->reader, slinfo->startid, NSTUNSET);
 
-      if (retval < 0)
+      if (retval == RINGID_ERROR)
       {
         lprintf (0, "[%s] Error with RingPosition for %" PRId64,
                  cinfo->hostname, slinfo->startid);
@@ -317,7 +317,7 @@ SLHandleCmd (ClientInfo *cinfo)
       }
       else if (cinfo->timewinlimit < 1.0)
       {
-        int64_t pktlimit = (int64_t)(cinfo->timewinlimit * cinfo->ringparams->maxpackets);
+        uint64_t pktlimit = (uint64_t)(cinfo->timewinlimit * cinfo->ringparams->maxpackets);
 
         readid = RingAfterRev (cinfo->reader, cinfo->starttime, pktlimit, 0);
       }
@@ -328,19 +328,18 @@ SLHandleCmd (ClientInfo *cinfo)
         return -1;
       }
 
-      if (readid < 0)
+      if (readid == RINGID_ERROR)
       {
         lprintf (0, "[%s] Error with RingAfter time: %s [%" PRId64 "]",
                  cinfo->hostname, timestr, cinfo->starttime);
         SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error positioning reader to start of time window");
         return -1;
       }
-
-      if (readid == 0)
+      else if (readid == 0)
       {
         lprintf (2, "[%s] No packet found for RingAfter time: %s [%" PRId64 "], positioning to next packet",
                  cinfo->hostname, timestr, cinfo->starttime);
-        cinfo->reader->pktid = RINGNEXT;
+        cinfo->reader->pktid = RINGID_NEXT;
       }
       else
       {
@@ -352,7 +351,7 @@ SLHandleCmd (ClientInfo *cinfo)
     /* Set read position to next packet if not already done */
     if (cinfo->reader->pktid == 0)
     {
-      cinfo->reader->pktid = RINGNEXT;
+      cinfo->reader->pktid = RINGID_NEXT;
     }
 
     lprintf (1, "[%s] Configured ring parameters", cinfo->hostname);
@@ -381,7 +380,7 @@ SLStreamPackets (ClientInfo *cinfo)
 {
   SLInfo *slinfo;
   StreamNode *stream;
-  int64_t readid;
+  uint64_t readid;
   int skiprecord = 0;
   int newstream;
 
@@ -393,16 +392,16 @@ SLStreamPackets (ClientInfo *cinfo)
   /* Read next packet from ring */
   readid = RingReadNext (cinfo->reader, &cinfo->packet, cinfo->packetdata);
 
-  if (readid < 0)
+  if (readid == RINGID_ERROR)
   {
     lprintf (0, "[%s] Error reading next packet from ring", cinfo->hostname);
     return -1;
   }
-  else if (readid > 0 &&
+  else if (readid != 0 &&
            (MS2_ISVALIDHEADER (cinfo->packetdata) ||
             MS3_ISVALIDHEADER (cinfo->packetdata)))
   {
-    lprintf (3, "[%s] Read %s (%u bytes) packet ID %" PRId64 " from ring",
+    lprintf (3, "[%s] Read %s (%u bytes) packet ID %" PRIu64 " from ring",
              cinfo->hostname, cinfo->packet.streamid, cinfo->packet.datasize, cinfo->packet.pktid);
 
     /* Get (creating if needed) the StreamNode for this streamid */
@@ -489,7 +488,7 @@ SLStreamPackets (ClientInfo *cinfo)
     return -1;
   }
 
-  return (readid) ? cinfo->packet.datasize : 0;
+  return (readid) ? (int)cinfo->packet.datasize : 0;
 } /* End of SLStreamPackets() */
 
 /***********************************************************************
@@ -539,7 +538,7 @@ HandleNegotiation (ClientInfo *cinfo)
   char starttimestr[51] = {0};
   char endtimestr[51]   = {0};
   char selector[64]     = {0};
-  int64_t startpacket   = RINGCURRENT;
+  uint64_t startpacket  = RINGID_CURRENT;
 
   char *ptr;
   char OKGO = 1;
@@ -879,9 +878,9 @@ HandleNegotiation (ClientInfo *cinfo)
                        seqstr, starttimestr, endtimestr, &junk);
 
       if (strcmp (seqstr, "ALL") == 0)
-        startpacket = RINGEARLIEST;
+        startpacket = RINGID_EARLIEST;
       else
-        startpacket = strtoull (seqstr, NULL, 10);
+        startpacket = (uint64_t)strtoull (seqstr, NULL, 10);
     }
     else /* Protocol 3.x */
     {
@@ -895,7 +894,7 @@ HandleNegotiation (ClientInfo *cinfo)
     }
 
     /* SeedLink clients resume data flow by requesting: lastpacket + 1
-     * The ring needs to be positioned to the actual last packet ID for RINGNEXT,
+     * The ring needs to be positioned to the actual last packet ID for RINGID_NEXT,
      * so set the starting packet to the last actual packet received by the client. */
     if (startpacket >= 0)
       startpacket = (startpacket == 1) ? cinfo->ringparams->maxpktid : (startpacket - 1);
@@ -1699,7 +1698,7 @@ SendRecord (RingPacket *packet, char *record, uint32_t reclen, void *vcinfo)
       return -1;
   }
 
-  return SendPacket (packet->pktid, record, reclen, staid,
+  return SendPacket ((uint64_t)packet->pktid, record, reclen, staid,
                      format, subformat, vcinfo);
 } /* End of SendRecord() */
 
@@ -1813,7 +1812,7 @@ GetReqStationID (RBTree *tree, char *staid)
 
     stationid->starttime = NSTUNSET;
     stationid->endtime   = NSTUNSET;
-    stationid->packetid  = RINGCURRENT;
+    stationid->packetid  = RINGID_CURRENT;
     stationid->datastart = NSTUNSET;
     stationid->selectors = NULL;
 
