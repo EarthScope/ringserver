@@ -234,7 +234,7 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     /* Allocate ring packet buffer */
     if (!(*ringparams = malloc (ringsize)))
     {
-      lprintf (0, "RingInitialize(): error allocating %" PRId64 " bytes for ring packet buffer",
+      lprintf (0, "RingInitialize(): error allocating %" PRIu64 " bytes for ring packet buffer",
                ringsize);
       return -2;
     }
@@ -476,7 +476,7 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
   /* Log the critical ring parameters if verbose enough */
   lprintf (2, "   maxpackets: %" PRIu64 ", maxpktid: %" PRIu64, maxpackets, maxpktid);
   lprintf (2, "   maxoffset: %" PRIu64 ", headersize: %u", maxoffset, headersize);
-  lprintf (2, "   earliest packet ID: %" PRId64 ", offset: %" PRId64,
+  lprintf (2, "   earliest packet ID: %" PRIu64 ", offset: %" PRIu64,
            (*ringparams)->earliestid, (*ringparams)->earliestoffset);
   ms_nstime2timestr ((*ringparams)->earliestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   earliest packet creation time: %s",
@@ -484,7 +484,7 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
   ms_nstime2timestr ((*ringparams)->earliestdstime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   earliest packet data start time: %s",
            ((*ringparams)->earliestdstime == NSTUNSET) ? "NONE" : timestr);
-  lprintf (2, "   latest packet ID: %" PRId64 ", offset: %" PRId64,
+  lprintf (2, "   latest packet ID: %" PRIu64 ", offset: %" PRIu64,
            (*ringparams)->latestid, (*ringparams)->latestoffset);
   ms_nstime2timestr ((*ringparams)->latestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   latest packet creation time: %s",
@@ -755,7 +755,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
 
       if (!(nextInRing = GetPacket (ringparams, nextid, 0)))
       {
-        lprintf (0, "RingWrite(): Error getting next earliest ID: %" PRId64 ", current earliest: %" PRId64,
+        lprintf (0, "RingWrite(): Error getting next earliest ID: %" PRIu64 ", current earliest: %" PRIu64,
                  nextid, earliest->pktid);
         ringparams->corruptflag = 1;
         ringparams->fluxflag    = 0;
@@ -783,7 +783,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
         return -2;
       }
 
-      lprintf (3, "Removing packet for stream %s (id: %" PRId64 ")",
+      lprintf (3, "Removing packet for stream %s (id: %" PRIu64 ")",
                earliest->streamid, earliest->pktid);
 
       /* Update RingParams with new earliest entry */
@@ -879,7 +879,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
   {
     if (!(prevlatest = GetPacket (ringparams, stream->latestid, 0)))
     {
-      lprintf (0, "RingWrite(): Error getting next packet in stream (id: %" PRId64 ")", stream->latestid);
+      lprintf (0, "RingWrite(): Error getting next packet in stream (id: %" PRIu64 ")", stream->latestid);
       ringparams->corruptflag = 1;
       ringparams->fluxflag    = 0;
       pthread_mutex_unlock (ringparams->writelock);
@@ -903,7 +903,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
   pthread_mutex_unlock (ringparams->writelock);
   pthread_mutex_unlock (ringparams->streamlock);
 
-  lprintf (3, "Added packet for stream %s, pktid: %" PRId64 ", offset: %" PRId64,
+  lprintf (3, "Added packet for stream %s, pktid: %" PRIu64 ", offset: %" PRIu64,
            packet->streamid, packet->pktid, packet->offset);
 
   return 0;
@@ -1258,7 +1258,7 @@ RingPosition (RingReader *reader, uint64_t pktid, nstime_t pkttime)
   }
   else if (pktid < 0)
   {
-    lprintf (0, "RingPosition(): unsupported position value: %" PRId64, pktid);
+    lprintf (0, "RingPosition(): unsupported position value: %" PRIu64, pktid);
     return RINGID_ERROR;
   }
 

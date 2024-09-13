@@ -2962,16 +2962,16 @@ PrintHandler ()
   lprintf (1, "Ring parameters, ringsize: %" PRIu64 ", pktsize: %u (%lu)",
            ringparams->ringsize, ringparams->pktsize,
            ringparams->pktsize - sizeof (RingPacket));
-  lprintf (2, "   maxpackets: %" PRId64 ", maxpktid: %" PRId64,
+  lprintf (2, "   maxpackets: %" PRIu64 ", maxpktid: %" PRIu64,
            ringparams->maxpackets, ringparams->maxpktid);
-  lprintf (2, "   maxoffset: %" PRId64 ", headersize: %u",
+  lprintf (2, "   maxoffset: %" PRIu64 ", headersize: %u",
            ringparams->maxoffset, ringparams->headersize);
   ms_nstime2timestr (ringparams->earliestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-  lprintf (2, "   earliest packet ID: %" PRId64 ", offset: %" PRId64 ", time: %s",
+  lprintf (2, "   earliest packet ID: %" PRIu64 ", offset: %" PRIu64 ", time: %s",
            ringparams->earliestid, ringparams->earliestoffset,
            (ringparams->earliestptime == NSTUNSET) ? "NONE" : timestr);
   ms_nstime2timestr (ringparams->latestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-  lprintf (2, "   latest packet ID: %" PRId64 ", offset: %" PRId64 ", time: %s",
+  lprintf (2, "   latest packet ID: %" PRIu64 ", offset: %" PRIu64 ", time: %s",
            ringparams->latestid, ringparams->latestoffset,
            (ringparams->latestptime == NSTUNSET) ? "NONE" : timestr);
   lprintf (2, "   TX packet rate: %g, TX byte rate: %g",
@@ -3000,7 +3000,7 @@ Usage (int level)
                    " -M maxperIP    Maximum number of concurrent clients per address (currently %d)\n"
                    " -Rd ringdir    Directory for ring buffer files, required\n"
                    " -Rs bytes      Ring packet buffer file size in bytes (default 1 Gigabyte)\n"
-                   " -Rm maxid      Maximum ring packet ID (currently %" PRId64 ")\n"
+                   " -Rm maxid      Maximum ring packet ID (currently %" PRIu64 ")\n"
                    " -Rp pktsize    Maximum ring packet data size in bytes (currently %d)\n"
                    " -NOMM          Do not memory map the packet buffer, use memory instead\n"
                    " -L port        Listen for connections on port, all protocols (default off)\n"

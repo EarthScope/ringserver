@@ -1175,8 +1175,8 @@ GenerateStatus (ClientInfo *cinfo, char **status)
   snprintf (ringsize, sizeof (ringsize), "%" PRIu64, cinfo->ringparams->ringsize);
   snprintf (packetsize, sizeof (packetsize), "%lu",
             (unsigned long int)(cinfo->ringparams->pktsize - sizeof (RingPacket)));
-  snprintf (maxpacketid, sizeof (maxpacketid), "%" PRId64, cinfo->ringparams->maxpktid);
-  snprintf (maxpackets, sizeof (maxpackets), "%" PRId64, cinfo->ringparams->maxpackets);
+  snprintf (maxpacketid, sizeof (maxpacketid), "%" PRIu64, cinfo->ringparams->maxpktid);
+  snprintf (maxpackets, sizeof (maxpackets), "%" PRIu64, cinfo->ringparams->maxpackets);
   snprintf (memorymapped, sizeof (memorymapped), "%s", (cinfo->ringparams->mmapflag) ? "TRUE" : "FALSE");
   snprintf (volatileflag, sizeof (volatileflag), "%s", (cinfo->ringparams->volatileflag) ? "TRUE" : "FALSE");
   snprintf (totalconnections, sizeof (totalconnections), "%d", clientcount);
@@ -1185,11 +1185,11 @@ GenerateStatus (ClientInfo *cinfo, char **status)
   snprintf (txbyterate, sizeof (txbyterate), "%.1f", cinfo->ringparams->txbyterate);
   snprintf (rxpacketrate, sizeof (rxpacketrate), "%.1f", cinfo->ringparams->rxpacketrate);
   snprintf (rxbyterate, sizeof (rxbyterate), "%.1f", cinfo->ringparams->rxbyterate);
-  snprintf (earliestpacketid, sizeof (earliestpacketid), "%" PRId64, cinfo->ringparams->earliestid);
+  snprintf (earliestpacketid, sizeof (earliestpacketid), "%" PRIu64, cinfo->ringparams->earliestid);
   ms_nstime2timestr (cinfo->ringparams->earliestptime, earliestpacketcreate, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   ms_nstime2timestr (cinfo->ringparams->earliestdstime, earliestpacketstart, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   ms_nstime2timestr (cinfo->ringparams->earliestdetime, earliestpacketend, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-  snprintf (latestpacketid, sizeof (latestpacketid), "%" PRId64, cinfo->ringparams->latestid);
+  snprintf (latestpacketid, sizeof (latestpacketid), "%" PRIu64, cinfo->ringparams->latestid);
   ms_nstime2timestr (cinfo->ringparams->latestptime, latestpacketcreate, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   ms_nstime2timestr (cinfo->ringparams->latestdstime, latestpacketstart, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   ms_nstime2timestr (cinfo->ringparams->latestdetime, latestpacketend, ISOMONTHDAY_Z, NANO_MICRO_NONE);
@@ -1430,9 +1430,9 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
     snprintf (conninfo, sizeof (conninfo),
               "%s [%s:%s]\n"
               "  [%s] %s  %s\n"
-              "  Packet %" PRId64 " (%s)  Lag %s, %.1f\n"
-              "  TX %" PRId64 " packets, %.1f packets/sec  %" PRId64 " bytes, %.1f bytes/sec\n"
-              "  RX %" PRId64 " packets, %.1f packets/sec  %" PRId64 " bytes, %.1f bytes/sec\n"
+              "  Packet %" PRIu64 " (%s)  Lag %s, %.1f\n"
+              "  TX %" PRIu64 " packets, %.1f packets/sec  %" PRIu64 " bytes, %.1f bytes/sec\n"
+              "  RX %" PRIu64 " packets, %.1f packets/sec  %" PRIu64 " bytes, %.1f bytes/sec\n"
               "  Stream count: %d\n"
               "  Match: %.50s\n"
               "  Reject: %.50s\n\n",

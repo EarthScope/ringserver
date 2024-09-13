@@ -51,6 +51,7 @@ extern "C" {
 #define RINGID_EARLIEST (UINT64_MAX - 2)
 #define RINGID_LATEST   (UINT64_MAX - 3)
 #define RINGID_NEXT     (UINT64_MAX - 4)
+#define RINGID_MAXIMUM  (UINT64_MAX - 5)
 
 /* Define a maximum stream ID string length */
 #define MAXSTREAMID 60
@@ -82,7 +83,7 @@ typedef struct RingParams
   pthread_mutex_t *writelock; /* Mutex lock for ring write access */
   RBTree   *streamidx;        /* Binary tree of streams */
   pthread_mutex_t *streamlock;/* Mutex lock for stream index */
-  int32_t   streamcount;      /* Count of streams in index */
+  uint32_t   streamcount;     /* Count of streams in index */
   uint64_t  earliestid;       /* Earliest packet ID */
   nstime_t  earliestptime;    /* Earliest packet creation time */
   nstime_t  earliestdstime;   /* Earliest packet data start time */

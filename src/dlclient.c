@@ -202,7 +202,7 @@ DLStreamPackets (ClientInfo *cinfo)
   }
   else if (readid != 0)
   {
-    lprintf (3, "[%s] Read %s (%u bytes) packet ID %" PRId64 " from ring",
+    lprintf (3, "[%s] Read %s (%u bytes) packet ID %" PRIu64 " from ring",
              cinfo->hostname, cinfo->packet.streamid,
              cinfo->packet.datasize, cinfo->packet.pktid);
 
@@ -993,8 +993,8 @@ HandleInfo (ClientInfo *cinfo, int socket)
     mxmlElementSetAttrf (status, "RingSize", "%" PRIu64, cinfo->ringparams->ringsize);
     mxmlElementSetAttrf (status, "PacketSize", "%lu",
                          (unsigned long int)(cinfo->ringparams->pktsize - sizeof (RingPacket)));
-    mxmlElementSetAttrf (status, "MaximumPacketID", "%" PRId64, cinfo->ringparams->maxpktid);
-    mxmlElementSetAttrf (status, "MaximumPackets", "%" PRId64, cinfo->ringparams->maxpackets);
+    mxmlElementSetAttrf (status, "MaximumPacketID", "%" PRIu64, cinfo->ringparams->maxpktid);
+    mxmlElementSetAttrf (status, "MaximumPackets", "%" PRIu64, cinfo->ringparams->maxpackets);
     mxmlElementSetAttrf (status, "MemoryMappedRing", "%s", (cinfo->ringparams->mmapflag) ? "TRUE" : "FALSE");
     mxmlElementSetAttrf (status, "VolatileRing", "%s", (cinfo->ringparams->volatileflag) ? "TRUE" : "FALSE");
     mxmlElementSetAttrf (status, "TotalConnections", "%d", clientcount);
@@ -1003,7 +1003,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
     mxmlElementSetAttrf (status, "TXByteRate", "%.1f", cinfo->ringparams->txbyterate);
     mxmlElementSetAttrf (status, "RXPacketRate", "%.1f", cinfo->ringparams->rxpacketrate);
     mxmlElementSetAttrf (status, "RXByteRate", "%.1f", cinfo->ringparams->rxbyterate);
-    mxmlElementSetAttrf (status, "EarliestPacketID", "%" PRId64, cinfo->ringparams->earliestid);
+    mxmlElementSetAttrf (status, "EarliestPacketID", "%" PRIu64, cinfo->ringparams->earliestid);
     ms_nstime2timestr (cinfo->ringparams->earliestptime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "EarliestPacketCreationTime",
                         (cinfo->ringparams->earliestptime != NSTUNSET) ? string : "-");
@@ -1013,7 +1013,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
     ms_nstime2timestr (cinfo->ringparams->earliestdetime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "EarliestPacketDataEndTime",
                         (cinfo->ringparams->earliestdetime != NSTUNSET) ? string : "-");
-    mxmlElementSetAttrf (status, "LatestPacketID", "%" PRId64, cinfo->ringparams->latestid);
+    mxmlElementSetAttrf (status, "LatestPacketID", "%" PRIu64, cinfo->ringparams->latestid);
     ms_nstime2timestr (cinfo->ringparams->latestptime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "LatestPacketCreationTime",
                         (cinfo->ringparams->latestptime != NSTUNSET) ? string : "-");
@@ -1146,12 +1146,12 @@ HandleInfo (ClientInfo *cinfo, int socket)
         else
         {
           mxmlElementSetAttr (stream, "Name", ringstream->streamid);
-          mxmlElementSetAttrf (stream, "EarliestPacketID", "%" PRId64, ringstream->earliestid);
+          mxmlElementSetAttrf (stream, "EarliestPacketID", "%" PRIu64, ringstream->earliestid);
           ms_nstime2timestr (ringstream->earliestdstime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
           mxmlElementSetAttr (stream, "EarliestPacketDataStartTime", string);
           ms_nstime2timestr (ringstream->earliestdetime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
           mxmlElementSetAttr (stream, "EarliestPacketDataEndTime", string);
-          mxmlElementSetAttrf (stream, "LatestPacketID", "%" PRId64, ringstream->latestid);
+          mxmlElementSetAttrf (stream, "LatestPacketID", "%" PRIu64, ringstream->latestid);
           ms_nstime2timestr (ringstream->latestdstime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
           mxmlElementSetAttr (stream, "LatestPacketDataStartTime", string);
           ms_nstime2timestr (ringstream->latestdetime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
@@ -1300,7 +1300,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
         mxmlElementSetAttrf (conn, "Match", "%s", (tcinfo->matchstr) ? tcinfo->matchstr : "");
         mxmlElementSetAttrf (conn, "Reject", "%s", (tcinfo->rejectstr) ? tcinfo->rejectstr : "");
         mxmlElementSetAttrf (conn, "StreamCount", "%d", tcinfo->streamscount);
-        mxmlElementSetAttrf (conn, "PacketID", "%" PRId64, tcinfo->reader->pktid);
+        mxmlElementSetAttrf (conn, "PacketID", "%" PRIu64, tcinfo->reader->pktid);
         ms_nstime2timestr (tcinfo->reader->pkttime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
         mxmlElementSetAttr (conn, "PacketCreationTime",
                             (tcinfo->reader->pkttime != NSTUNSET) ? string : "-");
@@ -1310,13 +1310,13 @@ HandleInfo (ClientInfo *cinfo, int socket)
         ms_nstime2timestr (tcinfo->reader->dataend, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
         mxmlElementSetAttr (conn, "PacketDataEndTime",
                             (tcinfo->reader->dataend != NSTUNSET) ? string : "-");
-        mxmlElementSetAttrf (conn, "TXPacketCount", "%" PRId64, tcinfo->txpackets[0]);
+        mxmlElementSetAttrf (conn, "TXPacketCount", "%" PRIu64, tcinfo->txpackets[0]);
         mxmlElementSetAttrf (conn, "TXPacketRate", "%.1f", tcinfo->txpacketrate);
-        mxmlElementSetAttrf (conn, "TXByteCount", "%" PRId64, tcinfo->txbytes[0]);
+        mxmlElementSetAttrf (conn, "TXByteCount", "%" PRIu64, tcinfo->txbytes[0]);
         mxmlElementSetAttrf (conn, "TXByteRate", "%.1f", tcinfo->txbyterate);
-        mxmlElementSetAttrf (conn, "RXPacketCount", "%" PRId64, tcinfo->rxpackets[0]);
+        mxmlElementSetAttrf (conn, "RXPacketCount", "%" PRIu64, tcinfo->rxpackets[0]);
         mxmlElementSetAttrf (conn, "RXPacketRate", "%.1f", tcinfo->rxpacketrate);
-        mxmlElementSetAttrf (conn, "RXByteCount", "%" PRId64, tcinfo->rxbytes[0]);
+        mxmlElementSetAttrf (conn, "RXByteCount", "%" PRIu64, tcinfo->rxbytes[0]);
         mxmlElementSetAttrf (conn, "RXByteRate", "%.1f", tcinfo->rxbyterate);
 
         /* Latency value is the difference between the current time and the time of last packet exchange in seconds */

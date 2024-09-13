@@ -262,18 +262,18 @@ SLHandleCmd (ClientInfo *cinfo)
 
       if (retval == RINGID_ERROR)
       {
-        lprintf (0, "[%s] Error with RingPosition for %" PRId64,
+        lprintf (0, "[%s] Error with RingPosition for %" PRIu64,
                  cinfo->hostname, slinfo->startid);
         return -1;
       }
       else if (retval == 0)
       {
-        lprintf (0, "[%s] Could not find and position to packet ID: %" PRId64,
+        lprintf (0, "[%s] Could not find and position to packet ID: %" PRIu64,
                  cinfo->hostname, slinfo->startid);
       }
       else
       {
-        lprintf (2, "[%s] Positioned ring to packet ID: %" PRId64,
+        lprintf (2, "[%s] Positioned ring to packet ID: %" PRIu64,
                  cinfo->hostname, slinfo->startid);
       }
     }
@@ -343,7 +343,7 @@ SLHandleCmd (ClientInfo *cinfo)
       }
       else
       {
-        lprintf (2, "[%s] Positioned to packet %" PRId64 ", first after: %s",
+        lprintf (2, "[%s] Positioned to packet %" PRIu64 ", first after: %s",
                  cinfo->hostname, readid, timestr);
       }
     }
@@ -1623,7 +1623,7 @@ SendPacket (uint64_t pktid, char *payload, uint32_t payloadlen,
     /* Check that sequence number is not too big */
     if (pktid > 0xFFFFFF)
     {
-      lprintf (0, "[%s] sequence number too large for SeedLink: %" PRId64,
+      lprintf (0, "[%s] sequence number too large for SeedLink: %" PRIu64,
                cinfo->hostname, pktid);
     }
 
