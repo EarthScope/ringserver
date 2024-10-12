@@ -1175,7 +1175,6 @@ GenerateStatus (ClientInfo *cinfo, char **status)
   snprintf (ringsize, sizeof (ringsize), "%" PRIu64, cinfo->ringparams->ringsize);
   snprintf (packetsize, sizeof (packetsize), "%lu",
             (unsigned long int)(cinfo->ringparams->pktsize - sizeof (RingPacket)));
-  snprintf (maxpacketid, sizeof (maxpacketid), "%" PRIu64, cinfo->ringparams->maxpktid);
   snprintf (maxpackets, sizeof (maxpackets), "%" PRIu64, cinfo->ringparams->maxpackets);
   snprintf (memorymapped, sizeof (memorymapped), "%s", (cinfo->ringparams->mmapflag) ? "TRUE" : "FALSE");
   snprintf (volatileflag, sizeof (volatileflag), "%s", (cinfo->ringparams->volatileflag) ? "TRUE" : "FALSE");

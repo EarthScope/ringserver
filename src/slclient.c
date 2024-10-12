@@ -229,7 +229,7 @@ SLHandleCmd (ClientInfo *cinfo)
         }
 
         /* Track the newest packet ID while validating their existence */
-        if (stationid->packetid)
+        if (stationid->packetid != RINGID_NONE)
           retval = RingRead (cinfo->reader, stationid->packetid, &cinfo->packet, 0);
         else
           retval = 0;
@@ -349,7 +349,7 @@ SLHandleCmd (ClientInfo *cinfo)
     }
 
     /* Set read position to next packet if not already done */
-    if (cinfo->reader->pktid == 0)
+    if (cinfo->reader->pktid == RINGID_NONE)
     {
       cinfo->reader->pktid = RINGID_NEXT;
     }
@@ -538,7 +538,7 @@ HandleNegotiation (ClientInfo *cinfo)
   char starttimestr[51] = {0};
   char endtimestr[51]   = {0};
   char selector[64]     = {0};
-  uint64_t startpacket  = RINGID_CURRENT;
+  uint64_t startpacket  = RINGID_NEXT;
 
   char *ptr;
   char OKGO = 1;
@@ -894,10 +894,10 @@ HandleNegotiation (ClientInfo *cinfo)
     }
 
     /* SeedLink clients resume data flow by requesting: lastpacket + 1
-     * The ring needs to be positioned to the actual last packet ID for RINGID_NEXT,
+     * The ring needs to be positioned to the actual last packet ID for RingReadNext(),
      * so set the starting packet to the last actual packet received by the client. */
     if (startpacket >= 0)
-      startpacket = (startpacket == 1) ? cinfo->ringparams->maxpktid : (startpacket - 1);
+      startpacket = (startpacket == 1) ? 0 : (startpacket - 1);
 
     /* Make sure we got no extra arguments */
     if ((slinfo->proto_major == 4 && fields > 3) ||
@@ -1698,7 +1698,7 @@ SendRecord (RingPacket *packet, char *record, uint32_t reclen, void *vcinfo)
       return -1;
   }
 
-  return SendPacket ((uint64_t)packet->pktid, record, reclen, staid,
+  return SendPacket (packet->pktid, record, reclen, staid,
                      format, subformat, vcinfo);
 } /* End of SendRecord() */
 
@@ -1812,7 +1812,7 @@ GetReqStationID (RBTree *tree, char *staid)
 
     stationid->starttime = NSTUNSET;
     stationid->endtime   = NSTUNSET;
-    stationid->packetid  = RINGID_CURRENT;
+    stationid->packetid  = RINGID_NONE;
     stationid->datastart = NSTUNSET;
     stationid->selectors = NULL;
 

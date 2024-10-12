@@ -59,12 +59,13 @@
 #include "rbtree.h"
 #include "ring.h"
 
-/* Macros to determine next and previous IDs given an ID and the maximum ID */
-#define NEXTID(I, M) ((((I) + 1) > (M)) ? 1 : (I) + 1)
-#define PREVID(I, M) (((I) == 1) ? M : (I) - 1)
+/* Macros to determine next and previous packet offsets given an
+ * reference offset, maximum offset, and packet size */
+#define NEXTOFFSET(O, M, S) (((O) + (S) > (M)) ? 0 : (O) + (S))
+#define PREVOFFSET(O, M, S) (((O) == 0) ? (M) : (O) - (S))
 
 static int StreamStackNodeCmp (StackNode *a, StackNode *b);
-static inline RingPacket *GetPacket (RingParams *ringparams, uint64_t pktid, nstime_t *pkttime);
+static inline int64_t FindOffsetForID (RingParams *ringparams, uint64_t pktid, nstime_t *pkttime);
 static RingStream *AddStreamIdx (RBTree *streamidx, RingStream *stream, Key **ppkey);
 static RingStream *GetStreamIdx (RBTree *streamidx, char *streamid);
 static int DelStreamIdx (RBTree *streamidx, char *streamid);
@@ -83,8 +84,8 @@ static int DelStreamIdx (RBTree *streamidx, char *streamid);
  ***************************************************************************/
 int
 RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
-                uint32_t pktsize, uint64_t maxpktid, uint8_t mmapflag,
-                uint8_t volatileflag, int *ringfd, RingParams **ringparams)
+                uint32_t pktsize, uint8_t mmapflag, uint8_t volatileflag,
+                int *ringfd, RingParams **ringparams)
 {
   static pthread_mutex_t writelock;
   static pthread_mutex_t streamlock;
@@ -97,7 +98,7 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
   long pagesize;
   uint32_t headersize;
   uint64_t maxpackets;
-  uint64_t maxoffset;
+  int64_t maxoffset;
   mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 
   int corruptring = 0;
@@ -111,7 +112,7 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
   /* Sanity check input parameters */
   if (!volatileflag && (!ringfilename || !streamfilename))
   {
-    lprintf (0, "RingInitialize(): ring file and stream file must be specified");
+    lprintf (0, "%s(): ring file and stream file must be specified", __func__);
     return -2;
   }
 
@@ -124,8 +125,8 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
   /* Determine system page size */
   if ((pagesize = sysconf (_SC_PAGESIZE)) < 0)
   {
-    lprintf (0, "RingInitizlize(): Error determining system page size: %s",
-             strerror (errno));
+    lprintf (0, "%s(): Error determining system page size: %s",
+             __func__, strerror (errno));
     return -2;
   }
 
@@ -137,24 +138,16 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
   /* Sanity check that the ring can hold at least two packets */
   if (ringsize < (headersize + 2 * pktsize))
   {
-    lprintf (0, "RingInitialize(): ring size (%" PRIu64 ") must be enough for 2 packets (%u each) and header (%d)",
-             ringsize, pktsize, headersize);
+    lprintf (0, "%s(): ring size (%" PRIu64 ") must be enough for 2 packets (%u each) and header (%d)",
+             __func__, ringsize, pktsize, headersize);
     return -2;
   }
 
   /* Determine the maximum number of packets that fit after the first page */
   maxpackets = (uint64_t)((ringsize - headersize) / pktsize);
 
-  /* Sanity check that the maximum packet ID is greater than the maximum number of packets */
-  if (maxpktid < maxpackets)
-  {
-    lprintf (0, "RingInitialize(): maximum pkt id (%" PRIu64 ") must be >= maximum packets (%" PRIu64 ")",
-             maxpktid, maxpackets);
-    return -2;
-  }
-
   /* Determine the maximum packet offset value */
-  maxoffset = (uint64_t)((maxpackets - 1) * pktsize);
+  maxoffset = (int64_t)((maxpackets - 1) * pktsize);
 
   /* Open ring packet buffer file if non-volatile */
   if (!volatileflag)
@@ -162,14 +155,14 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     /* Open ring packet buffer file, creating if necessary */
     if ((*ringfd = open (ringfilename, O_RDWR | O_CREAT, mode)) < 0)
     {
-      lprintf (0, "RingInitialize(): error opening %s: %s", ringfilename, strerror (errno));
+      lprintf (0, "%s(): error opening %s: %s", __func__, ringfilename, strerror (errno));
       return -1;
     }
 
     /* Stat the ring packet buffer file */
     if (fstat (*ringfd, &ringfilestat))
     {
-      lprintf (0, "RingInitialize(): error stating %s: %s", ringfilename, strerror (errno));
+      lprintf (0, "%s(): error stating %s: %s", __func__, ringfilename, strerror (errno));
       return -1;
     }
 
@@ -188,7 +181,7 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
       {
         if (ftruncate (*ringfd, (off_t)ringsize) == -1)
         {
-          lprintf (0, "RingInitialize(): error truncating %s: %s", ringfilename, strerror (errno));
+          lprintf (0, "%s(): error truncating %s: %s", __func__, ringfilename, strerror (errno));
           return -1;
         }
       }
@@ -196,14 +189,14 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
       /* Go to the last byte of the desired size */
       if (lseek (*ringfd, (off_t)ringsize - 1, SEEK_SET) == -1)
       {
-        lprintf (0, "RingInitialize(): error seeking in %s: %s", ringfilename, strerror (errno));
+        lprintf (0, "%s(): error seeking in %s: %s", __func__, ringfilename, strerror (errno));
         return -1;
       }
 
       /* Write a dummy byte at the end of the ring packet buffer */
       if (write (*ringfd, "", 1) != 1)
       {
-        lprintf (0, "RingInitialize(): error writing to %s: %s", ringfilename, strerror (errno));
+        lprintf (0, "%s(): error writing to %s: %s", __func__, ringfilename, strerror (errno));
         return -1;
       }
     }
@@ -222,7 +215,7 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     if ((*ringparams = (RingParams *)mmap (NULL, ringsize, PROT_READ | PROT_WRITE,
                                            MAP_SHARED, *ringfd, 0)) == (void *)-1)
     {
-      lprintf (0, "RingInitialize(): error mmaping %s: %s", ringfilename, strerror (errno));
+      lprintf (0, "%s(): error mmaping %s: %s", __func__, ringfilename, strerror (errno));
       return -1;
     }
   }
@@ -234,8 +227,8 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     /* Allocate ring packet buffer */
     if (!(*ringparams = malloc (ringsize)))
     {
-      lprintf (0, "RingInitialize(): error allocating %" PRIu64 " bytes for ring packet buffer",
-               ringsize);
+      lprintf (0, "%s(): error allocating %" PRIu64 " bytes for ring packet buffer",
+               __func__, ringsize);
       return -2;
     }
 
@@ -250,8 +243,8 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
 
       if (read (*ringfd, *ringparams, ringsize) != ringsize)
       {
-        lprintf (0, "RingInitialize(): error reading ring packet buffer into memory: %s",
-                 strerror (errno));
+        lprintf (0, "%s(): error reading ring packet buffer into memory: %s",
+                 __func__, strerror (errno));
         return -1;
       }
     }
@@ -274,12 +267,12 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
   /* Initialize locks */
   if ((rc = pthread_mutex_init (&writelock, NULL)))
   {
-    lprintf (0, "RingInitialize(): error initializing ring write lock: %s", strerror (rc));
+    lprintf (0, "%s(): error initializing ring write lock: %s", __func__, strerror (rc));
     return -2;
   }
   if ((rc = pthread_mutex_init (&streamlock, NULL)))
   {
-    lprintf (0, "RingInitialize(): error initializing stream lock: %s", strerror (rc));
+    lprintf (0, "%s(): error initializing stream lock: %s", __func__, strerror (rc));
     return -2;
   }
 
@@ -291,7 +284,7 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
   (*ringparams)->streamidx    = RBTreeCreate (KeyCompare, free, free);
   (*ringparams)->streamcount  = 0;
   (*ringparams)->ringstart    = NSnow ();
-  (*ringparams)->data         = ((char *)(*ringparams)) + headersize;
+  (*ringparams)->data         = ((uint8_t *)(*ringparams)) + headersize;
 
   /* Validate existing ring packet buffer parameters, resetting if needed */
   if (ringinit ||
@@ -299,7 +292,6 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
       (*ringparams)->version != RING_VERSION ||
       (*ringparams)->ringsize != ringsize ||
       (*ringparams)->pktsize != pktsize ||
-      (*ringparams)->maxpktid != maxpktid ||
       (*ringparams)->maxpackets != maxpackets ||
       (*ringparams)->maxoffset != maxoffset ||
       (*ringparams)->headersize != headersize)
@@ -315,8 +307,6 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
         lprintf (0, "** Packet buffer size change: %" PRIu64 " -> %" PRIu64, (*ringparams)->ringsize, ringsize);
       if ((*ringparams)->pktsize != pktsize)
         lprintf (0, "** Packet size change: %u -> %u", (*ringparams)->pktsize, pktsize);
-      if ((*ringparams)->maxpktid != maxpktid)
-        lprintf (0, "** Maximum packet ID change: %" PRIu64 " -> %" PRIu64, (*ringparams)->maxpktid, maxpktid);
       if ((*ringparams)->maxpackets != maxpackets)
         lprintf (0, "** Maximum packets change: %" PRIu64 " -> %" PRIu64, (*ringparams)->maxpackets, maxpackets);
       if ((*ringparams)->maxoffset != maxoffset)
@@ -331,7 +321,6 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     (*ringparams)->version        = RING_VERSION;
     (*ringparams)->ringsize       = ringsize;
     (*ringparams)->pktsize        = pktsize;
-    (*ringparams)->maxpktid       = maxpktid;
     (*ringparams)->maxpackets     = maxpackets;
     (*ringparams)->maxoffset      = maxoffset;
     (*ringparams)->headersize     = headersize;
@@ -341,12 +330,12 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     (*ringparams)->earliestptime  = NSTUNSET;
     (*ringparams)->earliestdstime = NSTUNSET;
     (*ringparams)->earliestdetime = NSTUNSET;
-    (*ringparams)->earliestoffset = 0;
+    (*ringparams)->earliestoffset = -1;
     (*ringparams)->latestid       = 0;
     (*ringparams)->latestptime    = NSTUNSET;
     (*ringparams)->latestdstime   = NSTUNSET;
     (*ringparams)->latestdetime   = NSTUNSET;
-    (*ringparams)->latestoffset   = 0;
+    (*ringparams)->latestoffset   = -1;
     (*ringparams)->txpacketrate   = 0.0;
     (*ringparams)->txbyterate     = 0.0;
     (*ringparams)->rxpacketrate   = 0.0;
@@ -363,14 +352,14 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     /* Open stream index file */
     if ((streamidxfd = open (streamfilename, O_RDONLY, 0)) < 0)
     {
-      lprintf (0, "RingInitialize(): error opening %s: %s", streamfilename, strerror (errno));
+      lprintf (0, "%s(): error opening %s: %s", __func__, streamfilename, strerror (errno));
       return -1;
     }
 
     /* Stat the streams file */
     if (fstat (streamidxfd, &streamfilestat))
     {
-      lprintf (0, "RingInitialize(): error stating %s: %s", streamfilename, strerror (errno));
+      lprintf (0, "%s(): error stating %s: %s", __func__, streamfilename, strerror (errno));
       return -1;
     }
 
@@ -382,7 +371,7 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
         /* Re-populating streams index */
         if (!AddStreamIdx ((*ringparams)->streamidx, &stream, 0))
         {
-          lprintf (0, "RingInitialize(): error adding stream to index");
+          lprintf (0, "%s(): error adding stream to index", __func__);
           corruptring = 1;
         }
         else
@@ -394,13 +383,13 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
       /* Test for read error */
       if (rv < 0)
       {
-        lprintf (0, "RingInitialize(): error reading %s: %s", streamfilename, strerror (errno));
+        lprintf (0, "%s(): error reading %s: %s", __func__, streamfilename, strerror (errno));
         return -1;
       }
     }
     else
     {
-      lprintf (0, "RingInitialize(): stream index file empty!");
+      lprintf (0, "%s(): stream index file empty!", __func__);
       return -1;
     }
 
@@ -408,41 +397,46 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     close (streamidxfd);
   }
 
+  if ((*ringparams)->earliestoffset >= (*ringparams)->maxoffset)
+  {
+    lprintf (0, "%s(): error earliest offset >= maxoffset, ring corrupted", __func__);
+    corruptring = 1;
+  }
+  if ((*ringparams)->latestoffset >= (*ringparams)->maxoffset)
+  {
+    lprintf (0, "%s(): error latest offset >= maxoffset, ring corrupted", __func__);
+    corruptring = 1;
+  }
+
   /* Sanity checks: compare earliest and latest packet offsets between RingParams and lookups
    * and check the earliest and latest stream entries. */
-  if ((*ringparams)->earliestid)
+  if (!corruptring && (*ringparams)->earliestoffset >= 0)
   {
-    if (!(packetptr = GetPacket ((*ringparams), (*ringparams)->earliestid, 0)))
+    packetptr = (RingPacket *)((*ringparams)->data + (*ringparams)->earliestoffset);
+
+    if (packetptr->offset != (*ringparams)->earliestoffset)
     {
-      lprintf (0, "RingInitialize(): error getting index of earliest packet, ring corrupted");
-      corruptring = 1;
-    }
-    else if (packetptr->offset != (*ringparams)->earliestoffset)
-    {
-      lprintf (0, "RingInitialize(): error comparing earliest packet offsets, ring corrupted");
+      lprintf (0, "%s(): error comparing earliest packet offsets, ring corrupted", __func__);
       corruptring = 1;
     }
     else if (!(streamptr = GetStreamIdx ((*ringparams)->streamidx, packetptr->streamid)))
     {
-      lprintf (0, "RingInitialize(): error finding stream entry for earliest packet, ring corrupted");
+      lprintf (0, "%s(): error finding stream entry for earliest packet, ring corrupted", __func__);
       corruptring = 1;
     }
   }
-  if ((*ringparams)->latestid)
+  if (!corruptring && (*ringparams)->latestoffset >= 0)
   {
-    if (!(packetptr = GetPacket (*ringparams, (*ringparams)->latestid, 0)))
+    packetptr = (RingPacket *)((*ringparams)->data + (*ringparams)->latestoffset);
+
+    if (packetptr->offset != (*ringparams)->latestoffset)
     {
-      lprintf (0, "RingInitialize(): error getting index of latest packet, ring corrupted");
-      corruptring = 1;
-    }
-    else if (packetptr->offset != (*ringparams)->latestoffset)
-    {
-      lprintf (0, "RingInitialize(): error comparing latest packet offsets, ring corrupted");
+      lprintf (0, "%s(): error comparing latest packet offsets, ring corrupted", __func__);
       corruptring = 1;
     }
     else if (!(streamptr = GetStreamIdx ((*ringparams)->streamidx, packetptr->streamid)))
     {
-      lprintf (0, "RingInitialize(): error finding stream entry for latest packet, ring corrupted");
+      lprintf (0, "%s(): error finding stream entry for latest packet, ring corrupted", __func__);
       corruptring = 1;
     }
   }
@@ -455,14 +449,14 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     /* Unmap the ring file */
     if (munmap ((void *)(*ringparams), ringsize))
     {
-      lprintf (0, "RingInitialize(): error unmapping ring file: %s", strerror (errno));
+      lprintf (0, "%s(): error unmapping ring file: %s", __func__, strerror (errno));
       return -1;
     }
 
     /* Close the ring file and re-init the descriptor */
     if (close (*ringfd))
     {
-      lprintf (0, "RingInitialize(): error closing ring file: %s", strerror (errno));
+      lprintf (0, "%s(): error closing ring file: %s", __func__, strerror (errno));
       return -1;
     }
     *ringfd = -1;
@@ -474,7 +468,6 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
            ringsize, pktsize, (pktsize - sizeof (RingPacket)));
 
   /* Log the critical ring parameters if verbose enough */
-  lprintf (2, "   maxpackets: %" PRIu64 ", maxpktid: %" PRIu64, maxpackets, maxpktid);
   lprintf (2, "   maxoffset: %" PRIu64 ", headersize: %u", maxoffset, headersize);
   lprintf (2, "   earliest packet ID: %" PRIu64 ", offset: %" PRIu64,
            (*ringparams)->earliestid, (*ringparams)->earliestoffset);
@@ -536,7 +529,7 @@ RingShutdown (int ringfd, char *streamfilename, RingParams *ringparams)
   /* Open stream index file */
   if ((streamidxfd = open (streamfilename, O_RDWR | O_CREAT | O_TRUNC, mode)) < 0)
   {
-    lprintf (0, "RingShutdown(): error opening %s: %s", streamfilename, strerror (errno));
+    lprintf (0, "%s(): error opening %s: %s", __func__, streamfilename, strerror (errno));
     rv = -1;
   }
 
@@ -558,7 +551,7 @@ RingShutdown (int ringfd, char *streamfilename, RingParams *ringparams)
 
     if (write (streamidxfd, stream, sizeof (RingStream)) != sizeof (RingStream))
     {
-      lprintf (0, "RingShutdown(): error writing to %s: %s", streamfilename, strerror (errno));
+      lprintf (0, "%s(): error writing to %s: %s", __func__, streamfilename, strerror (errno));
       rv = -1;
     }
   }
@@ -566,7 +559,7 @@ RingShutdown (int ringfd, char *streamfilename, RingParams *ringparams)
   /* Close the streams file */
   if (close (streamidxfd))
   {
-    lprintf (0, "RingShutdown(): error closing %s: %s", streamfilename, strerror (errno));
+    lprintf (0, "%s(): error closing %s: %s", __func__, streamfilename, strerror (errno));
     rv = -1;
   }
 
@@ -578,7 +571,7 @@ RingShutdown (int ringfd, char *streamfilename, RingParams *ringparams)
   /* Destroy streams index lock */
   if ((rc = pthread_mutex_destroy (ringparams->streamlock)))
   {
-    lprintf (0, "RingShutdown(): error destroying stream lock: %s", strerror (rc));
+    lprintf (0, "%s(): error destroying stream lock: %s", __func__, strerror (rc));
     rv = -1;
   }
   ringparams->streamlock = NULL;
@@ -592,7 +585,7 @@ RingShutdown (int ringfd, char *streamfilename, RingParams *ringparams)
     pthread_mutex_unlock (ringparams->writelock);
     if ((rc = pthread_mutex_destroy (ringparams->writelock)))
     {
-      lprintf (0, "RingShutdown(): error destroying ring write lock: %s", strerror (rc));
+      lprintf (0, "%s(): error destroying ring write lock: %s", __func__, strerror (rc));
       rv = -1;
     }
     ringparams->writelock = NULL;
@@ -601,7 +594,7 @@ RingShutdown (int ringfd, char *streamfilename, RingParams *ringparams)
     lprintf (1, "Unmapping and closing ring buffer file");
     if (munmap ((void *)ringparams, ringparams->ringsize))
     {
-      lprintf (0, "RingShutdown(): error unmapping ring buffer file: %s", strerror (errno));
+      lprintf (0, "%s(): error unmapping ring buffer file: %s", __func__, strerror (errno));
       rv = -1;
     }
   }
@@ -612,7 +605,7 @@ RingShutdown (int ringfd, char *streamfilename, RingParams *ringparams)
 
     if (lseek (ringfd, 0, SEEK_SET) == -1)
     {
-      lprintf (0, "RingShutdown(): error seeking in ring buffer file: %s", strerror (errno));
+      lprintf (0, "%s(): error seeking in ring buffer file: %s", __func__, strerror (errno));
       rv = -1;
     }
 
@@ -623,14 +616,14 @@ RingShutdown (int ringfd, char *streamfilename, RingParams *ringparams)
     pthread_mutex_unlock (ringparams->writelock);
     if ((rc = pthread_mutex_destroy (ringparams->writelock)))
     {
-      lprintf (0, "RingShutdown(): error destroying ring write lock: %s", strerror (rc));
+      lprintf (0, "%s(): error destroying ring write lock: %s", __func__, strerror (rc));
       rv = -1;
     }
     ringparams->writelock = NULL;
 
     if (write (ringfd, ringparams, ringparams->ringsize) != ringparams->ringsize)
     {
-      lprintf (0, "RingShutdown(): error writing ring buffer file: %s", strerror (errno));
+      lprintf (0, "%s(): error writing ring buffer file: %s", __func__, strerror (errno));
       rv = -1;
     }
 
@@ -641,7 +634,7 @@ RingShutdown (int ringfd, char *streamfilename, RingParams *ringparams)
   /* Close the ring file */
   if (close (ringfd))
   {
-    lprintf (0, "RingShutdown(): error closing ring buffer file: %s", strerror (errno));
+    lprintf (0, "%s(): error closing ring buffer file: %s", __func__, strerror (errno));
     rv = -1;
   }
 
@@ -672,14 +665,14 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
 {
   RingStream *stream;
   RingStream newstream;
-  RingPacket *earliest = 0;
-  RingPacket *latest   = 0;
+  RingPacket *earliest = NULL;
+  RingPacket *latest   = NULL;
   RingPacket *prevlatest;
-  RBNode *node = 0;
+  RBNode *node = NULL;
   Key *skey;
 
   uint64_t pktid;
-  uint64_t offset;
+  int64_t offset;
 
   if (!ringparams || !packet || !packetdata)
     return -1;
@@ -687,8 +680,8 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
   /* Check packet size */
   if ((sizeof (RingPacket) + datasize) > ringparams->pktsize)
   {
-    lprintf (0, "RingWrite(): %s packet size too large (%lu), maximum is %d bytes",
-             packet->streamid, (sizeof (RingPacket) + datasize), ringparams->pktsize);
+    lprintf (0, "%s(): %s packet size too large (%lu), maximum is %d bytes",
+             __func__, packet->streamid, (sizeof (RingPacket) + datasize), ringparams->pktsize);
     return -1;
   }
 
@@ -699,83 +692,58 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
   /* Set ring flux flag */
   ringparams->fluxflag = 1;
 
-  /* Get packet entries for earliest and latest packets in ring */
-  if (ringparams->earliestid > 0)
-    if (!(earliest = GetPacket (ringparams, ringparams->earliestid, 0)))
-    {
-      lprintf (0, "RingWrite(): Error getting earliest packet index");
-      ringparams->corruptflag = 1;
-      ringparams->fluxflag    = 0;
-      pthread_mutex_unlock (ringparams->writelock);
-      pthread_mutex_unlock (ringparams->streamlock);
-      return -2;
-    }
-  if (ringparams->latestid > 0)
-    if (!(latest = GetPacket (ringparams, ringparams->latestid, 0)))
-    {
-      lprintf (0, "RingWrite(): Error getting latest packet index");
-      ringparams->corruptflag = 1;
-      ringparams->fluxflag    = 0;
-      pthread_mutex_unlock (ringparams->writelock);
-      pthread_mutex_unlock (ringparams->streamlock);
-      return -2;
-    }
+  /* Set packet entries for earliest and latest packets in ring */
+  if (ringparams->earliestoffset >= 0)
+  {
+    earliest = (RingPacket *)(ringparams->data + ringparams->earliestoffset);
+  }
+  if (ringparams->latestoffset >= 0)
+  {
+    latest = (RingPacket *)(ringparams->data + ringparams->latestoffset);
+  }
 
   /* Determine next packet ID and offset */
-  if (!earliest && !latest)
+  if (latest)
+  {
+    offset = NEXTOFFSET (latest->offset, ringparams->maxoffset, ringparams->pktsize);
+    pktid  = latest->pktid + 1;
+
+    /* In the unlikely event we reached the end of the universe start again with 1 */
+    if (pktid > RINGID_MAXIMUM)
+    {
+      pktid = 1;
+    }
+  }
+  /* Otherwise the buffer is empty, start from the beginning */
+  else
   {
     pktid  = 1;
     offset = 0;
-  }
-  else
-  {
-    /* Determine next ID: Increment or roll back to 1 if beyond the maxpktid */
-    pktid = NEXTID (latest->pktid, ringparams->maxpktid);
-    /* Increment offset by pktsize or roll back to 0 if beyond max offset */
-    offset = ((latest->offset + ringparams->pktsize) > ringparams->maxoffset) ? 0 : (latest->offset + ringparams->pktsize);
   }
 
   /* Update new packet details */
   packet->pktid        = pktid;
   packet->offset       = offset;
   packet->pkttime      = NSnow ();
-  packet->nextinstream = 0;
+  packet->nextinstream = -1;
 
   /* Remove earliest packet if ring is full (next == earliest) */
   if (earliest && latest && earliest != latest)
   {
     if (offset == ringparams->earliestoffset)
     {
-      uint64_t nextid;                  /* New earliest packet ID in ring*/
-      RingPacket *nextInRing       = 0; /* New earliest packet in ring */
-      RingPacket *nextInStream     = 0; /* New earliest packet in stream */
-      RingStream *streamOfEarliest = 0; /* Stream of old earliest packet */
+      int64_t next_offset;                 /* New earliest packet offset */
+      RingPacket *nextInRing       = NULL; /* New earliest packet in ring */
+      RingPacket *nextInStream     = NULL; /* New earliest packet in stream */
+      RingStream *streamOfEarliest = NULL; /* Stream of old earliest packet */
 
-      nextid = NEXTID (earliest->pktid, ringparams->maxpktid);
+      next_offset = NEXTOFFSET (earliest->offset, ringparams->maxoffset, ringparams->pktsize);
+      nextInRing  = (RingPacket *)(ringparams->data + next_offset);
+      nextInStream = (RingPacket *)(ringparams->data + earliest->nextinstream);
 
-      if (!(nextInRing = GetPacket (ringparams, nextid, 0)))
-      {
-        lprintf (0, "RingWrite(): Error getting next earliest ID: %" PRIu64 ", current earliest: %" PRIu64,
-                 nextid, earliest->pktid);
-        ringparams->corruptflag = 1;
-        ringparams->fluxflag    = 0;
-        pthread_mutex_unlock (ringparams->writelock);
-        pthread_mutex_unlock (ringparams->streamlock);
-        return -2;
-      }
-      if (earliest->nextinstream)
-        if (!(nextInStream = GetPacket (ringparams, earliest->nextinstream, 0)))
-        {
-          lprintf (0, "RingWrite(): Error getting new earliest stream packet index");
-          ringparams->corruptflag = 1;
-          ringparams->fluxflag    = 0;
-          pthread_mutex_unlock (ringparams->writelock);
-          pthread_mutex_unlock (ringparams->streamlock);
-          return -2;
-        }
       if (!(streamOfEarliest = GetStreamIdx (ringparams->streamidx, earliest->streamid)))
       {
-        lprintf (0, "RingWrite(): Error getting earliest packet stream");
+        lprintf (0, "%s(): Error getting earliest packet stream", __func__);
         ringparams->corruptflag = 1;
         ringparams->fluxflag    = 0;
         pthread_mutex_unlock (ringparams->writelock);
@@ -783,8 +751,8 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
         return -2;
       }
 
-      lprintf (3, "Removing packet for stream %s (id: %" PRIu64 ")",
-               earliest->streamid, earliest->pktid);
+      lprintf (3, "Removing packet for stream %s (id: %" PRIu64 ", offset: %" PRId64 ")",
+               earliest->streamid, earliest->pktid, earliest->offset);
 
       /* Update RingParams with new earliest entry */
       ringparams->earliestid     = nextInRing->pktid;
@@ -794,8 +762,8 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
       ringparams->earliestoffset = nextInRing->offset;
 
       /* Delete stream entry if this is the only packet */
-      if (earliest->pktid == streamOfEarliest->earliestid &&
-          earliest->pktid == streamOfEarliest->latestid)
+      if (earliest->offset == streamOfEarliest->earliestoffset &&
+          earliest->offset == streamOfEarliest->latestoffset)
       {
         lprintf (2, "Removing stream index entry for %s", earliest->streamid);
         DelStreamIdx (ringparams->streamidx, earliest->streamid);
@@ -808,29 +776,28 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
         streamOfEarliest->earliestdetime = nextInStream->dataend;
         streamOfEarliest->earliestptime  = nextInStream->pkttime;
         streamOfEarliest->earliestid     = nextInStream->pktid;
+        streamOfEarliest->earliestoffset = nextInStream->offset;
       }
     }
   }
 
-  /* Find RingStream entry */
+  /* Find RingStream entry, creating if not found */
   if (!(stream = GetStreamIdx (ringparams->streamidx, packet->streamid)))
   {
     /* Populate and add RingStream entry */
     memset (&newstream, 0, sizeof (RingStream));
-    strncpy (newstream.streamid, packet->streamid, sizeof (newstream.streamid));
+    memcpy (newstream.streamid, packet->streamid, sizeof (newstream.streamid));
     newstream.earliestdstime = packet->datastart;
     newstream.earliestdetime = packet->dataend;
     newstream.earliestptime  = packet->pkttime;
     newstream.earliestid     = packet->pktid;
-    newstream.latestdstime   = packet->datastart;
-    newstream.latestdetime   = packet->dataend;
-    newstream.latestptime    = packet->pkttime;
-    newstream.latestid       = 0; /* Latest ID will get set later */
+    newstream.earliestoffset = packet->offset;
+    /* The "latest" fields are populated later */
 
     /* Add new stream to index */
     if (!(stream = AddStreamIdx (ringparams->streamidx, &newstream, &skey)))
     {
-      lprintf (0, "RingWrite(): Error adding new stream index");
+      lprintf (0, "%s(): Error adding new stream index", __func__);
       if (node)
       {
         free (node->key);
@@ -877,17 +844,9 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
   /* Update entry for previous packet in stream */
   if (stream->latestid > 0)
   {
-    if (!(prevlatest = GetPacket (ringparams, stream->latestid, 0)))
-    {
-      lprintf (0, "RingWrite(): Error getting next packet in stream (id: %" PRIu64 ")", stream->latestid);
-      ringparams->corruptflag = 1;
-      ringparams->fluxflag    = 0;
-      pthread_mutex_unlock (ringparams->writelock);
-      pthread_mutex_unlock (ringparams->streamlock);
-      return -2;
-    }
+    prevlatest = (RingPacket *)(ringparams->data + stream->latestoffset);
 
-    prevlatest->nextinstream = pktid;
+    prevlatest->nextinstream = packet->offset;
   }
 
   /* Update stream entry */
@@ -895,6 +854,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
   stream->latestdetime = packet->dataend;
   stream->latestptime  = packet->pkttime;
   stream->latestid     = packet->pktid;
+  stream->latestoffset = packet->offset;
 
   /* Clear ring flux flag */
   ringparams->fluxflag = 0;
@@ -912,13 +872,17 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
 /***************************************************************************
  * RingRead:
  *
- * Read a requested packet ID from the ring.  The requested ID can be
- * a positional value: RINGID_CURRENT, RINGID_EARLIEST or RINGID_LATEST.
+ * Read a requested packet ID from the ring.
+ *
+ * For this routine an explicit packet ID is requested and returned if
+ * found.  The packet stream ID matching and rejection patterns are not
+ * relevant.
+ *
  * The packet pointer must point to already allocated memory.  The packet
  * data will only be returned if the packetdata pointer is not 0 and
  * points to already allocated memory.
  *
- * Returns positive packet ID on success, 0 when the packet was not
+ * Returns the packet ID on success, 0 when the packet was not
  * found and RINGID_ERROR on error.
  ***************************************************************************/
 uint64_t
@@ -929,6 +893,7 @@ RingRead (RingReader *reader, uint64_t reqid,
   RingPacket *pkt;
   nstime_t pkttime;
   uint64_t pktid = 0;
+  int64_t offset = -1;
 
   if (!reader || !packet)
     return RINGID_ERROR;
@@ -937,22 +902,9 @@ RingRead (RingReader *reader, uint64_t reqid,
   if (!ringparams)
     return RINGID_ERROR;
 
-  /* Determine packet ID to request */
-  if (reqid == RINGID_EARLIEST)
+  if (reqid > RINGID_MAXIMUM)
   {
-    pktid = ringparams->earliestid;
-  }
-  else if (reqid == RINGID_LATEST)
-  {
-    pktid = ringparams->latestid;
-  }
-  else if (reqid == RINGID_CURRENT)
-  {
-    pktid = reader->pktid;
-  }
-  else if (reqid < 0)
-  {
-    lprintf (0, "RingRead(): unsupported position value: %" PRIu64, reqid);
+    lprintf (0, "%s(): unsupported position value: %" PRIu64, __func__, reqid);
     return RINGID_ERROR;
   }
   else
@@ -960,24 +912,26 @@ RingRead (RingReader *reader, uint64_t reqid,
     pktid = reqid;
   }
 
-  /* If requested ID is 0 we already know it's not available */
+  /* If requested ID is 0 it does not exist */
   if (pktid == 0)
   {
     return 0;
   }
 
-  /* Get RingPacket from Index */
-  if (!(pkt = GetPacket (ringparams, pktid, &pkttime)))
+  /* Find the offset to the packet if needed */
+  if (offset < 0 && (offset = FindOffsetForID (ringparams, pktid, &pkttime)) < 0)
   {
     return 0;
   }
+
+  pkt = (RingPacket *)(ringparams->data + offset);
 
   /* Copy packet header */
   memcpy (packet, pkt, sizeof (RingPacket));
 
   /* Copy packet data if a pointer is supplied */
   if (packetdata)
-    memcpy (packetdata, (char *)pkt + sizeof (RingPacket), pkt->datasize);
+    memcpy (packetdata, (uint8_t *)pkt + sizeof (RingPacket), pkt->datasize);
 
   /* Sanity check that the data was not overwritten during the copy */
   if (pktid != pkt->pktid)
@@ -986,6 +940,7 @@ RingRead (RingReader *reader, uint64_t reqid,
   }
 
   /* Update reader position value */
+  reader->pktoffset = packet->offset;
   reader->pktid     = packet->pktid;
   reader->pkttime   = packet->pkttime;
   reader->datastart = packet->datastart;
@@ -998,9 +953,8 @@ RingRead (RingReader *reader, uint64_t reqid,
  * RingReadNext:
  *
  * Determine and read the next packet from the ring.  The packet
- * pointer must point to already allocated memory.  The packet data
- * will only be returned if the packetdata pointer is not 0 and points
- * to already allocated memory.
+ * pointer must point to already allocated memory.  The packet data (payload)
+ * will be returned if the packetdata pointer is not NULL.
  *
  * If the packet being searched for does not exist and is not the next
  * expected packet that will enter the ring, assume that the read
@@ -1016,12 +970,14 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
   RingParams *ringparams;
   RingPacket *pkt;
   nstime_t pkttime;
-  uint64_t pktid = 0;
+  int64_t offset = -1;
   uint8_t skip;
   uint32_t skipped;
 
-  uint64_t latestoffset;
-  uint64_t earliestid;
+  int64_t earliestoffset;
+  int64_t latestoffset;
+  int64_t eoboffset;
+
   uint64_t latestid;
   nstime_t latestptime;
   nstime_t latestdstime;
@@ -1034,8 +990,14 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
   if (!ringparams)
     return RINGID_ERROR;
 
-  latestoffset = ringparams->latestoffset;
-  earliestid   = ringparams->earliestid;
+  latestoffset   = ringparams->latestoffset;
+  earliestoffset = ringparams->earliestoffset;
+
+  /* If ring is empty return immediately */
+  if (latestoffset < 0)
+  {
+    return 0;
+  }
 
   /* Determine latest packet details directly to avoid race */
   latestid     = ((RingPacket *)(ringparams->data + latestoffset))->pktid;
@@ -1043,111 +1005,70 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
   latestdstime = ((RingPacket *)(ringparams->data + latestoffset))->datastart;
   latestdetime = ((RingPacket *)(ringparams->data + latestoffset))->dataend;
 
-  /* Determine packet ID for relative positions */
-  if (reader->pktid < 0)
+  /* Determine offset for initial read or relative positions */
+  if (reader->pktoffset < 0)
   {
     if (reader->pktid == RINGID_NEXT)
     {
-      /* If ring is empty (no latest ID) set to earliest */
-      if (latestid == 0)
-      {
-        reader->pktid = RINGID_EARLIEST;
-      }
-      /* Otherwise set to latest packet */
-      else if (latestid > 0)
-      {
-        reader->pktid     = latestid;
-        reader->pkttime   = latestptime;
-        reader->datastart = latestdstime;
-        reader->dataend   = latestdetime;
-      }
+      /* Position reader at the latest packet */
+      reader->pktoffset = latestoffset;
+      reader->pktid     = latestid;
+      reader->pkttime   = latestptime;
+      reader->datastart = latestdstime;
+      reader->dataend   = latestdetime;
 
+      /* There is no next packet so return */
       return 0;
-    }
-    else if (reader->pktid == RINGID_EARLIEST)
-    {
-      if (earliestid > 0)
-      {
-        pktid = earliestid;
-      }
-      else
-      {
-        return 0;
-      }
     }
     else if (reader->pktid == RINGID_LATEST)
     {
-      if (latestid > 0)
-      {
-        pktid = latestid;
-      }
-      else
-      {
-        return 0;
-      }
+      /* Return the latest packet */
+      offset = latestoffset;
+    }
+    else if (reader->pktid == RINGID_EARLIEST)
+    {
+      /* Return the earliest packet */
+      offset = earliestoffset;
     }
     else
     {
-      lprintf (0, "RingReadNext(): unsupported position value: %" PRIu64, reader->pktid);
+      lprintf (0, "%s(): unsupported packet ID value: %" PRIu64, __func__, reader->pktid);
       return RINGID_ERROR;
     }
   }
-  /* Determine next packet ID based on current ID */
+  /* Otherwise determine the next packet offset */
   else
   {
-    /* If no current packet return immediately */
-    if (reader->pktid == 0)
-    {
-      /* Revert to latest packet */
-      if (latestid > 0)
-      {
-        reader->pktid     = latestid;
-        reader->pkttime   = latestptime;
-        reader->datastart = latestdstime;
-        reader->dataend   = latestdetime;
-      }
-
-      return 0;
-    }
-    /* If current packet is the latest in the ring return immediately,
-     * this means we will never search for the next expected packet number. */
-    else if (reader->pktid == latestid &&
-             reader->pkttime == latestptime)
-    {
-      return 0;
-    }
-
-    /* Determine next ID: Increment or roll back to 1 if beyond the maxpktid */
-    pktid = NEXTID (reader->pktid, ringparams->maxpktid);
+    offset = NEXTOFFSET (reader->pktoffset, ringparams->maxoffset, ringparams->pktsize);
   }
 
-  /* If requested ID is 0 we already know it's not available */
-  if (pktid == 0)
-  {
-    return 0;
-  }
+  /* Determine the end-of-buffer offset as the one following the latest offset */
+  eoboffset = NEXTOFFSET (latestoffset, ringparams->maxoffset, ringparams->pktsize);
 
-  /* Loop until we have a matching packet or no next */
+  /* Loop until we have a matching packet or reached the end of the buffer */
   skip    = 1;
   skipped = 0;
-  while (skip)
+  while (skip && offset != eoboffset)
   {
     skip = 0;
 
-    /* Get packet header from index */
-    if (!(pkt = GetPacket (ringparams, pktid, &pkttime)))
+    pkt = (RingPacket *)(ringparams->data + offset);
+    pkttime = pkt->pkttime;
+
+    /* Determine if this is a valid packet by checking that the packet time has
+     * not advanced past the lastest time */
+    if (pkttime > latestptime)
     {
-      /* If packet was not found, and it is already known to not be the next
-       * expected packet, then assume the reader has been lapped (fallen off
+      /* If the packet has been replaced, assume the reader has been lapped (fallen off
        * the trailing edge of the buffer) and reposition to the earliest packet */
 
-      pktid = ringparams->earliestid;
+      offset = ringparams->earliestoffset;
       skipped++;
 
       /* Safety value to avoid skipping off the trailing edge of the buffer forever */
-      if (skipped > 100)
+      if (skipped >= 100)
       {
-        lprintf (0, "RingReadNext(): skipped off trailing edge of buffer %d times", skipped);
+        lprintf (0, "%s(): skipped off trailing edge of buffer %d times", __func__, skipped);
         return 0;
       }
 
@@ -1158,8 +1079,9 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
     skipped = 0;
 
     /* Update reader position */
-    reader->pktid     = pktid;
-    reader->pkttime   = pkttime;
+    reader->pktoffset = offset;
+    reader->pktid     = pkt->pktid;
+    reader->pkttime   = pkt->pkttime;
     reader->datastart = pkt->datastart;
     reader->dataend   = pkt->dataend;
 
@@ -1181,24 +1103,16 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
                        reader->reject_data, NULL) >= 0)
         skip = 1;
 
-    /* Sanity check that the packet was not removed since GetPacket() */
-    if (pkt->pktid != pktid || pkt->pkttime != pkttime)
-      skip = 1;
-
-    /* If skipping this packet move to the next packet in the ring */
+    /* If skipping this packet determine the next packet in the ring */
     if (skip)
     {
-      /* If there is no next packet return immediately */
-      if (pktid == latestid)
-      {
-        return 0;
-      }
-      /* Otherwise continue with the next packet */
-      else
-      {
-        pktid = NEXTID (reader->pktid, ringparams->maxpktid);
-      }
+      offset = NEXTOFFSET (offset, ringparams->maxoffset, ringparams->pktsize);
     }
+  }
+
+  if (offset == eoboffset)
+  {
+    return 0;
   }
 
   /* Copy packet header */
@@ -1206,15 +1120,15 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
 
   /* Copy packet data if a pointer is supplied */
   if (packetdata)
-    memcpy (packetdata, (char *)pkt + sizeof (RingPacket), pkt->datasize);
+    memcpy (packetdata, (uint8_t *)pkt + sizeof (RingPacket), pkt->datasize);
 
-  /* Sanity check that the data was not overwritten during the copy */
-  if (pktid != pkt->pktid)
+  /* Sanity check that the data was not overwritten during processing */
+  if (pkttime != pkt->pkttime)
   {
     return 0;
   }
 
-  return pktid;
+  return packet->pktid;
 } /* End of RingReadNext() */
 
 /***************************************************************************
@@ -1229,7 +1143,7 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
  * If the packet is successfully found the RingReader.pktid will be
  * updated.
  *
- * Returns positive packet ID on success, 0 when the packet was not
+ * Returns packet ID on success, 0 when the packet was not
  * found and RINGID_ERROR on error.
  ***************************************************************************/
 uint64_t
@@ -1239,6 +1153,7 @@ RingPosition (RingReader *reader, uint64_t pktid, nstime_t pkttime)
   RingPacket *pkt;
   nstime_t ptime;
   nstime_t datastart, dataend;
+  int64_t offset;
 
   if (!reader)
     return RINGID_ERROR;
@@ -1256,27 +1171,28 @@ RingPosition (RingReader *reader, uint64_t pktid, nstime_t pkttime)
   {
     pktid = ringparams->latestid;
   }
-  else if (pktid < 0)
+  else if (pktid > RINGID_MAXIMUM)
   {
-    lprintf (0, "RingPosition(): unsupported position value: %" PRIu64, pktid);
+    lprintf (0, "%s(): unsupported position value: %" PRIu64, __func__, pktid);
     return RINGID_ERROR;
   }
 
-  /* Get RingPacket from Index */
-  if (!(pkt = GetPacket (ringparams, pktid, &ptime)))
+  /* Find the offset to the packet */
+  if ((offset = FindOffsetForID (ringparams, pktid, &ptime)) < 0)
   {
     return 0;
   }
 
-  /* Check for matching pkttime if not NSTUNSET */
-  if (pkttime != NSTUNSET)
+  pkt = (RingPacket *)(ringparams->data + offset);
+
+  /* Check for matching pkttime if not NSTUNSET or NSTERROR */
+  if (pkttime != NSTUNSET && pkttime != NSTERROR)
   {
-    if (pkttime != pkt->pkttime)
+    if (pkttime != ptime)
     {
       return 0;
     }
   }
-
   datastart = pkt->datastart;
   dataend   = pkt->dataend;
 
@@ -1287,6 +1203,7 @@ RingPosition (RingReader *reader, uint64_t pktid, nstime_t pkttime)
   }
 
   /* Update reader position value */
+  reader->pktoffset = offset;
   reader->pktid     = pktid;
   reader->pkttime   = ptime;
   reader->datastart = datastart;
@@ -1327,11 +1244,13 @@ uint64_t
 RingAfter (RingReader *reader, nstime_t reftime, int whence)
 {
   RingParams *ringparams;
-  RingPacket *pkt0 = 0, *pkt1 = 0;
-  nstime_t pkttime0 = NSTUNSET;
-  nstime_t pkttime1 = NSTUNSET;
-  nstime_t datastart, dataend;
-  uint64_t pktid0, pktid1;
+  RingPacket *pkt0 = NULL;
+  RingPacket *pkt1 = NULL;
+  uint64_t pktid;
+  nstime_t pkttime;
+  nstime_t datastart;
+  nstime_t dataend;
+  int64_t offset;
   uint64_t skipped = 0;
   uint8_t skip;
 
@@ -1343,8 +1262,7 @@ RingAfter (RingReader *reader, nstime_t reftime, int whence)
     return RINGID_ERROR;
 
   /* Start searching with the earliest packet in the ring */
-  pktid1 = ringparams->earliestid;
-  pktid0 = pktid1;
+  offset = ringparams->earliestoffset;
 
   /* Loop through packets in forward order */
   while (skipped < ringparams->maxpackets)
@@ -1352,20 +1270,7 @@ RingAfter (RingReader *reader, nstime_t reftime, int whence)
     skip = 0;
 
     /* Get pointer to RingPacket */
-    if (!(pkt1 = GetPacket (ringparams, pktid1, &pkttime1)))
-    {
-      /* Avoid skipping off the bottom, continue if no packets seen */
-      if (skipped == 0)
-      {
-        pktid0 = pktid1 = NEXTID (pktid1, ringparams->maxpktid);
-        continue;
-      }
-      /* Otherwise this is an unrecognized problem */
-      else
-      {
-        return 0;
-      }
-    }
+    pkt1 = (RingPacket *)(ringparams->data + offset);
 
     /* Test if packet is earlier than reference time, this will avoid the
      * regex tests for packets that we will eventually skip anyway */
@@ -1397,17 +1302,15 @@ RingAfter (RingReader *reader, nstime_t reftime, int whence)
     }
 
     /* Shift skipped packet to the history value */
-    pktid0   = pktid1;
-    pkttime0 = pkttime1;
-    pkt0     = pkt1;
+    pkt0 = pkt1;
 
     /* Done if we reach the latest packet */
-    if (pktid1 == ringparams->latestid)
+    if (offset == ringparams->latestoffset)
     {
       break;
     }
 
-    pktid1 = NEXTID (pktid1, ringparams->maxpktid);
+    offset = NEXTOFFSET (offset, ringparams->maxoffset, ringparams->pktsize);
     skipped++;
   }
 
@@ -1420,27 +1323,29 @@ RingAfter (RingReader *reader, nstime_t reftime, int whence)
   /* Position to packet before match if requested and not the first packet */
   if (whence == 0 && skipped > 0)
   {
-    pktid1   = pktid0;
-    pkttime1 = pkttime0;
-    pkt1     = pkt0;
+    pkt1 = pkt0;
   }
 
+  offset    = pkt1->offset;
+  pktid     = pkt1->pktid;
+  pkttime   = pkt1->pkttime;
   datastart = pkt1->datastart;
   dataend   = pkt1->dataend;
 
   /* Sanity check that the data was not overwritten during the copy */
-  if (pktid1 != pkt1->pktid)
+  if (pktid != pkt1->pktid)
   {
     return 0;
   }
 
   /* Update reader position value */
-  reader->pktid     = pktid1;
-  reader->pkttime   = pkttime1;
+  reader->pktoffset = offset;
+  reader->pktid     = pktid;
+  reader->pkttime   = pkttime;
   reader->datastart = datastart;
   reader->dataend   = dataend;
 
-  return pktid1;
+  return pktid;
 } /* End of RingAfter() */
 
 /***************************************************************************
@@ -1476,12 +1381,14 @@ RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit,
               int whence)
 {
   RingParams *ringparams;
-  RingPacket *pkt   = 0;
-  RingPacket *spkt  = 0;
+  RingPacket *pkt   = NULL;
+  RingPacket *spkt  = NULL;
   nstime_t pkttime  = NSTUNSET;
-  nstime_t spkttime = NSTUNSET;
-  nstime_t datastart, dataend;
-  uint64_t pktid, spktid;
+  nstime_t datastart;
+  nstime_t dataend;
+  uint64_t pktid;
+  int64_t offset;
+  int64_t soffset;
   uint64_t count = 0;
   uint8_t skip;
 
@@ -1493,8 +1400,8 @@ RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit,
     return RINGID_ERROR;
 
   /* Start searching with the latest packet in the ring */
-  pktid  = ringparams->latestid;
-  spktid = pktid;
+  offset  = ringparams->latestoffset;
+  soffset = offset;
 
   /* Loop through packets in reverse order */
   while (count < pktlimit)
@@ -1502,10 +1409,7 @@ RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit,
     skip = 0;
 
     /* Get pointer to RingPacket */
-    if (!(spkt = GetPacket (ringparams, spktid, &spkttime)))
-    {
-      return 0;
-    }
+    spkt = (RingPacket *)(ringparams->data + soffset);
 
     /* Test limit expression if available */
     if (reader->limit)
@@ -1530,9 +1434,10 @@ RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit,
       /* Set ID and time if this matching packet has a data end time after that specified */
       if (spkt->dataend > reftime)
       {
+        offset  = soffset;
+        pktid   = spkt->pktid;
+        pkttime = spkt->pkttime;
         pkt     = spkt;
-        pktid   = spktid;
-        pkttime = spkttime;
       }
 
       /* Done if we reach a matching packet with earlier start time */
@@ -1543,12 +1448,12 @@ RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit,
     }
 
     /* Done if we reach the earliest packet */
-    if (spktid == ringparams->earliestid)
+    if (soffset == ringparams->earliestoffset)
     {
       break;
     }
 
-    spktid = PREVID (spktid, ringparams->maxpktid);
+    soffset = PREVOFFSET (soffset, ringparams->maxoffset, ringparams->pktsize);
     count++;
   }
 
@@ -1558,19 +1463,18 @@ RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit,
     return 0;
   }
 
-  /* Position to packet before match if requested and it exists */
+  /* Position to packet before match if requested */
   if (whence == 0)
   {
     /* Search for the previous packet */
-    spktid = PREVID (pktid, ringparams->maxpktid);
+    soffset = PREVOFFSET (soffset, ringparams->maxoffset, ringparams->pktsize);
 
-    /* Get pointer to RingPacket */
-    if ((spkt = GetPacket (ringparams, spktid, &spkttime)))
-    {
-      pkt     = spkt;
-      pktid   = spktid;
-      pkttime = spkttime;
-    }
+    spkt = (RingPacket *)(ringparams->data + soffset);
+
+    offset  = spkt->offset;
+    pktid   = spkt->pktid;
+    pkttime = spkt->pkttime;
+    pkt     = spkt;
   }
 
   datastart = pkt->datastart;
@@ -1583,6 +1487,7 @@ RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit,
   }
 
   /* Update reader position value */
+  reader->pktoffset = offset;
   reader->pktid     = pktid;
   reader->pkttime   = pkttime;
   reader->datastart = datastart;
@@ -1731,7 +1636,7 @@ GetStreamsStack (RingParams *ringparams, RingReader *reader)
     /* Allocate memory for new stream entry */
     if (!(newstream = (RingStream *)malloc (sizeof (RingStream))))
     {
-      lprintf (0, "GetStreamsStack(): Error allocating memory");
+      lprintf (0, "%s(): Error allocating memory", __func__);
       return 0;
     }
 
@@ -1753,7 +1658,7 @@ GetStreamsStack (RingParams *ringparams, RingReader *reader)
   {
     if (StackSort (newstreams, StreamStackNodeCmp) < 0)
     {
-      lprintf (0, "GetStreamsStack(): Error sorting Stack");
+      lprintf (0, "%s(): Error sorting Stack", __func__);
       return 0;
     }
   }
@@ -1762,83 +1667,117 @@ GetStreamsStack (RingParams *ringparams, RingReader *reader)
 } /* End of GetStreamsStack() */
 
 /***************************************************************************
- * GetPacket:
+ * FindOffsetForID:
  *
- * Determine the offset in the ring buffer to a specified packet ID
- * and return a pointer to appropriate the RingPacket.  If the pkttime
- * is not NULL it will be set to the packet time of the packet, useful
- * for later packet validation.
+ * Determine the offset in the ring buffer to a specified packet ID.
  *
- * Return a pointer to a RingPacket if found or 0 if no match.
+ * Assumptions:
+ *
+ * - If the earliest ID >= largest ID, they represent a range between
+ * which the pktid must fall and they increase from earliest to latest.
+ *
+ * - If the earliest ID < largest ID, the ID set has no useful ordering.
+ *
+ * If pkttime is not NULL, it will be set to the time of the packet if the
+ * search is successful.
+ *
+ * Return the offset to the RingPacket on success or -1 if no match.
  ***************************************************************************/
-static inline RingPacket *
-GetPacket (RingParams *ringparams, uint64_t pktid, nstime_t *pkttime)
+static inline int64_t
+FindOffsetForID (RingParams *ringparams, uint64_t pktid, nstime_t *pkttime)
 {
-  uint64_t offset;
-  uint64_t latestoffset;
-  uint64_t earliestid;
-  uint64_t latestid;
-  uint64_t upktid, ulatestid;
+  RingPacket *packet = NULL;
 
-  RingPacket *packet = 0;
+  int64_t offset;
+  uint64_t latestid;
+  int64_t latestoffset;
+  uint64_t earliestid;
+  int64_t earliestoffset;
 
   if (!ringparams)
-    return 0;
+    return -1;
 
-  /* Sanity check requested packet ID */
-  if (pktid <= 0 || pktid > ringparams->maxpktid)
-    return 0;
+  latestid       = ringparams->latestid;
+  latestoffset   = ringparams->latestoffset;
+  earliestid     = ringparams->earliestid;
+  earliestoffset = ringparams->earliestoffset;
 
-  latestoffset = ringparams->latestoffset;
-  earliestid   = ringparams->earliestid;
-
-  /* Sanity check that ring packets exist */
-  if (latestoffset < 0 || earliestid <= 0)
+  /* Ring is empty */
+  if (earliestoffset < 0 || latestoffset < 0)
   {
-    return 0;
+    return -1;
   }
 
-  /* Determine latest ID directly from packet to avoid race */
-  latestid = ((RingPacket *)(ringparams->data + latestoffset))->pktid;
-
-  /* Determine "unwrapped" latest and requested packet IDs */
-  ulatestid = (latestid < earliestid) ? ringparams->maxpktid + latestid : latestid;
-  upktid    = (pktid < earliestid) ? ringparams->maxpktid + pktid : pktid;
-
-  /* If packet ID is not inside the current ID space it's not available */
-  if (upktid < earliestid || upktid > ulatestid)
-    return 0;
-
-  /* Determine offset of requested ID */
-  offset = latestoffset - ((ulatestid - upktid) * ringparams->pktsize);
-
-  /* "Unwrap" offset if needed */
-  if (offset < 0)
-    offset += ringparams->maxoffset + ringparams->pktsize;
-
-  /* Sanity check the offset value */
-  if (offset < 0 || offset > ringparams->maxoffset)
+  /* Earliest ID is less than latest ID.
+   * Assume they increment from earliest to latest.
+   * Assume the pktid must exist within the range. */
+  if (ringparams->earliestid <= ringparams->latestid)
   {
-    lprintf (0, "GetPacket() determined an impossible offset: %" PRIu64 " for pktid: %" PRIu64,
-             offset, pktid);
-    lprintf (0, "            upktid: %" PRIu64 ", ulatestid: %" PRIu64 ", latestoffset: %" PRIu64,
-             upktid, ulatestid, latestoffset);
-    return 0;
+    /* Check that requested packet ID is within earliest - latest range */
+    if (pktid < ringparams->earliestid || pktid > ringparams->latestid)
+    {
+      return -1;
+    }
+
+    int64_t latestoffset_unwrapped = (latestoffset < earliestoffset) ? latestoffset + ringparams->maxoffset : latestoffset;
+
+    int64_t lowpkt = 0;
+    int64_t highpkt = (latestoffset_unwrapped - earliestoffset) / ringparams->pktsize;
+    int64_t midpkt;
+
+    /* Binary search for a matching ID */
+    while (lowpkt <= highpkt)
+    {
+      midpkt = lowpkt + (highpkt - lowpkt) / 2;
+
+      int64_t offset_unwrapped = earliestoffset + (midpkt * ringparams->pktsize);
+
+      offset = (offset_unwrapped > ringparams->maxoffset) ? offset_unwrapped - ringparams->maxoffset : offset_unwrapped;
+
+      packet = (RingPacket *)(ringparams->data + offset);
+
+      /* If packet ID is found return the offset */
+      if (packet->pktid == pktid)
+      {
+        if (pkttime)
+          *pkttime = packet->pkttime;
+
+        return offset;
+      }
+
+      if (packet->pktid < pktid)
+      {
+        lowpkt = midpkt + 1;
+      }
+      else
+      {
+        highpkt = midpkt - 1;
+      }
+    }
+  }
+  /* Otherwise the ID set has either wrapped or is otherwise unordered */
+  else
+  {
+    /* Brute force search backwards from the latest */
+    offset = NEXTOFFSET (latestoffset, ringparams->maxoffset, ringparams->pktsize);
+    do
+    {
+      offset = PREVOFFSET (offset, ringparams->maxoffset, ringparams->pktsize);
+
+      packet = (RingPacket *)(ringparams->data + offset);
+
+      if (packet->pktid == pktid)
+      {
+        if (pkttime)
+          *pkttime = packet->pkttime;
+
+        return offset;
+      }
+    } while (offset != ringparams->earliestoffset);
   }
 
-  /* Set pointer to RingPacket in ring packet buffer */
-  packet = (RingPacket *)(ringparams->data + offset);
-
-  /* Set packet time if requested */
-  if (pkttime)
-    *pkttime = packet->pkttime;
-
-  /* Sanity check that this is the correct packet */
-  if (packet->pktid != pktid || packet->offset != offset)
-    return 0;
-
-  return packet;
-} /* End of GetPacket() */
+  return -1;
+} /* End of FindOffsetForID() */
 
 /***************************************************************************
  * AddStreamIdx:

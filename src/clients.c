@@ -99,7 +99,8 @@ ClientThread (void *arg)
   reader.ringparams = cinfo->ringparams;
 
   /* Initialize RingReader parameters */
-  reader.pktid       = 0;
+  reader.pktoffset   = -1;
+  reader.pktid       = RINGID_NONE;
   reader.pkttime     = NSTUNSET;
   reader.datastart   = NSTUNSET;
   reader.dataend     = NSTUNSET;

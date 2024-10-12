@@ -117,7 +117,6 @@ static uint32_t maxclientsperip = 0;                         /* Enforce maximum 
 static uint32_t clienttimeout   = 3600;                      /* Drop clients if no exchange within this limit */
 static char *ringdir            = NULL;                      /* Directory for ring files */
 static uint64_t ringsize        = 1073741824;                /* Size of ring buffer file (1 gigabyte) */
-static uint64_t maxpktid        = 0xFFFFFF;                  /* Maximum packet ID (2^16 = 16,777,215) */
 static uint32_t pktsize         = sizeof (RingPacket) + 512; /* Ring packet size */
 static uint8_t memorymapring    = 1;                         /* Flag to control mmap'ing of packet buffer */
 static uint8_t volatilering     = 0;                         /* Flag to control if ring is volatile or not */
@@ -233,7 +232,7 @@ main (int argc, char *argv[])
     }
 
     /* Initialize ring system */
-    if ((ringinit = RingInitialize (ringfilename, streamfilename, ringsize, pktsize, maxpktid,
+    if ((ringinit = RingInitialize (ringfilename, streamfilename, ringsize, pktsize,
                                     memorymapring, volatilering, &ringfd, &ringparams)))
     {
       /* Exit on unrecoverable errors and if no auto recovery */
@@ -301,7 +300,7 @@ main (int argc, char *argv[])
       }
 
       /* Re-initialize ring system */
-      if ((ringinit = RingInitialize (ringfilename, streamfilename, ringsize, pktsize, maxpktid,
+      if ((ringinit = RingInitialize (ringfilename, streamfilename, ringsize, pktsize,
                                       memorymapring, volatilering, &ringfd, &ringparams)))
       {
         lprintf (0, "Error re-initializing ring buffer on auto-recovery (%d)", ringinit);
@@ -1222,10 +1221,6 @@ ProcessParam (int argcount, char **argvec)
     {
       ringsize = CalcSize (GetOptVal (argcount, argvec, optind++));
     }
-    else if (strcmp (argvec[optind], "-Rm") == 0)
-    {
-      maxpktid = strtoull (GetOptVal (argcount, argvec, optind++), NULL, 10);
-    }
     else if (strcmp (argvec[optind], "-Rp") == 0)
     {
       pktsize = sizeof (RingPacket) + strtoul (GetOptVal (argcount, argvec, optind++), NULL, 10);
@@ -1434,7 +1429,7 @@ GetOptVal (int argcount, char **argvec, int argopt)
  *
  * RingDirectory <dir>
  * RingSize <size>
- * MaxPacketID <id>
+ * MaxPacketID <id>  (deprecated, parsed and prints a warning)
  * MaxPacketSize <size>
  * MemoryMapRing <1|0>
  * AutoRecovery <2|1|0>
@@ -1478,7 +1473,6 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
   char svalue[513];
   float fvalue;
   unsigned int uvalue;
-  unsigned long long int lluvalue;
 
   if (!configfile)
     return -1;
@@ -1606,13 +1600,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     }
     else if (!dynamiconly && !strncasecmp ("MaxPacketID", ptr, 11))
     {
-      if (sscanf (ptr, "%*s %llu", &lluvalue) != 1)
-      {
-        lprintf (0, "Error with MaxPacketID config file line: %s", ptr);
-        return -1;
-      }
-
-      maxpktid = lluvalue;
+      lprintf (0, "MaxPacketID config file option no longer used, ignoring: %s", ptr);
     }
     else if (!dynamiconly && !strncasecmp ("MaxPacketSize", ptr, 13))
     {
@@ -2552,23 +2540,30 @@ static int
 CalcStats (ClientInfo *cinfo)
 {
   nstime_t nsnow = NSnow ();
+  int64_t latestoffset_unwrapped;
+  int64_t readeroffset_unwrapped;
   double deltasec;
-  uint64_t ulatestid;
-  uint64_t upktid;
 
   if (!cinfo)
     return -1;
 
   /* Determine percent lag if the current pktid is set */
-  if (cinfo->reader && cinfo->reader->pktid > 0)
+  if (cinfo->reader && cinfo->reader->pktid <= RINGID_MAXIMUM)
   {
-    /* Determined "unwrapped" latest ring ID and current reader position ID */
-    ulatestid = (ringparams->latestid < ringparams->earliestid) ? ringparams->latestid + ringparams->maxpktid : ringparams->latestid;
+    if (ringparams->latestoffset < ringparams->earliestoffset)
+      latestoffset_unwrapped = ringparams->latestoffset + ringparams->maxoffset;
+    else
+      latestoffset_unwrapped = ringparams->latestoffset;
 
-    upktid = (cinfo->reader->pktid < ringparams->earliestid) ? cinfo->reader->pktid + ringparams->maxpktid : cinfo->reader->pktid;
+    if (cinfo->reader->pktoffset < ringparams->earliestoffset)
+      readeroffset_unwrapped = cinfo->reader->pktoffset + ringparams->maxoffset;
+    else
+      readeroffset_unwrapped = cinfo->reader->pktoffset;
+
+    fprintf (stderr, "latestoffset_unwrapped: %ld, readeroffset_unwrapped: %ld, earliestoffset: %ld\n", latestoffset_unwrapped, readeroffset_unwrapped, ringparams->earliestoffset);
 
     /* Calculate percentage lag as position in ring where 0% = latest ID and 100% = earliest ID */
-    cinfo->percentlag = (int)(((double)(ulatestid - upktid) / (ulatestid - ringparams->earliestid)) * 100);
+    cinfo->percentlag = (int)(((double)(latestoffset_unwrapped - readeroffset_unwrapped) / (latestoffset_unwrapped - ringparams->earliestoffset)) * 100);
   }
   else
   {
@@ -2942,6 +2937,10 @@ SignalThread (void *arg)
     case SIGUSR1:
       PrintHandler (); /* Print global ring details */
       break;
+    case SIGSEGV:
+      lprintf (0, "Received segmentation fault signal, exiting");
+      exit (1);
+      break;
     default:
       lprintf (0, "Summarily ignoring %s (%d) signal", strsignal (sig), sig);
       break;
@@ -2962,8 +2961,6 @@ PrintHandler ()
   lprintf (1, "Ring parameters, ringsize: %" PRIu64 ", pktsize: %u (%lu)",
            ringparams->ringsize, ringparams->pktsize,
            ringparams->pktsize - sizeof (RingPacket));
-  lprintf (2, "   maxpackets: %" PRIu64 ", maxpktid: %" PRIu64,
-           ringparams->maxpackets, ringparams->maxpktid);
   lprintf (2, "   maxoffset: %" PRIu64 ", headersize: %u",
            ringparams->maxoffset, ringparams->headersize);
   ms_nstime2timestr (ringparams->earliestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
@@ -3000,8 +2997,7 @@ Usage (int level)
                    " -M maxperIP    Maximum number of concurrent clients per address (currently %d)\n"
                    " -Rd ringdir    Directory for ring buffer files, required\n"
                    " -Rs bytes      Ring packet buffer file size in bytes (default 1 Gigabyte)\n"
-                   " -Rm maxid      Maximum ring packet ID (currently %" PRIu64 ")\n"
-                   " -Rp pktsize    Maximum ring packet data size in bytes (currently %d)\n"
+                   " -Rp pktsize    Maximum ring packet data size in bytes (currently %" PRIu64 ")\n"
                    " -NOMM          Do not memory map the packet buffer, use memory instead\n"
                    " -L port        Listen for connections on port, all protocols (default off)\n"
                    " -T logdir      Directory to write transfer logs (default is no logs)\n"
@@ -3009,7 +3005,7 @@ Usage (int level)
                    " -Tp prefix     Prefix to add to transfer log files (default is none)\n"
                    " -STDERR        Send all console output to stderr instead of stdout\n"
                    "\n",
-           maxclients, maxclientsperip, maxpktid, (int)(pktsize - sizeof (RingPacket)));
+           maxclients, maxclientsperip, (uint64_t)(pktsize - sizeof (RingPacket)));
 
   if (level >= 1)
   {

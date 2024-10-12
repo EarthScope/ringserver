@@ -139,7 +139,7 @@ DLHandleCmd (ClientInfo *cinfo)
   else if (!strncmp (cinfo->recvbuf, "STREAM", 6))
   {
     /* Set read position to next packet if position not set */
-    if (cinfo->reader->pktid == 0)
+    if (cinfo->reader->pktid == RINGID_NONE)
     {
       cinfo->reader->pktid = RINGID_NEXT;
     }
@@ -993,7 +993,6 @@ HandleInfo (ClientInfo *cinfo, int socket)
     mxmlElementSetAttrf (status, "RingSize", "%" PRIu64, cinfo->ringparams->ringsize);
     mxmlElementSetAttrf (status, "PacketSize", "%lu",
                          (unsigned long int)(cinfo->ringparams->pktsize - sizeof (RingPacket)));
-    mxmlElementSetAttrf (status, "MaximumPacketID", "%" PRIu64, cinfo->ringparams->maxpktid);
     mxmlElementSetAttrf (status, "MaximumPackets", "%" PRIu64, cinfo->ringparams->maxpackets);
     mxmlElementSetAttrf (status, "MemoryMappedRing", "%s", (cinfo->ringparams->mmapflag) ? "TRUE" : "FALSE");
     mxmlElementSetAttrf (status, "VolatileRing", "%s", (cinfo->ringparams->volatileflag) ? "TRUE" : "FALSE");
@@ -1322,7 +1321,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
         /* Latency value is the difference between the current time and the time of last packet exchange in seconds */
         mxmlElementSetAttrf (conn, "Latency", "%.1f", (double)MS_NSTIME2EPOCH ((nsnow - tcinfo->lastxchange)));
 
-        if (tcinfo->reader->pktid <= 0)
+        if (tcinfo->reader->pktid > RINGID_MAXIMUM)
           strncpy (string, "-", sizeof (string));
         else
           snprintf (string, sizeof (string), "%d", tcinfo->percentlag);
