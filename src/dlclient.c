@@ -1190,9 +1190,6 @@ HandleInfo (ClientInfo *cinfo, int socket)
 
     pcre2_code *match_code       = NULL;
     pcre2_match_data *match_data = NULL;
-    int errcode;
-    PCRE2_SIZE erroffset;
-    PCRE2_UCHAR buffer[256];
 
     /* Check for trusted flag, required to access this resource */
     if (!cinfo->trusted)
@@ -1214,20 +1211,10 @@ HandleInfo (ClientInfo *cinfo, int socket)
     nsnow = NSnow ();
 
     /* Compile match expression supplied with request */
-    if (matchexpr)
+    if (matchexpr && UpdatePattern (&match_code, &match_data, matchexpr, "connection match expression"))
     {
-      match_code = pcre2_compile ((PCRE2_SPTR)matchexpr, PCRE2_ZERO_TERMINATED,
-                                  PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
-      if (match_code == NULL)
-      {
-        pcre2_get_error_message (errcode, buffer, sizeof (buffer));
-        lprintf (0, "%s(): Error compiling expression at %zu: %s",
-                 __func__, erroffset, buffer);
-        errflag   = 1;
-        matchexpr = 0;
-      }
-
-      match_data = pcre2_match_data_create_from_pattern (match_code, NULL);
+      errflag   = 1;
+      matchexpr = NULL;
     }
 
     /* Create "ConnectionList" element */

@@ -34,6 +34,7 @@
 #include "generic.h"
 #include "infojson.h"
 #include "slclient.h"
+#include "ring.h"
 
 /***************************************************************************
  * info_create_root:
@@ -256,27 +257,11 @@ info_add_stations (ClientInfo *cinfo, cJSON *root, int include_streams,
 
   pcre2_code *match_code       = NULL;
   pcre2_match_data *match_data = NULL;
-  int errcode;
-  PCRE2_SIZE erroffset;
-  PCRE2_UCHAR buffer[256];
 
-  /* Compile match regex if provided */
-  if (matchexpr)
+  /* Compile match expression if provided */
+  if (matchexpr && UpdatePattern (&match_code, &match_data, matchexpr, "stream match expression"))
   {
-    match_code = pcre2_compile ((PCRE2_SPTR)matchexpr, PCRE2_ZERO_TERMINATED,
-                                PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
-
-    if (match_code == NULL)
-    {
-      pcre2_get_error_message (errcode, buffer, sizeof (buffer));
-
-      lprintf (0, "[%s] Error compiling match expression at %zu: %s",
-               cinfo->hostname, erroffset, buffer);
-
-      return NULL;
-    }
-
-    match_data = pcre2_match_data_create_from_pattern (match_code, NULL);
+    return NULL;
   }
 
   /* Get copy of streams as a Stack, sorted by stream ID */
@@ -524,31 +509,12 @@ info_add_connections (ClientInfo *cinfo, cJSON *root, const char *matchexpr)
 
   pcre2_code *match_code       = NULL;
   pcre2_match_data *match_data = NULL;
-  int errcode;
-  PCRE2_SIZE erroffset;
-  PCRE2_UCHAR buffer[256];
 
   /* Compile match expression if provided */
-  if (matchexpr)
+  if (matchexpr && UpdatePattern (&match_code, &match_data, matchexpr, "connection match expression"))
   {
-    match_code = pcre2_compile ((PCRE2_SPTR)matchexpr, PCRE2_ZERO_TERMINATED,
-                                PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
-
-    if (match_code == NULL)
-    {
-      pcre2_get_error_message (errcode, buffer, sizeof (buffer));
-
-      lprintf (0, "[%s] Error compiling match expression at %zu: %s",
-               cinfo->hostname, erroffset, buffer);
-
-      return NULL;
-    }
-
-fprintf (stderr, "DEBUG: compiled matchexpr=%p\n", matchexpr);
-
-    match_data = pcre2_match_data_create_from_pattern (match_code, NULL);
+    return NULL;
   }
-
 
   if ((connections = cJSON_AddObjectToObject (root, "connections")) == NULL)
   {

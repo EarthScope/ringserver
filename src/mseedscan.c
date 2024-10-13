@@ -1072,42 +1072,20 @@ WriteRecord (MSScanInfo *mssinfo, char *record, uint64_t reclen)
 static int
 Initialize (MSScanInfo *mssinfo)
 {
-  int errcode;
-  PCRE2_SIZE erroffset;
-  PCRE2_UCHAR buffer[256];
-
   /* Compile the match regex if specified */
-  if (*(mssinfo->matchstr) != '\0')
+  if (*(mssinfo->matchstr) != '\0' &&
+      UpdatePattern (&mssinfo->fnmatch, &mssinfo->fnmatch_data,
+                     mssinfo->matchstr, "msscan filename match expression"))
   {
-    /* Compile regex */
-    mssinfo->fnmatch = pcre2_compile ((PCRE2_SPTR)mssinfo->matchstr, PCRE2_ZERO_TERMINATED,
-                                      PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
-    if (mssinfo->fnmatch == NULL)
-    {
-      pcre2_get_error_message (errcode, buffer, sizeof (buffer));
-      lprintf (0, "%s(): Error compiling msscan match expression at %zu: %s",
-               __func__, erroffset, buffer);
-      return -1;
-    }
-
-    mssinfo->fnmatch_data = pcre2_match_data_create_from_pattern (mssinfo->fnmatch, NULL);
+    return -1;
   }
 
   /* Compile the reject regex if specified */
-  if (*(mssinfo->rejectstr) != '\0')
+  if (*(mssinfo->rejectstr) != '\0' &&
+      UpdatePattern (&mssinfo->fnreject, &mssinfo->fnreject_data,
+                     mssinfo->rejectstr, "msscan filename reject expression"))
   {
-    /* Compile regex */
-    mssinfo->fnreject = pcre2_compile ((PCRE2_SPTR)mssinfo->rejectstr, PCRE2_ZERO_TERMINATED,
-                                       PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
-    if (mssinfo->fnreject == NULL)
-    {
-      pcre2_get_error_message (errcode, buffer, sizeof (buffer));
-      lprintf (0, "%s(): Error compiling msscan reject expression at %zu: %s",
-               __func__, erroffset, buffer);
-      return -1;
-    }
-
-    mssinfo->fnreject_data = pcre2_match_data_create_from_pattern (mssinfo->fnreject, NULL);
+    return -1;
   }
 
   /* Calculate maximum allowed record length and allocate file read buffer */

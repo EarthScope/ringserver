@@ -1325,9 +1325,6 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
 
   pcre2_code *match_code       = NULL;
   pcre2_match_data *match_data = NULL;
-  int errcode;
-  PCRE2_SIZE erroffset;
-  PCRE2_UCHAR buffer[256];
 
   if (!cinfo || !connectionlist || !path)
     return -1;
@@ -1351,19 +1348,9 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
   }
 
   /* Compile match expression supplied with request */
-  if (matchlen > 0)
+  if (matchlen > 0 && UpdatePattern (&match_code, &match_data, matchstr, "connection match expression"))
   {
-    match_code = pcre2_compile ((PCRE2_SPTR)matchstr, PCRE2_ZERO_TERMINATED,
-                                PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);
-    if (match_code == NULL)
-    {
-      pcre2_get_error_message (errcode, buffer, sizeof (buffer));
-      lprintf (0, "[%s] %s(): Error compiling connection match expression at %zu: %s",
-               cinfo->hostname, __func__, erroffset, buffer);
-      matchlen = 0;
-    }
-
-    match_data = pcre2_match_data_create_from_pattern (match_code, NULL);
+    matchlen = 0;
   }
 
   /* Get current time */

@@ -2560,9 +2560,7 @@ CalcStats (ClientInfo *cinfo)
     else
       readeroffset_unwrapped = cinfo->reader->pktoffset;
 
-    fprintf (stderr, "latestoffset_unwrapped: %ld, readeroffset_unwrapped: %ld, earliestoffset: %ld\n", latestoffset_unwrapped, readeroffset_unwrapped, ringparams->earliestoffset);
-
-    /* Calculate percentage lag as position in ring where 0% = latest ID and 100% = earliest ID */
+    /* Calculate percentage lag as position in ring where 0% = latest offset and 100% = earliest offset */
     cinfo->percentlag = (int)(((double)(latestoffset_unwrapped - readeroffset_unwrapped) / (latestoffset_unwrapped - ringparams->earliestoffset)) * 100);
   }
   else

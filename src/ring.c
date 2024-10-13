@@ -1687,19 +1687,14 @@ static inline int64_t
 FindOffsetForID (RingParams *ringparams, uint64_t pktid, nstime_t *pkttime)
 {
   RingPacket *packet = NULL;
-
-  int64_t offset;
-  uint64_t latestid;
   int64_t latestoffset;
-  uint64_t earliestid;
   int64_t earliestoffset;
+  int64_t offset;
 
   if (!ringparams)
     return -1;
 
-  latestid       = ringparams->latestid;
   latestoffset   = ringparams->latestoffset;
-  earliestid     = ringparams->earliestid;
   earliestoffset = ringparams->earliestoffset;
 
   /* Ring is empty */
