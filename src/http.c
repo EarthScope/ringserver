@@ -1184,11 +1184,17 @@ GenerateStatus (ClientInfo *cinfo, char **status)
   snprintf (txbyterate, sizeof (txbyterate), "%.1f", cinfo->ringparams->txbyterate);
   snprintf (rxpacketrate, sizeof (rxpacketrate), "%.1f", cinfo->ringparams->rxpacketrate);
   snprintf (rxbyterate, sizeof (rxbyterate), "%.1f", cinfo->ringparams->rxbyterate);
-  snprintf (earliestpacketid, sizeof (earliestpacketid), "%" PRIu64, cinfo->ringparams->earliestid);
+  if (cinfo->ringparams->earliestid <= RINGID_MAXIMUM)
+    snprintf (earliestpacketid, sizeof (earliestpacketid), "%" PRIu64, cinfo->ringparams->earliestid);
+  else
+    strncpy (earliestpacketid, "NONE", sizeof (earliestpacketid));
   ms_nstime2timestr (cinfo->ringparams->earliestptime, earliestpacketcreate, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   ms_nstime2timestr (cinfo->ringparams->earliestdstime, earliestpacketstart, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   ms_nstime2timestr (cinfo->ringparams->earliestdetime, earliestpacketend, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-  snprintf (latestpacketid, sizeof (latestpacketid), "%" PRIu64, cinfo->ringparams->latestid);
+  if (cinfo->ringparams->latestid <= RINGID_MAXIMUM)
+    snprintf (latestpacketid, sizeof (latestpacketid), "%" PRIu64, cinfo->ringparams->latestid);
+  else
+    strncpy (latestpacketid, "NONE", sizeof (latestpacketid));
   ms_nstime2timestr (cinfo->ringparams->latestptime, latestpacketcreate, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   ms_nstime2timestr (cinfo->ringparams->latestdstime, latestpacketstart, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   ms_nstime2timestr (cinfo->ringparams->latestdetime, latestpacketend, ISOMONTHDAY_Z, NANO_MICRO_NONE);

@@ -1009,7 +1009,8 @@ HandleInfo (ClientInfo *cinfo, int socket)
     mxmlElementSetAttrf (status, "TXByteRate", "%.1f", cinfo->ringparams->txbyterate);
     mxmlElementSetAttrf (status, "RXPacketRate", "%.1f", cinfo->ringparams->rxpacketrate);
     mxmlElementSetAttrf (status, "RXByteRate", "%.1f", cinfo->ringparams->rxbyterate);
-    mxmlElementSetAttrf (status, "EarliestPacketID", "%" PRIu64, cinfo->ringparams->earliestid);
+    if (cinfo->ringparams->earliestid <= RINGID_MAXIMUM)
+      mxmlElementSetAttrf (status, "EarliestPacketID", "%" PRIu64, cinfo->ringparams->earliestid);
     ms_nstime2timestr (cinfo->ringparams->earliestptime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "EarliestPacketCreationTime",
                         (cinfo->ringparams->earliestptime != NSTUNSET) ? string : "-");
@@ -1019,7 +1020,8 @@ HandleInfo (ClientInfo *cinfo, int socket)
     ms_nstime2timestr (cinfo->ringparams->earliestdetime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "EarliestPacketDataEndTime",
                         (cinfo->ringparams->earliestdetime != NSTUNSET) ? string : "-");
-    mxmlElementSetAttrf (status, "LatestPacketID", "%" PRIu64, cinfo->ringparams->latestid);
+    if (cinfo->ringparams->latestid <= RINGID_MAXIMUM)
+      mxmlElementSetAttrf (status, "LatestPacketID", "%" PRIu64, cinfo->ringparams->latestid);
     ms_nstime2timestr (cinfo->ringparams->latestptime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     mxmlElementSetAttr (status, "LatestPacketCreationTime",
                         (cinfo->ringparams->latestptime != NSTUNSET) ? string : "-");

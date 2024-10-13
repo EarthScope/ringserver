@@ -107,7 +107,7 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
   ssize_t rv;
   RingPacket *packetptr;
   RingStream *streamptr;
-  char timestr[50];
+  char tmpstring[50];
 
   /* Sanity check input parameters */
   if (!volatileflag && (!ringfilename || !streamfilename))
@@ -326,12 +326,12 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     (*ringparams)->headersize     = headersize;
     (*ringparams)->corruptflag    = 0;
     (*ringparams)->fluxflag       = 0;
-    (*ringparams)->earliestid     = 0;
+    (*ringparams)->earliestid     = RINGID_NONE;
     (*ringparams)->earliestptime  = NSTUNSET;
     (*ringparams)->earliestdstime = NSTUNSET;
     (*ringparams)->earliestdetime = NSTUNSET;
     (*ringparams)->earliestoffset = -1;
-    (*ringparams)->latestid       = 0;
+    (*ringparams)->latestid       = RINGID_NONE;
     (*ringparams)->latestptime    = NSTUNSET;
     (*ringparams)->latestdstime   = NSTUNSET;
     (*ringparams)->latestdetime   = NSTUNSET;
@@ -469,22 +469,26 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
 
   /* Log the critical ring parameters if verbose enough */
   lprintf (2, "   maxoffset: %" PRIu64 ", headersize: %u", maxoffset, headersize);
-  lprintf (2, "   earliest packet ID: %" PRIu64 ", offset: %" PRIu64,
-           (*ringparams)->earliestid, (*ringparams)->earliestoffset);
-  ms_nstime2timestr ((*ringparams)->earliestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+  snprintf (tmpstring, sizeof (tmpstring), "%" PRIu64, (*ringparams)->earliestid);
+  lprintf (2, "   earliest packet ID: %s, offset: %" PRIu64,
+           ((*ringparams)->earliestid == RINGID_NONE) ? "NONE" : tmpstring,
+           (*ringparams)->earliestoffset);
+  ms_nstime2timestr ((*ringparams)->earliestptime, tmpstring, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   earliest packet creation time: %s",
-           ((*ringparams)->earliestptime == NSTUNSET) ? "NONE" : timestr);
-  ms_nstime2timestr ((*ringparams)->earliestdstime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+           ((*ringparams)->earliestptime == NSTUNSET) ? "NONE" : tmpstring);
+  ms_nstime2timestr ((*ringparams)->earliestdstime, tmpstring, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   earliest packet data start time: %s",
-           ((*ringparams)->earliestdstime == NSTUNSET) ? "NONE" : timestr);
-  lprintf (2, "   latest packet ID: %" PRIu64 ", offset: %" PRIu64,
-           (*ringparams)->latestid, (*ringparams)->latestoffset);
-  ms_nstime2timestr ((*ringparams)->latestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+           ((*ringparams)->earliestdstime == NSTUNSET) ? "NONE" : tmpstring);
+  snprintf (tmpstring, sizeof (tmpstring), "%" PRIu64, (*ringparams)->latestid);
+  lprintf (2, "   latest packet ID: %s, offset: %" PRIu64,
+           ((*ringparams)->latestid == RINGID_NONE) ? "NONE" : tmpstring,
+           (*ringparams)->latestoffset);
+  ms_nstime2timestr ((*ringparams)->latestptime, tmpstring, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   latest packet creation time: %s",
-           ((*ringparams)->latestptime == NSTUNSET) ? "NONE" : timestr);
-  ms_nstime2timestr ((*ringparams)->latestdstime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+           ((*ringparams)->latestptime == NSTUNSET) ? "NONE" : tmpstring);
+  ms_nstime2timestr ((*ringparams)->latestdstime, tmpstring, ISOMONTHDAY_Z, NANO_MICRO_NONE);
   lprintf (2, "   latest packet data start time: %s",
-           ((*ringparams)->latestdstime == NSTUNSET) ? "NONE" : timestr);
+           ((*ringparams)->latestdstime == NSTUNSET) ? "NONE" : tmpstring);
 
   return 0;
 } /* End of RingInitialize() */
@@ -792,6 +796,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
     newstream.earliestptime  = packet->pkttime;
     newstream.earliestid     = packet->pktid;
     newstream.earliestoffset = packet->offset;
+    newstream.latestoffset   = -1;
     /* The "latest" fields are populated later */
 
     /* Add new stream to index */
@@ -842,7 +847,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
   }
 
   /* Update entry for previous packet in stream */
-  if (stream->latestid > 0)
+  if (stream->latestoffset >= 0)
   {
     prevlatest = (RingPacket *)(ringparams->data + stream->latestoffset);
 
@@ -1163,7 +1168,8 @@ RingPosition (RingReader *reader, uint64_t pktid, nstime_t pkttime)
   {
     pktid = ringparams->latestid;
   }
-  else if (pktid > RINGID_MAXIMUM)
+
+  if (pktid > RINGID_MAXIMUM)
   {
     lprintf (0, "%s(): unsupported position value: %" PRIu64, __func__, pktid);
     return RINGID_ERROR;
