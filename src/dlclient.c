@@ -200,7 +200,11 @@ DLStreamPackets (ClientInfo *cinfo)
     lprintf (0, "[%s] Error reading next packet from ring", cinfo->hostname);
     return -1;
   }
-  else if (readid != 0)
+  else if (readid == RINGID_NONE)
+  {
+    return 0;
+  }
+  else
   {
     lprintf (3, "[%s] Read %s (%u bytes) packet ID %" PRIu64 " from ring",
              cinfo->hostname, cinfo->packet.streamid,
@@ -219,13 +223,8 @@ DLStreamPackets (ClientInfo *cinfo)
     if (cinfo->socketerr)
       return -1;
   }
-  /* Otherwise there was no next packet */
-  else
-  {
-    return 0;
-  }
 
-  return (readid) ? (int)cinfo->packet.datasize : 0;
+  return (int)cinfo->packet.datasize;
 } /* End of DLStreamPackets() */
 
 /***********************************************************************
@@ -390,7 +389,7 @@ HandleNegotiation (ClientInfo *cinfo)
             if (SendPacket (cinfo, "ERROR", "Error positioning reader", 0, 1, 1))
               return -1;
           }
-          else if (pktid == 0)
+          else if (pktid == RINGID_NONE)
           {
             if (SendPacket (cinfo, "ERROR", "Packet not found", 0, 1, 1))
               return -1;
@@ -418,6 +417,9 @@ HandleNegotiation (ClientInfo *cinfo)
         }
         else
         {
+          char timestr[32];
+          ms_nstime2timestr (nstime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+
           /* Position ring according to start time, use reverse search if limited */
           if (cinfo->timewinlimit == 1.0)
           {
@@ -438,18 +440,23 @@ HandleNegotiation (ClientInfo *cinfo)
 
           if (pktid == RINGID_ERROR)
           {
-            lprintf (0, "[%s] Error with RingAfter[Rev] (nstime: %" PRId64 ")",
-                     cinfo->hostname, nstime);
+            lprintf (0, "[%s] Error with RingAfter[Rev] time: %s [%" PRId64 "]",
+                     cinfo->hostname, timestr, nstime);
             if (SendPacket (cinfo, "ERROR", "Error positioning reader", 0, 1, 1))
               return -1;
           }
-          else if (pktid == 0)
+          else if (pktid == RINGID_NONE)
           {
+            lprintf (2, "[%s] No packet found for RingAfter time: %s [%" PRId64 "]",
+                     cinfo->hostname, timestr, cinfo->starttime);
             if (SendPacket (cinfo, "ERROR", "Packet not found", 0, 1, 1))
               return -1;
           }
           else
           {
+            lprintf (3, "[%s] Positioned to packet %" PRIu64 ", first after: %s",
+                     cinfo->hostname, pktid, timestr);
+
             snprintf (sendbuffer, sizeof (sendbuffer), "Positioned to packet ID %" PRIu64, pktid);
             if (SendPacket (cinfo, "OK", sendbuffer, pktid, 1, 1))
               return -1;
@@ -890,16 +897,16 @@ HandleRead (ClientInfo *cinfo)
   }
 
   /* Read the packet from the ring */
-  if ((readid = RingRead (cinfo->reader, reqid, &cinfo->packet, cinfo->packetdata)) == RINGID_ERROR)
+  readid = RingRead (cinfo->reader, reqid, &cinfo->packet, cinfo->packetdata);
+
+  if (readid == RINGID_ERROR)
   {
     lprintf (1, "[%s] Error with RingRead", cinfo->hostname);
 
     if (SendPacket (cinfo, "ERROR", "Error reading packet from ring", 0, 1, 1))
       return -1;
   }
-
-  /* Return packet not found error message if needed */
-  if (readid == 0)
+  else if (readid == RINGID_NONE)
   {
     snprintf (replystr, sizeof (replystr), "Packet %" PRIu64 " not found in ring", reqid);
     if (SendPacket (cinfo, "ERROR", replystr, 0, 1, 1))

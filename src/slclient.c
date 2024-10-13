@@ -266,7 +266,7 @@ SLHandleCmd (ClientInfo *cinfo)
                  cinfo->hostname, slinfo->startid);
         return -1;
       }
-      else if (retval == 0)
+      else if (retval == RINGID_NONE)
       {
         lprintf (0, "[%s] Could not find and position to packet ID: %" PRIu64,
                  cinfo->hostname, slinfo->startid);
@@ -305,10 +305,8 @@ SLHandleCmd (ClientInfo *cinfo)
     /* Set ring position based on time if start time specified and not a packet ID */
     if (cinfo->starttime && cinfo->starttime != NSTUNSET && !slinfo->startid)
     {
-      char timestr[31];
-
+      char timestr[32];
       ms_nstime2timestr (cinfo->starttime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-      readid = 0;
 
       /* Position ring according to start time, use reverse search if limited */
       if (cinfo->timewinlimit == 1.0)
@@ -330,12 +328,12 @@ SLHandleCmd (ClientInfo *cinfo)
 
       if (readid == RINGID_ERROR)
       {
-        lprintf (0, "[%s] Error with RingAfter time: %s [%" PRId64 "]",
+        lprintf (0, "[%s] Error with RingAfter[Rev] time: %s [%" PRId64 "]",
                  cinfo->hostname, timestr, cinfo->starttime);
         SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error positioning reader to start of time window");
         return -1;
       }
-      else if (readid == 0)
+      else if (readid == RINGID_NONE)
       {
         lprintf (2, "[%s] No packet found for RingAfter time: %s [%" PRId64 "], positioning to next packet",
                  cinfo->hostname, timestr, cinfo->starttime);
@@ -343,7 +341,7 @@ SLHandleCmd (ClientInfo *cinfo)
       }
       else
       {
-        lprintf (2, "[%s] Positioned to packet %" PRIu64 ", first after: %s",
+        lprintf (3, "[%s] Positioned to packet %" PRIu64 ", first after: %s",
                  cinfo->hostname, readid, timestr);
       }
     }
@@ -397,8 +395,20 @@ SLStreamPackets (ClientInfo *cinfo)
     lprintf (0, "[%s] Error reading next packet from ring", cinfo->hostname);
     return -1;
   }
-  else if (readid != 0 &&
-           (MS2_ISVALIDHEADER (cinfo->packetdata) ||
+  else if (readid == RINGID_NONE)
+  {
+    if (slinfo->dialup)
+    {
+      lprintf (2, "[%s] Dial-up mode reached end of buffer", cinfo->hostname);
+      SendData (cinfo, "END", 3);
+      return -1;
+    }
+    else
+    {
+      return 0;
+    }
+  }
+  else if ((MS2_ISVALIDHEADER (cinfo->packetdata) ||
             MS3_ISVALIDHEADER (cinfo->packetdata)))
   {
     lprintf (3, "[%s] Read %s (%u bytes) packet ID %" PRIu64 " from ring",
@@ -477,18 +487,11 @@ SLStreamPackets (ClientInfo *cinfo)
     }
     else
     {
-      readid = 0;
+      readid = RINGID_NONE;
     }
   }
-  /* If in dial-up mode check if we are at the end of the ring */
-  else if (readid == 0 && slinfo->dialup)
-  {
-    lprintf (2, "[%s] Dial-up mode reached end of buffer", cinfo->hostname);
-    SendData (cinfo, "END", 3);
-    return -1;
-  }
 
-  return (readid) ? (int)cinfo->packet.datasize : 0;
+  return (readid != RINGID_NONE) ? (int)cinfo->packet.datasize : 0;
 } /* End of SLStreamPackets() */
 
 /***********************************************************************

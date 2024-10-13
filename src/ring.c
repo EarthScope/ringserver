@@ -882,7 +882,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
  * data will only be returned if the packetdata pointer is not 0 and
  * points to already allocated memory.
  *
- * Returns the packet ID on success, 0 when the packet was not
+ * Returns the packet ID on success, RINGID_NONE when the packet was not
  * found and RINGID_ERROR on error.
  ***************************************************************************/
 uint64_t
@@ -892,7 +892,7 @@ RingRead (RingReader *reader, uint64_t reqid,
   RingParams *ringparams;
   RingPacket *pkt;
   nstime_t pkttime;
-  uint64_t pktid = 0;
+  uint64_t pktid = RINGID_NONE;
   int64_t offset = -1;
 
   if (!reader || !packet)
@@ -912,16 +912,10 @@ RingRead (RingReader *reader, uint64_t reqid,
     pktid = reqid;
   }
 
-  /* If requested ID is 0 it does not exist */
-  if (pktid == 0)
-  {
-    return 0;
-  }
-
   /* Find the offset to the packet if needed */
   if (offset < 0 && (offset = FindOffsetForID (ringparams, pktid, &pkttime)) < 0)
   {
-    return 0;
+    return RINGID_NONE;
   }
 
   pkt = (RingPacket *)(ringparams->data + offset);
@@ -936,7 +930,7 @@ RingRead (RingReader *reader, uint64_t reqid,
   /* Sanity check that the data was not overwritten during the copy */
   if (pktid != pkt->pktid)
   {
-    return 0;
+    return RINGID_NONE;
   }
 
   /* Update reader position value */
@@ -961,8 +955,8 @@ RingRead (RingReader *reader, uint64_t reqid,
  * position has fallen off the trailing edge of the ring and
  * reposition the search at the earliest packet.
  *
- * Returns positive packet ID on success, 0 when the packet was not
- * found and RINGID_ERROR on error.
+ * Returns packet ID on success, RINGID_NONE when no next packet
+ * and RINGID_ERROR on error.
  ***************************************************************************/
 uint64_t
 RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
@@ -996,7 +990,7 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
   /* If ring is empty return immediately */
   if (latestoffset < 0)
   {
-    return 0;
+    return RINGID_NONE;
   }
 
   /* Determine latest packet details directly to avoid race */
@@ -1018,16 +1012,14 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
       reader->dataend   = latestdetime;
 
       /* There is no next packet so return */
-      return 0;
+      return RINGID_NONE;
     }
     else if (reader->pktid == RINGID_LATEST)
     {
-      /* Return the latest packet */
       offset = latestoffset;
     }
     else if (reader->pktid == RINGID_EARLIEST)
     {
-      /* Return the earliest packet */
       offset = earliestoffset;
     }
     else
@@ -1069,7 +1061,7 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
       if (skipped >= 100)
       {
         lprintf (0, "%s(): skipped off trailing edge of buffer %d times", __func__, skipped);
-        return 0;
+        return RINGID_NONE;
       }
 
       skip = 1;
@@ -1112,7 +1104,7 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
 
   if (offset == eoboffset)
   {
-    return 0;
+    return RINGID_NONE;
   }
 
   /* Copy packet header */
@@ -1125,7 +1117,7 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
   /* Sanity check that the data was not overwritten during processing */
   if (pkttime != pkt->pkttime)
   {
-    return 0;
+    return RINGID_NONE;
   }
 
   return packet->pktid;
@@ -1143,7 +1135,7 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
  * If the packet is successfully found the RingReader.pktid will be
  * updated.
  *
- * Returns packet ID on success, 0 when the packet was not
+ * Returns packet ID on success, RINGID_NONE when the packet was not
  * found and RINGID_ERROR on error.
  ***************************************************************************/
 uint64_t
@@ -1180,7 +1172,7 @@ RingPosition (RingReader *reader, uint64_t pktid, nstime_t pkttime)
   /* Find the offset to the packet */
   if ((offset = FindOffsetForID (ringparams, pktid, &ptime)) < 0)
   {
-    return 0;
+    return RINGID_NONE;
   }
 
   pkt = (RingPacket *)(ringparams->data + offset);
@@ -1190,7 +1182,7 @@ RingPosition (RingReader *reader, uint64_t pktid, nstime_t pkttime)
   {
     if (pkttime != ptime)
     {
-      return 0;
+      return RINGID_NONE;
     }
   }
   datastart = pkt->datastart;
@@ -1199,7 +1191,7 @@ RingPosition (RingReader *reader, uint64_t pktid, nstime_t pkttime)
   /* Sanity check that the data was not overwritten during the copy */
   if (pktid != pkt->pktid)
   {
-    return 0;
+    return RINGID_NONE;
   }
 
   /* Update reader position value */
@@ -1237,7 +1229,7 @@ RingPosition (RingReader *reader, uint64_t pktid, nstime_t pkttime)
  * be updated.  The current read position is not changed if any errors
  * occur.
  *
- * Returns positive packet ID on success, 0 when the packet was not
+ * Returns packet ID on success, RINGID_NONE when the packet was not
  * found and RINGID_ERROR on error.
  ***************************************************************************/
 uint64_t
@@ -1317,7 +1309,7 @@ RingAfter (RingReader *reader, nstime_t reftime, int whence)
   /* Safety valve, if no packets were ever seen */
   if (!pkt1)
   {
-    return 0;
+    return RINGID_NONE;
   }
 
   /* Position to packet before match if requested and not the first packet */
@@ -1335,7 +1327,7 @@ RingAfter (RingReader *reader, nstime_t reftime, int whence)
   /* Sanity check that the data was not overwritten during the copy */
   if (pktid != pkt1->pktid)
   {
-    return 0;
+    return RINGID_NONE;
   }
 
   /* Update reader position value */
@@ -1373,7 +1365,7 @@ RingAfter (RingReader *reader, nstime_t reftime, int whence)
  * be updated.  The current read position is not changed if any errors
  * occur.
  *
- * Returns positive packet ID on success, 0 when the packet was not
+ * Returns packet ID on success, RINGID_NONE when the packet was not
  * found and -1 on error.
  ***************************************************************************/
 uint64_t
@@ -1460,7 +1452,7 @@ RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit,
   /* Safety valve, if no packets were ever seen */
   if (!pkt)
   {
-    return 0;
+    return RINGID_NONE;
   }
 
   /* Position to packet before match if requested */
@@ -1483,7 +1475,7 @@ RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit,
   /* Sanity check that the data was not overwritten during the copy */
   if (pktid != pkt->pktid)
   {
-    return 0;
+    return RINGID_NONE;
   }
 
   /* Update reader position value */
