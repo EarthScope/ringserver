@@ -5,12 +5,15 @@
  *
  * Mapping SeedLink sequence numbers <-> ring packet ID's:
  *
- * SeedLink sequence numbers are mapped directly to ring packet IDs.
- * With a large ring it is possible to have more IDs than fit into the
- * SeedLink sequence number address space (6 hexidecimal numbers,
- * maximum of 0xFFFFFF which is 16,777,215), an error will be logged
- * when IDs are encountered that are too large to map into a sequence
- * number.
+ * SeedLink v4 sequence numbers are directly mapped to ringer buffer
+ * packet IDs as both are unsigned 64-bt integers.
+ *
+ * SeedLink v3 sequence numbers are limited to 24-bit values.  They
+ * are mapped to ring packet IDs by combining the highest 40-bits of
+ * the latest ring packet ID with the 24-bit SeedLink sequence number.
+ * If the packet ID series is well behaved, increasing monotonically,
+ * this will result in v3 clients being able to resume from the last
+ * 16,777,215 packets received.
  *
  * The SeedLink protocol is designed with the concept of a station ID
  * where sequenences may be specific to each station ID.  Ringserver
@@ -887,20 +890,30 @@ HandleNegotiation (ClientInfo *cinfo)
     }
     else /* Protocol 3.x */
     {
-      unsigned int seq;
+      uint32_t seq;
 
       /* DATA|FETCH [seq_hex [start]] */
-      fields = sscanf (cinfo->recvbuf, "%*s %x %50s %c",
+      fields = sscanf (cinfo->recvbuf, "%*s %" SCNx32 " %50s %c",
                        &seq, starttimestr, &junk);
 
-      startpacket = seq;
+      if (cinfo->ringparams->latestid <= RINGID_MAXIMUM)
+      {
+        /* To map the 24-bit SeedLink v3 sequence into the 64-bit packet ID range
+         * combine the highest 40-bits of latest ID with lowest 24-bits of requested sequence */
+        startpacket = (cinfo->ringparams->latestid & 0xFFFFFFFFFF000000) | (seq & 0xFFFFFF);
+      }
+      else
+      {
+        startpacket = (seq & 0xFFFFFF);
+      }
     }
 
     /* SeedLink clients resume data flow by requesting: lastpacket + 1
      * The ring needs to be positioned to the actual last packet ID for RingReadNext(),
-     * so set the starting packet to the last actual packet received by the client. */
-    if (startpacket >= 0)
-      startpacket = (startpacket == 1) ? 0 : (startpacket - 1);
+     * so set the starting packet to the last actual packet received by the client.
+     * An unfortunate side-effect: resuming from sequence 0 is not possible. */
+    if (startpacket < RINGID_MAXIMUM && startpacket > 0)
+      startpacket = startpacket - 1;
 
     /* Make sure we got no extra arguments */
     if ((slinfo->proto_major == 4 && fields > 3) ||
@@ -1397,7 +1410,7 @@ HandleInfo_v4 (ClientInfo *cinfo)
   /* Parse INFO item and optional station and stream patterns */
   fields = sscanf (cinfo->recvbuf, "%*s %63s %63s %63s %c", item, station, stream, &junk);
 
-  fprintf (stderr, "DEBUG: fields=%d item='%s' station='%s' stream='%s'\n", fields, item, station, stream);
+  //fprintf (stderr, "DEBUG: fields=%d item='%s' station='%s' stream='%s'\n", fields, item, station, stream);
 
   if (fields == 0)
   {
@@ -1568,7 +1581,7 @@ SendReply (ClientInfo *cinfo, char *reply, ErrorCode code, char *extreply)
       snprintf (sendstr, sizeof (sendstr), "%s\r\n", reply);
   }
 
-  fprintf (stderr, "DEBUG, sending response: '%.*s'\n", (int)strcspn (sendstr, "\r\n"), sendstr);
+  //fprintf (stderr, "DEBUG, sending response: '%.*s'\n", (int)strcspn (sendstr, "\r\n"), sendstr);
 
   /* Send the reply */
   if (SendData (cinfo, sendstr, strlen (sendstr)))
@@ -1603,7 +1616,7 @@ SendPacket (uint64_t pktid, char *payload, uint32_t payloadlen,
   {
     l_staidlen = (staid) ? (uint8_t)strlen (staid) : 0;
 
-    /* V4 header values are in little-endan byte order */
+    /* V4 header values are little-endian byte order */
     if (ms_bigendianhost ())
     {
       ms_gswap4 (&payloadlen);
@@ -1623,19 +1636,13 @@ SendPacket (uint64_t pktid, char *payload, uint32_t payloadlen,
   }
   else /* Create v3 header */
   {
-    /* Check that sequence number is not too big */
-    if (pktid > 0xFFFFFF)
-    {
-      lprintf (0, "[%s] sequence number too large for SeedLink: %" PRIu64,
-               cinfo->hostname, pktid);
-    }
-
-    /* Create SeedLink header: signature + sequence number */
-    snprintf (header, sizeof (header), "SL%06" PRIX64, pktid);
+    /* Create v3 SeedLink header: signature + sequence number
+     * Use ony the lowest 24-bits of pktid, maximum allowed in v3 sequence */
+    snprintf (header, sizeof (header), "SL%06X", (uint32_t)(pktid & 0xFFFFFF));
     headerlen = SLHEADSIZE_V3;
   }
 
-  fprintf (stderr, "DEBUG, sending packet length %u, header length: %zu, sum: %zu\n", payloadlen, headerlen, payloadlen + headerlen);
+  //fprintf (stderr, "DEBUG, sending packet length %u, header length: %zu, sum: %zu\n", payloadlen, headerlen, payloadlen + headerlen);
 
   if (SendDataMB (cinfo, (void *[]){header, payload}, (size_t[]){headerlen, payloadlen}, 2))
     return -1;
