@@ -315,15 +315,15 @@ HandleNegotiation (ClientInfo *cinfo)
   else if (!strncasecmp (cinfo->recvbuf, "POSITION", 8))
   {
     char subcmd[11];
-    char value[31];
-    char subvalue[31];
+    char value[32];
+    char subvalue[32];
     uint64_t pktid = 0;
     nstime_t nstime;
 
     OKGO = 1;
 
     /* Parse sub-command and value from request */
-    fields = sscanf (cinfo->recvbuf, "%*s %10s %30s %30s %c",
+    fields = sscanf (cinfo->recvbuf, "%*s %10s %31s %31s %c",
                      subcmd, value, subvalue, &junk);
 
     /* Make sure the subcommand, value and subvalue fields are terminated */

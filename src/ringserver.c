@@ -2954,7 +2954,7 @@ SignalThread (void *arg)
 static void
 PrintHandler ()
 {
-  char timestr[31];
+  char timestr[32];
 
   lprintf (1, "Ring parameters, ringsize: %" PRIu64 ", pktsize: %u (%lu)",
            ringparams->ringsize, ringparams->pktsize,

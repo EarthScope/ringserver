@@ -147,13 +147,13 @@ WriteTLog (ClientInfo *cinfo, int reset)
   struct tm starttm;
   struct tm endtm;
 
-  char conntime[30];
-  char currtime[30];
-  char txfilename[500];
-  char rxfilename[500];
-  char *modestr = "";
-  FILE *txfp    = 0;
-  FILE *rxfp    = 0;
+  char txfilename[500] = {0};
+  char rxfilename[500] = {0};
+  char conntime[32]    = {0};
+  char currtime[32]    = {0};
+  char *modestr        = "";
+  FILE *txfp           = NULL;
+  FILE *rxfp           = NULL;
 
   /* If the base directory is not specified we are done */
   if (!TLogParams.tlogbasedir)
