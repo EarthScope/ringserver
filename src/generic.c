@@ -286,3 +286,40 @@ IsAllDigits (char *string)
 
   return 1;
 } /* End of IsAllDigits() */
+
+/*********************************************************************
+ * HumanSizeString:
+ *
+ * Convert a size in bytes to a human readable string in KiB, MiB,
+ * GiB, etc.
+ *
+ * A maximum of sizestringlen characters will be written to sizestring
+ * and an error will be returned if the string would be longer.
+ *
+ * Return 0 on success and -1 on error.
+ *********************************************************************/
+int
+HumanSizeString (uint64_t bytes, char *sizestring, size_t sizestringlen)
+{
+  const char *units[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"};
+
+  double size = (double)bytes;
+  int printed;
+  int idx = 0;
+
+  if (!sizestring)
+    return -1;
+
+  while (size >= 1024.0 && idx < 7)
+  {
+    size /= 1024.0;
+    idx++;
+  }
+
+  if (idx == 0)
+    printed = snprintf (sizestring, sizestringlen, "%" PRIu64 " %s", bytes, units[idx]);
+  else
+    printed = snprintf (sizestring, sizestringlen, "%.1f %s", size, units[idx]);
+
+  return (printed < 0 || printed >= sizestringlen) ? -1 : 0;
+} /* End of HumanSizeString() */

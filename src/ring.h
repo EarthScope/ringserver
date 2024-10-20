@@ -161,6 +161,7 @@ extern uint64_t RingReadNext (RingReader *reader, RingPacket *packet, char *pack
 extern uint64_t RingPosition (RingReader *reader, uint64_t pktid, nstime_t pkttime);
 extern uint64_t RingAfter (RingReader *reader, nstime_t reftime, int whence);
 extern uint64_t RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit, int whence);
+extern void LogRingParameters (RingParams *ringparams);
 extern int UpdatePattern (pcre2_code **code, pcre2_match_data **data,
                           const char *pattern, const char *description);
 extern Stack* GetStreamsStack (RingParams *ringparams, RingReader *reader);

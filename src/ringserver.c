@@ -2444,9 +2444,9 @@ AddServerThread (unsigned int type, void *params)
  * string is terminated with the following suffixes the specified
  * scaling will be applied:
  *
- * 'K' or 'k' : kilobytes - value * 1024
- * 'M' or 'm' : megabytes - value * 1024*1024
- * 'G' or 'g' : gigabytes - value * 1024*1024*1024
+ * 'K' or 'k' : kibibytes - value * 1024
+ * 'M' or 'm' : mebibytes - value * 1024*1024
+ * 'G' or 'g' : gibibytes - value * 1024*1024*1024
  *
  * Returns a size in bytes on success and 0 on error.
  ***************************************************************************/
@@ -2954,25 +2954,7 @@ SignalThread (void *arg)
 static void
 PrintHandler ()
 {
-  char timestr[32];
-
-  lprintf (1, "Ring parameters, ringsize: %" PRIu64 ", pktsize: %u (%lu)",
-           ringparams->ringsize, ringparams->pktsize,
-           ringparams->pktsize - sizeof (RingPacket));
-  lprintf (2, "   maxoffset: %" PRIu64 ", headersize: %u",
-           ringparams->maxoffset, ringparams->headersize);
-  ms_nstime2timestr (ringparams->earliestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-  lprintf (2, "   earliest packet ID: %" PRIu64 ", offset: %" PRIu64 ", time: %s",
-           ringparams->earliestid, ringparams->earliestoffset,
-           (ringparams->earliestptime == NSTUNSET) ? "NONE" : timestr);
-  ms_nstime2timestr (ringparams->latestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-  lprintf (2, "   latest packet ID: %" PRIu64 ", offset: %" PRIu64 ", time: %s",
-           ringparams->latestid, ringparams->latestoffset,
-           (ringparams->latestptime == NSTUNSET) ? "NONE" : timestr);
-  lprintf (2, "   TX packet rate: %g, TX byte rate: %g",
-           ringparams->txpacketrate, ringparams->txbyterate);
-  lprintf (2, "   RX packet rate: %g, RX byte rate: %g",
-           ringparams->rxpacketrate, ringparams->rxbyterate);
+  LogRingParameters (ringparams);
 }
 
 /***************************************************************************
