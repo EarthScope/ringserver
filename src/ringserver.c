@@ -101,7 +101,7 @@ static int ConfigMSWrite (char *value);
 static int AddListenThreads (ListenPortParams *lpp);
 static int AddMSeedScanThread (char *configstr);
 static int AddServerThread (unsigned int type, void *params);
-static uint64_t CalcSize (char *sizestr);
+static uint64_t CalcSize (const char *sizestr);
 static int CalcStats (ClientInfo *cinfo);
 static int AddIPNet (IPNet **pplist, char *network, char *limitstr);
 static IPNet *MatchIP (IPNet *list, struct sockaddr *addr);
@@ -110,13 +110,15 @@ static void *SignalThread (void *arg);
 static void PrintHandler ();
 static void Usage (int level);
 
+#define GIBIBYTE (1024ULL * 1024ULL * 1024ULL)
+
 static char *configfile         = NULL;                      /* Configuration file */
 static time_t configfilemtime   = 0;                         /* Modification time of configuration file */
 static uint32_t maxclients      = 600;                       /* Enforce maximum number of clients */
 static uint32_t maxclientsperip = 0;                         /* Enforce maximum number of clients per IP */
 static uint32_t clienttimeout   = 3600;                      /* Drop clients if no exchange within this limit */
 static char *ringdir            = NULL;                      /* Directory for ring files */
-static uint64_t ringsize        = 1073741824;                /* Size of ring buffer file (1 gigabyte) */
+static uint64_t ringsize        = GIBIBYTE;                  /* Size of ring buffer file (1 gibibyte) */
 static uint32_t pktsize         = sizeof (RingPacket) + 512; /* Ring packet size */
 static uint8_t memorymapring    = 1;                         /* Flag to control mmap'ing of packet buffer */
 static uint8_t volatilering     = 0;                         /* Flag to control if ring is volatile or not */
@@ -1220,6 +1222,12 @@ ProcessParam (int argcount, char **argvec)
     else if (strcmp (argvec[optind], "-Rs") == 0)
     {
       ringsize = CalcSize (GetOptVal (argcount, argvec, optind++));
+
+      if (ringsize == 0)
+      {
+        lprintf (0, "Error with -Rs option");
+        exit (1);
+      }
     }
     else if (strcmp (argvec[optind], "-Rp") == 0)
     {
@@ -1597,6 +1605,12 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
       svalue[sizeof (svalue) - 1] = '\0';
 
       ringsize = CalcSize (svalue);
+
+      if (ringsize == 0)
+      {
+        lprintf (0, "Error with RingSize config file line: %s", ptr);
+        return -1;
+      }
     }
     else if (!dynamiconly && !strncasecmp ("MaxPacketID", ptr, 11))
     {
@@ -2447,75 +2461,92 @@ AddServerThread (unsigned int type, void *params)
  * 'K' or 'k' : kibibytes - value * 1024
  * 'M' or 'm' : mebibytes - value * 1024*1024
  * 'G' or 'g' : gibibytes - value * 1024*1024*1024
+ * 'T' or 't' : tebibytes - value * 1024*1024*1024*1024
  *
  * Returns a size in bytes on success and 0 on error.
  ***************************************************************************/
 static uint64_t
-CalcSize (char *sizestr)
+CalcSize (const char *sizestr)
 {
   uint64_t size = 0;
-  char *parsestr;
-  int termchar;
+  double dsize;
+  size_t length;
+  const char *lastchar;
+  char *endptr;
 
   if (!sizestr)
     return 0;
 
-  if (!(parsestr = strdup (sizestr)))
+  length = strlen (sizestr);
+
+  if (length == 0)
     return 0;
 
-  termchar = strlen (parsestr) - 1;
+  lastchar = sizestr + length - 1;
 
-  if (termchar <= 0)
-    return 0;
+  /* For kibibytes */
+  if (*lastchar == 'K' || *lastchar == 'k')
+  {
+    dsize = strtod (sizestr, &endptr);
 
-  /* For kilobytes */
-  if (parsestr[termchar] == 'K' || parsestr[termchar] == 'k')
-  {
-    parsestr[termchar] = '\0';
-    size               = strtoull (parsestr, NULL, 10);
-    if (!size)
+    if (dsize < 0 || endptr != lastchar)
     {
-      lprintf (0, "CalcSize(): Error converting %s to integer", parsestr);
+      lprintf (0, "%s(): Error converting %s to positive integer", __func__, sizestr);
       return 0;
     }
-    size *= 1024;
+
+    size = dsize * 1024 + 0.5;
   }
-  /* For megabytes */
-  else if (parsestr[termchar] == 'M' || parsestr[termchar] == 'm')
+  /* For mebibytes */
+  else if (*lastchar == 'M' || *lastchar == 'm')
   {
-    parsestr[termchar] = '\0';
-    size               = strtoull (parsestr, NULL, 10);
-    if (!size)
+    dsize = strtod (sizestr, &endptr);
+
+    if (dsize < 0 || endptr != lastchar)
     {
-      lprintf (0, "CalcSize(): Error converting %s to integer", parsestr);
+      lprintf (0, "%s(): Error converting %s to positive integer", __func__, sizestr);
       return 0;
     }
-    size *= 1024 * 1024;
+
+    size = dsize * 1024 * 1024 + 0.5;
   }
-  /* For gigabytes */
-  else if (parsestr[termchar] == 'G' || parsestr[termchar] == 'g')
+  /* For gibibytes */
+  else if (*lastchar == 'G' || *lastchar == 'g')
   {
-    parsestr[termchar] = '\0';
-    size               = strtoull (parsestr, NULL, 10);
-    if (!size)
+    dsize = strtod (sizestr, &endptr);
+
+    if (dsize < 0 || endptr != lastchar)
     {
-      lprintf (0, "CalcSize(): Error converting %s to integer", parsestr);
+      lprintf (0, "%s(): Error converting %s to positive integer", __func__, sizestr);
       return 0;
     }
-    size *= 1024 * 1024 * 1024;
+
+    size = dsize * 1024 * 1024 * 1024 + 0.5;
   }
+  /* For tebibytes */
+  else if (*lastchar == 'T' || *lastchar == 't')
+  {
+    dsize = strtod (sizestr, &endptr);
+
+    if (dsize < 0 || endptr != lastchar)
+    {
+      lprintf (0, "%s(): Error converting %s to positive integer", __func__, sizestr);
+      return 0;
+    }
+
+    size = dsize * 1024 * 1024 * 1024 * 1024 + 0.5;
+  }
+  /* Otherwise no recognized suffix */
   else
   {
-    size = strtoull (parsestr, NULL, 10);
-    if (!size)
+    size = (uint64_t)strtoull (sizestr, &endptr, 10);
+
+    if (size < 0 || *endptr != '\0')
     {
-      lprintf (0, "CalcSize(): Error converting %s to integer", parsestr);
+      lprintf (0, "%s(): Error converting %s to positive integer", __func__, sizestr);
       return 0;
     }
   }
-
-  if (parsestr)
-    free (parsestr);
 
   return size;
 } /* End of CalcSize() */
@@ -2976,7 +3007,7 @@ Usage (int level)
                    " -m maxclnt     Maximum number of concurrent clients (currently %d)\n"
                    " -M maxperIP    Maximum number of concurrent clients per address (currently %d)\n"
                    " -Rd ringdir    Directory for ring buffer files, required\n"
-                   " -Rs bytes      Ring packet buffer file size in bytes (default 1 Gigabyte)\n"
+                   " -Rs bytes      Ring packet buffer file size in bytes (default 1 Gibibyte)\n"
                    " -Rp pktsize    Maximum ring packet data size in bytes (currently %" PRIu64 ")\n"
                    " -NOMM          Do not memory map the packet buffer, use memory instead\n"
                    " -L port        Listen for connections on port, all protocols (default off)\n"
