@@ -396,14 +396,14 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     close (streamidxfd);
   }
 
-  if ((*ringparams)->earliestoffset >= (*ringparams)->maxoffset)
+  if ((*ringparams)->earliestoffset > (*ringparams)->maxoffset)
   {
-    lprintf (0, "%s(): error earliest offset >= maxoffset, ring corrupted", __func__);
+    lprintf (0, "%s(): error earliest offset > maxoffset, ring corrupted", __func__);
     corruptring = 1;
   }
-  if ((*ringparams)->latestoffset >= (*ringparams)->maxoffset)
+  if ((*ringparams)->latestoffset > (*ringparams)->maxoffset)
   {
-    lprintf (0, "%s(): error latest offset >= maxoffset, ring corrupted", __func__);
+    lprintf (0, "%s(): error latest offset > maxoffset, ring corrupted", __func__);
     corruptring = 1;
   }
 
