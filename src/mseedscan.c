@@ -1039,6 +1039,7 @@ WriteRecord (MSScanInfo *mssinfo, char *record, uint64_t reclen)
   packet.datastart = mssinfo->msr->starttime;
   packet.dataend   = msr3_endtime (mssinfo->msr);
   packet.datasize  = (uint32_t)mssinfo->msr->reclen;
+  packet.pktid     = RINGID_NONE;
 
   /* Add the packet to the ring */
   if ((rv = RingWrite (mssinfo->ringparams, &packet, record, packet.datasize)))

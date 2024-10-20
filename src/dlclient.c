@@ -694,10 +694,16 @@ HandleWrite (ClientInfo *cinfo)
 
   dlinfo = (DLInfo *)cinfo->extinfo;
 
-  /* Parse command parameters: WRITE <streamid> <datastart> <dataend> <flags> <datasize> */
-  if (sscanf (cinfo->recvbuf, "%*s %100s %" SCNd64 " %" SCNd64 " %100s %u",
-              streamid, &(cinfo->packet.datastart), &(cinfo->packet.dataend),
-              flags, &(cinfo->packet.datasize)) != 5)
+  /* Parse command parameters: WRITE <streamid> <datastart> <dataend> <flags> <datasize> [pktid] */
+  rv = sscanf (cinfo->recvbuf, "%*s %100s %" SCNd64 " %" SCNd64 " %100s %" SCNu32 " %" SCNu64,
+               streamid,
+               &(cinfo->packet.datastart),
+               &(cinfo->packet.dataend),
+               flags,
+               &(cinfo->packet.datasize),
+               &(cinfo->packet.pktid));
+
+  if (rv < 5)
   {
     lprintf (1, "[%s] Error parsing WRITE parameters: %.100s",
              cinfo->hostname, cinfo->recvbuf);
@@ -705,6 +711,12 @@ HandleWrite (ClientInfo *cinfo)
     SendPacket (cinfo, "ERROR", "Error parsing WRITE command parameters", 0, 1, 1);
 
     return -1;
+  }
+
+  /* Set packet ID to RINGID_NONE if not provided */
+  if (rv == 5 || (rv == 6 && strchr (flags, 'I') == NULL))
+  {
+    cinfo->packet.pktid = RINGID_NONE;
   }
 
   /* Translate legacy stream ID: NN_SSSSS_LL_CCC/MSEED
@@ -1408,7 +1420,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
  *
  * Create and send a packet from given header and packet data strings.
  * The header and packet strings must be NULL-terminated.  If the data
- * argument is NULL a header-only packet will be send.  If the
+ * argument is NULL a header-only packet will be sent.  If the
  * addvalue argument is true the value argument will be appended to
  * the header.  If the addsize argument is true the size of the packet
  * string will be appended to the header.

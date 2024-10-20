@@ -726,7 +726,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
   }
 
   /* Update new packet details */
-  packet->pktid        = pktid;
+  packet->pktid        = (packet->pktid == RINGID_NONE) ? pktid : packet->pktid;
   packet->offset       = offset;
   packet->pkttime      = NSnow ();
   packet->nextinstream = -1;
