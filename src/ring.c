@@ -972,6 +972,12 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
   /* If ring is empty return immediately */
   if (latestoffset < 0)
   {
+    /* For readers already streaming data, position them to the eventual earliest */
+    if (reader->pktoffset < 0 && reader->pktid == RINGID_NEXT)
+    {
+      reader->pktid = RINGID_EARLIEST;
+    }
+
     return RINGID_NONE;
   }
 

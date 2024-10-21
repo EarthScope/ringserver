@@ -65,7 +65,7 @@ typedef struct ClientInfo
   char        clientid[100];/* Client identifier string */
   uint8_t     state;        /* Client state flag */
   uint8_t     type;         /* Client type flag */
-  uint8_t     protocols;    /* Procotol flags for this client */
+  uint8_t     protocols;    /* Protocol flags for this client */
   uint8_t     websocket;    /* Flag identifying websocket connection */
   union {
     uint32_t one;
@@ -92,9 +92,9 @@ typedef struct ClientInfo
   int         percentlag;   /* Percent lag of client in ring buffer */
   nstime_t    lastxchange;  /* Time of last data transmission or reception */
   uint64_t    txpackets[2]; /* Track total number of packets transmitted to client */
-  double      txpacketrate; /* Track rate of packet trasmission */
+  double      txpacketrate; /* Track rate of packet transmission */
   uint64_t    txbytes[2];   /* Track total number of data bytes transmitted */
-  double      txbyterate;   /* Track rate of data byte trasmission */
+  double      txbyterate;   /* Track rate of data byte transmission */
   uint64_t    rxpackets[2]; /* Track total number of packets received from client */
   double      rxpacketrate; /* Track rate of packet reception */
   uint64_t    rxbytes[2];   /* Track total number of data bytes received */

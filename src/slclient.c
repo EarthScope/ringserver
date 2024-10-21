@@ -555,8 +555,6 @@ HandleNegotiation (ClientInfo *cinfo)
 
   slinfo = (SLInfo *)cinfo->extinfo;
 
-  fprintf (stderr, "DEBUG %s: received '%s'\n", __func__, cinfo->recvbuf);
-
   /* HELLO (v3.x and v4.0) - Return server version and ID */
   if (!strncasecmp (cinfo->recvbuf, "HELLO", 5))
   {
@@ -1410,8 +1408,6 @@ HandleInfo_v4 (ClientInfo *cinfo)
   /* Parse INFO item and optional station and stream patterns */
   fields = sscanf (cinfo->recvbuf, "%*s %63s %63s %63s %c", item, station, stream, &junk);
 
-  //fprintf (stderr, "DEBUG: fields=%d item='%s' station='%s' stream='%s'\n", fields, item, station, stream);
-
   if (fields == 0)
   {
     lprintf (0, "[%s] INFO requested without a level", cinfo->hostname);
@@ -1581,8 +1577,6 @@ SendReply (ClientInfo *cinfo, char *reply, ErrorCode code, char *extreply)
       snprintf (sendstr, sizeof (sendstr), "%s\r\n", reply);
   }
 
-  //fprintf (stderr, "DEBUG, sending response: '%.*s'\n", (int)strcspn (sendstr, "\r\n"), sendstr);
-
   /* Send the reply */
   if (SendData (cinfo, sendstr, strlen (sendstr)))
     return -1;
@@ -1641,8 +1635,6 @@ SendPacket (uint64_t pktid, char *payload, uint32_t payloadlen,
     snprintf (header, sizeof (header), "SL%06X", (uint32_t)(pktid & 0xFFFFFF));
     headerlen = SLHEADSIZE_V3;
   }
-
-  //fprintf (stderr, "DEBUG, sending packet length %u, header length: %zu, sum: %zu\n", payloadlen, headerlen, payloadlen + headerlen);
 
   if (SendDataMB (cinfo, (void *[]){header, payload}, (size_t[]){headerlen, payloadlen}, 2))
     return -1;
