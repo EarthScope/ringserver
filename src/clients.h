@@ -32,19 +32,26 @@ extern "C" {
 
 #include "ring.h"
 #include "rbtree.h"
+#include "ringserver.h"
 #include "dsarchive.h"
 
 /* Client types */
-#define CLIENT_UNDETERMINED 0
-#define CLIENT_DATALINK     1
-#define CLIENT_SEEDLINK     2
-#define CLIENT_HTTP         3
+typedef enum
+{
+  CLIENT_UNDETERMINED,
+  CLIENT_DATALINK,
+  CLIENT_SEEDLINK,
+  CLIENT_HTTP
+} ClientType;
 
 /* Client states */
-#define STATE_COMMAND       1  /* Initial, base, command state */
-#define STATE_STATION       2  /* SeedLink STATION negotiation */
-#define STATE_RINGCONFIG    3  /* SeedLink ring configuration */
-#define STATE_STREAM        4  /* Data streaming */
+typedef enum
+{
+  STATE_COMMAND,    /* Initial command state */
+  STATE_STATION,    /* SeedLink STATION negotiation */
+  STATE_RINGCONFIG, /* SeedLink ring configuration */
+  STATE_STREAM      /* Data streaming */
+} ClientState;
 
 /* Connection information for client threads */
 typedef struct ClientInfo
@@ -63,9 +70,9 @@ typedef struct ClientInfo
   char        portstr[32];  /* Remote host port */
   char        hostname[200];/* Remote hostname */
   char        clientid[100];/* Client identifier string */
-  uint8_t     state;        /* Client state flag */
-  uint8_t     type;         /* Client type flag */
-  uint8_t     protocols;    /* Protocol flags for this client */
+  ClientState state;        /* Client state flag */
+  ClientType  type;         /* Client type flag */
+  ListenProtocols protocols; /* Protocol flags for this client */
   uint8_t     websocket;    /* Flag identifying websocket connection */
   union {
     uint32_t one;
@@ -126,7 +133,7 @@ extern int RecvData (ClientInfo *cinfo, char *buffer, size_t buflen);
 
 extern int RecvLine (ClientInfo *cinfo);
 
-extern int GenProtocolString (uint8_t protocols, char *protocolstr, size_t maxlength);
+extern int GenProtocolString (ListenProtocols protocols, char *protocolstr, size_t maxlength);
 
 extern StreamNode *GetStreamNode (RBTree *tree, pthread_mutex_t *plock,
 				  char *streamid, int *new);

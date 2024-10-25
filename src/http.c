@@ -1368,7 +1368,7 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
   while (loopctp)
   {
     /* Skip if client thread is not in ACTIVE state */
-    if (!(loopctp->td->td_flags & TDF_ACTIVE))
+    if (loopctp->td->td_state != TDS_ACTIVE)
     {
       loopctp = loopctp->next;
       continue;

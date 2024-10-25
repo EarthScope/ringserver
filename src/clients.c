@@ -39,7 +39,6 @@
 #include "http.h"
 #include "logging.h"
 #include "rbtree.h"
-#include "ringserver.h"
 #include "slclient.h"
 
 /* Progressive throttle stepping and maximum in microseconds */
@@ -208,7 +207,7 @@ ClientThread (void *arg)
 
     /* Set thread closing status */
     pthread_mutex_lock (&(mytdp->td_lock));
-    mytdp->td_flags = TDF_CLOSING;
+    mytdp->td_state = TDS_CLOSING;
     pthread_mutex_unlock (&(mytdp->td_lock));
 
     if (cinfo->sendbuf)
@@ -236,12 +235,12 @@ ClientThread (void *arg)
 
   /* Set thread active status */
   pthread_mutex_lock (&(mytdp->td_lock));
-  if (mytdp->td_flags == TDF_SPAWNING)
-    mytdp->td_flags = TDF_ACTIVE;
+  if (mytdp->td_state == TDS_SPAWNING)
+    mytdp->td_state = TDS_ACTIVE;
   pthread_mutex_unlock (&(mytdp->td_lock));
 
   /* Main client loop, delegating processing and data flow */
-  while (mytdp->td_flags != TDF_CLOSE)
+  while (mytdp->td_state != TDS_CLOSE)
   {
     /* Increment throttle if not at maximum */
     if (throttleusec < THROTTLE_MAXIMUM)
@@ -399,7 +398,7 @@ ClientThread (void *arg)
 
   /* Set thread CLOSING status, locking entire client list */
   pthread_mutex_lock (&cthreads_lock);
-  mytdp->td_flags = TDF_CLOSING;
+  mytdp->td_state = TDS_CLOSING;
   pthread_mutex_unlock (&cthreads_lock);
 
   /* Close client socket */
@@ -475,7 +474,7 @@ ClientThread (void *arg)
 
   /* Set thread CLOSED status */
   pthread_mutex_lock (&(mytdp->td_lock));
-  mytdp->td_flags = TDF_CLOSED;
+  mytdp->td_state = TDS_CLOSED;
   pthread_mutex_unlock (&(mytdp->td_lock));
 
   return NULL;
@@ -1109,13 +1108,12 @@ RecvLine (ClientInfo *cinfo)
 /***************************************************************************
  * GenProtocolString:
  *
- * Generate a string containing the names of the protocols specified
- * by the protocols flag.
+ * Generate a string containing the names of the given protocols.
  *
  * Return length of string in protocolstr on success or 0 for error.
  ***************************************************************************/
 int
-GenProtocolString (uint8_t protocols, char *protocolstr, size_t maxlength)
+GenProtocolString (ListenProtocols protocols, char *protocolstr, size_t maxlength)
 {
   int length;
   char *family;

@@ -546,7 +546,7 @@ info_add_connections (ClientInfo *cinfo, cJSON *root, const char *matchexpr)
       }
 
     /* Skip if client thread is not in ACTIVE state */
-    if (!(loopctp->td->td_flags & TDF_ACTIVE))
+    if (loopctp->td->td_state != TDS_ACTIVE)
     {
       loopctp = loopctp->next;
       continue;

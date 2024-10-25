@@ -32,46 +32,57 @@ extern "C" {
 #define PACKAGE   "ringserver"
 #define VERSION   "4.0.0"
 
-/* Thread data flags */
-#define TDF_SPAWNING    (1<<0)          /* Thread is now spawning   */
-#define TDF_ACTIVE      (1<<1)          /* If set, thread is active */
-#define TDF_CLOSE       (1<<2)          /* If set, thread closes    */
-#define TDF_CLOSING     (1<<3)          /* Thread in close process  */
-#define TDF_CLOSED      (1<<4)          /* Thread is closed         */
+/* Thread states */
+typedef enum
+{
+  TDS_SPAWNING, /* Thread is now spawning */
+  TDS_ACTIVE,   /* If set, thread is active */
+  TDS_CLOSE,    /* If set, thread closes */
+  TDS_CLOSING,  /* Thread in close process */
+  TDS_CLOSED    /* Thread is closed */
+} ThreadState;
 
 /* Thread data associated with most threads */
 struct thread_data {
   pthread_mutex_t td_lock;
   pthread_t       td_id;
-  int             td_flags;
+  ThreadState     td_state;
   int             td_done;
   void           *td_prvtptr;
 };
 
 /* Server thread types */
-#define LISTEN_THREAD     1
-#define MSEEDSCAN_THREAD  2
-
-/* Listen thread protocols */
-#define PROTO_DATALINK  0x01
-#define PROTO_SEEDLINK  0x02
-#define PROTO_HTTP      0x04
-#define FAMILY_IPv4     0x08
-#define FAMILY_IPv6     0x10
-
-#define PROTO_ALL (PROTO_DATALINK | PROTO_SEEDLINK | PROTO_HTTP)
+typedef enum
+{
+  LISTEN_THREAD,   /* Listen for incoming network connections */
+  MSEEDSCAN_THREAD /* Scan for miniSEED files */
+} ServerThreadType;
 
 /* Doubly-linked structure of server threads */
-struct sthread {
+struct sthread
+{
   struct thread_data *td;
-  unsigned int    type;
+  ServerThreadType type;
   void           *params;
   struct sthread *prev;
   struct sthread *next;
 };
 
+/* Listen thread protocols */
+typedef enum
+{
+  PROTO_DATALINK = 1u << 1,
+  PROTO_SEEDLINK = 1u << 2,
+  PROTO_HTTP     = 1u << 3,
+  PROTO_TLS      = 1u << 4,
+  FAMILY_IPv4    = 1u << 5,
+  FAMILY_IPv6    = 1u << 6,
+  PROTO_ALL      = PROTO_DATALINK | PROTO_SEEDLINK | PROTO_HTTP
+} ListenProtocols;
+
 /* Doubly-linked structure of client threads */
-struct cthread {
+struct cthread
+{
   struct thread_data *td;
   struct cthread *prev;
   struct cthread *next;
@@ -80,9 +91,9 @@ struct cthread {
 /* A structure for server listening parameters */
 typedef struct ListenPortParams
 {
-  char portstr[11];      /* Port number to listen on as string */
-  uint8_t protocols;     /* Protocol flags for this connection */
-  int socket;            /* Socket descriptor or -1 when not connected */
+  char portstr[11];          /* Port number to listen on as string */
+  ListenProtocols protocols; /* Protocol flags for this connection */
+  int socket;                /* Socket descriptor or -1 when not connected */
 } ListenPortParams;
 
 /* Global variables declared in ringserver.c */

@@ -1081,15 +1081,15 @@ HandleInfo (ClientInfo *cinfo, int socket)
         {
           /* Add thread status flags to Thread element */
           string[0] = '\0';
-          if (loopstp->td->td_flags & TDF_SPAWNING)
+          if (loopstp->td->td_state == TDS_SPAWNING)
             strcat (string, " SPAWNING");
-          if (loopstp->td->td_flags & TDF_ACTIVE)
+          if (loopstp->td->td_state == TDS_ACTIVE)
             strcat (string, " ACTIVE");
-          if (loopstp->td->td_flags & TDF_CLOSE)
+          if (loopstp->td->td_state == TDS_CLOSE)
             strcat (string, " CLOSE");
-          if (loopstp->td->td_flags & TDF_CLOSING)
+          if (loopstp->td->td_state == TDS_CLOSING)
             strcat (string, " CLOSING");
-          if (loopstp->td->td_flags & TDF_CLOSED)
+          if (loopstp->td->td_state == TDS_CLOSED)
             strcat (string, " CLOSED");
           mxmlElementSetAttr (st, "Flags", string);
 
@@ -1251,7 +1251,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
     while (loopctp)
     {
       /* Skip if client thread is not in ACTIVE state */
-      if (!(loopctp->td->td_flags & TDF_ACTIVE))
+      if (loopctp->td->td_state != TDS_ACTIVE)
       {
         loopctp = loopctp->next;
         continue;

@@ -100,7 +100,7 @@ static int ReadConfigFile (char *configfile, int dynamiconly, time_t mtime);
 static int ConfigMSWrite (char *value);
 static int AddListenThreads (ListenPortParams *lpp);
 static int AddMSeedScanThread (char *configstr);
-static int AddServerThread (unsigned int type, void *params);
+static int AddServerThread (ServerThreadType type, void *params);
 static uint64_t CalcSize (const char *sizestr);
 static int CalcStats (ClientInfo *cinfo);
 static int AddIPNet (IPNet **pplist, char *network, char *limitstr);
@@ -373,13 +373,13 @@ main (int argc, char *argv[])
           }
         }
         /* Otherwise set thread flag to CLOSE */
-        else if (loopstp->td && (!(loopstp->td->td_flags & TDF_CLOSING) && !(loopstp->td->td_flags & TDF_CLOSED)))
+        else if (loopstp->td && (loopstp->td->td_state != TDS_CLOSING) && loopstp->td->td_state != TDS_CLOSED)
         {
           lprintf (3, "Requesting shutdown of server thread %lu",
                    (unsigned long int)loopstp->td->td_id);
 
           pthread_mutex_lock (&(loopstp->td->td_lock));
-          loopstp->td->td_flags = TDF_CLOSE;
+          loopstp->td->td_state = TDS_CLOSE;
           pthread_mutex_unlock (&(loopstp->td->td_lock));
         }
 
@@ -392,13 +392,13 @@ main (int argc, char *argv[])
       loopctp = cthreads;
       while (loopctp)
       {
-        if (!(loopctp->td->td_flags & TDF_CLOSING) && !(loopctp->td->td_flags & TDF_CLOSED))
+        if (loopctp->td->td_state != TDS_CLOSING && loopctp->td->td_state != TDS_CLOSED)
         {
           lprintf (3, "Requesting shutdown of client thread %lu",
                    (unsigned long int)loopctp->td->td_id);
 
           pthread_mutex_lock (&(loopctp->td->td_lock));
-          loopctp->td->td_flags = TDF_CLOSE;
+          loopctp->td->td_state = TDS_CLOSE;
           pthread_mutex_unlock (&(loopctp->td->td_lock));
         }
         loopctp = loopctp->next;
@@ -453,16 +453,17 @@ main (int argc, char *argv[])
       /* Report status of server thread */
       if (stp->td)
       {
-        sprintf (statusstr, "Server thread (%s) %lu Flags:", threadtype, (unsigned long int)stp->td->td_id);
-        if (stp->td->td_flags & TDF_SPAWNING)
+        //TODO: use switch
+        sprintf (statusstr, "Server thread (%s) %lu state:", threadtype, (unsigned long int)stp->td->td_id);
+        if (stp->td->td_state == TDS_SPAWNING)
           strcat (statusstr, " SPAWNING");
-        if (stp->td->td_flags & TDF_ACTIVE)
+        if (stp->td->td_state == TDS_ACTIVE)
           strcat (statusstr, " ACTIVE");
-        if (stp->td->td_flags & TDF_CLOSE)
+        if (stp->td->td_state == TDS_CLOSE)
           strcat (statusstr, " CLOSE");
-        if (stp->td->td_flags & TDF_CLOSING)
+        if (stp->td->td_state == TDS_CLOSING)
           strcat (statusstr, " CLOSING");
-        if (stp->td->td_flags & TDF_CLOSED)
+        if (stp->td->td_state == TDS_CLOSED)
           strcat (statusstr, " CLOSED");
         lprintf (3, "%s", statusstr);
 
@@ -476,7 +477,7 @@ main (int argc, char *argv[])
         ListenPortParams *lpp = stp->params;
 
         /* Cleanup CLOSED listen thread */
-        if (stp->td && stp->td->td_flags & TDF_CLOSED)
+        if (stp->td && stp->td->td_state == TDS_CLOSED)
         {
           lprintf (1, "Joining CLOSED %s thread", threadtype);
 
@@ -521,7 +522,7 @@ main (int argc, char *argv[])
         MSScanInfo *mssinfo = stp->params;
 
         /* Cleanup CLOSED scanning thread */
-        if (stp->td && stp->td->td_flags & TDF_CLOSED)
+        if (stp->td && stp->td->td_state == TDS_CLOSED)
         {
           lprintf (1, "Joining CLOSED %s thread", threadtype);
 
@@ -582,21 +583,22 @@ main (int argc, char *argv[])
       ctp     = loopctp;
       loopctp = loopctp->next;
 
-      sprintf (statusstr, "Client thread %lu Flags:", (unsigned long int)ctp->td->td_id);
-      if (ctp->td->td_flags & TDF_SPAWNING)
+      //TODO: use switch
+      sprintf (statusstr, "Client thread %lu state:", (unsigned long int)ctp->td->td_id);
+      if (ctp->td->td_state == TDS_SPAWNING)
         strcat (statusstr, " SPAWNING");
-      if (ctp->td->td_flags & TDF_ACTIVE)
+      if (ctp->td->td_state == TDS_ACTIVE)
         strcat (statusstr, " ACTIVE");
-      if (ctp->td->td_flags & TDF_CLOSE)
+      if (ctp->td->td_state == TDS_CLOSE)
         strcat (statusstr, " CLOSE");
-      if (ctp->td->td_flags & TDF_CLOSING)
+      if (ctp->td->td_state == TDS_CLOSING)
         strcat (statusstr, " CLOSING");
-      if (ctp->td->td_flags & TDF_CLOSED)
+      if (ctp->td->td_state == TDS_CLOSED)
         strcat (statusstr, " CLOSED");
       lprintf (3, "%s", statusstr);
 
       /* Free associated resources and join CLOSED client threads */
-      if (ctp->td->td_flags & TDF_CLOSED)
+      if (ctp->td->td_state == TDS_CLOSED)
       {
         lprintf (3, "Removing client thread %lu from the cthreads list",
                  (unsigned long int)ctp->td->td_id);
@@ -651,12 +653,12 @@ main (int argc, char *argv[])
         if (clienttimeout && (hpcurtime - ((ClientInfo *)ctp->td->td_prvtptr)->lastxchange) > (clienttimeout * (nstime_t)NSTMODULUS))
         {
           pthread_mutex_lock (&(ctp->td->td_lock));
-          if (!(ctp->td->td_flags & TDF_CLOSE) &&
-              !(ctp->td->td_flags & TDF_CLOSING) &&
-              !(ctp->td->td_flags & TDF_CLOSED))
+          if (ctp->td->td_state != TDS_CLOSE &&
+              ctp->td->td_state != TDS_CLOSING &&
+              ctp->td->td_state != TDS_CLOSED)
           {
             lprintf (1, "Closing idle client connection: %s", ((ClientInfo *)ctp->td->td_prvtptr)->hostname);
-            ctp->td->td_flags = TDF_CLOSE;
+            ctp->td->td_state = TDS_CLOSE;
           }
           pthread_mutex_unlock (&(ctp->td->td_lock));
         }
@@ -769,7 +771,7 @@ InitThreadData (void *prvtptr)
   }
 
   rtdp->td_id    = 0;
-  rtdp->td_flags = TDF_SPAWNING;
+  rtdp->td_state = TDS_SPAWNING;
 
   rtdp->td_prvtptr = prvtptr;
 
@@ -808,7 +810,7 @@ ListenThread (void *arg)
 
   /* Set thread active status */
   pthread_mutex_lock (&(mytdp->td_lock));
-  mytdp->td_flags = TDF_ACTIVE;
+  mytdp->td_state = TDS_ACTIVE;
   pthread_mutex_unlock (&(mytdp->td_lock));
 
   /* Generate string of protocols supported by this listener */
@@ -1061,7 +1063,7 @@ ListenThread (void *arg)
 
   /* Set thread closing status */
   pthread_mutex_lock (&(mytdp->td_lock));
-  mytdp->td_flags = TDF_CLOSED;
+  mytdp->td_state = TDS_CLOSED;
   pthread_mutex_unlock (&(mytdp->td_lock));
 
   lprintf (1, "Listening thread closing");
@@ -2387,7 +2389,7 @@ AddMSeedScanThread (char *configstr)
  * Returns 0 on success and non zero on error.
  ***************************************************************************/
 static int
-AddServerThread (unsigned int type, void *params)
+AddServerThread (ServerThreadType type, void *params)
 {
   struct sthread *stp;
   struct sthread *nstp;
