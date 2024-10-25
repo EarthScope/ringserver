@@ -453,24 +453,29 @@ main (int argc, char *argv[])
       /* Report status of server thread */
       if (stp->td)
       {
-        //TODO: use switch
-        sprintf (statusstr, "Server thread (%s) %lu state:", threadtype, (unsigned long int)stp->td->td_id);
-        if (stp->td->td_state == TDS_SPAWNING)
-          strcat (statusstr, " SPAWNING");
-        if (stp->td->td_state == TDS_ACTIVE)
-          strcat (statusstr, " ACTIVE");
-        if (stp->td->td_state == TDS_CLOSE)
-          strcat (statusstr, " CLOSE");
-        if (stp->td->td_state == TDS_CLOSING)
-          strcat (statusstr, " CLOSING");
-        if (stp->td->td_state == TDS_CLOSED)
-          strcat (statusstr, " CLOSED");
-        lprintf (3, "%s", statusstr);
+        char *state;
+        if (stp->td->td_state = TDS_SPAWNING)
+          state = "SPAWNING";
+        else if (stp->td->td_state = TDS_ACTIVE)
+          state = "ACTIVE";
+        else if (stp->td->td_state = TDS_CLOSE)
+          state = "CLOSE";
+        else if (stp->td->td_state = TDS_CLOSING)
+          state = "CLOSING";
+        else if (stp->td->td_state = TDS_CLOSED)
+          state = "CLOSED";
+        else
+          state = "UNKNOWN";
+
+        lprintf (3, "Server thread (%s) %lu state: %s",
+                 threadtype, (unsigned long int)stp->td->td_id, state);
 
         servercount++;
       }
       else
+      {
         lprintf (2, "Server thread (%s) not running", threadtype);
+      }
 
       if (stp->type == LISTEN_THREAD)
       {
@@ -583,19 +588,22 @@ main (int argc, char *argv[])
       ctp     = loopctp;
       loopctp = loopctp->next;
 
-      //TODO: use switch
-      sprintf (statusstr, "Client thread %lu state:", (unsigned long int)ctp->td->td_id);
-      if (ctp->td->td_state == TDS_SPAWNING)
-        strcat (statusstr, " SPAWNING");
-      if (ctp->td->td_state == TDS_ACTIVE)
-        strcat (statusstr, " ACTIVE");
-      if (ctp->td->td_state == TDS_CLOSE)
-        strcat (statusstr, " CLOSE");
-      if (ctp->td->td_state == TDS_CLOSING)
-        strcat (statusstr, " CLOSING");
-      if (ctp->td->td_state == TDS_CLOSED)
-        strcat (statusstr, " CLOSED");
-      lprintf (3, "%s", statusstr);
+      char *state;
+      if (ctp->td->td_state = TDS_SPAWNING)
+        state = "SPAWNING";
+      else if (ctp->td->td_state = TDS_ACTIVE)
+        state = "ACTIVE";
+      else if (ctp->td->td_state = TDS_CLOSE)
+        state = "CLOSE";
+      else if (ctp->td->td_state = TDS_CLOSING)
+        state = "CLOSING";
+      else if (ctp->td->td_state = TDS_CLOSED)
+        state = "CLOSED";
+      else
+        state = "UNKNOWN";
+
+      lprintf (3, "Client thread %lu state: %s",
+               (unsigned long int)ctp->td->td_id, state);
 
       /* Free associated resources and join CLOSED client threads */
       if (ctp->td->td_state == TDS_CLOSED)

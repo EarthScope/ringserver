@@ -1079,19 +1079,21 @@ HandleInfo (ClientInfo *cinfo, int socket)
         }
         else
         {
-          /* Add thread status flags to Thread element */
-          string[0] = '\0';
+          /* Add thread state to Thread element */
+          char *state;
           if (loopstp->td->td_state == TDS_SPAWNING)
-            strcat (string, " SPAWNING");
-          if (loopstp->td->td_state == TDS_ACTIVE)
-            strcat (string, " ACTIVE");
-          if (loopstp->td->td_state == TDS_CLOSE)
-            strcat (string, " CLOSE");
-          if (loopstp->td->td_state == TDS_CLOSING)
-            strcat (string, " CLOSING");
-          if (loopstp->td->td_state == TDS_CLOSED)
-            strcat (string, " CLOSED");
-          mxmlElementSetAttr (st, "Flags", string);
+            state = "SPAWNING";
+          else if (loopstp->td->td_state == TDS_ACTIVE)
+            state = "ACTIVE";
+          else if (loopstp->td->td_state == TDS_CLOSE)
+            state = "CLOSE";
+          else if (loopstp->td->td_state == TDS_CLOSING)
+            state = "CLOSING";
+          else if (loopstp->td->td_state == TDS_CLOSED)
+            state = "CLOSED";
+          else
+            state = "UNKNOWN";
+          mxmlElementSetAttr (st, "State", state);
 
           /* Determine server thread type and add specifics */
           if (loopstp->type == LISTEN_THREAD)
