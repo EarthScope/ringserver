@@ -454,15 +454,15 @@ main (int argc, char *argv[])
       if (stp->td)
       {
         char *state;
-        if (stp->td->td_state = TDS_SPAWNING)
+        if (stp->td->td_state == TDS_SPAWNING)
           state = "SPAWNING";
-        else if (stp->td->td_state = TDS_ACTIVE)
+        else if (stp->td->td_state == TDS_ACTIVE)
           state = "ACTIVE";
-        else if (stp->td->td_state = TDS_CLOSE)
+        else if (stp->td->td_state == TDS_CLOSE)
           state = "CLOSE";
-        else if (stp->td->td_state = TDS_CLOSING)
+        else if (stp->td->td_state == TDS_CLOSING)
           state = "CLOSING";
-        else if (stp->td->td_state = TDS_CLOSED)
+        else if (stp->td->td_state == TDS_CLOSED)
           state = "CLOSED";
         else
           state = "UNKNOWN";
@@ -589,15 +589,15 @@ main (int argc, char *argv[])
       loopctp = loopctp->next;
 
       char *state;
-      if (ctp->td->td_state = TDS_SPAWNING)
+      if (ctp->td->td_state == TDS_SPAWNING)
         state = "SPAWNING";
-      else if (ctp->td->td_state = TDS_ACTIVE)
+      else if (ctp->td->td_state == TDS_ACTIVE)
         state = "ACTIVE";
-      else if (ctp->td->td_state = TDS_CLOSE)
+      else if (ctp->td->td_state == TDS_CLOSE)
         state = "CLOSE";
-      else if (ctp->td->td_state = TDS_CLOSING)
+      else if (ctp->td->td_state == TDS_CLOSING)
         state = "CLOSING";
-      else if (ctp->td->td_state = TDS_CLOSED)
+      else if (ctp->td->td_state == TDS_CLOSED)
         state = "CLOSED";
       else
         state = "UNKNOWN";
