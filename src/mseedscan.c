@@ -603,7 +603,7 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
 static FileNode *
 FindFile (RBTree *filetree, FileKey *fkey)
 {
-  FileNode *fnode = 0;
+  FileNode *fnode = NULL;
   RBNode *tnode;
 
   /* Search for a matching inode + file name entry */
@@ -1334,7 +1334,7 @@ EOpenDir (const char *dirname)
   EDIR *edirp;
   struct dirent *de;
   struct edirent *ede;
-  struct edirent *prevede = 0;
+  struct edirent *prevede = NULL;
   int namelen;
 
   if (!dirname)
@@ -1379,7 +1379,7 @@ EOpenDir (const char *dirname)
     ede->prev  = prevede;
 
     /* Add new enhanced directory entry to the list */
-    if (prevede == 0)
+    if (prevede == NULL)
     {
       edirp->ents = ede;
     }

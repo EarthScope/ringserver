@@ -493,7 +493,7 @@ HandleNegotiation (ClientInfo *cinfo)
     {
       if (cinfo->matchstr)
         free (cinfo->matchstr);
-      cinfo->matchstr = 0;
+      cinfo->matchstr = NULL;
       RingMatch (cinfo->reader, 0);
 
       selected = SelectedStreams (cinfo->ringparams, cinfo->reader);
@@ -574,7 +574,7 @@ HandleNegotiation (ClientInfo *cinfo)
     {
       if (cinfo->rejectstr)
         free (cinfo->rejectstr);
-      cinfo->rejectstr = 0;
+      cinfo->rejectstr = NULL;
       RingReject (cinfo->reader, 0);
 
       selected = SelectedStreams (cinfo->ringparams, cinfo->reader);
@@ -847,7 +847,7 @@ HandleWrite (ClientInfo *cinfo)
 
   /* Get (creating if needed) the StreamNode for this streamid */
   if ((stream = GetStreamNode (cinfo->streams, &cinfo->streams_lock,
-                               cinfo->packet.streamid, &newstream)) == 0)
+                               cinfo->packet.streamid, &newstream)) == NULL)
   {
     lprintf (0, "[%s] Error with GetStreamNode for %s",
              cinfo->hostname, cinfo->packet.streamid);
@@ -950,13 +950,13 @@ HandleRead (ClientInfo *cinfo)
 static int
 HandleInfo (ClientInfo *cinfo, int socket)
 {
-  mxml_node_t *xmldoc = 0;
+  mxml_node_t *xmldoc = NULL;
   mxml_node_t *status;
   char string[200];
-  char *xmlstr = 0;
+  char *xmlstr = NULL;
   int xmllength;
   char *type      = NULL;
-  char *matchexpr = 0;
+  char *matchexpr = NULL;
   char errflag    = 0;
 
   if (!cinfo)
@@ -1434,7 +1434,7 @@ static int
 SendPacket (ClientInfo *cinfo, char *header, char *data,
             uint64_t value, int addvalue, int addsize)
 {
-  char *wirepacket = 0;
+  char *wirepacket = NULL;
   char headerstr[255];
   uint8_t headerlen_u8;
   size_t headerlen;
@@ -1584,7 +1584,7 @@ SendRingPacket (ClientInfo *cinfo)
 
   /* Get (creating if needed) the StreamNode for this streamid */
   if ((stream = GetStreamNode (cinfo->streams, &cinfo->streams_lock,
-                               cinfo->packet.streamid, &newstream)) == 0)
+                               cinfo->packet.streamid, &newstream)) == NULL)
   {
     lprintf (0, "[%s] Error with GetStreamNode for %s",
              cinfo->hostname, cinfo->packet.streamid);

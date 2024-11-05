@@ -436,7 +436,7 @@ main (int argc, char *argv[])
     while (loopstp)
     {
       char *threadtype             = "";
-      void *(*threadfunc) (void *) = 0;
+      void *(*threadfunc) (void *) = NULL;
 
       stp     = loopstp;
       loopstp = loopstp->next;
@@ -495,11 +495,11 @@ main (int argc, char *argv[])
           }
 
           free (stp->td);
-          stp->td = 0;
+          stp->td = NULL;
         }
 
         /* Start new listening thread if needed */
-        if (stp->td == 0 && !shutdownsig)
+        if (stp->td == NULL && !shutdownsig)
         {
           /* Initialize thread data and create thread */
           if (!(stp->td = InitThreadData (lpp)))
@@ -515,7 +515,7 @@ main (int argc, char *argv[])
               lprintf (0, "Error creating %s thread: %s", threadtype, strerror (errno));
               if (stp->td)
                 free (stp->td);
-              stp->td = 0;
+              stp->td = NULL;
             }
             else
             {
@@ -540,11 +540,11 @@ main (int argc, char *argv[])
           }
 
           free (stp->td);
-          stp->td = 0;
+          stp->td = NULL;
         }
 
         /* Start new thread if needed */
-        if (stp->td == 0 && !shutdownsig)
+        if (stp->td == NULL && !shutdownsig)
         {
           mssinfo->ringparams = ringparams;
 
@@ -562,7 +562,7 @@ main (int argc, char *argv[])
               lprintf (0, "Error creating %s thread: %s", threadtype, strerror (errno));
               if (stp->td)
                 free (stp->td);
-              stp->td = 0;
+              stp->td = NULL;
             }
             else
             {
@@ -615,7 +615,7 @@ main (int argc, char *argv[])
 
         /* Unlink from the cthreads list */
         if (!ctp->prev && !ctp->next)
-          cthreads = 0;
+          cthreads = NULL;
         if (!ctp->prev && ctp->next)
           cthreads = ctp->next;
         if (ctp->prev)
@@ -1031,7 +1031,7 @@ ListenThread (void *arg)
         close (clientsocket);
       if (tdp)
         free (tdp);
-      tdp = 0;
+      tdp = NULL;
       continue;
     }
     else
@@ -1051,7 +1051,7 @@ ListenThread (void *arg)
       }
 
       ctp->td   = tdp;
-      ctp->prev = 0;
+      ctp->prev = NULL;
 
       /* Add ctp to the beginning of the client threads list (cthreads) */
       pthread_mutex_lock (&cthreads_lock);
@@ -1062,7 +1062,7 @@ ListenThread (void *arg)
       }
       else
       {
-        ctp->next = 0;
+        ctp->next = NULL;
       }
       cthreads = ctp;
       pthread_mutex_unlock (&cthreads_lock);
@@ -1512,8 +1512,8 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
   char line[200];
   char *ptr, *chr;
   struct stat cfstat;
-  IPNet *ipnet     = 0;
-  IPNet *nextipnet = 0;
+  IPNet *ipnet     = NULL;
+  IPNet *nextipnet = NULL;
   ListenPortParams lpp;
 
   char svalue[513];
@@ -2193,8 +2193,8 @@ static int
 ConfigMSWrite (char *value)
 {
   char archive[513];
-  char *layout = 0;
-  char *path   = 0;
+  char *layout = NULL;
+  char *path   = NULL;
 
   /* Parse layout specification if present */
   if ((path = strchr (value, '@')))
@@ -2520,7 +2520,7 @@ AddServerThread (ServerThreadType type, void *params)
     /* Otherwise this is the first entry */
     sthreads = nstp;
   }
-  nstp->next = 0;
+  nstp->next = NULL;
   pthread_mutex_unlock (&sthreads_lock);
 
   return 0;
@@ -2802,7 +2802,7 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
   }
 
   /* Loop through results from getaddrinfo(), adding new entries */
-  for (addr = addrlist; addr != 0; addr = addr->ai_next)
+  for (addr = addrlist; addr != NULL; addr = addr->ai_next)
   {
     /* Allocate new IPNet */
     if (!(newipnet = (IPNet *)calloc (1, sizeof (IPNet))))

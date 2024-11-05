@@ -193,7 +193,7 @@ SLHandleCmd (ClientInfo *cinfo)
     {
       Stack *stack;
       RBNode *rbnode;
-      nstime_t newesttime = 0;
+      nstime_t newesttime = NSTUNSET;
 
       stack = StackCreate ();
       RBBuildStack (slinfo->stations, stack);
@@ -244,7 +244,7 @@ SLHandleCmd (ClientInfo *cinfo)
              (int64_t)(MS_NSTIME2EPOCH (stationid->datastart)) == (int64_t)(MS_NSTIME2EPOCH (cinfo->packet.datastart))))
         {
           /* Use this packet ID if it is newer than any previous newest */
-          if (newesttime == 0 || cinfo->packet.pkttime > newesttime)
+          if (newesttime == NSTUNSET || cinfo->packet.pkttime > newesttime)
           {
             slinfo->startid = stationid->packetid;
             newesttime      = cinfo->packet.pkttime;
@@ -419,7 +419,7 @@ SLStreamPackets (ClientInfo *cinfo)
 
     /* Get (creating if needed) the StreamNode for this streamid */
     if ((stream = GetStreamNode (cinfo->streams, &cinfo->streams_lock,
-                                 cinfo->packet.streamid, &newstream)) == 0)
+                                 cinfo->packet.streamid, &newstream)) == NULL)
     {
       lprintf (0, "[%s] Error with GetStreamNode() for %s",
                cinfo->hostname, cinfo->packet.streamid);
@@ -514,7 +514,7 @@ SLFree (ClientInfo *cinfo)
   slinfo = (SLInfo *)cinfo->extinfo;
 
   RBTreeDestroy (slinfo->stations);
-  slinfo->stations = 0;
+  slinfo->stations = NULL;
 
   free (slinfo);
   cinfo->extinfo = NULL;

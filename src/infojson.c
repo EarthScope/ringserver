@@ -610,7 +610,7 @@ info_add_connections (ClientInfo *cinfo, cJSON *root, const char *matchexpr)
     if (tcinfo->reader->pkttime != NSTUNSET)
       cJSON_AddStringToObject (connection, "packet_time", packettime);
 
-    cJSON_AddNumberToObject (connection, "lag_percent", (tcinfo->reader->pktid <= 0) ? 0 : tcinfo->percentlag);
+    cJSON_AddNumberToObject (connection, "lag_percent", (tcinfo->reader->pktid > RINGID_MAXIMUM) ? 0 : tcinfo->percentlag);
     cJSON_AddNumberToObject (connection, "lag_seconds", (double)MS_NSTIME2EPOCH ((nsnow - tcinfo->lastxchange)));
 
     cJSON_AddNumberToObject (connection, "transmit_packets", tcinfo->txpackets[0]);

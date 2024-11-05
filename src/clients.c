@@ -212,7 +212,7 @@ ClientThread (void *arg)
     {
       shutdown (cinfo->socket, SHUT_RDWR);
       close (cinfo->socket);
-      cinfo->socket = 0;
+      cinfo->socket = -1;
     }
 
     tls_cleanup (cinfo);
@@ -229,7 +229,7 @@ ClientThread (void *arg)
     /* Release stream tracking binary tree */
     pthread_mutex_lock (&(cinfo->streams_lock));
     RBTreeDestroy (cinfo->streams);
-    cinfo->streams      = 0;
+    cinfo->streams      = NULL;
     cinfo->streamscount = 0;
     pthread_mutex_unlock (&(cinfo->streams_lock));
 
@@ -435,7 +435,7 @@ ClientThread (void *arg)
   {
     shutdown (cinfo->socket, SHUT_RDWR);
     close (cinfo->socket);
-    cinfo->socket = 0;
+    cinfo->socket = -1;
   }
 
   tls_cleanup (cinfo);
@@ -471,7 +471,7 @@ ClientThread (void *arg)
   /* Release stream tracking binary tree */
   pthread_mutex_lock (&(cinfo->streams_lock));
   RBTreeDestroy (cinfo->streams);
-  cinfo->streams      = 0;
+  cinfo->streams      = NULL;
   cinfo->streamscount = 0;
   pthread_mutex_unlock (&(cinfo->streams_lock));
 
@@ -1160,7 +1160,7 @@ GetStreamNode (RBTree *tree, pthread_mutex_t *plock, char *streamid, int *new)
   Key key;
   Key *newkey;
   RBNode *rbnode;
-  StreamNode *stream = 0;
+  StreamNode *stream = NULL;
 
   /* Generate key */
   key = FVNhash64 (streamid);

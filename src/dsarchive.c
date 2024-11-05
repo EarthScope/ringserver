@@ -145,7 +145,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
   /* Special case of an absolute path (first entry is empty) */
   if (*fnptr->element == '\0')
   {
-    if (fnptr->next != 0)
+    if (fnptr->next)
     {
       strcat (filename, "/");
       strcat (globmatch, "/");
@@ -166,7 +166,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
   /* Decompose start time */
   ms_nstime2time (msr->starttime, &year, &yday, &hour, &min, &sec, &nsec);
 
-  while (fnptr != 0)
+  while (fnptr)
   {
     size_t globlen = 0;
     int tdy;
@@ -175,7 +175,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
     p = fnptr->element;
 
     /* Special case of no file given */
-    if (*p == '\0' && fnptr->next == 0)
+    if (*p == '\0' && fnptr->next == NULL)
     {
       lprintf (0, "[%s] ds_streamproc(): no file name specified, only %s",
                hostname, filename);
@@ -520,7 +520,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
     }
 
     /* If not the last entry then it should be a directory */
-    if (fnptr->next != 0)
+    if (fnptr->next)
     {
       if (access (filename, F_OK))
       {
@@ -706,7 +706,7 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
   DataStreamGroup *searchgroup = NULL;
   DataStreamGroup *prevgroup   = NULL;
   time_t curtime;
-  char *matchedfilename = 0;
+  char *matchedfilename = NULL;
 
   searchgroup = datastream->grouproot;
   curtime     = time (NULL);
@@ -1009,8 +1009,8 @@ ds_strparse (const char *string, const char *delim, DSstrlist **list)
   int count = 0;
   int total;
 
-  DSstrlist *curlist = 0;
-  DSstrlist *tmplist = 0;
+  DSstrlist *curlist = NULL;
+  DSstrlist *tmplist = NULL;
 
   if (string != NULL && delim != NULL)
   {
@@ -1031,7 +1031,7 @@ ds_strparse (const char *string, const char *delim, DSstrlist **list)
       }
 
       tmplist       = (DSstrlist *)malloc (sizeof (DSstrlist));
-      tmplist->next = 0;
+      tmplist->next = NULL;
 
       tmplist->element = (char *)malloc ((size_t)(del - beg + 1));
       strncpy (tmplist->element, beg, (del - beg));
