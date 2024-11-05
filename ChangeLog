@@ -5,16 +5,22 @@
 	buffer as corrupt and discard the contents, a consequence of downgrading
 	to an earlier release.
 
+	Major new features:
 	- Add support for SeedLink protocol version 4.
 	- Map 24-bit SeedLink v3 sequence numbers into 64-bit range, allowing
 	v3 clients to resume from the most recent 16,777,215 packets in the
 	buffer even if the buffer can contain more packets.
+	- Add support for TLS/SSL using mbedtls release 3.6.2
+	- Add TLS flag for listening port configuration
+	- Add TLSCertfile, TLSKeyFile, and TLSVerfiyClientCert parameters.
+	- Allow DataLink v1.1 WRITE command to accept a packet ID.
+
+	Other changes:
 	- Convert internal time stamps from microsecond ticks (hptime) to use
 	nanosecond ticks, as used by the libmseed3.
 	- Most generated time strings are now YYYY-MM-DDThh:mm:ss.sss*Z formatted.
 	- All legacy stream IDs for miniSEED of the form: NN_SSSSS_LL_CCC/MSEED
 	will be converted to FDSN Source ID form: FDSN:NN_SSSSS_LL_C_C_C/MSEED.
-	- Allow DataLink WRITE command to accept a packet ID.
 	- Allow ring size to be specified in fractional large units, e.g. "1.5g".
 	- Update libmseed to 3, adapt for miniSEED 3 API.
 	- Upgrade to PCRE2 10.42 from legacy PCRE.

@@ -4,7 +4,7 @@
 #   CFLAGS : Specify compiler options to use
 
 .PHONY: all clean
-all clean: pcre2 mxml libmseed
+all clean: pcre2 mxml libmseed mbedtls
 	$(MAKE) -C src $@
 
 # Test for Makefile/makefile and run make, run configure if needed
@@ -29,6 +29,10 @@ mxml:
 
 .PHONY: libmseed
 libmseed:
+	$(MAKE) -C $@ $(MAKECMDGOALS)
+
+.PHONY: mbedtls
+mbedtls:
 	$(MAKE) -C $@ $(MAKECMDGOALS)
 
 .PHONY: install

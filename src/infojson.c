@@ -555,21 +555,32 @@ info_add_connections (ClientInfo *cinfo, cJSON *root, const char *matchexpr)
     /* Determine connection type */
     if (tcinfo->type == CLIENT_DATALINK)
     {
-      if (tcinfo->websocket)
-        conntype = "WebSocket DataLink";
+      if (tcinfo->websocket && tcinfo->tls)
+        conntype = "DataLink:WebSocket:TLS";
+      else if (tcinfo->websocket)
+        conntype = "DataLink:WebSocket";
+      else if (tcinfo->tls)
+        conntype = "DataLink:TLS";
       else
         conntype = "DataLink";
     }
     else if (tcinfo->type == CLIENT_SEEDLINK)
     {
-      if (tcinfo->websocket)
-        conntype = "WebSocket SeedLink";
+      if (tcinfo->websocket && tcinfo->tls)
+        conntype = "SeedLink:WebSocket:TLS";
+      else if (tcinfo->websocket)
+        conntype = "SeedLink:WebSocket";
+      else if (tcinfo->tls)
+        conntype = "SeedLink:TLS";
       else
         conntype = "SeedLink";
     }
     else if (tcinfo->type == CLIENT_HTTP)
     {
-      conntype = "HTTP";
+      if (tcinfo->tls)
+        conntype = "HTTPS";
+      else
+        conntype = "HTTP";
     }
     else
     {

@@ -4,15 +4,16 @@
 #   CC : Specify the C compiler to use
 #   CFLAGS : Specify compiler options to use
 
-BIN = ringserver
+BIN = ../ringserver
 
 SRCS = stack.c rbtree.c logging.c clients.c slclient.c dlclient.c \
        http.c dsarchive.c mseedscan.c generic.c ring.c ringserver.c \
-       infojson.c infoxml.c cJSON.c
+       infojson.c infoxml.c cJSON.c tls.c
 OBJS = $(SRCS:.c=.o)
 
-# Standard compiler parameters
-CFLAGS += -D_REENTRANT -D_POSIX_PTHREAD_SEMANTICS -I../libmseed -I../mxml -I../pcre2/src
+MBEDTLS_OBJS = $(wildcard ../mbedtls/library/*.o)
+
+CFLAGS += -D_REENTRANT -D_POSIX_PTHREAD_SEMANTICS -I../libmseed -I../mxml -I../pcre2/src -I../mbedtls/include
 
 LDLIBS  = ../pcre2/.libs/libpcre2-8.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread
 
@@ -21,11 +22,11 @@ LDLIBS  = ../pcre2/.libs/libpcre2-8.a ../libmseed/libmseed.a ../mxml/libmxml.a -
 
 all: $(BIN)
 
-$(BIN): $(OBJS)
-	$(CC) $(CFLAGS) -o ../$(BIN) $(OBJS) $(LDFLAGS) $(LDLIBS)
+$(BIN): $(OBJS) $(MBEDTLS_OBJS)
+	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(MBEDTLS_OBJS) $(LDFLAGS) $(LDLIBS)
 
 clean:
-	rm -f $(OBJS) ../$(BIN)
+	rm -f $(OBJS) $(BIN)
 
 install:
 	@echo

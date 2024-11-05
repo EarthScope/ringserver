@@ -36,8 +36,8 @@ extern "C" {
 typedef enum
 {
   TDS_SPAWNING, /* Thread is now spawning */
-  TDS_ACTIVE,   /* If set, thread is active */
-  TDS_CLOSE,    /* If set, thread closes */
+  TDS_ACTIVE,   /* Thread is active */
+  TDS_CLOSE,    /* Thread close triggered */
   TDS_CLOSING,  /* Thread in close process */
   TDS_CLOSED    /* Thread is closed */
 } ThreadState;
@@ -74,11 +74,16 @@ typedef enum
   PROTO_DATALINK = 1u << 1,
   PROTO_SEEDLINK = 1u << 2,
   PROTO_HTTP     = 1u << 3,
-  PROTO_TLS      = 1u << 4,
-  FAMILY_IPv4    = 1u << 5,
-  FAMILY_IPv6    = 1u << 6,
   PROTO_ALL      = PROTO_DATALINK | PROTO_SEEDLINK | PROTO_HTTP
 } ListenProtocols;
+
+/* Listen thread options */
+typedef enum
+{
+  ENCRYPTION_TLS = 1u << 1,
+  FAMILY_IPv4    = 1u << 2,
+  FAMILY_IPv6    = 1u << 3,
+} ListenOptions;
 
 /* Doubly-linked structure of client threads */
 struct cthread
@@ -93,6 +98,7 @@ typedef struct ListenPortParams
 {
   char portstr[11];          /* Port number to listen on as string */
   ListenProtocols protocols; /* Protocol flags for this connection */
+  ListenOptions options;     /* Options for this connection */
   int socket;                /* Socket descriptor or -1 when not connected */
 } ListenPortParams;
 
@@ -102,11 +108,17 @@ extern struct sthread *sthreads;
 extern pthread_mutex_t cthreads_lock;
 extern struct cthread *cthreads;
 extern char *serverid;
+extern char *tlscertfile;
+extern char *tlskeyfile;
+extern int tlsverifyclientcert;
 extern char *webroot;
 extern nstime_t serverstarttime;
 extern int clientcount;
 extern int resolvehosts;
 extern int shutdownsig;
+
+extern int GenProtocolString (ListenProtocols protocols, ListenOptions options,
+                              char *result, size_t maxlength);
 
 #ifdef __cplusplus
 }

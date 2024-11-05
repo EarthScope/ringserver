@@ -403,7 +403,7 @@ SLStreamPackets (ClientInfo *cinfo)
     if (slinfo->dialup)
     {
       lprintf (2, "[%s] Dial-up mode reached end of buffer", cinfo->hostname);
-      SendData (cinfo, "END", 3);
+      SendData (cinfo, "END", 3, 0);
       return -1;
     }
     else
@@ -458,7 +458,7 @@ SLStreamPackets (ClientInfo *cinfo)
       if (slinfo->timewinchannels <= 0)
       {
         lprintf (2, "[%s] End of time window reached for all channels", cinfo->hostname);
-        SendData (cinfo, "END", 3);
+        SendData (cinfo, "END", 3, 0);
         return -1;
       }
     }
@@ -469,7 +469,7 @@ SLStreamPackets (ClientInfo *cinfo)
       /* Send miniSEED record to client */
       if (SendRecord (&cinfo->packet, cinfo->packetdata, cinfo->packet.datasize, cinfo))
       {
-        if (cinfo->socketerr != 2)
+        if (cinfo->socketerr != -2)
           lprintf (0, "[%s] Error sending record to client", cinfo->hostname);
 
         return -1;
@@ -570,7 +570,7 @@ HandleNegotiation (ClientInfo *cinfo)
                cinfo->hostname, (int)sizeof (sendbuffer), sendbuffer);
     }
 
-    if (SendData (cinfo, sendbuffer, strlen (sendbuffer)))
+    if (SendData (cinfo, sendbuffer, strlen (sendbuffer), 0))
       return -1;
   }
 
@@ -636,7 +636,7 @@ HandleNegotiation (ClientInfo *cinfo)
     snprintf (sendbuffer, sizeof (sendbuffer),
               "CAT command not implemented\r\n");
 
-    if (SendData (cinfo, sendbuffer, strlen (sendbuffer)))
+    if (SendData (cinfo, sendbuffer, strlen (sendbuffer), 0))
       return -1;
   }
 
@@ -1578,7 +1578,7 @@ SendReply (ClientInfo *cinfo, char *reply, ErrorCode code, char *extreply)
   }
 
   /* Send the reply */
-  if (SendData (cinfo, sendstr, strlen (sendstr)))
+  if (SendData (cinfo, sendstr, strlen (sendstr), 0))
     return -1;
 
   return 0;
@@ -1636,7 +1636,7 @@ SendPacket (uint64_t pktid, char *payload, uint32_t payloadlen,
     headerlen = SLHEADSIZE_V3;
   }
 
-  if (SendDataMB (cinfo, (void *[]){header, payload}, (size_t[]){headerlen, payloadlen}, 2))
+  if (SendDataMB (cinfo, (void *[]){header, payload}, (size_t[]){headerlen, payloadlen}, 2, 0))
     return -1;
 
   /* Update the time of the last packet exchange */
@@ -1728,7 +1728,7 @@ SendInfoRecord (char *record, uint32_t reclen, void *vcinfo)
   else
     memcpy (header, "SLINFO *", SLHEADSIZE_V3);
 
-  SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE_V3, reclen}, 2);
+  SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE_V3, reclen}, 2, 0);
 
   /* Update the time of the last packet exchange */
   cinfo->lastxchange = NSnow ();

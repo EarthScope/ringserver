@@ -83,8 +83,11 @@ struct sthread *sthreads      = NULL; /* Server threads list */
 pthread_mutex_t cthreads_lock = PTHREAD_MUTEX_INITIALIZER;
 struct cthread *cthreads      = NULL; /* Client threads list */
 
-char *serverid = NULL;    /* Server ID */
-char *webroot  = NULL;    /* Web content root directory */
+char *serverid          = NULL; /* Server ID */
+char *tlscertfile       = NULL; /* TLS certificate file */
+char *tlskeyfile        = NULL; /* TLS key file */
+int tlsverifyclientcert = 0;    /* Verify client certificate */
+char *webroot           = NULL; /* Web content root directory */
 nstime_t serverstarttime; /* Server start time */
 int clientcount  = 0;     /* Track number of connected clients */
 int resolvehosts = 1;     /* Flag to control resolving of client hostnames */
@@ -93,7 +96,7 @@ int shutdownsig  = 0;     /* Shutdown signal */
 /* Local functions and variables */
 static struct thread_data *InitThreadData (void *prvtptr);
 static void *ListenThread (void *arg);
-static int InitServerSocket (char *portstr, uint8_t protocols);
+static int InitServerSocket (char *portstr, ListenOptions options);
 static int ProcessParam (int argcount, char **argvec);
 static char *GetOptVal (int argcount, char **argvec, int argopt);
 static int ReadConfigFile (char *configfile, int dynamiconly, time_t mtime);
@@ -155,7 +158,6 @@ main (int argc, char *argv[])
   struct sthread *loopstp;
   struct cthread *ctp;
   struct cthread *loopctp;
-  char statusstr[100];
   int tlogwrite   = 0;
   int servercount = 0;
 
@@ -821,8 +823,8 @@ ListenThread (void *arg)
   mytdp->td_state = TDS_ACTIVE;
   pthread_mutex_unlock (&(mytdp->td_lock));
 
-  /* Generate string of protocols supported by this listener */
-  if (GenProtocolString (lpp->protocols, protocolstr, sizeof (protocolstr)) > 0)
+  /* Generate string of protocols and options supported by this listener */
+  if (GenProtocolString (lpp->protocols, lpp->options, protocolstr, sizeof (protocolstr)) > 0)
     lprintf (1, "Listening for connections on port %s (%s)",
              lpp->portstr, protocolstr);
   else
@@ -928,6 +930,7 @@ ListenThread (void *arg)
 
     cinfo->socket     = clientsocket;
     cinfo->protocols  = lpp->protocols;
+    cinfo->tls        = (lpp->options & ENCRYPTION_TLS) ? 1 : 0;
     cinfo->type       = CLIENT_UNDETERMINED;
     cinfo->ringparams = ringparams;
 
@@ -1088,7 +1091,7 @@ ListenThread (void *arg)
  * Return socket descriptor on success and -1 on error.
  ***********************************************************************/
 static int
-InitServerSocket (char *portstr, uint8_t protocols)
+InitServerSocket (char *portstr, ListenOptions options)
 {
   struct addrinfo *addr;
   struct addrinfo hints;
@@ -1103,12 +1106,12 @@ InitServerSocket (char *portstr, uint8_t protocols)
   memset (&hints, 0, sizeof (hints));
 
   /* AF_INET, or AF_INET6 for IPv4 or IPv6 */
-  if (protocols & FAMILY_IPv4)
+  if (options & FAMILY_IPv4)
   {
     hints.ai_family = AF_INET;
     familystr       = "IPv4";
   }
-  else if (protocols & FAMILY_IPv6)
+  else if (options & FAMILY_IPv6)
   {
     hints.ai_family = AF_INET6;
     familystr       = "IPv6";
@@ -1190,6 +1193,7 @@ InitServerSocket (char *portstr, uint8_t protocols)
 static int
 ProcessParam (int argcount, char **argvec)
 {
+  struct sthread *loopstp;
   ListenPortParams lpp;
   int optind;
 
@@ -1403,6 +1407,30 @@ ProcessParam (int argcount, char **argvec)
       lprintf (0, "WARNING, cannot write to transfer log directory: %s",
                TLogParams.tlogbasedir);
     }
+  }
+
+  /* Check that TLS is not specified for a port with more than one protocol */
+  loopstp = sthreads;
+  while (loopstp)
+  {
+    /* Close listening server sockets, causing the listen thread to exit too */
+    if (loopstp->type == LISTEN_THREAD)
+    {
+      ListenPortParams *params = (ListenPortParams *)loopstp->params;
+
+      if (params->options & ENCRYPTION_TLS &&
+          params->protocols != PROTO_SEEDLINK &&
+          params->protocols != PROTO_DATALINK &&
+          params->protocols != PROTO_HTTP)
+      {
+        lprintf (0, "Error, TLS specified for port %s with multiple protocols",
+                 params->portstr);
+        lprintf (0, "  TLS is only supported for ports with a single protocol");
+        exit (1);
+      }
+    }
+
+    loopstp = loopstp->next;
   }
 
   return 0;
@@ -1676,12 +1704,14 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
 
       lpp.portstr[sizeof (lpp.portstr) - 1] = '\0';
       lpp.protocols                         = PROTO_ALL;
+      lpp.options                           = 0;
       lpp.socket                            = -1;
 
       /* Parse optional protocol flags to limit allowed protocols */
       if (rv == 2)
       {
         lpp.protocols = 0;
+        lpp.options   = 0;
 
         if (strcasestr (svalue, "DataLink"))
           lpp.protocols |= PROTO_DATALINK;
@@ -1693,10 +1723,12 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
         if (lpp.protocols == 0)
           lpp.protocols = PROTO_ALL;
 
+        if (strcasestr (svalue, "TLS"))
+          lpp.options |= ENCRYPTION_TLS;
         if (strcasestr (svalue, "IPv4"))
-          lpp.protocols |= FAMILY_IPv4;
+          lpp.options |= FAMILY_IPv4;
         if (strcasestr (svalue, "IPv6"))
-          lpp.protocols |= FAMILY_IPv6;
+          lpp.options |= FAMILY_IPv6;
       }
 
       if (!AddListenThreads (&lpp))
@@ -1783,6 +1815,38 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
         free (serverid);
 
       serverid = strdup (value);
+    }
+    else if (!strncasecmp ("TLSCertFile", ptr, 11))
+    {
+      if (sscanf (ptr, "%*s %512s", svalue) != 1)
+      {
+        lprintf (0, "Error with TLSCertFile config file line: %s", ptr);
+        return -1;
+      }
+      svalue[sizeof (svalue) - 1] = '\0';
+
+      free (tlscertfile);
+      tlscertfile = strdup (svalue);
+    }
+    else if (!strncasecmp ("TLSKeyFile", ptr, 10))
+    {
+      if (sscanf (ptr, "%*s %512s", svalue) != 1)
+      {
+        lprintf (0, "Error with TLSKeyFile config file line: %s", ptr);
+        return -1;
+      }
+      svalue[sizeof (svalue) - 1] = '\0';
+
+      free (tlskeyfile);
+      tlskeyfile = strdup (svalue);
+    }
+    else if (!strncasecmp ("TLSVerifyClientCert", ptr, 19))
+    {
+      if (sscanf (ptr, "%*s %d", &tlsverifyclientcert) != 1)
+      {
+        lprintf (0, "Error with TLSVerifyClientCert config file line: %s", ptr);
+        return -1;
+      }
     }
     else if (!strncasecmp ("Verbosity", ptr, 9))
     {
@@ -2199,33 +2263,34 @@ ConfigMSWrite (char *value)
 static int
 AddListenThreads (ListenPortParams *lpp)
 {
-  uint8_t protocols;
-  uint8_t families = 0;
-  int threads      = 0;
+  ListenOptions options;
+  ListenOptions families = 0;
+
+  int threads = 0;
 
   if (!lpp)
     return 0;
 
-  protocols = lpp->protocols;
+  options = lpp->options;
 
-  /* Split server protocols from network protocol families */
-  if (protocols & FAMILY_IPv4)
+  /* Split server options from network protocol families */
+  if (options & FAMILY_IPv4)
   {
     families |= FAMILY_IPv4;
-    protocols &= ~FAMILY_IPv4;
+    options &= ~FAMILY_IPv4;
   }
-  if (protocols & FAMILY_IPv6)
+  if (options & FAMILY_IPv6)
   {
     families |= FAMILY_IPv6;
-    protocols &= ~FAMILY_IPv6;
+    options &= ~FAMILY_IPv6;
   }
 
-  /* Try to initialize listening for IPv4, if requested or default (neither family requested) */
+  /* Try to initialize listening for IPv4, if requested or default (no family specified) */
   if (families == 0 || (families & FAMILY_IPv4))
   {
-    lpp->protocols = protocols | FAMILY_IPv4;
+    lpp->options = options | FAMILY_IPv4;
 
-    if ((lpp->socket = InitServerSocket (lpp->portstr, lpp->protocols)) > 0)
+    if ((lpp->socket = InitServerSocket (lpp->portstr, lpp->options)) > 0)
     {
       if (AddServerThread (LISTEN_THREAD, lpp))
       {
@@ -2242,12 +2307,12 @@ AddListenThreads (ListenPortParams *lpp)
     }
   }
 
-  /* Try to initialize listening for IPv6, if requested or default (neither family requested) */
+  /* Try to initialize listening for IPv6, if requested or default (no family specified) */
   if (families == 0 || (families & FAMILY_IPv6))
   {
-    lpp->protocols = protocols | FAMILY_IPv6;
+    lpp->options = options | FAMILY_IPv6;
 
-    if ((lpp->socket = InitServerSocket (lpp->portstr, lpp->protocols)) > 0)
+    if ((lpp->socket = InitServerSocket (lpp->portstr, lpp->options)) > 0)
     {
       if (AddServerThread (LISTEN_THREAD, lpp))
       {
@@ -2264,7 +2329,7 @@ AddListenThreads (ListenPortParams *lpp)
     }
   }
 
-  lpp->protocols = protocols | families;
+  lpp->options = options | families;
 
   return threads;
 } /* End of AddListenThreads() */
@@ -2901,7 +2966,7 @@ ClientIPCount (struct sockaddr *addr)
   ctp = cthreads;
   while (ctp)
   {
-    /* If the same protocol family */
+    /* If the same IP protocol family */
     if (((ClientInfo *)ctp->td->td_prvtptr)->addr->sa_family == addr->sa_family)
     {
       /* Compare IPv4 addresses */
@@ -2938,6 +3003,44 @@ ClientIPCount (struct sockaddr *addr)
 
   return addrcount;
 } /* End of ClientIPCount() */
+
+/***************************************************************************
+ * GenProtocolString:
+ *
+ * Generate a string containing the given protocols and options.
+ *
+ * Return length of string in result on success or 0 for error.
+ ***************************************************************************/
+int
+GenProtocolString (ListenProtocols protocols, ListenOptions options,
+                   char *result, size_t maxlength)
+{
+  int length;
+  char *family;
+
+  if (!result)
+    return 0;
+
+  if (options & FAMILY_IPv4)
+    family = "IPv4";
+  else if (options & FAMILY_IPv6)
+    family = "IPv6";
+  else
+    family = "Unknown family?";
+
+  length = snprintf (result, maxlength,
+                     "%s: %s%s%s%s",
+                     family,
+                     (protocols & PROTO_DATALINK) ? "DataLink " : "",
+                     (protocols & PROTO_SEEDLINK) ? "SeedLink " : "",
+                     (protocols & PROTO_HTTP) ? "HTTP " : "",
+                     (options & ENCRYPTION_TLS) ? "over TLS " : "");
+
+  if (length < maxlength && result[length - 1] == ' ')
+    result[length - 1] = '\0';
+
+  return (length > maxlength) ? maxlength - 1 : length;
+} /* End of GenProtocolString() */
 
 /***********************************************************************
  * SignalThread:

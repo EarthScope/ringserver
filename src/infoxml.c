@@ -34,7 +34,7 @@
 #include "slclient.h"
 
 /***************************************************************************
- * Create and rerturn an SeedLink v3 INFO ID document in XML format.
+ * Return an SeedLink v3 INFO ID document in XML format.
  *
  * The returned document is allocated on the heap and should be freed by
  * the caller.
@@ -96,7 +96,7 @@ info_xml_slv3_id (ClientInfo *cinfo, const char *software)
 }
 
 /***************************************************************************
- * Create and rerturn an SeedLink v3 INFO CAPABILITIES document in XML format.
+ * Return an SeedLink v3 INFO CAPABILITIES document in XML format.
  *
  * The returned document is allocated on the heap and should be freed by
  * the caller.
@@ -175,8 +175,7 @@ info_xml_slv3_capabilities (ClientInfo *cinfo, const char *software)
 }
 
 /***************************************************************************
- * Create and rerturn an SeedLink v3 INFO STATIONS or INFO STREAMS
- * document in XML format.
+ * Return an SeedLink v3 INFO STATIONS or INFO STREAMS document in XML format.
  *
  * The returned document is allocated on the heap and should be freed by
  * the caller.
@@ -321,7 +320,7 @@ info_xml_slv3_stations (ClientInfo *cinfo, const char *software, int include_str
 }
 
 /***************************************************************************
- * Create and rerturn an SeedLink v3 INFO CONNECTIONS document in XML format.
+ * Return an SeedLink v3 INFO CONNECTIONS document in XML format.
  *
  * The returned document is allocated on the heap and should be freed by
  * the caller.

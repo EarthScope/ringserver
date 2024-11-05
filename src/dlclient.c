@@ -213,7 +213,7 @@ DLStreamPackets (ClientInfo *cinfo)
     /* Send packet to client */
     if (SendRingPacket (cinfo))
     {
-      if (cinfo->socketerr != 2)
+      if (cinfo->socketerr != -2)
         lprintf (1, "[%s] Error sending packet to client", cinfo->hostname);
 
       return -1;
@@ -525,7 +525,7 @@ HandleNegotiation (ClientInfo *cinfo)
         return -1;
       }
 
-      if (RecvData (cinfo, cinfo->matchstr, size) < 0)
+      if (RecvData (cinfo, cinfo->matchstr, size, 1) < 0)
       {
         lprintf (0, "[%s] Error Recv'ing data", cinfo->hostname);
         return -1;
@@ -606,7 +606,7 @@ HandleNegotiation (ClientInfo *cinfo)
         return -1;
       }
 
-      if (RecvData (cinfo, cinfo->rejectstr, size) < 0)
+      if (RecvData (cinfo, cinfo->rejectstr, size, 1) < 0)
       {
         lprintf (0, "[%s] Error Recv'ing data", cinfo->hostname);
         return -1;
@@ -784,7 +784,7 @@ HandleWrite (ClientInfo *cinfo)
   }
 
   /* Recv packet data from socket */
-  nread = RecvData (cinfo, cinfo->packetdata, cinfo->packet.datasize);
+  nread = RecvData (cinfo, cinfo->packetdata, cinfo->packet.datasize, 1);
 
   if (nread < 0)
     return -1;
@@ -795,6 +795,7 @@ HandleWrite (ClientInfo *cinfo)
     char filename[100];
     char *fn;
 
+    //TODO - this could check for miniSEED in packetdata with a header check instead of relying on the streamid suffix
     if ((type = strrchr (cinfo->packet.streamid, '/')))
     {
       if (!strncmp (++type, "MSEED", 5))
@@ -927,7 +928,7 @@ HandleRead (ClientInfo *cinfo)
   /* Send packet to client */
   else if (SendRingPacket (cinfo))
   {
-    if (cinfo->socketerr != 2)
+    if (cinfo->socketerr != -2)
       lprintf (1, "[%s] Error sending packet to client", cinfo->hostname);
   }
 
@@ -1101,7 +1102,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
             ListenPortParams *lpp = loopstp->params;
             char protocolstr[100];
 
-            if (GenProtocolString (lpp->protocols, protocolstr, sizeof (protocolstr)) > 0)
+            if (GenProtocolString (lpp->protocols, lpp->options, protocolstr, sizeof (protocolstr)) > 0)
               mxmlElementSetAttr (st, "Type", protocolstr);
             mxmlElementSetAttr (st, "Port", lpp->portstr);
           }
@@ -1396,7 +1397,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
     /* Send XML to client */
     if (SendPacket (cinfo, type, xmlstr, 0, 0, 1))
     {
-      if (cinfo->socketerr != 2)
+      if (cinfo->socketerr != -2)
         lprintf (0, "[%s] Error sending INFO XML", cinfo->hostname);
 
       if (xmldoc)
@@ -1496,9 +1497,9 @@ SendPacket (ClientInfo *cinfo, char *header, char *data,
     memcpy (&wirepacket[3 + headerlen], data, datalen);
 
   /* Send complete wire packet */
-  if (SendData (cinfo, wirepacket, (3 + headerlen + datalen)))
+  if (SendData (cinfo, wirepacket, (3 + headerlen + datalen), 0))
   {
-    if (cinfo->socketerr != 2)
+    if (cinfo->socketerr != -2)
       lprintf (0, "[%s] SendPacket(): Error sending packet: %s",
                cinfo->hostname, strerror (errno));
     return -1;
@@ -1573,9 +1574,9 @@ SendRingPacket (ClientInfo *cinfo)
   memcpy (&cinfo->sendbuf[3 + headerlen], cinfo->packetdata, cinfo->packet.datasize);
 
   /* Send complete wire packet */
-  if (SendData (cinfo, cinfo->sendbuf, (3 + headerlen + cinfo->packet.datasize)))
+  if (SendData (cinfo, cinfo->sendbuf, (3 + headerlen + cinfo->packet.datasize), 0))
   {
-    if (cinfo->socketerr != 2)
+    if (cinfo->socketerr != -2)
       lprintf (0, "[%s] SendRingPacket(): Error sending packet: %s",
                cinfo->hostname, strerror (errno));
     return -1;

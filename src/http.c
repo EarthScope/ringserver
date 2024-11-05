@@ -121,8 +121,9 @@ urldecode (char *dst, const char *src)
  *   /seedlink    - initiate WebSocket connection for SeedLink
  *   /datalink    - initiate WebSocket connection for DataLink
  *
- * Returns 1 on success and should disconnect, 0 on success and -1 on
- * error which should disconnect.
+ * Return 1 on success and should disconnect
+ * Return 0 on success
+ * Return -1 on error which should disconnect.
  ***************************************************************************/
 int
 HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
@@ -177,7 +178,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     if (headlen > 0)
     {
-      SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
+      SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen), 0);
     }
     else
     {
@@ -261,7 +262,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
                        (size_t[]){MIN ((size_t)headlen, cinfo->sendbuflen), (response) ? (size_t)responsebytes : 0},
-                       2);
+                       2, 0);
     }
     else
     {
@@ -309,7 +310,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
                        (size_t[]){MIN ((size_t)headlen, cinfo->sendbuflen), (response) ? (size_t)responsebytes : 0},
-                       2);
+                       2, 0);
     }
     else
     {
@@ -338,7 +339,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                           "\r\n",
                           (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
-      rv = SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
+      rv = SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen), 0);
 
       return (rv) ? -1 : 1;
     }
@@ -371,7 +372,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
                        (size_t[]){MIN ((size_t)headlen, cinfo->sendbuflen), (response) ? (size_t)responsebytes : 0},
-                       2);
+                       2, 0);
     }
     else
     {
@@ -400,7 +401,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                           "\r\n",
                           (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
-      rv = SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
+      rv = SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen), 0);
 
       return (rv) ? -1 : 1;
     }
@@ -433,7 +434,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
                        (size_t[]){MIN ((size_t)headlen, cinfo->sendbuflen), (response) ? (size_t)responsebytes : 0},
-                       2);
+                       2, 0);
     }
     else
     {
@@ -463,7 +464,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
+        SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen), 0);
       }
       else
       {
@@ -513,7 +514,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
+        SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen), 0);
       }
       else
       {
@@ -568,7 +569,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                           "<body><h1>Not Found</h1></body></html>",
                           (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
-      rv = SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
+      rv = SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen), 0);
 
       return (rv) ? -1 : 1;
     }
@@ -613,8 +614,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
  * |                     Payload Data continued ...                |
  * +---------------------------------------------------------------+
  *
- * Return number of characters read on success, 0 if no data is
- * available, -1 on connection shutdown and -2 on error.
+ * Return >0 as number of bytes read on success
+ * Return  0 when no data is available
+ * Return -1 on error or timeout, ClientInfo.socketerr is set
+ * Return -2 on orderly shutdown, ClientInfo.socketerr is set
  ***************************************************************************/
 int
 RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
@@ -623,43 +626,21 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
   uint8_t onetwo[2];
   uint16_t length16;
   uint8_t length7;
-  ssize_t nrecv;
   int totalrecv = 0;
+  int nrecv;
   int opcode;
 
   if (!cinfo || !length || !mask)
     return -1;
 
-  /* Recv first two bytes, no handling of fragmented receives */
-  nrecv = recv (cinfo->socket, onetwo, 2, 0);
+  /* Recv first two bytes */
+  nrecv = RecvData (cinfo, onetwo, 2, 0);
 
-  /* The only acceptable error is EAGAIN (no data on non-blocking) */
-  if (nrecv == -1 && errno != EAGAIN)
-  {
-    lprintf (0, "[%s] Error recv'ing data from client: %s",
-             cinfo->hostname, strerror (errno));
-    return -2;
-  }
-
-  /* No data on non-blocking socket, nothing to read */
-  if (nrecv == -1 && errno == EAGAIN)
-  {
-    return 0;
-  }
-
-  /* Peer completed an orderly shutdown */
-  if (nrecv == 0)
-  {
-    return -1;
-  }
-
-  /* Check for short read, which we do not handle */
   if (nrecv != 2)
   {
-    lprintf (0, "[%s] Error, only read %zd byte of 2 byte WebSocket start",
-             cinfo->hostname, nrecv);
-    return -2;
+    return nrecv;
   }
+
   totalrecv += 2;
 
   /* Check if FIN flag is set, bit 0 of the 1st byte */
@@ -676,10 +657,10 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
   /* If 126, the length is a 16-bit value in the next 2 bytes */
   if (length7 == 126)
   {
-    nrecv = recv (cinfo->socket, &length16, 2, MSG_WAITALL);
+    nrecv = RecvData (cinfo, &length16, 2, 1);
 
     if (nrecv != 2)
-      return -2;
+      return nrecv;
 
     totalrecv += 2;
 
@@ -691,10 +672,10 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
   /* If 127, the length is a 64-bit value in the next 8 bytes */
   else if (length7 == 127)
   {
-    nrecv = recv (cinfo->socket, length, 8, MSG_WAITALL);
+    nrecv = RecvData (cinfo, length, 8, 1);
 
     if (nrecv != 8)
-      return -2;
+      return nrecv;
 
     totalrecv += 8;
 
@@ -709,10 +690,10 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
   /* If mask flag, the masking key is the next 4 bytes */
   if (onetwo[1] & 0x80)
   {
-    nrecv = recv (cinfo->socket, mask, 4, MSG_WAITALL);
+    nrecv = RecvData (cinfo, mask, 4, 1);
 
     if (nrecv != 4)
-      return -2;
+      return nrecv;
 
     totalrecv += 4;
   }
@@ -725,19 +706,19 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
   {
     if (*length > 125)
     {
-      lprintf (0, "[%s] Error, WebSocket payload length of %llu > 125, which is not allowed for a ping",
-               cinfo->hostname, (unsigned long long int)*length);
+      lprintf (0, "[%s] Error, WebSocket payload length of %" PRIu64 " > 125, which is not allowed for a ping",
+               cinfo->hostname, *length);
       return -2;
     }
 
     if (*length > 0)
     {
-      nrecv = recv (cinfo->socket, payload, (size_t)*length, MSG_WAITALL);
+      nrecv = RecvData (cinfo, payload, *length, 1);
 
-      if (nrecv != (ssize_t)*length)
+      if (nrecv != (int)*length)
       {
-        lprintf (0, "[%s] Error receiving payload for WebSocket ping, nrecv: %zu, expected length: %llu\n",
-                 cinfo->hostname, (size_t)nrecv, (unsigned long long int)(*length));
+        lprintf (0, "[%s] Error receiving payload for WebSocket ping, nrecv: %d, expected length: %" PRIu64 "\n",
+                 cinfo->hostname, nrecv, *length);
         return -2;
       }
 
@@ -746,8 +727,8 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
 
     /* Send pong with same payload data */
     onetwo[0] = 0x8a; /* Change opcode to pong */
-    send (cinfo->socket, onetwo, 2, 0);
-    send (cinfo->socket, payload, *length, 0);
+    SendData (cinfo, onetwo, 2, 1);
+    SendData (cinfo, payload, *length, 1);
 
     return 0;
   }
@@ -757,19 +738,19 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
   {
     if (*length > 125)
     {
-      lprintf (0, "[%s] Error, WebSocket payload length of %llu > 125, which is not allowed for a pong",
-               cinfo->hostname, (unsigned long long int)*length);
+      lprintf (0, "[%s] Error, WebSocket payload length of %" PRIu64 " > 125, which is not allowed for a pong",
+               cinfo->hostname, *length);
       return -2;
     }
 
     if (*length > 0)
     {
-      nrecv = recv (cinfo->socket, payload, (size_t)*length, MSG_WAITALL);
+      nrecv = RecvData (cinfo, payload, *length, 1);
 
-      if (nrecv != (ssize_t)*length)
+      if (nrecv != (int)*length)
       {
-        lprintf (0, "[%s] Error receiving payload for unexpected WebSocket pong, nrecv: %zu, expected length: %llu\n",
-                 cinfo->hostname, (size_t)nrecv, (unsigned long long int)*length);
+        lprintf (0, "[%s] Error receiving payload for unexpected WebSocket pong, nrecv: %d, expected length: %" PRIu64 "\n",
+                 cinfo->hostname, nrecv, *length);
         return -2;
       }
 
@@ -783,7 +764,7 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
     /* Send Close frame in response */
     onetwo[0] = 0x88;
     onetwo[1] = 0;
-    send (cinfo->socket, onetwo, 2, 0);
+    SendData (cinfo, onetwo, 2, 1);
 
     return -1;
   }
@@ -918,7 +899,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly)
 
         if (headlen > 0)
         {
-          SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
+          SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen), 0);
         }
         else
         {
@@ -952,7 +933,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly)
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
+        SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen), 0);
       }
       else
       {
@@ -1000,7 +981,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly)
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
+        SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen), 0);
       }
       else
       {
@@ -1101,7 +1082,7 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly)
 
         if (headlen > 0)
         {
-          SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen));
+          SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen), 0);
         }
         else
         {
@@ -1256,7 +1237,7 @@ GenerateStatus (ClientInfo *cinfo, char **status)
       char protocolstr[100];
       ListenPortParams *lpp = loopstp->params;
 
-      if (GenProtocolString (lpp->protocols, protocolstr, sizeof (protocolstr)) > 0)
+      if (GenProtocolString (lpp->protocols, lpp->options, protocolstr, sizeof (protocolstr)) > 0)
       {
         if (snprintf (string, sizeof (string),
                       "  %s, Port: %s\n", protocolstr, lpp->portstr) > 0)
@@ -1390,17 +1371,32 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
     /* Determine connection type */
     if (tcinfo->type == CLIENT_DATALINK)
     {
-      if (tcinfo->websocket)
-        conntype = "WebSocket DataLink";
+      if (tcinfo->websocket && tcinfo->tls)
+        conntype = "DataLink:WebSocket:TLS";
+      else if (tcinfo->websocket)
+        conntype = "DataLink:WebSocket";
+      else if (tcinfo->tls)
+        conntype = "DataLink:TLS";
       else
         conntype = "DataLink";
     }
     else if (tcinfo->type == CLIENT_SEEDLINK)
     {
-      if (tcinfo->websocket)
-        conntype = "WebSocket SeedLink";
+      if (tcinfo->websocket && tcinfo->tls)
+        conntype = "SeedLink:WebSocket:TLS";
+      else if (tcinfo->websocket)
+        conntype = "SeedLink:WebSocket";
+      else if (tcinfo->tls)
+        conntype = "SeedLink:TLS";
       else
         conntype = "SeedLink";
+    }
+    else if (tcinfo->type == CLIENT_HTTP)
+    {
+      if (tcinfo->tls)
+        conntype = "HTTPS";
+      else
+        conntype = "HTTP";
     }
     else
     {
@@ -1571,11 +1567,11 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   }
 
   /* Send header and file */
-  SendData (cinfo, response, strlen (response));
+  SendData (cinfo, response, strlen (response), 0);
 
   while ((bytes = fread (filebuffer, 1, sizeof (filebuffer), fp)) > 0)
   {
-    if (SendData (cinfo, filebuffer, bytes) < 0)
+    if (SendData (cinfo, filebuffer, bytes, 0))
       break;
   }
 
@@ -1639,7 +1635,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
     if (response)
     {
-      SendData (cinfo, response, strlen (response));
+      SendData (cinfo, response, strlen (response), 0);
       free (response);
     }
 
@@ -1662,7 +1658,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
     if (response)
     {
-      SendData (cinfo, response, strlen (response));
+      SendData (cinfo, response, strlen (response), 0);
       free (response);
     }
 
@@ -1685,7 +1681,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
     if (response)
     {
-      SendData (cinfo, response, strlen (response));
+      SendData (cinfo, response, strlen (response), 0);
       free (response);
     }
 
@@ -1708,7 +1704,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
     if (response)
     {
-      SendData (cinfo, response, strlen (response));
+      SendData (cinfo, response, strlen (response), 0);
       free (response);
     }
 
@@ -1729,7 +1725,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
     if (response)
     {
-      SendData (cinfo, response, strlen (response));
+      SendData (cinfo, response, strlen (response), 0);
       free (response);
     }
 
@@ -1779,7 +1775,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
   if (response)
   {
-    SendData (cinfo, response, strlen (response));
+    SendData (cinfo, response, strlen (response), 0);
     free (response);
   }
   else

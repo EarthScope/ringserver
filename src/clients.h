@@ -57,7 +57,9 @@ typedef enum
 typedef struct ClientInfo
 {
   int         socket;       /* Socket descriptor */
-  int         socketerr;    /* Socket error flag */
+  uint8_t     tls;          /* Flag identifying TLS connection */
+  void       *tlsctx;       /* TLS context */
+  int         socketerr;    /* Socket error flag, -1: error, -2: orderly shutdown */
   char       *sendbuf;      /* Client specific send buffer */
   size_t      sendbuflen;   /* Length of send buffer */
   char       *recvbuf;      /* Client specific receive buffer */
@@ -72,7 +74,7 @@ typedef struct ClientInfo
   char        clientid[100];/* Client identifier string */
   ClientState state;        /* Client state flag */
   ClientType  type;         /* Client type flag */
-  ListenProtocols protocols; /* Protocol flags for this client */
+  ListenProtocols protocols;/* Protocol flags for this client */
   uint8_t     websocket;    /* Flag identifying websocket connection */
   union {
     uint32_t one;
@@ -123,23 +125,24 @@ typedef struct StreamNode
 
 extern void *ClientThread (void *arg);
 
-extern int SendData (ClientInfo *cinfo, void *buffer, size_t buflen);
+extern int SendData (ClientInfo *cinfo, void *buffer, size_t buflen, int no_wsframe);
 
-extern int SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[], int bufcount);
+extern int SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
+                       int bufcount, int no_wsframe);
 
-extern int RecvCmd (ClientInfo *cinfo);
+extern int RecvData (ClientInfo *cinfo, void *buffer, size_t recvlen, int fulfill);
 
-extern int RecvData (ClientInfo *cinfo, char *buffer, size_t buflen);
+extern int RecvDLCommand (ClientInfo *cinfo);
 
 extern int RecvLine (ClientInfo *cinfo);
 
-extern int GenProtocolString (ListenProtocols protocols, char *protocolstr, size_t maxlength);
+extern int PollSocket (int socket, int readability, int writability, int timeout_ms);
 
 extern StreamNode *GetStreamNode (RBTree *tree, pthread_mutex_t *plock,
-				  char *streamid, int *new);
+                                  char *streamid, int *new);
 
-extern int  AddToString (char **string, char *source, char *delim,
-			 size_t where, size_t maxlen);
+extern int AddToString (char **string, char *source, char *delim,
+                        size_t where, size_t maxlen);
 
 #ifdef __cplusplus
 }
