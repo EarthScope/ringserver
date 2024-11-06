@@ -428,7 +428,7 @@ ClientThread (void *arg)
   /* Set thread CLOSING status, locking entire client list */
   pthread_mutex_lock (&param.cthreads_lock);
   mytdp->td_state = TDS_CLOSING;
-  pthread_mutex_unlock (&param.sthreads_lock);
+  pthread_mutex_unlock (&param.cthreads_lock);
 
   /* Close client socket */
   if (cinfo->socket)
