@@ -22,12 +22,16 @@
 #ifndef RINGSERVER_H
 #define RINGSERVER_H 1
 
-#include <pthread.h>
-#include "clients.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <pthread.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+
+#include "clients.h"
 
 #define PACKAGE   "ringserver"
 #define VERSION   "4.0.0"
@@ -102,20 +106,70 @@ typedef struct ListenPortParams
   int socket;                /* Socket descriptor or -1 when not connected */
 } ListenPortParams;
 
-/* Global variables declared in ringserver.c */
-extern pthread_mutex_t sthreads_lock;
-extern struct sthread *sthreads;
-extern pthread_mutex_t cthreads_lock;
-extern struct cthread *cthreads;
-extern char *serverid;
-extern char *tlscertfile;
-extern char *tlskeyfile;
-extern int tlsverifyclientcert;
-extern char *webroot;
-extern nstime_t serverstarttime;
-extern int clientcount;
-extern int resolvehosts;
-extern int shutdownsig;
+/* A structure to list IP addresses ranges */
+typedef struct IPNet_s
+{
+  union
+  {
+    struct in_addr in_addr;
+    struct in6_addr in6_addr;
+  } network;
+  union
+  {
+    struct in_addr in_addr;
+    struct in6_addr in6_addr;
+  } netmask;
+  int family;
+  char *limitstr;
+  struct IPNet_s *next;
+} IPNet;
+
+/* Global parameters */
+struct param_s
+{
+  nstime_t serverstarttime; /* Server start time */
+  int clientcount;          /* Track number of connected clients */
+  int shutdownsig;          /* Shutdown signal */
+  time_t configfilemtime;   /* Modification time of configuration file */
+  pthread_mutex_t sthreads_lock;
+  struct sthread *sthreads; /* Server threads list */
+  pthread_mutex_t cthreads_lock;
+  struct cthread *cthreads; /* Client threads list */
+};
+
+extern struct param_s param;
+
+/* Configuration parameters */
+struct config_s
+{
+  char *configfile;         /* Configuration file */
+  char *serverid;           /* Server ID */
+  char *ringdir;            /* Directory for ring files */
+  uint64_t ringsize;        /* Size of ring buffer file */
+  uint32_t pktsize;         /* Ring packet size */
+  uint32_t maxclients;      /* Enforce maximum number of clients */
+  uint32_t maxclientsperip; /* Enforce maximum number of clients per IP */
+  uint32_t clienttimeout;   /* Drop clients if no communication within this limit */
+  float timewinlimit;       /* Time window search limit in percent */
+  int resolvehosts;         /* Flag to control resolving of client hostnames */
+  uint8_t memorymapring;    /* Flag to control mmap'ing of packet buffer */
+  uint8_t volatilering;     /* Flag to control if ring is volatile or not */
+  uint8_t autorecovery;     /* Flag to control auto recovery from corruption */
+  char *webroot;            /* Web content root directory */
+  char *httpheaders;        /* HTTP headers to include in each HTTP response */
+  char *mseedarchive;       /* miniSEED archive definition */
+  int mseedidleto;          /* miniSEED idle file timeout */
+  IPNet *limitips;          /* List of limit-by-IP entries */
+  IPNet *matchips;          /* List of IPs allowed to connect */
+  IPNet *rejectips;         /* List of IPs not allowed to connect */
+  IPNet *writeips;          /* List of IPs allowed to submit data */
+  IPNet *trustedips;        /* List of IPs to trust */
+  char *tlscertfile;        /* TLS certificate file */
+  char *tlskeyfile;         /* TLS key file */
+  int tlsverifyclientcert;  /* Verify client certificate */
+};
+
+extern struct config_s config;
 
 extern int GenProtocolString (ListenProtocols protocols, ListenOptions options,
                               char *result, size_t maxlength);

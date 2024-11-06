@@ -58,7 +58,7 @@ info_create_root (const char *software)
     return NULL;
   }
 
-  if (cJSON_AddStringToObject (root, "organization", serverid) == NULL)
+  if (cJSON_AddStringToObject (root, "organization", config.serverid) == NULL)
   {
     return NULL;
   }
@@ -81,7 +81,7 @@ info_add_id (cJSON *root)
   /* Add server start time */
 
   /* Create server start time string as YYYY-MM-DDTHH:MM:SSZ */
-  ms_nstime2timestr (serverstarttime, string, ISOMONTHDAY_Z, NONE);
+  ms_nstime2timestr (param.serverstarttime, string, ISOMONTHDAY_Z, NONE);
 
   if (cJSON_AddStringToObject (root, "server_start", string) == NULL)
   {
@@ -529,8 +529,8 @@ info_add_connections (ClientInfo *cinfo, cJSON *root, const char *matchexpr)
   nsnow = NSnow ();
 
   /* List connections, lock client list while looping */
-  pthread_mutex_lock (&cthreads_lock);
-  loopctp = cthreads;
+  pthread_mutex_lock (&param.cthreads_lock);
+  loopctp = param.cthreads;
   while (loopctp)
   {
     tcinfo = (ClientInfo *)loopctp->td->td_prvtptr;
@@ -631,7 +631,7 @@ info_add_connections (ClientInfo *cinfo, cJSON *root, const char *matchexpr)
 
     loopctp = loopctp->next;
   }
-  pthread_mutex_unlock (&cthreads_lock);
+  pthread_mutex_unlock (&param.cthreads_lock);
 
   if (match_code)
     pcre2_code_free (match_code);

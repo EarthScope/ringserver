@@ -562,7 +562,7 @@ HandleNegotiation (ClientInfo *cinfo)
 
     /* Create and send server version information */
     bytes = snprintf (sendbuffer, sizeof (sendbuffer),
-                      SLSERVER_ID "\r\n%s\r\n", serverid);
+                      SLSERVER_ID "\r\n%s\r\n", config.serverid);
 
     if (bytes >= sizeof (sendbuffer))
     {

@@ -48,13 +48,13 @@ tls_configure (ClientInfo *cinfo)
   int ret;
   psa_status_t status;
 
-  if (tlscertfile == NULL)
+  if (config.tlscertfile == NULL)
   {
     lprintf (0, "[%s] No TLS certificate provided, cannot configure TLS", cinfo->hostname);
     return -1;
   }
 
-  if (tlskeyfile == NULL)
+  if (config.tlskeyfile == NULL)
   {
     lprintf (0, "[%s] No TLS key provided, cannot configure TLS", cinfo->hostname);
     return -1;
@@ -108,18 +108,18 @@ tls_configure (ClientInfo *cinfo)
     return -1;
   }
 
-  lprintf (2, "[%s] Reading TLS cert from '%s'", cinfo->hostname, tlscertfile);
+  lprintf (2, "[%s] Reading TLS cert from '%s'", cinfo->hostname, config.tlscertfile);
 
-  if ((ret = mbedtls_x509_crt_parse_file (&tlsctx->srvcert, tlscertfile)) != 0)
+  if ((ret = mbedtls_x509_crt_parse_file (&tlsctx->srvcert, config.tlscertfile)) != 0)
   {
     lprintf (0, "[%s] mbedtls_x509_crt_parse_file() returned -0x%x",
              cinfo->hostname, (unsigned int)-ret);
     return -1;
   }
 
-  lprintf (2, "[%s] Reading TLS key from '%s'", cinfo->hostname, tlskeyfile);
+  lprintf (2, "[%s] Reading TLS key from '%s'", cinfo->hostname, config.tlskeyfile);
 
-  if ((ret = mbedtls_pk_parse_keyfile (&tlsctx->pkey, tlskeyfile, "",
+  if ((ret = mbedtls_pk_parse_keyfile (&tlsctx->pkey, config.tlskeyfile, "",
                                        mbedtls_ctr_drbg_random, &tlsctx->ctr_drbg)) != 0)
   {
     lprintf (0, "[%s] mbedtls_pk_parse_keyfile() returned -0x%x", cinfo->hostname, (unsigned int)-ret);
@@ -178,7 +178,7 @@ tls_configure (ClientInfo *cinfo)
     PollSocket (cinfo->socket, 1, 1, 1000);
   }
 
-  if (tlsverifyclientcert)
+  if (config.tlsverifyclientcert)
   {
     lprintf (2, "[%s] Verifying TLS client certificate", cinfo->hostname);
 

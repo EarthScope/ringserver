@@ -114,7 +114,7 @@ ClientThread (void *arg)
   cinfo->state = STATE_COMMAND;
 
   /* Resolve IP address to hostname */
-  if (resolvehosts)
+  if (config.resolvehosts)
   {
     if (getnameinfo (cinfo->addr, cinfo->addrlen,
                      cinfo->hostname, sizeof (cinfo->hostname), NULL, 0, 0))
@@ -426,9 +426,9 @@ ClientThread (void *arg)
   } /* End of main client loop */
 
   /* Set thread CLOSING status, locking entire client list */
-  pthread_mutex_lock (&cthreads_lock);
+  pthread_mutex_lock (&param.cthreads_lock);
   mytdp->td_state = TDS_CLOSING;
-  pthread_mutex_unlock (&cthreads_lock);
+  pthread_mutex_unlock (&param.sthreads_lock);
 
   /* Close client socket */
   if (cinfo->socket)

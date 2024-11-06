@@ -245,7 +245,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     responsebytes = asprintf (&response,
                               "%s/%s\n"
                               "Organization: %s",
-                              PACKAGE, VERSION, serverid);
+                              PACKAGE, VERSION, config.serverid);
 
     /* Create header */
     headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
@@ -477,6 +477,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     /* Check subprotocol header for acceptable values, rewrite to echo in response */
     if (*secWebSocketProtocolHeader)
     {
+      //TODO Add support for SeedLink4.0
       if (strstr (secWebSocketProtocolHeader, "SeedLink3.1"))
         snprintf (secWebSocketProtocolHeader, sizeof (secWebSocketProtocolHeader),
                   "SeedLink3.1");
@@ -552,7 +553,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     lprintf (1, "[%s] Received HTTP request for %s", cinfo->hostname, path);
 
     /* If WebRoot is configured send file */
-    if (webroot && (rv = SendFileHTTP (cinfo, path)) >= 0)
+    if (config.webroot && (rv = SendFileHTTP (cinfo, path)) >= 0)
     {
       lprintf (2, "[%s] Sent %s (%d bytes)", cinfo->hostname, path, rv);
     }
@@ -1151,7 +1152,7 @@ GenerateStatus (ClientInfo *cinfo, char **status)
   if (!cinfo || !status)
     return -1;
 
-  ms_nstime2timestr (serverstarttime, serverstart, ISOMONTHDAY_Z, NONE);
+  ms_nstime2timestr (param.serverstarttime, serverstart, ISOMONTHDAY_Z, NONE);
   snprintf (ringversion, sizeof (ringversion), "%u", (unsigned int)cinfo->ringparams->version);
   snprintf (ringsize, sizeof (ringsize), "%" PRIu64, cinfo->ringparams->ringsize);
   snprintf (packetsize, sizeof (packetsize), "%lu",
@@ -1159,7 +1160,7 @@ GenerateStatus (ClientInfo *cinfo, char **status)
   snprintf (maxpackets, sizeof (maxpackets), "%" PRIu64, cinfo->ringparams->maxpackets);
   snprintf (memorymapped, sizeof (memorymapped), "%s", (cinfo->ringparams->mmapflag) ? "TRUE" : "FALSE");
   snprintf (volatileflag, sizeof (volatileflag), "%s", (cinfo->ringparams->volatileflag) ? "TRUE" : "FALSE");
-  snprintf (totalconnections, sizeof (totalconnections), "%d", clientcount);
+  snprintf (totalconnections, sizeof (totalconnections), "%d", param.clientcount);
   snprintf (totalstreams, sizeof (totalstreams), "%d", cinfo->ringparams->streamcount);
   snprintf (txpacketrate, sizeof (txpacketrate), "%.1f", cinfo->ringparams->txpacketrate);
   snprintf (txbyterate, sizeof (txbyterate), "%.1f", cinfo->ringparams->txbyterate);
@@ -1202,7 +1203,7 @@ GenerateStatus (ClientInfo *cinfo, char **status)
                  "Latest packet: %s\n"
                  "  Create: %s  Data start: %s  Data end: %s\n",
                  PACKAGE, VERSION,
-                 serverid,
+                 config.serverid,
                  serverstart,
                  ringversion,
                  ringsize,
@@ -1228,8 +1229,8 @@ GenerateStatus (ClientInfo *cinfo, char **status)
   AddToString (status, "\nServer threads:\n", "", 0, 8388608);
 
   /* List server threads, lock thread list while looping */
-  pthread_mutex_lock (&sthreads_lock);
-  loopstp = sthreads;
+  pthread_mutex_lock (&param.sthreads_lock);
+  loopstp = param.sthreads;
   while (loopstp)
   {
     if (loopstp->type == LISTEN_THREAD)
@@ -1276,7 +1277,7 @@ GenerateStatus (ClientInfo *cinfo, char **status)
 
     loopstp = loopstp->next;
   }
-  pthread_mutex_unlock (&sthreads_lock);
+  pthread_mutex_unlock (&param.sthreads_lock);
 
   return (*status) ? strlen (*status) : 0;
 } /* End of GenerateStatus() */
@@ -1344,8 +1345,8 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
   nsnow = NSnow ();
 
   /* List connections, lock client list while looping */
-  pthread_mutex_lock (&cthreads_lock);
-  loopctp = cthreads;
+  pthread_mutex_lock (&param.cthreads_lock);
+  loopctp = param.cthreads;
   while (loopctp)
   {
     /* Skip if client thread is not in ACTIVE state */
@@ -1439,7 +1440,7 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
     selectedcount++;
     loopctp = loopctp->next;
   }
-  pthread_mutex_unlock (&cthreads_lock);
+  pthread_mutex_unlock (&param.cthreads_lock);
 
   snprintf (conninfo, sizeof (conninfo),
             "%d of %d connections\n",
@@ -1483,7 +1484,7 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
     return -1;
 
   /* Build path using web root and resolve absolute */
-  if (asprintf (&webpath, "%s/%s", webroot, path) < 0)
+  if (asprintf (&webpath, "%s/%s", config.webroot, path) < 0)
     return -1;
 
   filename = realpath (webpath, NULL);
@@ -1496,7 +1497,7 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   free (webpath);
 
   /* Sanity check that file is within web root */
-  if (strncmp (webroot, filename, strlen (webroot)))
+  if (strncmp (config.webroot, filename, strlen (config.webroot)))
   {
     lprintf (0, "Refusing to send file outside of WebRoot: %s", filename);
     return -1;

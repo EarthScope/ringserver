@@ -404,7 +404,7 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
     currentday = CalcDayTime (cday.tm_year + 1900, cday.tm_yday + 1);
   }
 
-  while (shutdownsig == 0 && (ede = EReadDir (dir)) != NULL)
+  while (param.shutdownsig == 0 && (ede = EReadDir (dir)) != NULL)
   {
     int filenamelen;
 
@@ -462,7 +462,7 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
     /* Stat the file */
     if (lstat (fkey->filename, &st) < 0)
     {
-      if (!(shutdownsig && errno == EINTR))
+      if (!(param.shutdownsig && errno == EINTR))
         lprintf (0, "[MSeedScan] Cannot stat %s: %s", fkey->filename, strerror (errno));
       continue;
     }
@@ -473,7 +473,7 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
       if (stat (fkey->filename, &st) < 0)
       {
         /* Interruption signals when the stop signal is set should break out */
-        if (shutdownsig && errno == EINTR)
+        if (param.shutdownsig && errno == EINTR)
           break;
 
         /* Log an error if the error is anything but a disconnected link */
@@ -694,7 +694,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
   /* Open target file */
   if ((fd = open (filename, flags, 0)) == -1)
   {
-    if (!(shutdownsig && errno == EINTR))
+    if (!(param.shutdownsig && errno == EINTR))
     {
       lprintf (0, "[MSeedScan] Error opening %s: %s", filename, strerror (errno));
       return -1;
@@ -717,7 +717,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
     /* Read up to MSSCAN_READLEN bytes into buffer */
     if ((nread = pread (fd, mssinfo->readbuffer, MSSCAN_READLEN, newoffset)) <= 0)
     {
-      if (!(shutdownsig && errno == EINTR))
+      if (!(param.shutdownsig && errno == EINTR))
       {
         lprintf (0, "[MSeedScan] Error: cannot read data from %s", filename);
         close (fd);
@@ -773,7 +773,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
                  (size_t)(detlen - nread),
                  newoffset + nread) != detlen - nread)
       {
-        if (!(shutdownsig && errno == EINTR))
+        if (!(param.shutdownsig && errno == EINTR))
         {
           lprintf (0, "[MSeedScan] Error: cannot read remaining record data from %s", filename);
           close (fd);
@@ -1051,7 +1051,7 @@ WriteRecord (MSScanInfo *mssinfo, char *record, uint64_t reclen)
 
     /* Set the shutdown signal if ring corruption was detected */
     if (rv == -2)
-      shutdownsig = 1;
+      param.shutdownsig = 1;
 
     return -1;
   }

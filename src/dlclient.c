@@ -840,7 +840,7 @@ HandleWrite (ClientInfo *cinfo)
 
     /* Set the shutdown signal if ring corruption was detected */
     if (rv == -2)
-      shutdownsig = 1;
+      param.shutdownsig = 1;
 
     return -1;
   }
@@ -993,7 +993,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
 
   /* All INFO responses contain these attributes in the root DataLink element */
   mxmlElementSetAttr (xmldoc, "Version", VERSION);
-  mxmlElementSetAttr (xmldoc, "ServerID", serverid);
+  mxmlElementSetAttr (xmldoc, "ServerID", config.serverid);
   mxmlElementSetAttrf (xmldoc, "Capabilities", "%s PACKETSIZE:%lu%s", DLCAPFLAGS,
                        (unsigned long int)(cinfo->ringparams->pktsize - sizeof (RingPacket)),
                        (cinfo->writeperm) ? " WRITE" : "");
@@ -1007,7 +1007,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
   else
   {
     /* Convert server start time to YYYY-MM-DD HH:MM:SS */
-    ms_nstime2timestr (serverstarttime, string, ISOMONTHDAY_Z, NONE);
+    ms_nstime2timestr (param.serverstarttime, string, ISOMONTHDAY_Z, NONE);
     mxmlElementSetAttr (status, "StartTime", string);
     mxmlElementSetAttrf (status, "RingVersion", "%u", (unsigned int)cinfo->ringparams->version);
     mxmlElementSetAttrf (status, "RingSize", "%" PRIu64, cinfo->ringparams->ringsize);
@@ -1016,7 +1016,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
     mxmlElementSetAttrf (status, "MaximumPackets", "%" PRIu64, cinfo->ringparams->maxpackets);
     mxmlElementSetAttrf (status, "MemoryMappedRing", "%s", (cinfo->ringparams->mmapflag) ? "TRUE" : "FALSE");
     mxmlElementSetAttrf (status, "VolatileRing", "%s", (cinfo->ringparams->volatileflag) ? "TRUE" : "FALSE");
-    mxmlElementSetAttrf (status, "TotalConnections", "%d", clientcount);
+    mxmlElementSetAttrf (status, "TotalConnections", "%d", param.clientcount);
     mxmlElementSetAttrf (status, "TotalStreams", "%d", cinfo->ringparams->streamcount);
     mxmlElementSetAttrf (status, "TXPacketRate", "%.1f", cinfo->ringparams->txpacketrate);
     mxmlElementSetAttrf (status, "TXByteRate", "%.1f", cinfo->ringparams->txbyterate);
@@ -1067,8 +1067,8 @@ HandleInfo (ClientInfo *cinfo, int socket)
       }
 
       /* Create a Thread element for each thread, lock thread list while looping */
-      pthread_mutex_lock (&sthreads_lock);
-      loopstp = sthreads;
+      pthread_mutex_lock (&param.sthreads_lock);
+      loopstp = param.sthreads;
       while (loopstp)
       {
         totalcount++;
@@ -1128,7 +1128,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
 
         loopstp = loopstp->next;
       }
-      pthread_mutex_unlock (&sthreads_lock);
+      pthread_mutex_unlock (&param.sthreads_lock);
 
       /* Add thread count attribute to ServerThreads element */
       mxmlElementSetAttrf (stlist, "TotalServerThreads", "%d", totalcount);
@@ -1249,8 +1249,8 @@ HandleInfo (ClientInfo *cinfo, int socket)
     }
 
     /* Create a Connection element for each client, lock client list while looping */
-    pthread_mutex_lock (&cthreads_lock);
-    loopctp = cthreads;
+    pthread_mutex_lock (&param.cthreads_lock);
+    loopctp = param.cthreads;
     while (loopctp)
     {
       /* Skip if client thread is not in ACTIVE state */
@@ -1344,7 +1344,7 @@ HandleInfo (ClientInfo *cinfo, int socket)
 
       loopctp = loopctp->next;
     }
-    pthread_mutex_unlock (&cthreads_lock);
+    pthread_mutex_unlock (&param.cthreads_lock);
 
     /* Add client count attribute to ConnectionList element */
     mxmlElementSetAttrf (connlist, "TotalConnections", "%d", totalcount);
