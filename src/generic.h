@@ -31,13 +31,13 @@ extern "C" {
 /* Key for B-trees */
 typedef int64_t Key;
 
-extern int SplitStreamID (char *streamid, char delim, int maxlength,
+extern int SplitStreamID (const char *streamid, char delim, int maxlength,
                           char *id1, char *id2, char *id3, char *id4, char *id5, char *id6,
                           char *type);
 extern nstime_t NSnow (void);
-extern int64_t FVNhash64 (char *str);
+extern int64_t FVNhash64 (const char *str);
 extern int KeyCompare (const void *a, const void *b);
-extern int IsAllDigits (char *string);
+extern int IsAllDigits (const char *string);
 extern int HumanSizeString (uint64_t bytes, char *sizestring, size_t sizestringlen);
 
 #ifdef __cplusplus

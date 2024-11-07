@@ -56,7 +56,7 @@
  * and -1 on error.
  ***************************************************************************/
 int
-SplitStreamID (char *streamid, char delim, int maxlength,
+SplitStreamID (const char *streamid, char delim, int maxlength,
                char *id1, char *id2, char *id3, char *id4, char *id5, char *id6,
                char *type)
 {
@@ -221,7 +221,7 @@ NSnow (void)
  * Returns the hash of the string.
  ***************************************************************************/
 int64_t
-FVNhash64 (char *str)
+FVNhash64 (const char *str)
 {
   unsigned char *s = (unsigned char *)str; /* unsigned string */
 
@@ -268,7 +268,7 @@ KeyCompare (const void *a, const void *b)
  * Return 1 if the specified string is all digits and 0 otherwise.
  *********************************************************************/
 int
-IsAllDigits (char *string)
+IsAllDigits (const char *string)
 {
   int idx;
   int length;
