@@ -687,7 +687,6 @@ HandleWrite (ClientInfo *cinfo)
   int rv;
 
   MS3Record *msr = NULL;
-  char *type;
 
   if (!cinfo || !cinfo->extinfo)
     return -1;
@@ -790,41 +789,35 @@ HandleWrite (ClientInfo *cinfo)
     return -1;
 
   /* Write received miniSEED to a disk archive if configured */
-  if (cinfo->mswrite)
+  if (cinfo->mswrite &&
+      (MS2_ISVALIDHEADER (cinfo->packetdata) ||
+       MS3_ISVALIDHEADER (cinfo->packetdata)))
   {
-    char filename[100];
+    char filename[100] = {0};
     char *fn;
 
-    //TODO - this could check for miniSEED in packetdata with a header check instead of relying on the streamid suffix
-    if ((type = strrchr (cinfo->packet.streamid, '/')))
+    /* Parse the miniSEED record header */
+    if (msr3_parse (cinfo->packetdata, cinfo->packet.datasize, &msr, 0, 0) == MS_NOERROR)
     {
-      if (!strncmp (++type, "MSEED", 5))
+      /* Check for file name in streamid: e.g. "filename::streamid/MSEED" */
+      if ((fn = strstr (cinfo->packet.streamid, "::")))
       {
-        /* Parse the miniSEED record header */
-        if (msr3_parse (cinfo->packetdata, cinfo->packet.datasize, &msr, 0, 0) == MS_NOERROR)
-        {
-          /* Check for file name in streamid: "filename::streamid/MSEED" */
-          if ((fn = strstr (cinfo->packet.streamid, "::")))
-          {
-            strncpy (filename, cinfo->packet.streamid, (fn - cinfo->packet.streamid));
-            filename[(fn - cinfo->packet.streamid)] = '\0';
-            fn                                      = filename;
-          }
-
-          /* Write miniSEED record to disk */
-          if (ds_streamproc (cinfo->mswrite, msr, fn, cinfo->hostname))
-          {
-            lprintf (1, "[%s] Error writing miniSEED to disk", cinfo->hostname);
-
-            SendPacket (cinfo, "ERROR", "Error writing miniSEED to disk", 0, 1, 1);
-
-            return -1;
-          }
-        }
-
-        if (msr)
-          msr3_free (&msr);
+        strncpy (filename, cinfo->packet.streamid, (fn - cinfo->packet.streamid));
+        filename[(fn - cinfo->packet.streamid)] = '\0';
+        fn                                      = filename;
       }
+
+      /* Write miniSEED record to disk */
+      if (ds_streamproc (cinfo->mswrite, msr, fn, cinfo->hostname))
+      {
+        lprintf (1, "[%s] Error writing miniSEED to disk", cinfo->hostname);
+
+        SendPacket (cinfo, "ERROR", "Error writing miniSEED to disk", 0, 1, 1);
+
+        return -1;
+      }
+
+      msr3_free (&msr);
     }
   }
 

@@ -477,8 +477,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     /* Check subprotocol header for acceptable values, rewrite to echo in response */
     if (*secWebSocketProtocolHeader)
     {
-      //TODO Add support for SeedLink4.0
-      if (strstr (secWebSocketProtocolHeader, "SeedLink3.1"))
+      if (strstr (secWebSocketProtocolHeader, "SeedLink4.0"))
+        snprintf (secWebSocketProtocolHeader, sizeof (secWebSocketProtocolHeader),
+                  "SeedLink4.0");
+      else if (strstr (secWebSocketProtocolHeader, "SeedLink3.1"))
         snprintf (secWebSocketProtocolHeader, sizeof (secWebSocketProtocolHeader),
                   "SeedLink3.1");
       else
