@@ -1507,9 +1507,11 @@ void LogRingParameters (RingParams *ringparams)
 
   lprintf (2, "   streamcount: %u", ringparams->streamcount);
 
-  lprintf (2, "   volatile: %u, mmap: %u, corrupt: %u, flux: %u",
-           ringparams->volatileflag, ringparams->mmapflag,
-           ringparams->corruptflag, ringparams->fluxflag);
+  lprintf (2, "   volatile: %s, mmap: %s, corrupt: %s, flux: %s",
+           (ringparams->volatileflag) ? "yes" : "no",
+           (ringparams->mmapflag) ? "yes" : "no",
+           (ringparams->corruptflag) ? "yes" : "no",
+           (ringparams->fluxflag) ? "yes" : "no");
 
   snprintf (pktidstr, sizeof (pktidstr), "%" PRIu64, ringparams->earliestid);
   lprintf (2, "   earliest packet ID: %s, offset: %" PRId64,
@@ -1533,7 +1535,7 @@ void LogRingParameters (RingParams *ringparams)
   lprintf (2, "   latest packet data start time: %s",
            (ringparams->latestdstime == NSTUNSET) ? "NONE" : timestr);
 
-} /* End of RingLogParameters() */
+} /* End of LogRingParameters() */
 
 /***************************************************************************
  * UpdatePattern:

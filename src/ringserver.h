@@ -106,6 +106,8 @@ typedef struct ListenPortParams
   int socket;                /* Socket descriptor or -1 when not connected */
 } ListenPortParams;
 
+#define ListenPortParams_INITIALIZER {.portstr = {0}, .protocols = 0, .options = 0, .socket = -1}
+
 /* A structure to list IP addresses ranges */
 typedef struct IPNet_s
 {

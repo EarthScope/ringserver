@@ -39,13 +39,16 @@
 #include "config.h"
 
 static char *GetOptVal (int argcount, char **argvec, int argopt);
+static int ReadEnvironmentVariables (void);
+static int SetParameter (const char *paramstring, int dynamiconly);
+static int YesNo (const char *value);
 static int InitServerSocket (char *portstr, ListenOptions options);
 static int ConfigMSWrite (char *value);
 static int AddListenThreads (ListenPortParams *lpp);
 static uint64_t CalcSize (const char *sizestr);
-static int AddMSeedScanThread (char *configstr);
+static int AddMSeedScanThread (const char *configstr);
 static int AddServerThread (ServerThreadType type, void *params);
-static int AddIPNet (IPNet **pplist, char *network, char *limitstr);
+static int AddIPNet (IPNet **pplist, const char *network, const char *limitstr);
 static void Usage (int level);
 
 /***************************************************************************
@@ -59,8 +62,9 @@ int
 ProcessParam (int argcount, char **argvec)
 {
   struct sthread *loopstp;
-  ListenPortParams lpp;
+  char paramstr[512] = {0};
   int optind;
+  int rv;
 
   /* Process all command line arguments */
   for (optind = 1; optind < argcount; optind++)
@@ -80,93 +84,88 @@ ProcessParam (int argcount, char **argvec)
     }
     else if (strncmp (argvec[optind], "-v", 2) == 0)
     {
-      verbose += strspn (&argvec[optind][1], "v");
+      size_t vcount = verbose + strspn (&argvec[optind][1], "v");
+      snprintf (paramstr, sizeof (paramstr), "Verbosity %zu", vcount);
+      if (SetParameter (paramstr, 0) <= 0)
+        exit (1);
     }
     else if (strcmp (argvec[optind], "-I") == 0)
     {
-      config.serverid = strdup (GetOptVal (argcount, argvec, optind++));
+      snprintf (paramstr, sizeof (paramstr), "ServerID \"%s\"", GetOptVal (argcount, argvec, optind++));
+      if (SetParameter (paramstr, 0) <= 0)
+        exit (1);
     }
     else if (strcmp (argvec[optind], "-m") == 0)
     {
-      config.maxclients = strtoul (GetOptVal (argcount, argvec, optind++), NULL, 10);
+      snprintf (paramstr, sizeof (paramstr), "MaxClients %s", GetOptVal (argcount, argvec, optind++));
+      if (SetParameter (paramstr, 0) <= 0)
+        exit (1);
     }
     else if (strcmp (argvec[optind], "-M") == 0)
     {
-      config.maxclientsperip = strtoul (GetOptVal (argcount, argvec, optind++), NULL, 10);
+      snprintf (paramstr, sizeof (paramstr), "MaxClientsPerIP %s", GetOptVal (argcount, argvec, optind++));
+      if (SetParameter (paramstr, 0) <= 0)
+        exit (1);
     }
     else if (strcmp (argvec[optind], "-Rd") == 0)
     {
-      config.ringdir = GetOptVal (argcount, argvec, optind++);
+      snprintf (paramstr, sizeof (paramstr), "RingDirectory \"%s\"", GetOptVal (argcount, argvec, optind++));
+      if (SetParameter (paramstr, 0) <= 0)
+        exit (1);
     }
     else if (strcmp (argvec[optind], "-Rs") == 0)
     {
-      config.ringsize = CalcSize (GetOptVal (argcount, argvec, optind++));
-
-      if (config.ringsize == 0)
-      {
-        lprintf (0, "Error with -Rs option");
+      snprintf (paramstr, sizeof (paramstr), "RingSize %s", GetOptVal (argcount, argvec, optind++));
+      if (SetParameter (paramstr, 0) <= 0)
         exit (1);
-      }
     }
     else if (strcmp (argvec[optind], "-Rp") == 0)
     {
-      config.pktsize = sizeof (RingPacket) + strtoul (GetOptVal (argcount, argvec, optind++), NULL, 10);
+      snprintf (paramstr, sizeof (paramstr), "MaxPacketSize %s", GetOptVal (argcount, argvec, optind++));
+      if (SetParameter (paramstr, 0) <= 0)
+        exit (1);
     }
     else if (strcmp (argvec[optind], "-NOMM") == 0)
     {
-      config.memorymapring = 0;
+      snprintf (paramstr, sizeof (paramstr), "MemoryMapRing 0");
+      if (SetParameter (paramstr, 0) <= 0)
+        exit (1);
     }
     else if (strcmp (argvec[optind], "-L") == 0)
     {
-      strncpy (lpp.portstr, GetOptVal (argcount, argvec, optind++), sizeof (lpp.portstr));
-      lpp.portstr[sizeof (lpp.portstr) - 1] = '\0';
-      lpp.protocols                         = PROTO_ALL;
-      lpp.socket                            = -1;
-
-      if (!AddListenThreads (&lpp))
-      {
-        lprintf (0, "Error adding listening threads for all protocols");
+      snprintf (paramstr, sizeof (paramstr), "ListenPort %s", GetOptVal (argcount, argvec, optind++));
+      if (SetParameter (paramstr, 0) <= 0)
         exit (1);
-      }
     }
     else if (strcmp (argvec[optind], "-DL") == 0)
     {
-      strncpy (lpp.portstr, GetOptVal (argcount, argvec, optind++), sizeof (lpp.portstr));
-      lpp.portstr[sizeof (lpp.portstr) - 1] = '\0';
-      lpp.protocols                         = PROTO_DATALINK;
-      lpp.socket                            = -1;
-
-      if (!AddListenThreads (&lpp))
-      {
-        lprintf (0, "Error adding listening threads for DataLink");
+      snprintf (paramstr, sizeof (paramstr), "DataLinkPort %s", GetOptVal (argcount, argvec, optind++));
+      if (SetParameter (paramstr, 0) <= 0)
         exit (1);
-      }
     }
     else if (strcmp (argvec[optind], "-SL") == 0)
     {
-      strncpy (lpp.portstr, GetOptVal (argcount, argvec, optind++), sizeof (lpp.portstr));
-      lpp.portstr[sizeof (lpp.portstr) - 1] = '\0';
-      lpp.protocols                         = PROTO_SEEDLINK;
-      lpp.socket                            = -1;
-
-      if (!AddListenThreads (&lpp))
-      {
-        lprintf (0, "Error adding listening threads for SeedLink");
+      snprintf (paramstr, sizeof (paramstr), "SeedLinkPort %s", GetOptVal (argcount, argvec, optind++));
+      if (SetParameter (paramstr, 0) <= 0)
         exit (1);
-      }
     }
     else if (strcmp (argvec[optind], "-T") == 0)
     {
-      TLogParams.tlogbasedir = GetOptVal (argcount, argvec, optind++);
+      snprintf (paramstr, sizeof (paramstr), "TransferLogDirectory \"%s\"", GetOptVal (argcount, argvec, optind++));
+      if (SetParameter (paramstr, 0) <= 0)
+        exit (1);
     }
     else if (strcmp (argvec[optind], "-Ti") == 0)
     {
-      /* Specified in hours, the actual variable should be in seconds */
-      TLogParams.tloginterval = strtod (GetOptVal (argcount, argvec, optind++), NULL) * 3600;
+      snprintf (paramstr, sizeof (paramstr), "TransferLogInterval %s", GetOptVal (argcount, argvec, optind++));
+      if (SetParameter (paramstr, 0) <= 0)
+        exit (1);
     }
     else if (strcmp (argvec[optind], "-Tp") == 0)
     {
-      TLogParams.tlogprefix = GetOptVal (argcount, argvec, optind++);
+      snprintf (paramstr, sizeof (paramstr), "TransferLogPrefix \"%s\"", GetOptVal (argcount, argvec, optind++));
+      if (SetParameter (paramstr, 0) <= 0)
+        exit (1);
     }
     else if (strcmp (argvec[optind], "-STDERR") == 0)
     {
@@ -179,19 +178,21 @@ ProcessParam (int argcount, char **argvec)
     }
     else if (strcmp (argvec[optind], "-MSWRITE") == 0)
     {
-      ConfigMSWrite (GetOptVal (argcount, argvec, optind++));
+      snprintf (paramstr, sizeof (paramstr), "MSeedWrite \"%s\"", GetOptVal (argcount, argvec, optind++));
+      if (SetParameter (paramstr, 0) <= 0)
+        exit (1);
     }
     else if (strcmp (argvec[optind], "-MSSCAN") == 0)
     {
-      if (AddMSeedScanThread (GetOptVal (argcount, argvec, optind++)))
-      {
-        lprintf (0, "Error with -MSSCAN option");
+      snprintf (paramstr, sizeof (paramstr), "MSeedScan \"%s\"", GetOptVal (argcount, argvec, optind++));
+      if (SetParameter (paramstr, 0) <= 0)
         exit (1);
-      }
     }
     else if (strcmp (argvec[optind], "-VOLATILE") == 0)
     {
-      config.volatilering = 1;
+      snprintf (paramstr, sizeof (paramstr), "VolatileRing 1");
+      if (SetParameter (paramstr, 0) <= 0)
+        exit (1);
     }
     else if (strncmp (argvec[optind], "-", 1) == 0)
     {
@@ -207,22 +208,36 @@ ProcessParam (int argcount, char **argvec)
       }
       else
       {
-        config.configfile = argvec[optind];
-
-        lprintf (1, "Reading configuration from %s", config.configfile);
-
-        /* Process the config file */
-        if (ReadConfigFile (config.configfile, 0, 0))
-        {
-          lprintf (0, "Error reading config file");
-          exit (1);
-        }
+        config.configfile = strdup(argvec[optind]);
       }
     }
   }
 
   /* Report the program version */
   lprintf (0, "%s version: %s", PACKAGE, VERSION);
+
+  /* Read environment variables */
+  if ((rv = ReadEnvironmentVariables ()) < 0)
+  {
+    lprintf (0, "Error reading environment variables");
+    exit (1);
+  }
+  else
+  {
+    lprintf (3, "Read %d configuration environment variables", rv);
+  }
+
+  /* Process the config file */
+  if (config.configfile)
+  {
+    lprintf (1, "Reading configuration from %s", config.configfile);
+
+    if (ReadConfigFile (config.configfile, 0, 0))
+    {
+      lprintf (0, "Error reading config file");
+      exit (1);
+    }
+  }
 
   /* Set default server ID if not already set */
   if (!config.serverid)
@@ -250,28 +265,11 @@ ProcessParam (int argcount, char **argvec)
     }
   }
 
-  /* Check for specified ring directory */
-  if (!config.ringsize)
-  {
-    lprintf (0, "Error, ring buffer size not valid: %" PRIu64, config.ringsize);
-    exit (1);
-  }
-
-  /* Check for specified ring directory */
+  /* Check that a ring directory is specified or is volatile */
   if (!config.ringdir && !config.volatilering)
   {
     lprintf (0, "Error, ring directory must be specified");
     exit (1);
-  }
-
-  /* Check transfer log directory */
-  if (TLogParams.tlogbasedir)
-  {
-    if (access (TLogParams.tlogbasedir, W_OK))
-    {
-      lprintf (0, "WARNING, cannot write to transfer log directory: %s",
-               TLogParams.tlogbasedir);
-    }
   }
 
   /* Check that TLS is not specified for a port with more than one protocol */
@@ -330,43 +328,299 @@ GetOptVal (int argcount, char **argvec, int argopt)
 } /* End of GetOptVal() */
 
 /***************************************************************************
+ * ReadEnvironmentVariables:
+ *
+ * Check for and processes recognized environment variables.
+ *
+ * Returns >=0 on the number of variables read on success
+ * Returns  -1 on error
+ ****************************************************************************/
+static int
+ReadEnvironmentVariables (void)
+{
+  const char *envvar;
+  char paramstr[512] = {0};
+  int count = 0;
+
+  if ((envvar = getenv ("RS_RING_DIRECTORY")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "RingDirectory \"%s\"", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_RING_SIZE")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "RingSize %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_MAX_PACKET_SIZE")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "MaxPacketSize %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_MEMORY_MAP_RING")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "MemoryMapRing %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_AUTO_RECOVERY")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "AutoRecovery %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_LISTEN_PORT")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "ListenPort %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_SEEDLINK_PORT")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "SeedLinkPort %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_DATALINK_PORT")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "DataLinkPort %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_SERVER_ID")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "ServerID \"%s\"", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_VERBOSITY")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "Verbosity %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_MAX_CLIENTS_PER_IP")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "MaxClientsPerIP %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_MAX_CLIENTS")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "MaxClients %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_CLIENT_TIMEOUT")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "ClientTimeout %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_RESOLVE_HOSTNAMES")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "ResolveHostnames %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_TIME_WINDOW_LIMIT")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "TimeWindowLimit %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_TRANSFER_LOG_DIRECTORY")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "TransferLogDirectory \"%s\"", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_TRANSFER_LOG_INTERVAL")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "TransferLogInterval %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_TRANSFER_LOG_PREFIX")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "TransferLogPrefix \"%s\"", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_TRANSFER_LOG_TX")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "TransferLogTX %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_TRANSFER_LOG_RX")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "TransferLogRX %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_WRITE_IP")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "WriteIP %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_TRUSTED_IP")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "TrustedIP %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_LIMIT_IP")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "LimitIP %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_MATCH_IP")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "MatchIP %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_REJECT_IP")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "RejectIP %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_WEB_ROOT")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "WebRoot \"%s\"", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_HTTP_HEADER")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "HTTPHeader \"%s\"", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_MSEED_WRITE")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "MSeedWrite \"%s\"", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_TLS_CERT_FILE")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "TLSCertFile \"%s\"", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_TLS_KEY_FILE")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "TLSKeyFile \"%s\"", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_TLS_VERIFY_CLIENT_CERT")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "TLSVerifyClientCert %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_MSEED_SCAN")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "MSeedScan %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_VOLATILE_RING")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "VolatileRing %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  return count;
+}  /* End of ReadEnvironmentVariables() */
+
+/***************************************************************************
  * ReadConfigFile:
  *
  * Reads the ringserver configuration from a file containing simple
- * key-value pairs.  If the dynamiconly argument is true only
- * "dynamic" parameters will be read from the file.
+ * key-value pairs.
  *
- * Recognized parameters ("D" labeled parameters are dynamic):
+ * If the dynamiconly argument is true only "dynamic" parameters will be
+ * read from the file.
  *
- * RingDirectory <dir>
- * RingSize <size>
- * MaxPacketID <id>  (deprecated, parsed and prints a warning)
- * MaxPacketSize <size>
- * MemoryMapRing <1|0>
- * AutoRecovery <2|1|0>
- * ListenPort <port>
- * SeedLinkPort <port>
- * DataLinkPort <port>
- * [D] ServerID <server id>
- * [D] Verbosity <level>
- * [D] MaxClientsPerIP <max>
- * [D] MaxClients <max>
- * [D] ClientTimeout <timeout>
- * [D] ResolveHostnames <1|0>
- * [D] TimeWindowLimit <percent>
- * [D] TransferLogDirectory <dir>
- * [D] TransferLogInterval <interval>
- * [D] TransferLogPrefix <prefix>
- * [D] TransferLogTX <1|0>
- * [D] TransferLogRX <1|0>
- * [D] WriteIP <IP>[/netmask]
- * [D] LimitIP <IP>[/netmask] <streamlimit>
- * [D] MatchIP <IP[/netmask]
- * [D] RejectIP <IP[/netmask]
- * [D] WebRoot <web content root>
- * [D] HTTPHeader <HTTP header>
- * [D] MSeedWrite <format>
- * MSeedScan <directory>
+ * The mtime argument is the modification time of the file, if known.
+ *
+ * See SetParameter() for recognized parameters.
  *
  * Returns 0 on success and -1 on error.
  ***************************************************************************/
@@ -375,15 +629,12 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
 {
   FILE *cfile;
   char line[200];
-  char *ptr, *chr;
-  struct stat cfstat;
+  char *ptr;
+  int linecount = 0;
+  int rv;
+
   IPNet *ipnet     = NULL;
   IPNet *nextipnet = NULL;
-  ListenPortParams lpp;
-
-  char svalue[513];
-  float fvalue;
-  unsigned int uvalue;
 
   if (!configfile)
     return -1;
@@ -399,6 +650,8 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
   /* If no mtime was supplied, stat the file to get it */
   if (!mtime)
   {
+    struct stat cfstat;
+
     if (fstat (fileno (cfile), &cfstat))
     {
       lprintf (0, "Error stating config file %s: %s",
@@ -470,550 +723,44 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
   /* Read and process all lines */
   while (fgets (line, sizeof (line), cfile))
   {
-    ptr = line;
+    linecount++;
 
-    /* Skip prefixed white-space */
-    while (isspace ((int)(*ptr)))
+    ptr = line;
+    while (isspace ((int)*ptr))
       ptr++;
 
-    /* Skip empty lines */
-    if (*ptr == '\0')
+    /* Skip blank and comment lines */
+    if (*ptr == '\0' || *ptr == '#')
       continue;
 
-    /* Skip comment lines */
-    if (*ptr == '#' || *ptr == '*')
-      continue;
+    /* Remove trailing newline */
+    if ((ptr = strrchr (ptr, '\n')))
+      *ptr = '\0';
 
-    /* Truncate at newline or carriage return */
-    if ((chr = strchr (ptr, '\n')))
-      *chr = '\0';
-    if ((chr = strchr (ptr, '\r')))
-      *chr = '\0';
+    /* Remove trailing carriage return */
+    if ((ptr = strrchr (ptr, '\r')))
+      *ptr = '\0';
 
-    /* Search for recognized parameters */
-    if (!dynamiconly && !strncasecmp ("RingDirectory", ptr, 13))
+    rv = SetParameter (line, dynamiconly);
+
+    if (rv < 0)
     {
-      if (sscanf (ptr, "%*s %512s", svalue) != 1)
-      {
-        lprintf (0, "Error with RingDirectory config file line: %s", ptr);
-        return -1;
-      }
-      svalue[sizeof (svalue) - 1] = '\0';
-
-      config.ringdir = strdup (svalue);
+      lprintf (0, "Error processing config file line (line %d): %s", linecount, line);
+      return -1;
     }
-    else if (!dynamiconly && !strncasecmp ("RingSize", ptr, 8))
+    else if (rv == 0)
     {
-      if (sscanf (ptr, "%*s %512s", svalue) != 1)
-      {
-        lprintf (0, "Error with RingSize config file line: %s", ptr);
-        return -1;
-      }
-      svalue[sizeof (svalue) - 1] = '\0';
-
-      config.ringsize = CalcSize (svalue);
-
-      if (config.ringsize == 0)
-      {
-        lprintf (0, "Error with RingSize config file line: %s", ptr);
-        return -1;
-      }
-    }
-    else if (!dynamiconly && !strncasecmp ("MaxPacketID", ptr, 11))
-    {
-      lprintf (0, "MaxPacketID config file option no longer used, ignoring: %s", ptr);
-    }
-    else if (!dynamiconly && !strncasecmp ("MaxPacketSize", ptr, 13))
-    {
-      if (sscanf (ptr, "%*s %u", &uvalue) != 1)
-      {
-        lprintf (0, "Error with MaxPacketSize config file line: %s", ptr);
-        return -1;
-      }
-
-      config.pktsize = sizeof (RingPacket) + uvalue;
-    }
-    else if (!dynamiconly && !strncasecmp ("AutoRecovery", ptr, 12))
-    {
-      if (sscanf (ptr, "%*s %u", &uvalue) != 1)
-      {
-        lprintf (0, "Error with AutoRecovery config file line: %s", ptr);
-        return -1;
-      }
-
-      if (uvalue != 0 && uvalue != 1 && uvalue != 2)
-      {
-        lprintf (0, "Invalid AutoRecovery config file value: %u", uvalue);
-        return -1;
-      }
-
-      config.autorecovery = uvalue;
-    }
-    else if (!dynamiconly && !strncasecmp ("MemoryMapRing", ptr, 13))
-    {
-      if (sscanf (ptr, "%*s %u", &uvalue) != 1)
-      {
-        lprintf (0, "Error with MemoryMapRing config file line: %s", ptr);
-        return -1;
-      }
-
-      config.memorymapring = (uvalue) ? 1 : 0;
-    }
-    else if (!dynamiconly && !strncasecmp ("ListenPort", ptr, 10))
-    {
-      int rv;
-
-      rv = sscanf (ptr, "%*s %10s %512[^\r\n]", lpp.portstr, svalue);
-
-      if (rv != 1 && rv != 2)
-      {
-        lprintf (0, "Error with ListenPort config file line: %s", ptr);
-        return -1;
-      }
-
-      lpp.portstr[sizeof (lpp.portstr) - 1] = '\0';
-      lpp.protocols                         = PROTO_ALL;
-      lpp.options                           = 0;
-      lpp.socket                            = -1;
-
-      /* Parse optional protocol flags to limit allowed protocols */
-      if (rv == 2)
-      {
-        lpp.protocols = 0;
-        lpp.options   = 0;
-
-        if (strcasestr (svalue, "DataLink"))
-          lpp.protocols |= PROTO_DATALINK;
-        if (strcasestr (svalue, "SeedLink"))
-          lpp.protocols |= PROTO_SEEDLINK;
-        if (strcasestr (svalue, "HTTP"))
-          lpp.protocols |= PROTO_HTTP;
-
-        if (lpp.protocols == 0)
-          lpp.protocols = PROTO_ALL;
-
-        if (strcasestr (svalue, "TLS"))
-          lpp.options |= ENCRYPTION_TLS;
-        if (strcasestr (svalue, "IPv4"))
-          lpp.options |= FAMILY_IPv4;
-        if (strcasestr (svalue, "IPv6"))
-          lpp.options |= FAMILY_IPv6;
-      }
-
-      if (!AddListenThreads (&lpp))
-      {
-        lprintf (0, "Error adding server thread for ListenPort config file line: %s", ptr);
-        return -1;
-      }
-    }
-    else if (!dynamiconly && !strncasecmp ("DataLinkPort", ptr, 12))
-    {
-      if (sscanf (ptr, "%*s %512s", svalue) != 1)
-      {
-        lprintf (0, "Error with DataLinkPort config file line: %s", ptr);
-        return -1;
-      }
-
-      strncpy (lpp.portstr, svalue, sizeof (lpp.portstr));
-      lpp.portstr[sizeof (lpp.portstr) - 1] = '\0';
-      lpp.protocols                         = PROTO_DATALINK;
-      lpp.socket                            = -1;
-
-      if (!AddListenThreads (&lpp))
-      {
-        lprintf (0, "Error adding server thread for DataLinkPort config file line: %s", ptr);
-        return -1;
-      }
-    }
-    else if (!dynamiconly && !strncasecmp ("SeedLinkPort", ptr, 12))
-    {
-      if (sscanf (ptr, "%*s %512s", svalue) != 1)
-      {
-        lprintf (0, "Error with SeedLinkPort config file line: %s", ptr);
-        return -1;
-      }
-
-      strncpy (lpp.portstr, svalue, sizeof (lpp.portstr));
-      lpp.portstr[sizeof (lpp.portstr) - 1] = '\0';
-      lpp.protocols                         = PROTO_SEEDLINK;
-      lpp.socket                            = -1;
-
-      if (!AddListenThreads (&lpp))
-      {
-        lprintf (0, "Error adding server thread for SeedLinkPort config file line: %s", ptr);
-        return -1;
-      }
-    }
-    else if (!strncasecmp ("ServerID", ptr, 8))
-    {
-      char *value;
-      char *tptr;
-      char dchar;
-
-      if (strlen (ptr) < 10)
-      {
-        lprintf (0, "Error with ServerID config file line: %s", ptr);
-        return -1;
-      }
-
-      /* Find beginning of non-white-space value */
-      value = ptr + 8;
-      while (isspace ((int)*value))
-        value++;
-
-      /* If single or double quotes are detected eliminate them */
-      if (*value == '"' || *value == '\'')
-      {
-        dchar = *value;
-        value++;
-
-        if ((tptr = strchr (value, dchar)))
-        {
-          /* Truncate string at matching quote */
-          *tptr = '\0';
-        }
-        else
-        {
-          lprintf (0, "Mismatching quotes for ServerID config file line: %s", ptr);
-          return -1;
-        }
-      }
-
-      /* Free existing server ID if any */
-      free (config.serverid);
-      config.serverid = strdup (value);
-    }
-    else if (!strncasecmp ("TLSCertFile", ptr, 11))
-    {
-      if (sscanf (ptr, "%*s %512s", svalue) != 1)
-      {
-        lprintf (0, "Error with TLSCertFile config file line: %s", ptr);
-        return -1;
-      }
-      svalue[sizeof (svalue) - 1] = '\0';
-
-      free (config.tlscertfile);
-      config.tlscertfile = strdup (svalue);
-    }
-    else if (!strncasecmp ("TLSKeyFile", ptr, 10))
-    {
-      if (sscanf (ptr, "%*s %512s", svalue) != 1)
-      {
-        lprintf (0, "Error with TLSKeyFile config file line: %s", ptr);
-        return -1;
-      }
-      svalue[sizeof (svalue) - 1] = '\0';
-
-      free (config.tlskeyfile);
-      config.tlskeyfile = strdup (svalue);
-    }
-    else if (!strncasecmp ("TLSVerifyClientCert", ptr, 19))
-    {
-      if (sscanf (ptr, "%*s %d", &config.tlsverifyclientcert) != 1)
-      {
-        lprintf (0, "Error with TLSVerifyClientCert config file line: %s", ptr);
-        return -1;
-      }
-    }
-    else if (!strncasecmp ("Verbosity", ptr, 9))
-    {
-      if (sscanf (ptr, "%*s %" SCNu8, &verbose) != 1)
-      {
-        lprintf (0, "Error with Verbosity config file line: %s", ptr);
-        return -1;
-      }
-    }
-    else if (!strncasecmp ("MaxClientsPerIP", ptr, 15))
-    {
-      if (sscanf (ptr, "%*s %" SCNu32, &config.maxclientsperip) != 1)
-      {
-        lprintf (0, "Error with MaxClientsPerIP config file line: %s", ptr);
-        return -1;
-      }
-    }
-    else if (!strncasecmp ("MaxClients", ptr, 10))
-    {
-      if (sscanf (ptr, "%*s %" SCNu32, &config.maxclients) != 1)
-      {
-        lprintf (0, "Error with MaxClients config file line: %s", ptr);
-        return -1;
-      }
-    }
-    else if (!strncasecmp ("ClientTimeout", ptr, 13))
-    {
-      if (sscanf (ptr, "%*s %" SCNu32, &config.clienttimeout) != 1)
-      {
-        lprintf (0, "Error with ClientTimeout config file line: %s", ptr);
-        return -1;
-      }
-    }
-    else if (!strncasecmp ("ResolveHostnames", ptr, 16))
-    {
-      if (sscanf (ptr, "%*s %u", &uvalue) != 1)
-      {
-        lprintf (0, "Error with ResolveHostnames config file line: %s", ptr);
-        return -1;
-      }
-
-      config.resolvehosts = (uvalue) ? 1 : 0;
-    }
-    else if (!strncasecmp ("TimeWindowLimit", ptr, 15))
-    {
-      if (sscanf (ptr, "%*s %f", &fvalue) != 1)
-      {
-        lprintf (0, "Error with TimeWindowLimit config file line: %s", ptr);
-        return -1;
-      }
-
-      config.timewinlimit = fvalue / 100.0;
-    }
-    else if (!strncasecmp ("TransferLogDirectory", ptr, 20))
-    {
-      if (sscanf (ptr, "%*s %512s", svalue) != 1)
-      {
-        lprintf (0, "Error with TransferLogDirectory config file line: %s", ptr);
-        return -1;
-      }
-      svalue[sizeof (svalue) - 1] = '\0';
-
-      TLogParams.tlogbasedir = strdup (svalue);
-    }
-    else if (!strncasecmp ("TransferLogInterval", ptr, 19))
-    {
-      if (sscanf (ptr, "%*s %f", &fvalue) != 1)
-      {
-        lprintf (0, "Error with TransferLogInterval config file line: %s", ptr);
-        return -1;
-      }
-
-      /* Parameter is specified in hours but value needs to be seconds */
-      TLogParams.tloginterval = fvalue * 3600.0;
-    }
-    else if (!strncasecmp ("TransferLogPrefix", ptr, 17))
-    {
-      if (sscanf (ptr, "%*s %512s", svalue) != 1)
-      {
-        lprintf (0, "Error with TransferLogPrefix config file line: %s", ptr);
-        return -1;
-      }
-      svalue[sizeof (svalue) - 1] = '\0';
-
-      TLogParams.tlogprefix = strdup (svalue);
-    }
-    else if (!strncasecmp ("TransferLogTX", ptr, 13))
-    {
-      if (sscanf (ptr, "%*s %u", &uvalue) != 1)
-      {
-        lprintf (0, "Error with TransferLogTX config file line: %s", ptr);
-        return -1;
-      }
-
-      TLogParams.txlog = (uvalue) ? 1 : 0;
-    }
-    else if (!strncasecmp ("TransferLogRX", ptr, 13))
-    {
-      if (sscanf (ptr, "%*s %u", &uvalue) != 1)
-      {
-        lprintf (0, "Error with TransferLogRX config file line: %s", ptr);
-        return -1;
-      }
-
-      TLogParams.rxlog = (uvalue) ? 1 : 0;
-    }
-    else if (!strncasecmp ("WriteIP", ptr, 7))
-    {
-      if (sscanf (ptr, "%*s %512s", svalue) != 1)
-      {
-        lprintf (0, "Error with WriteIP config file line: %s", ptr);
-        return -1;
-      }
-      svalue[sizeof (svalue) - 1] = '\0';
-
-      if (AddIPNet (&config.writeips, svalue, NULL))
-      {
-        lprintf (0, "Error with WriteIP config file line: %s", ptr);
-        return -1;
-      }
-    }
-    else if (!strncasecmp ("TrustedIP", ptr, 9))
-    {
-      if (sscanf (ptr, "%*s %512s", svalue) != 1)
-      {
-        lprintf (0, "Error with TrustedIP config file line: %s", ptr);
-        return -1;
-      }
-      svalue[sizeof (svalue) - 1] = '\0';
-
-      if (AddIPNet (&config.trustedips, svalue, NULL))
-      {
-        lprintf (0, "Error with TrustedIP config file line: %s", ptr);
-        return -1;
-      }
-    }
-    else if (!strncasecmp ("LimitIP", ptr, 7))
-    {
-      char limitstr[513];
-
-      limitstr[0] = '\0';
-      if (sscanf (ptr, "%*s %512s %512s", svalue, limitstr) != 2)
-      {
-        lprintf (0, "Error with LimitIP config file line: %s", ptr);
-        return -1;
-      }
-      svalue[sizeof (svalue) - 1]     = '\0';
-      limitstr[sizeof (limitstr) - 1] = '\0';
-
-      if (AddIPNet (&config.limitips, svalue, limitstr))
-      {
-        lprintf (0, "Error with LimitIP config file line: %s", ptr);
-        return -1;
-      }
-    }
-    else if (!strncasecmp ("MatchIP", ptr, 7))
-    {
-      if (sscanf (ptr, "%*s %512s", svalue) != 1)
-      {
-        lprintf (0, "Error with MatchIP config file line: %s", ptr);
-        return -1;
-      }
-      svalue[sizeof (svalue) - 1] = '\0';
-
-      if (AddIPNet (&config.matchips, svalue, NULL))
-      {
-        lprintf (0, "Error with MatchIP config file line: %s", ptr);
-        return -1;
-      }
-    }
-    else if (!strncasecmp ("RejectIP", ptr, 8))
-    {
-      if (sscanf (ptr, "%*s %512s", svalue) != 1)
-      {
-        lprintf (0, "Error with RejectIP config file line: %s", ptr);
-        return -1;
-      }
-      svalue[sizeof (svalue) - 1] = '\0';
-
-      if (AddIPNet (&config.rejectips, svalue, NULL))
-      {
-        lprintf (0, "Error with RejectIP config file line: %s", ptr);
-        return -1;
-      }
-    }
-    else if (!strncasecmp ("WebRoot", ptr, 7))
-    {
-      char *value;
-      char *tptr;
-      char dchar;
-
-      if (strlen (ptr) < 9)
-      {
-        lprintf (0, "Error with WebRoot config file line: %s", ptr);
-        return -1;
-      }
-
-      /* Find beginning of non-white-space value */
-      value = ptr + 8;
-      while (isspace ((int)*value))
-        value++;
-
-      /* If single or double quotes are detected eliminate them */
-      if (*value == '"' || *value == '\'')
-      {
-        dchar = *value;
-        value++;
-
-        if ((tptr = strchr (value, dchar)))
-        {
-          /* Truncate string at matching quote */
-          *tptr = '\0';
-        }
-        else
-        {
-          lprintf (0, "Mismatching quotes for WebRoot config file line: %s", ptr);
-          return -1;
-        }
-      }
-
-      free (config.webroot);
-      config.webroot = realpath (value, NULL);
-
-      if (config.webroot == NULL)
-      {
-        lprintf (0, "Error with WebRoot value: %s", value);
-        return -1;
-      }
-    }
-    else if (!strncasecmp ("HTTPHeader", ptr, 10))
-    {
-      char *value;
-      char *tptr;
-      char dchar;
-
-      if (strlen (ptr) < 12)
-      {
-        lprintf (0, "Error with HTTPHeader config file line: %s", ptr);
-        return -1;
-      }
-
-      /* Find beginning of non-white-space value */
-      value = ptr + 10;
-      while (isspace ((int)*value))
-        value++;
-
-      /* If single or double quotes are detected eliminate them */
-      if (*value == '"' || *value == '\'')
-      {
-        dchar = *value;
-        value++;
-
-        if ((tptr = strchr (value, dchar)))
-        {
-          /* Truncate string at matching quote */
-          *tptr = '\0';
-        }
-        else
-        {
-          lprintf (0, "Mismatching quotes for HTTPHeader config file line: %s", ptr);
-          return -1;
-        }
-      }
-
-      /* Append multiple headers to composite string */
-      if (asprintf (&tptr, "%s%s\r\n", (config.httpheaders) ? config.httpheaders : "", value) == -1)
-      {
-        lprintf (0, "Error allocating memory");
-        return -1;
-      }
-
-      free (config.httpheaders);
-      config.httpheaders = tptr;
-    }
-    else if (!strncasecmp ("MSeedWrite", ptr, 10))
-    {
-      if (sscanf (ptr, "%*s %512s", svalue) != 1)
-      {
-        lprintf (0, "Error with MSeedWrite config file line: %s", ptr);
-        return -1;
-      }
-      svalue[sizeof (svalue) - 1] = '\0';
-
-      ConfigMSWrite (svalue);
-    }
-    else if (!dynamiconly && !strncasecmp ("MSeedScan", ptr, 9))
-    {
-      if (sscanf (ptr, "%*s %512[^\n]", svalue) != 1)
-      {
-        lprintf (0, "Error with MSeedScan config file line: %s", ptr);
-        return -1;
-      }
-
-      if (AddMSeedScanThread (svalue))
-      {
-        lprintf (0, "Error with MSeedScan config file line: %s", ptr);
-        return -1;
-      }
+      lprintf (0, "Unrecognized parameter in config file (line %d): %s", linecount, line);
     }
   } /* Done reading config file lines */
+
+  /* Close config file */
+  if (fclose (cfile))
+  {
+    lprintf (0, "Error closing config file %s: %s",
+             configfile, strerror (errno));
+    return -1;
+  }
 
   /* Add localhost (loopback) to write permission list if list empty */
   if (!config.writeips)
@@ -1035,16 +782,559 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     }
   }
 
-  /* Close config file */
-  if (fclose (cfile))
+  return 0;
+} /* End of ReadConfigFile() */
+
+/***************************************************************************
+ * SetParameter:
+ *
+ * Parses a configuration parameter from a string, validates and sets the
+ * appropriate config value.
+ *
+ * If the dynamiconly argument is true only "dynamic" parameters will be
+ * updated.
+ *
+ * Recognized parameters ("D" labeled parameters are dynamic):
+ *
+ * RingDirectory <dir>
+ * RingSize <size>
+ * MaxPacketID <id>  (deprecated, parsed and prints a warning)
+ * MaxPacketSize <size>
+ * MemoryMapRing <1|0>
+ * AutoRecovery <2|1|0>
+ * ListenPort <port> [flags]
+ * SeedLinkPort <port> [flags]
+ * DataLinkPort <port> [flags]
+ * [D] ServerID <server id>
+ * [D] Verbosity <level>
+ * [D] MaxClientsPerIP <max>
+ * [D] MaxClients <max>
+ * [D] ClientTimeout <timeout>
+ * [D] ResolveHostnames <1|0>
+ * [D] TimeWindowLimit <percent>
+ * [D] TransferLogDirectory <dir>
+ * [D] TransferLogInterval <interval>
+ * [D] TransferLogPrefix <prefix>
+ * [D] TransferLogTX <1|0>
+ * [D] TransferLogRX <1|0>
+ * [D] WriteIP <IP>[/netmask]
+ * [D] TrustedIP <IP>[/netmask]
+ * [D] LimitIP <IP>[/netmask] <streamlimit>
+ * [D] MatchIP <IP[/netmask]
+ * [D] RejectIP <IP[/netmask]
+ * [D] WebRoot <web content root>
+ * [D] HTTPHeader <HTTP header>
+ * [D] MSeedWrite <format>
+ * [D[ TLSCertFile <file>
+ * [D] TLSKeyFile <file>
+ * [D] TLSVerifyClientCert 0|1
+ * MSeedScan <directory>
+ * VolatileRing 0|1
+ *
+ * Returns >0 on the number of fields on success
+ * Returns  0 on unrecognized parameter
+ * Returns -1 on error
+ ****************************************************************************/
+static int
+SetParameter (const char *paramstring, int dynamiconly)
+{
+#define MAX_FIELDS 10
+  char resolved_path[PATH_MAX] = {0};
+  char *field[MAX_FIELDS]      = {0};
+  char param[200]              = {0};
+
+  int fieldcount = 0;
+
+  ListenPortParams lpp = ListenPortParams_INITIALIZER;
+  int yesno;
+
+  if (!paramstring)
+    return -1;
+
+  if (strlen (paramstring) > sizeof (param))
   {
-    lprintf (0, "Error closing config file %s: %s",
-             configfile, strerror (errno));
+    lprintf (0, "%s() Error, parameter string too long (%zu characters): '%.20s ...'",
+             __func__, strlen (paramstring), paramstring);
     return -1;
   }
 
-  return 0;
-} /* End of ReadConfigFile() */
+  lprintf (3, "Processing parameter: %s", paramstring);
+
+  /* Set field pointers to space-delimited strings, while handling
+   * quoted strings and trailing '#' comments. */
+  strncpy (param, paramstring, sizeof (param) - 1);
+  for (int idx = 0, start = 1, inside_quotes = 0;
+       param[idx] && fieldcount < MAX_FIELDS;
+       idx++)
+  {
+    if (param[idx] == '"')
+    {
+      inside_quotes = !inside_quotes;
+      param[idx]    = '\0';
+    }
+    else if (!inside_quotes && isspace ((int)param[idx]))
+    {
+      param[idx] = '\0';
+      start      = 1;
+    }
+    else if (!inside_quotes && param[idx] == '#')
+    {
+      param[idx] = '\0';
+      break;
+    }
+    else if (start)
+    {
+      field[fieldcount] = param + idx;
+      fieldcount++;
+      start = 0;
+    }
+  }
+
+  /* Search for recognized parameters */
+  if (!strcasecmp ("RingDirectory", field[0]) && fieldcount == 2)
+  {
+    if (dynamiconly)
+      return fieldcount;
+
+    if (realpath (field[1], resolved_path) == NULL)
+    {
+      lprintf (0, "Error with %s value, cannot find path: %s",
+               field[0], field[1]);
+      return -1;
+    }
+
+    if (access (resolved_path, W_OK))
+    {
+      lprintf (0, "Error with %s value, cannot write to directory: %s",
+               field[0], resolved_path);
+      return -1;
+    }
+
+    free (config.ringdir);
+    config.ringdir = strdup (resolved_path);
+  }
+  else if (!strcasecmp ("RingSize", field[0]) && fieldcount == 2)
+  {
+    if (dynamiconly)
+      return fieldcount;
+
+    config.ringsize = CalcSize (field[1]);
+
+    if (config.ringsize == 0)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+  }
+  else if (!strcasecmp ("MaxPacketID", field[0]))
+  {
+    lprintf (0, "MaxPacketID config file option no longer used, ignoring: %s", paramstring);
+  }
+  else if (!strcasecmp ("MaxPacketSize", field[0]) && fieldcount == 2)
+  {
+    if (dynamiconly)
+      return fieldcount;
+
+    if (sscanf (field[1], "%" SCNu32, &config.pktsize) != 1)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    /* Add size of RingPacket header to specified value */
+    config.pktsize += sizeof (RingPacket);
+  }
+  else if (!strcasecmp ("AutoRecovery", field[0]) && fieldcount == 2)
+  {
+    if (dynamiconly)
+      return fieldcount;
+
+    if ((yesno = YesNo (field[1])) < 0)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    config.autorecovery = yesno;
+  }
+  else if (!strcasecmp ("MemoryMapRing", field[0]) && fieldcount == 2)
+  {
+    if (dynamiconly)
+      return fieldcount;
+
+    if ((yesno = YesNo (field[1])) < 0)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    config.memorymapring = yesno;
+  }
+  else if ((!strcasecmp ("ListenPort", field[0]) ||
+            !strcasecmp ("DataLinkPort", field[0]) ||
+            !strcasecmp ("SeedLinkPort", field[0])) &&
+           fieldcount >= 2)
+  {
+    if (dynamiconly)
+      return fieldcount;
+
+    if (strlen (field[1]) >= sizeof (lpp.portstr))
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    strcpy (lpp.portstr, field[1]);
+
+    if (!strcasecmp ("DataLinkPort", field[0]))
+      lpp.protocols = PROTO_DATALINK;
+    else if (!strcasecmp ("SeedLinkPort", field[0]))
+      lpp.protocols = PROTO_SEEDLINK;
+    else
+      lpp.protocols = 0;
+
+    lpp.options   = 0;
+    lpp.socket    = -1;
+
+    /* Parse optional protocol flags to limit allowed protocols */
+    for (int idx = 2, allow_protocols = (lpp.protocols == 0) ? 1 : 0;
+         idx < fieldcount;
+         idx++)
+    {
+      if (allow_protocols && strcasestr ("DataLink", field[idx]))
+        lpp.protocols |= PROTO_DATALINK;
+      else if (allow_protocols && strcasestr ("SeedLink", field[idx]))
+        lpp.protocols |= PROTO_SEEDLINK;
+      else if (allow_protocols && strcasestr ("HTTP", field[idx]))
+        lpp.protocols |= PROTO_HTTP;
+
+      else if (!strcasecmp ("TLS", field[idx]))
+        lpp.options |= ENCRYPTION_TLS;
+
+      else if (!strcasecmp ("IPv4", field[idx]))
+        lpp.options |= FAMILY_IPv4;
+      else if (!strcasecmp ("IPv6", field[idx]))
+        lpp.options |= FAMILY_IPv6;
+      else
+      {
+        lprintf (0, "Error with listen port config flag: %s", paramstring);
+        lprintf (0, "  Unrecognized or unsupported flag: %s", field[idx]);
+        return -1;
+      }
+    }
+
+    if (lpp.protocols == 0)
+      lpp.protocols = PROTO_ALL;
+
+    if (!AddListenThreads (&lpp))
+    {
+      lprintf (0, "Error adding server thread for listen port config parameter: %s", paramstring);
+      return -1;
+    }
+  }
+  else if (!strcasecmp ("ServerID", field[0]) && fieldcount == 2)
+  {
+    free (config.serverid);
+    config.serverid = strdup (field[1]);
+  }
+  else if (!strcasecmp ("TLSCertFile", field[0]) && fieldcount == 2)
+  {
+    if (realpath (field[1], resolved_path) == NULL)
+    {
+      lprintf (0, "Error with %s value, cannot find path: %s",
+               field[0], field[1]);
+      return -1;
+    }
+
+    if (access (resolved_path, R_OK))
+    {
+      lprintf (0, "Error with %s value, cannot write to directory: %s",
+               field[0], resolved_path);
+      return -1;
+    }
+
+    free (config.tlscertfile);
+    config.tlscertfile = strdup (resolved_path);
+  }
+  else if (!strcasecmp ("TLSKeyFile", field[0]) && fieldcount == 2)
+  {
+    if (realpath (field[1], resolved_path) == NULL)
+    {
+      lprintf (0, "Error with %s value, cannot find path: %s",
+               field[0], field[1]);
+      return -1;
+    }
+
+    if (access (resolved_path, R_OK))
+    {
+      lprintf (0, "Error with %s value, cannot write to directory: %s",
+               field[0], resolved_path);
+      return -1;
+    }
+
+    free (config.tlskeyfile);
+    config.tlskeyfile = strdup (resolved_path);
+  }
+  else if (!strcasecmp ("TLSVerifyClientCert", field[0]) && fieldcount == 2)
+  {
+    if ((yesno = YesNo (field[1])) < 0)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    config.tlsverifyclientcert = yesno;
+  }
+  else if (!strcasecmp ("Verbosity", field[0]) && fieldcount == 2)
+  {
+    if (sscanf (field[1], "%" SCNu8, &verbose) != 1)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+  }
+  else if (!strcasecmp ("MaxClientsPerIP", field[0]) && fieldcount == 2)
+  {
+    if (sscanf (field[1], "%" SCNu32, &config.maxclientsperip) != 1)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+  }
+  else if (!strcasecmp ("MaxClients", field[0]) && fieldcount == 2)
+  {
+    if (sscanf (field[1], "%" SCNu32, &config.maxclients) != 1)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+  }
+  else if (!strcasecmp ("ClientTimeout", field[0]) && fieldcount == 2)
+  {
+    if (sscanf (field[1], "%" SCNu32, &config.clienttimeout) != 1)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+  }
+  else if (!strcasecmp ("ResolveHostnames", field[0]) && fieldcount == 2)
+  {
+    if ((yesno = YesNo (field[1])) < 0)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    config.resolvehosts = yesno;
+  }
+  else if (!strcasecmp ("TimeWindowLimit", field[0]) && fieldcount == 2)
+  {
+    uint8_t scanvalue;
+
+    if (sscanf (field[1], "%" SCNu8, &scanvalue) != 1)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    config.timewinlimit = (scanvalue > 0) ? scanvalue / 100.0 : 0.0;
+  }
+  else if (!strcasecmp ("TransferLogDirectory", field[0]) && fieldcount == 2)
+  {
+    if (realpath (field[1], resolved_path) == NULL)
+    {
+      lprintf (0, "Error with %s value, cannot find path: %s",
+               field[0], field[1]);
+      return -1;
+    }
+
+    if (access (resolved_path, W_OK))
+    {
+      lprintf (0, "Error with %s value, cannot write to directory: %s",
+               field[0], resolved_path);
+      return -1;
+    }
+
+    free (TLogParams.tlogbasedir);
+    TLogParams.tlogbasedir = strdup (resolved_path);
+  }
+  else if (!strcasecmp ("TransferLogInterval", field[0]) && fieldcount == 2)
+  {
+    float fvalue;
+    if (sscanf (field[1], "%f", &fvalue) != 1)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    /* Parameter is specified in hours but value needs to be seconds */
+    TLogParams.tloginterval = fvalue * 3600.0;
+  }
+  else if (!strcasecmp ("TransferLogPrefix", field[0]) && fieldcount == 2)
+  {
+    free (TLogParams.tlogprefix);
+    TLogParams.tlogprefix = strdup (field[1]);
+  }
+  else if (!strcasecmp ("TransferLogTX", field[0]) && fieldcount == 2)
+  {
+    if ((yesno = YesNo (field[1])) < 0)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    TLogParams.txlog = yesno;
+  }
+  else if (!strcasecmp ("TransferLogRX", field[0]) && fieldcount == 2)
+  {
+    if ((yesno = YesNo (field[1])) < 0)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    TLogParams.rxlog = yesno;
+  }
+  else if (!strcasecmp ("WriteIP", field[0]) && fieldcount == 2)
+  {
+    if (AddIPNet (&config.writeips, field[1], NULL))
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+  }
+  else if (!strcasecmp ("TrustedIP", field[0]) && fieldcount == 2)
+  {
+    if (AddIPNet (&config.trustedips, field[1], NULL))
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+  }
+  else if (!strcasecmp ("LimitIP", field[0]) && fieldcount == 3)
+  {
+    if (AddIPNet (&config.limitips, field[1], field[2]))
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+  }
+  else if (!strcasecmp ("MatchIP", field[0]) && fieldcount == 2)
+  {
+    if (AddIPNet (&config.matchips, field[1], NULL))
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+  }
+  else if (!strcasecmp ("RejectIP", field[0]) && fieldcount == 2)
+  {
+    if (AddIPNet (&config.rejectips, field[1], NULL))
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+  }
+  else if (!strcasecmp ("WebRoot", field[0]) && fieldcount == 2)
+  {
+    if (realpath (field[1], resolved_path) == NULL)
+    {
+      lprintf (0, "Error with %s value, cannot find path: %s",
+               field[0], field[1]);
+      return -1;
+    }
+
+    if (access (resolved_path, R_OK))
+    {
+      lprintf (0, "Error with %s value, cannot access directory: %s",
+               field[0], resolved_path);
+      return -1;
+    }
+
+    free (config.webroot);
+    config.webroot = strdup (resolved_path);
+  }
+  else if (!strcasecmp ("HTTPHeader", field[0]) && fieldcount == 2)
+  {
+    char *combined_value = NULL;
+
+    /* Append multiple headers to composite string */
+    if (asprintf (&combined_value, "%s%s\r\n", (config.httpheaders) ? config.httpheaders : "", field[1]) == -1)
+    {
+      lprintf (0, "Error allocating memory");
+      return -1;
+    }
+
+    free (config.httpheaders);
+    config.httpheaders = combined_value;
+  }
+  else if (!strcasecmp ("MSeedWrite", field[0]) && fieldcount == 2)
+  {
+    if (ConfigMSWrite (field[1]))
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+  }
+  else if (!strcasecmp ("MSeedScan", field[0]) && fieldcount >= 2)
+  {
+    if (dynamiconly)
+      return fieldcount;
+
+    if (AddMSeedScanThread (paramstring + strlen ("MSeedScan")))
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+  }
+  else if (!strcasecmp ("VolatileRing", field[0]) && fieldcount == 2)
+  {
+    if (dynamiconly)
+      return fieldcount;
+
+    if ((yesno = YesNo (field[1])) < 0)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    config.volatilering = yesno;
+  }
+  else
+  {
+    lprintf (0, "Unrecognized or misformatted config parameter: %s", paramstring);
+    return -1;
+  }
+
+  return fieldcount;
+} /* End of SetParameter() */
+
+/***********************************************************************
+ * YesNo:
+ *
+ * Determine if a string is a "yes" or "no" value, including many
+ * variations.
+ *
+ * Return 1 for "yes", 0 for "no, and -1 on undetermined.
+ ***********************************************************************/
+static int
+YesNo (const char *value)
+{
+  if (*value == '1' ||
+      !strcasecmp (value, "y") ||
+      !strcasecmp (value, "yes") ||
+      !strcasecmp (value, "true") ||
+      !strcasecmp (value, "on"))
+    return 1;
+  else if (*value == '0' ||
+           !strcasecmp (value, "n") ||
+           !strcasecmp (value, "no") ||
+           !strcasecmp (value, "false") ||
+           !strcasecmp (value, "off"))
+    return 0;
+  else
+    return -1;
+}
 
 /***********************************************************************
  * InitServerSocket:
@@ -1152,43 +1442,49 @@ InitServerSocket (char *portstr, ListenOptions options)
  *
  * Configure miniSEED writing parameters for a given archive definition.
  *
+ * Allow archive definition to be specified as a pre-determined layout
+ * with a specified base directory, e.g. "SDAY@/data/archive".
+ *
  * Returns 0 on success and non zero on error.
  ***************************************************************************/
 static int
-ConfigMSWrite (char *value)
+ConfigMSWrite (char *archive)
 {
-  char archive[513];
   char *layout = NULL;
   char *path   = NULL;
 
   /* Parse layout specification if present */
-  if ((path = strchr (value, '@')))
+  if ((path = strchr (archive, '@')))
   {
     *path++ = '\0';
 
-    if (!strcmp (value, "BUD"))
+    if (!strcmp (archive, "BUD"))
     {
       layout = BUDLAYOUT;
     }
-    else if (!strcmp (value, "CHAN"))
+    else if (!strcmp (archive, "CHAN"))
     {
       layout = CHANLAYOUT;
     }
-    else if (!strcmp (value, "QCHAN"))
+    else if (!strcmp (archive, "QCHAN"))
     {
       layout = QCHANLAYOUT;
     }
-    else if (!strcmp (value, "CDAY"))
+    else if (!strcmp (archive, "CDAY"))
     {
       layout = CDAYLAYOUT;
     }
-    else if (!strcmp (value, "SDAY"))
+    else if (!strcmp (archive, "SDAY"))
     {
       layout = SDAYLAYOUT;
     }
-    else if (!strcmp (value, "HSDAY"))
+    else if (!strcmp (archive, "HSDAY"))
     {
       layout = HSDAYLAYOUT;
+    }
+    else
+    {
+      return -1;
     }
   }
 
@@ -1197,12 +1493,13 @@ ConfigMSWrite (char *value)
   /* Set new data stream archive definition */
   if (path && layout)
   {
-    snprintf (archive, sizeof (archive), "%s/%s", path, layout);
-    config.mseedarchive = strdup (archive);
+    char combined[PATH_MAX];
+    snprintf (combined, sizeof (combined), "%s/%s", path, layout);
+    config.mseedarchive = strdup (combined);
   }
   else
   {
-    config.mseedarchive = strdup (value);
+    config.mseedarchive = strdup (archive);
   }
 
   return 0;
@@ -1305,9 +1602,11 @@ AddListenThreads (ListenPortParams *lpp)
  * Returns 0 on success and non zero on error.
  ***************************************************************************/
 static int
-AddMSeedScanThread (char *configstr)
+AddMSeedScanThread (const char *scanconfig)
 {
+  char myconfig[PATH_MAX] = {0};
   MSScanInfo mssinfo;
+  char *configstr;
   char *kptr;
   char *vptr;
   char *sptr;
@@ -1322,6 +1621,9 @@ AddMSeedScanThread (char *configstr)
   mssinfo.throttlensec = 100;                /* Nanoseconds to sleep after reading each record */
   mssinfo.filemaxrecs  = 100;                /* Maximum records to read from each file per scan */
   mssinfo.stateint     = 300;                /* State saving interval in seconds */
+
+  strncpy (myconfig, scanconfig, sizeof (myconfig) - 1);
+  configstr = myconfig;
 
   /* Skip initial whitespace */
   while (isspace ((int)(*configstr)))
@@ -1459,7 +1761,8 @@ AddServerThread (ServerThreadType type, void *params)
   }
   else
   {
-    lprintf (0, "Error, unrecognized server thread type: %d", type);
+    lprintf (0, "%s() Error, unrecognized server thread type: %d",
+             __func__, type);
     return -1;
   }
 
@@ -1597,19 +1900,19 @@ CalcSize (const char *sizestr)
  * Returns 0 on success and -1 on error.
  ***************************************************************************/
 static int
-AddIPNet (IPNet **pplist, char *network, char *limitstr)
+AddIPNet (IPNet **pplist, const char *network, const char *limitstr)
 {
   struct addrinfo hints;
-  struct addrinfo *addrlist;
+  struct addrinfo *addrlist = NULL;
   struct addrinfo *addr;
   struct sockaddr_in *sockaddr;
   struct sockaddr_in6 *sockaddr6;
   IPNet *newipnet;
-  char net[100] = {0};
-  char *end     = NULL;
-  char *prefixstr;
-  unsigned long int prefix = 0;
-  uint32_t v4netmask       = 0;
+  char net[100]      = {0};
+  char *endptr       = NULL;
+  char *prefixstr    = NULL;
+  uint64_t prefix    = 0;
+  uint32_t v4netmask = 0;
   int rv;
   int idx;
   int jdx;
@@ -1629,11 +1932,19 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
   /* Convert prefix string to value */
   if (IsAllDigits (prefixstr))
   {
-    prefix = strtoul (prefixstr, &end, 10);
+    errno  = 0;
+    prefix = strtoul (prefixstr, &endptr, 10);
 
-    if (*end)
+    if (errno)
     {
-      lprintf (0, "AddIPNet(): Error converting prefix value (%s)", prefixstr);
+      lprintf (0, "%s(): Error converting prefix value (%s): %s",
+               __func__, prefixstr, strerror (errno));
+      return -1;
+    }
+
+    if (endptr == prefixstr || *endptr != '\0')
+    {
+      lprintf (0, "%s(): Error converting prefix value (%s)", __func__, prefixstr);
       return -1;
     }
   }
@@ -1642,7 +1953,7 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
   {
     if (inet_pton (AF_INET, prefixstr, &v4netmask) <= 0)
     {
-      lprintf (0, "AddIPNet(): Error parsing IPv4 netmask: %s", prefixstr);
+      lprintf (0, "%s(): Error parsing IPv4 netmask: %s", __func__, prefixstr);
       return -1;
     }
 
@@ -1650,7 +1961,7 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
     {
       if (ntohl (v4netmask) & (~ntohl (v4netmask) >> 1))
       {
-        lprintf (0, "AddIPNet(): Invalid IPv4 netmask: %s", prefixstr);
+        lprintf (0, "%s(): Invalid IPv4 netmask: %s", __func__, prefixstr);
         return -1;
       }
     }
@@ -1663,7 +1974,7 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
   /* Sanity check and catch errors from strtoul() */
   if (prefix > 128)
   {
-    lprintf (0, "AddIPNet(): Error, prefix (%s) must be less than 128", prefixstr);
+    lprintf (0, "%s(): Error, prefix (%s) must be <= 128", __func__, prefixstr);
     return -1;
   }
 
@@ -1675,7 +1986,7 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
 
   if ((rv = getaddrinfo (net, NULL, &hints, &addrlist)) != 0)
   {
-    lprintf (0, "AddIPNet(): Error with getaddrinfo(%s): %s", net, gai_strerror (rv));
+    lprintf (0, "%s(): Error with getaddrinfo(%s): %s", __func__, net, gai_strerror (rv));
     return -1;
   }
 
@@ -1685,7 +1996,7 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
     /* Allocate new IPNet */
     if (!(newipnet = (IPNet *)calloc (1, sizeof (IPNet))))
     {
-      lprintf (0, "AddIPNet(): Error allocating memory for IPNet");
+      lprintf (0, "%s(): Error allocating memory for IPNet", __func__);
       return -1;
     }
 
@@ -1747,7 +2058,7 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
     {
       if (!(newipnet->limitstr = strdup (limitstr)))
       {
-        lprintf (0, "AddIPNet(): Error allocating memory for limit string");
+        lprintf (0, "%s(): Error allocating memory for limit string", __func__);
         return -1;
       }
     }
@@ -1757,7 +2068,8 @@ AddIPNet (IPNet **pplist, char *network, char *limitstr)
     *pplist        = newipnet;
   }
 
-  freeaddrinfo (addrlist);
+  if (addrlist)
+    freeaddrinfo (addrlist);
 
   return 0;
 } /* End of AddIPNet() */

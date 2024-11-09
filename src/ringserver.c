@@ -101,6 +101,7 @@ struct config_s config = {
 };
 
 /* Local functions and variables */
+static void LogServerParameters ();
 static struct thread_data *InitThreadData (void *prvtptr);
 static void *ListenThread (void *arg);
 static int CalcStats (ClientInfo *cinfo);
@@ -117,8 +118,8 @@ static RingParams *ringparams = NULL;
 int
 main (int argc, char *argv[])
 {
-  char ringfilename[512];
-  char streamfilename[512];
+  char ringfilename[512]   = {0};
+  char streamfilename[512] = {0};
   nstime_t hpcurtime;
   time_t curtime;
   time_t chktime;
@@ -199,11 +200,6 @@ main (int argc, char *argv[])
       /* Create stream index file path: "<ringdir>/streamidx" */
       strncpy (streamfilename, config.ringdir, sizeof (streamfilename) - 20);
       strcat (streamfilename, "/streamidx");
-    }
-    else
-    {
-      ringfilename[0]   = '\0';
-      streamfilename[0] = '\0';
     }
 
     /* Initialize ring system */
@@ -312,6 +308,8 @@ main (int argc, char *argv[])
       return 1;
     }
   }
+
+  LogServerParameters ();
 
   /* Set loop interval check tick to 1/4 second */
   timereq.tv_sec  = 0;
@@ -1352,10 +1350,173 @@ SignalThread (void *arg)
 } /* End of SignalThread() */
 
 /***************************************************************************
+ * LogServerParameters:
+ *
+ * Log high-level server parameters, not ring buffer specific.
+ ***************************************************************************/
+void LogServerParameters ()
+{
+  char network[INET6_ADDRSTRLEN];
+  char netmask[INET6_ADDRSTRLEN];
+  char timestring[32];
+
+  lprintf (1, "Server parameters:");
+  lprintf (1, "   server ID: %s", config.serverid);
+  lprintf (1, "   ring directory: %s", (config.ringdir) ? config.ringdir : "NONE");
+  lprintf (1, "   max clients: %u", config.maxclients);
+  lprintf (1, "   max clients per IP: %u", config.maxclientsperip);
+
+  lprintf (2, "   configuration file: %s", (config.configfile) ? config.configfile : "NONE");
+  lprintf (2, "   client timeout: %u seconds", config.clienttimeout);
+  lprintf (2, "   time window limit: %.0f%%", config.timewinlimit * 100);
+  lprintf (2, "   resolve hostnames: %s", (config.resolvehosts) ? "yes" : "no");
+  lprintf (2, "   auto recovery: %u", config.autorecovery);
+  lprintf (2, "   TLS certificate file: %s", (config.tlscertfile) ? config.tlscertfile : "NONE");
+  lprintf (2, "   TLS key file: %s", (config.tlskeyfile) ? config.tlskeyfile : "NONE");
+  lprintf (2, "   TLS verify client certificate: %s", (config.tlsverifyclientcert) ? "yes" : "no");
+
+  lprintf (3, "   web root: %s", (config.webroot) ? config.webroot : "NONE");
+  lprintf (3, "   HTTP headers: %s", (config.httpheaders) ? config.httpheaders : "NONE");
+  lprintf (3, "   miniSEED archive: %s", (config.mseedarchive) ? config.mseedarchive : "NONE");
+  lprintf (3, "   miniSEED idle file timeout: %u seconds", config.mseedidleto);
+
+  lprintf (3, "   transfer log: %s", (TLogParams.tlogbasedir) ? TLogParams.tlogbasedir : "NONE");
+  if (TLogParams.tlogbasedir && verbose >= 3)
+  {
+    lprintf (3, "     log prefix: %s", (TLogParams.tlogprefix) ? TLogParams.tlogprefix : "NONE");
+    lprintf (3, "     log interval: %d seconds", TLogParams.tloginterval);
+    lprintf (3, "     log transmission: %s", (TLogParams.txlog) ? "yes" : "no");
+    lprintf (3, "     log reception: %s", (TLogParams.rxlog) ? "yes" : "no");
+
+    if (TLogParams.tlogstartint)
+    {
+      ms_nstime2timestr (MS_EPOCH2NSTIME (TLogParams.tlogstartint), timestring, ISOMONTHDAY_Z, NONE);
+      lprintf (3, "     log interval start: %s", timestring);
+    }
+    else
+    {
+      lprintf (3, "     log interval start: NONE");
+    }
+
+    if (TLogParams.tlogendint)
+    {
+      ms_nstime2timestr (MS_EPOCH2NSTIME (TLogParams.tlogendint), timestring, ISOMONTHDAY_Z, NONE);
+      lprintf (3, "     log interval end: %s", timestring);
+    }
+    else
+    {
+      lprintf (3, "     log interval end: NONE");
+    }
+
+    if (TLogParams.tlogstart)
+    {
+      ms_nstime2timestr (MS_EPOCH2NSTIME (TLogParams.tlogstart), timestring, ISOMONTHDAY_Z, NONE);
+      lprintf (3, "     log window start: %s", timestring);
+    }
+    else
+    {
+      lprintf (3, "     log window start: NONE");
+    }
+  }
+
+  if (config.limitips && verbose >= 3)
+  {
+    IPNet *ipn = config.limitips;
+    while (ipn)
+    {
+      inet_ntop (ipn->family, &ipn->network, network, sizeof (network));
+      inet_ntop (ipn->family, &ipn->netmask, netmask, sizeof (netmask));
+
+      lprintf (3, "   limit IP range: %s/%s", network, netmask);
+      lprintf (3, "     limit pattern: %s", (ipn->limitstr) ? ipn->limitstr : "NONE");
+
+      ipn = ipn->next;
+    }
+  }
+  else
+  {
+    lprintf (3, "   limit IP: NONE");
+  }
+
+  if (config.matchips && verbose >= 3)
+  {
+    IPNet *ipn = config.matchips;
+    while (ipn)
+    {
+      inet_ntop (ipn->family, &ipn->network, network, sizeof (network));
+      inet_ntop (ipn->family, &ipn->netmask, netmask, sizeof (netmask));
+
+      lprintf (3, "   match IP range: %s/%s", network, netmask);
+
+      ipn = ipn->next;
+    }
+  }
+  else
+  {
+    lprintf (3, "   match IP range: NONE");
+  }
+
+  if (config.rejectips && verbose >= 3)
+  {
+    IPNet *ipn = config.rejectips;
+    while (ipn)
+    {
+      inet_ntop (ipn->family, &ipn->network, network, sizeof (network));
+      inet_ntop (ipn->family, &ipn->netmask, netmask, sizeof (netmask));
+
+      lprintf (3, "   reject IP range: %s/%s", network, netmask);
+
+      ipn = ipn->next;
+    }
+  }
+  else
+  {
+    lprintf (3, "   reject IP range: NONE");
+  }
+
+  if (config.writeips && verbose >= 3)
+  {
+    IPNet *ipn = config.writeips;
+    while (ipn)
+    {
+      inet_ntop (ipn->family, &ipn->network, network, sizeof (network));
+      inet_ntop (ipn->family, &ipn->netmask, netmask, sizeof (netmask));
+
+      lprintf (3, "   write IP range: %s/%s", network, netmask);
+
+      ipn = ipn->next;
+    }
+  }
+  else
+  {
+    lprintf (3, "   write IP range: NONE");
+  }
+
+  if (config.trustedips && verbose >= 3)
+  {
+    IPNet *ipn = config.trustedips;
+    while (ipn)
+    {
+      inet_ntop (ipn->family, &ipn->network, network, sizeof (network));
+      inet_ntop (ipn->family, &ipn->netmask, netmask, sizeof (netmask));
+
+      lprintf (3, "   trusted IP range: %s/%s", network, netmask);
+
+      ipn = ipn->next;
+    }
+  }
+  else
+  {
+    lprintf (3, "   trusted IP range: NONE");
+  }
+} /* End of LogServerParameters() */
+
+/***************************************************************************
  * PrintHandler (USR1 signal):
  ***************************************************************************/
 static void
 PrintHandler ()
 {
   LogRingParameters (ringparams);
+  LogServerParameters ();
 }

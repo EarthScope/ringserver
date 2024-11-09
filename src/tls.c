@@ -191,6 +191,8 @@ tls_configure (ClientInfo *cinfo)
       lprintf (0, "[%s] VERIFY INFO: %s", cinfo->hostname, vrfy_buf);
 
       lprintf (0, "[%s] Connection refused due to client certificate verification failure", cinfo->hostname);
+
+      return -1;
     }
   }
 
