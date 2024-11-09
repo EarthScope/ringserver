@@ -1,6 +1,6 @@
-.TH RINGSERVER 1 2020/03/08
+.TH RINGSERVER 1 2024/11/09
 .SH NAME
-ringserver \- Generic packet ring buffer
+ringserver \- stream oriented packet ring buffer
 
 .SH SYNOPSIS
 .nf
@@ -9,12 +9,14 @@ ringserver [options] [configfile]
 
 .SH DESCRIPTION
 \fBringserver\fP is a TCP-based ring buffer designed for packetized
-streaming data.  The ring buffer is implemented as a FIFO with newly
-arriving packets pushing older packets out of the buffer.  The ring
-packets are not format specific and may contain any type of data.  All
-communications are performed via TCP interfaces.  Data is available to
-clients using the SeedLink and DataLink protocols and submitted to the
-server using the DataLink protocol.
+streaming data.  The buffer operates on a First-in-first-out basis
+with newly arriving packets pushing older packets out of the buffer.
+The ring packets are not format specific and may contain any type of
+data.  All communications are performed via TCP interfaces.  Data
+streams are available to clients using the SeedLink and DataLink
+protocols and submitted to the server using the DataLink protocol.
+WebSocket connections are supported for the SeedLink and DataLink
+protocols and general status is available via HTTP.
 
 The server is configured either with options on the command line,
 through environment variables, and/or by using a \fBringserver\fP
@@ -33,29 +35,34 @@ parameters.
 
 In normal operation packet buffer contents are saved in files when the
 server is shut down making the server stateful across restarts.  By
-default the packet buffer is managed as a memory-mapped file, it can
-optionally be maintained completely in system memory and only read and
-write the buffer contents on startup and shutdown (useful in
-environments where memory-mapping is not possible).
+default the packet buffer is managed as a memory-mapped file. The
+buffer can optionally be maintained completely in system memory, only
+reading and writing the buffer contents on startup and shutdown (useful
+in environments where memory-mapping is not possible).
 
-Client access is controlled using 3 IP address based lists: one list
-for specific IPs that must match, one list for specific IPs that are
-to be rejected and one for IPs that are allowed to send data to the
-server (write access).  See \fBAccess Control\fP for more details.
+Client access is controlled using IP addresses.  A match list requires
+that client addresses match one of the entries.  A reject list requires
+that client addresses do _not_ match one of the entires.  A write list
+provides permission to submit packets to specific client addresses.
+A limit list specifies which streams a client is allowed to access.
+See \fBAccess Control\fP for more details.
 
 Transfer logs can optionally be written to track the transmission and
 reception of data packets to and from the server.  This tracking is
 stream-based and identifies the number of packet bytes of each unique
-stream transfered to or from each client connection.
+stream transferred to or from each client connection.
 
-The server supports multiple protocols (SeedLink, DataLink and HTTP)
-on the same listening port.  Support can be limited to certain
-protocols on a by-port basis.  See \fBMulti-protocol support\fP for
-more information.
+The server supports multiple protocols: SeedLink, DataLink, HTTP with
+WebSocket.  The server can listen on multiple network ports, and each
+port can be configured to support any combination of the protocols.
+For ports configured for TLS encryption, only a single protocol is
+supported and must be specified.
+See \fBMulti-protocol support\fP for more information.
 
-The server also has limited support for HTTP requests.  When support is
-enabled, server status, stream lists and other details can be accessed
-with simple HTTP requests.  See \fBHTTP Support\fP for more details.
+The server also has limited support for simple HTTP requests.  When
+support is enabled, server status, stream lists and other details can
+be accessed with simple HTTP requests.
+See \fBHTTP Support\fP for more details.
 
 The slinktool(1) and dalitool(1) programs can be used to query the
 ringserver for various information via the SeedLink and DataLink
@@ -93,8 +100,8 @@ is 600.
 
 .IP "-Rd \fIringdir\fP"
 Base directory for the server to store the packet buffer data files.
-This option must be specified on the command line or in the config
-file, there is no default.
+This parameter must be specified via this option, environment variable,
+or config file; there is no default.
 
 .IP "-Rs \fIbytes\fP"
 Size of the packet buffer in bytes, default size is 1 GiB.  The size of
@@ -105,11 +112,6 @@ limited to how large a file the host system can support.  If the
 server is configured to maintain the ring in system memory the size is
 limited to system memory.
 
-.IP "-Rm \fImaxID\fP"
-Maximum ring packet ID used to uniquely identify a packet.  Default is
-16,777,215 which the maximum supported by the SeedLink protocol, if
-SeedLink is not being used it can be much higher.
-
 .IP "-Rp \fIpacketsize\fP"
 Maximum ring packet data size (not including packet buffer header),
 default is 512 bytes.
@@ -119,7 +121,7 @@ No memory-mapping, maintain the ring buffer in system memory only.  On
 startup the ring buffer files will be read into memory and on shutdown
 the memory buffers will be written back to the files.  This option
 might be useful in environments where memory-mapping of files is not
-possbile or is unreliable (e.g. NFS).
+possible or is unreliable or slow (e.g. network storage).
 
 .IP "-L \fIport\fP"
 Network port to listen for incoming connections on.  By default the
@@ -153,16 +155,15 @@ output on the console.
 
 .IP "-MSWRITE \fIformat\fP"
 A special mode of ringserver is to write all miniSEED data records
-received via DataLink (ring packets ending with the \fB/MSEED\fP
-suffix) to a user defined directory and file structure.  See
-\fBminiSEED Archiving\fP for more details.
+received via DataLink to a user defined directory and file structure.
+See \fBminiSEED Archiving\fP for more details.
 
 .IP "-MSSCAN \fIdirectory\fP [suboptions]"
 A special mode of ringserver is to recursively scan a directory for
 files containing miniSEED formatted data records and insert them into
-the ring as packets with a /MSEED suffix.  Optional suboptions control
-scanning behavior, the StateFile suboption is highly recommended.  See
-\fBminiSEED Scanning\fP for more details.
+the buffer.  Optional suboptions control scanning behavior, the
+StateFile suboption is highly recommended.
+See \fBminiSEED Scanning\fP for more details.
 
 .IP "-VOLATILE"
 Create a volatile (non-stateful) ring buffer, in other words do not
@@ -171,25 +172,24 @@ on shutdown.  This is useful in combination with the -MSWRITE option
 when no stateful buffer is needed.
 
 .SH "Config file parameters"
-All of the command line parameters have config file equivalents, below
-are the config file parameters which have no command line equivalents.
-Many of the config file parameters are dynamic, if they are changed
-the server will re-read it's configuration on the fly.  See the
-detailed parameter descriptions in the documented example config file.
-
-.nf
-\fBAutoRecovery\fP [0|1|2] - Control autorecovery after corruption detection
-\fBResolveHostnames\fP [0|1] - Control reverse DNS lookups
-\fBTimeWindowLimit\fP % - Control limit for time window searches
-\fBTransferLogTX\fP [0|1] - Control writing of transmission log
-\fBTransferLogRX\fP [0|1] - Control writing of reception log
-\fBWriteIP\fP IP[/netmaks] - Add IP address(es) to write permission list
-\fBLimitIP\fP IP[/netmaks] RegEx - Add IP address(es) to limit list
-\fBMatchIP\fP IP[/netmaks] - Add IP address(es) to match list
-\fBRejectIP\fP IP[/netmaks] - Add IP address(es) to reject list
-.fi
+All of the command line parameters have config file and environment
+variable equivalents.  Many of the config file parameters are dynamic,
+if they are changed the server will re-read it's configuration on the
+fly. See the detailed parameter descriptions in the documented example
+config file.
 
 .SH "Access Control"
+
+Access control is based on IP addresses and configured using the
+following config file parameters and environment variables:
+
+.nf
+  \fBMatchIP\fP or \fBRS_MATCH_IP\fP
+  \fBRejectIP\fP or \fBRS_REJECT_IP\fP
+  \fBLimitIP\fP or \fBRS_LIMIT_IP\fP
+  \fBWriteIP\fP or \fBRS_WRITE_IP\fP
+  \fBTrustedIP\fP or \fBRS_TRUSTED_IP\fP
+.fi
 
 By default all clients are allowed to connect.  Specific clients can
 be rejected using the \fBRejectIP\fP config parameter.  If any
@@ -221,23 +221,25 @@ specifying only the single address.
 
 .SH "SeedLink Support"
 
-The legacy SeedLink protocol only transmits 512-byte miniSEED data
+The legacy SeedLink protocol (v3) only transmits 512-byte miniSEED data
 records.  This server is able to transmit miniSEED records of any
-length via SeedLink.  To ensure compatitiblity with legacy clients,
-only 512-byte miniSEED records should be inserted into the ring
-buffer.
+length via SeedLink.  If you wish to ensure compatibility with
+legacy clients, only 512-byte miniSEED records should be submitted
+to the server.
 
-This server supports the wildcarding of network and station codes
+This server supports the wild-carding of network and station codes
 during SeedLink negotiation using the '?' and '*' characters for
 single or multiple character matches respectively.  Not all SeedLink
-clients support wildcarded network and station codes.
+clients support wild-carded network and station codes.
 
 .SH "Multi-protocol Support"
 
 Network listening ports can respond to all supported protocols
-(SeedLink, DataLink and HTTP).  The first command received by the
-server is used to determine which protocol is being used by the
-client, all subsequent communication is expected in this protocol.
+(SeedLink, DataLink and HTTP) for non-TLS ports.  The first command
+received by the server is used to determine which protocol is being
+used by the client, all subsequent communication is expected in this
+protocol.  Listening ports configured for TLS encryption can only
+support a single protocol that must be specified.
 
 The protocols allowed by any given listening port can be set to any
 combination of the supported protocols by adding flags to the
@@ -252,7 +254,7 @@ configuration file.
 
 The server will respond to HTTP requests for a few fixed resources.
 If the \fBWebRoot\fP config parameter is set to a directory, the files
-under that directory will also be served when requesed through the
+under that directory will also be served when requested through the
 HTTP GET method.  Except for the fixed resources, the HTTP server
 implementation is limited to returning existing files and returning
 "index.html" files when a directory is requested.
@@ -300,10 +302,10 @@ to enable cross-site HTTP requests via Cross-Origin Resource Sharing (CORS).
 
 .SH "Transfer logging"
 The \fB-T\fP command line option or the \fBTransferLogTX\fP or
-\fBTransferLogRX\fP config file parameters turn on logging of data
-either transmitted or received.  The log interval and file name
-prefix can be changed via the \fB-Ti\fP and \fB-Tp\fP command line
-options.
+\fBTransferLogRX\fP config file parameters (or equivalent environment
+variables) turn on logging of data either transmitted or received.
+The log interval and file name prefix can be changed via
+the \fB-Ti\fP and \fB-Tp\fP command line options.
 
 Both the transmission (TX) and reception (RX) log files contain
 entries that following this pattern:
@@ -320,7 +322,7 @@ protocol, client ID, log time, and connection time.
 3) An "END CLIENT" line including the total bytes or this entry.
 
 Note: the byte counts are the sum of the data payload bytes in each
-packet and do not include the DataLink or SeedLink protcol headers.
+packet and do not include the DataLink or SeedLink protocol headers.
 
 An example "TX" file illustrating a transmission entry:
 
@@ -331,12 +333,29 @@ IU_SNZO_00_BHZ/MSEED 2048 4
 END CLIENT host.iris.edu [192.168.255.255] total TX bytes: 4608
 .fi
 
+.SH "External packet IDs"
+
+With the DataLink v1.1 protocol a client may submit packets with a
+packet ID for use in tracking the packet through the system.  This
+may be useful to implement multiple servers that share common
+packet IDs for use with a network load balancer, such that it does
+not matter to which server a client connects.
+
+These packet IDs are used in the SeedLink and DataLink protocols by
+clients to track and resume data streams.  In SeedLink these are called
+sequence numbers.
+
+For ringserver, packet IDs, aka sequence numbers, cannot be larger
+than (UINT64_MAX - 10), or 18446744073709551605.  The last 10 values
+of the uint64 range are reserved for internal use to indicate special
+conditions.  These values are not expected to be encountered in normal
+data streaming operation.
+
 .SH "miniSEED Archiving"
 Using either the \fB-MSWRITE\fP command line option or the
 \fBMSeedWrite\fP config file parameter the server can be configured to
 write all miniSEED data records received via DataLink to a user
-defined directory and file structure.  Only ring packets ending with
-the \fB/MSEED\fP suffix are considered.
+defined directory and file structure.
 
 The archive \fIformat\fP argument is expanded for each packet processed
 using the following flags:
@@ -416,11 +435,11 @@ fields are from the first packet in the file.
 
 .SH "miniSEED Scanning"
 Using either the \fB-MSSCAN\fP command line option or the
-\fBMSeedScan\fP config file parameter the server can be configured to
-recursively scan a directory for files containing miniSEED data
-records and insert them into the ring.  Intended for real-time data
-re-distribution, files are continuously scanned, newly added records
-are inserted into the ring.
+\fBMSeedScan\fP config file parameter (or equivalent environment
+variable) the server can be configured to recursively scan a directory
+for files containing miniSEED data records and insert them into the
+buffer.  Intended for real-time data re-distribution, files are
+continuously scanned, newly added records are inserted into the buffer.
 
 Sub-options can be used to control the scanning process.  The
 sub-options are specified on the same line as the scan directory as
@@ -431,7 +450,7 @@ quotes for the values.  The available sub-options are:
 .nf
   \fBStateFile\fP : File to save scanning state through restarts
   \fBMatch\fP : Regular expression to match file names
-  \fBReject\fP : Regular epression to reject file names
+  \fBReject\fP : Regular expression to reject file names
   \fBInitCurrentState\fP : Initialize scanning to current state
   \fBMaxRecurse\fP : Maximum recursion depth (default is no limit)
 .fi
@@ -470,5 +489,5 @@ the Match option, e.g. files ending in ".mseed":
 .SH AUTHOR
 .nf
 Chad Trabant
-IRIS Data Management Center
+EarthScope Data Services
 .fi
