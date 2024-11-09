@@ -16,16 +16,20 @@ communications are performed via TCP interfaces.  Data is available to
 clients using the SeedLink and DataLink protocols and submitted to the
 server using the DataLink protocol.
 
-The server is configured either with options on the command line or by
-using a \fBringserver\fP config file (or both).  Only the most common
-options are available on the command line, all options are tunable via
-the config file.  Detailed descriptions for each option are included
-in the example config file that accompanies the source code.  Many
-options are dynamic, meaning that they can be changed while the server
-is running.  In this case the server will recognize that the config
-file has changed and will re-read it's configuration.  This is
-especially useful for updating access control lists, logging verbosity
-and other logging parameters.
+The server is configured either with options on the command line,
+through environment variables, and/or by using a \fBringserver\fP
+config file.  The order of precedence for configuration options is
+command line, environment variables, and then config file.
+
+Only the most common options are available on the command line, all
+options are controllable via environment variables and the config file.
+Detailed descriptions for each option are included in the example
+config file that accompanies the source code.  Many options are dynamic,
+meaning that they can be changed while the server is running.  In this
+case the server will recognize that the config file has changed and
+will re-read it's configuration.  This is especially useful for
+updating access controls, logging verbosity and other logging
+parameters.
 
 In normal operation packet buffer contents are saved in files when the
 server is shut down making the server stateful across restarts.  By

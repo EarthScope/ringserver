@@ -49,7 +49,90 @@ static uint64_t CalcSize (const char *sizestr);
 static int AddMSeedScanThread (const char *configstr);
 static int AddServerThread (ServerThreadType type, void *params);
 static int AddIPNet (IPNet **pplist, const char *network, const char *limitstr);
-static void Usage (int level);
+
+/***************************************************************************
+ * Usage:
+ *
+ * Print usage message and exit.
+ ***************************************************************************/
+static void
+Usage (int level)
+{
+  fprintf (stderr, "%s version %s\n\n", PACKAGE, VERSION);
+  fprintf (stderr, "Usage: %s [options] [configfile]\n\n", PACKAGE);
+  fprintf (stderr, " ## Options ##\n"
+                   " -V             Print program version and exit\n"
+                   " -h             Print this usage message\n"
+                   " -H             Print an extended usage message\n"
+                   " -v             Be more verbose, multiple flags can be used\n"
+                   " -I serverID    Server ID (default 'Ring Server')\n"
+                   " -m maxclnt     Maximum number of concurrent clients (currently %d)\n"
+                   " -M maxperIP    Maximum number of concurrent clients per address (currently %d)\n"
+                   " -Rd ringdir    Directory for ring buffer files, required\n"
+                   " -Rs bytes      Ring packet buffer file size in bytes (default 1 Gibibyte)\n"
+                   " -Rp pktsize    Maximum ring packet data size in bytes (currently %" PRIu32 ")\n"
+                   " -NOMM          Do not memory map the packet buffer, use memory instead\n"
+                   " -L port        Listen for connections on port, all protocols (default off)\n"
+                   " -T logdir      Directory to write transfer logs (default is no logs)\n"
+                   " -Ti hours      Transfer log writing interval (default 24 hours)\n"
+                   " -Tp prefix     Prefix to add to transfer log files (default is none)\n"
+                   " -STDERR        Send all console output to stderr instead of stdout\n"
+                   "\n",
+           config.maxclients,
+           config.maxclientsperip,
+           config.pktsize - (uint32_t)sizeof (RingPacket));
+
+  if (level >= 1)
+  {
+    fprintf (stderr,
+             " -MSWRITE format  Write all received miniSEED to an archive\n"
+             " -MSSCAN dir      Scan directory for files containing miniSEED\n"
+             " -VOLATILE        Create volatile ring, contents not saved to files\n"
+             "\n");
+
+    fprintf (stderr,
+             "The 'format' argument is expanded for each record using the\n"
+             "flags below.  Some preset archive layouts are available:\n"
+             "\n"
+             "BUD   : %%n/%%s/%%s.%%n.%%l.%%c.%%Y.%%j  (BUD layout)\n"
+             "CHAN  : %%n.%%s.%%l.%%c  (channel)\n"
+             "QCHAN : %%n.%%s.%%l.%%c.%%q  (quality-channel-day)\n"
+             "CDAY  : %%n.%%s.%%l.%%c.%%Y:%%j:#H:#M:#S  (channel-day)\n"
+             "SDAY  : %%n.%%s.%%Y:%%j  (station-day)\n"
+             "HSDAY : %%h/%%n.%%s.%%Y:%%j  (host-station-day)\n"
+             "\n"
+             "Archive definition flags\n"
+             "  n : Network code, white space removed\n"
+             "  s : Station code, white space removed\n"
+             "  l : Location code, white space removed\n"
+             "  c : Channel code, white space removed\n"
+             "  q : Record quality indicator (D, R, Q, M), single character\n"
+             "  Y : Year, 4 digits\n"
+             "  y : Year, 2 digits zero padded\n"
+             "  j : Day of year, 3 digits zero padded\n"
+             "  H : Hour, 2 digits zero padded\n"
+             "  M : Minute, 2 digits zero padded\n"
+             "  S : Second, 2 digits zero padded\n"
+             "  F : Fractional seconds, 4 digits zero padded\n"
+             "  D : Current year-day time stamp of the form YYYYDDD\n"
+             "  L : Data record length in bytes\n"
+             "  r : Sample rate (Hz) as a rounded integer\n"
+             "  R : Sample rate (Hz) as a float with 6 digit precision\n"
+             "  h : Host name of client submitting data \n"
+             "  %% : The percent (%%) character\n"
+             "  # : The number (#) character\n"
+             "\n"
+             "The flags are prefaced with either the %% or # modifier.  The %% modifier\n"
+             "indicates a defining flag while the # indicates a non-defining flag.\n"
+             "All records with the same set of defining flags will be written to the\n"
+             "same file. Non-defining flags will be expanded using the values in the\n"
+             "first record for the resulting file name.\n"
+             "\n");
+  }
+
+  exit (1);
+} /* End of Usage() */
+
 
 /***************************************************************************
  * ProcessParam:
@@ -2074,85 +2157,3 @@ AddIPNet (IPNet **pplist, const char *network, const char *limitstr)
   return 0;
 } /* End of AddIPNet() */
 
-/***************************************************************************
- * Usage:
- *
- * Print usage message and exit.
- ***************************************************************************/
-static void
-Usage (int level)
-{
-  fprintf (stderr, "%s version %s\n\n", PACKAGE, VERSION);
-  fprintf (stderr, "Usage: %s [options] [configfile]\n\n", PACKAGE);
-  fprintf (stderr, " ## Options ##\n"
-                   " -V             Print program version and exit\n"
-                   " -h             Print this usage message\n"
-                   " -H             Print an extended usage message\n"
-                   " -v             Be more verbose, multiple flags can be used\n"
-                   " -I serverID    Server ID (default 'Ring Server')\n"
-                   " -m maxclnt     Maximum number of concurrent clients (currently %d)\n"
-                   " -M maxperIP    Maximum number of concurrent clients per address (currently %d)\n"
-                   " -Rd ringdir    Directory for ring buffer files, required\n"
-                   " -Rs bytes      Ring packet buffer file size in bytes (default 1 Gibibyte)\n"
-                   " -Rp pktsize    Maximum ring packet data size in bytes (currently %" PRIu32 ")\n"
-                   " -NOMM          Do not memory map the packet buffer, use memory instead\n"
-                   " -L port        Listen for connections on port, all protocols (default off)\n"
-                   " -T logdir      Directory to write transfer logs (default is no logs)\n"
-                   " -Ti hours      Transfer log writing interval (default 24 hours)\n"
-                   " -Tp prefix     Prefix to add to transfer log files (default is none)\n"
-                   " -STDERR        Send all console output to stderr instead of stdout\n"
-                   "\n",
-           config.maxclients,
-           config.maxclientsperip,
-           config.pktsize - (uint32_t)sizeof (RingPacket));
-
-  if (level >= 1)
-  {
-    fprintf (stderr,
-             " -MSWRITE format  Write all received miniSEED to an archive\n"
-             " -MSSCAN dir      Scan directory for files containing miniSEED\n"
-             " -VOLATILE        Create volatile ring, contents not saved to files\n"
-             "\n");
-
-    fprintf (stderr,
-             "The 'format' argument is expanded for each record using the\n"
-             "flags below.  Some preset archive layouts are available:\n"
-             "\n"
-             "BUD   : %%n/%%s/%%s.%%n.%%l.%%c.%%Y.%%j  (BUD layout)\n"
-             "CHAN  : %%n.%%s.%%l.%%c  (channel)\n"
-             "QCHAN : %%n.%%s.%%l.%%c.%%q  (quality-channel-day)\n"
-             "CDAY  : %%n.%%s.%%l.%%c.%%Y:%%j:#H:#M:#S  (channel-day)\n"
-             "SDAY  : %%n.%%s.%%Y:%%j  (station-day)\n"
-             "HSDAY : %%h/%%n.%%s.%%Y:%%j  (host-station-day)\n"
-             "\n"
-             "Archive definition flags\n"
-             "  n : Network code, white space removed\n"
-             "  s : Station code, white space removed\n"
-             "  l : Location code, white space removed\n"
-             "  c : Channel code, white space removed\n"
-             "  q : Record quality indicator (D, R, Q, M), single character\n"
-             "  Y : Year, 4 digits\n"
-             "  y : Year, 2 digits zero padded\n"
-             "  j : Day of year, 3 digits zero padded\n"
-             "  H : Hour, 2 digits zero padded\n"
-             "  M : Minute, 2 digits zero padded\n"
-             "  S : Second, 2 digits zero padded\n"
-             "  F : Fractional seconds, 4 digits zero padded\n"
-             "  D : Current year-day time stamp of the form YYYYDDD\n"
-             "  L : Data record length in bytes\n"
-             "  r : Sample rate (Hz) as a rounded integer\n"
-             "  R : Sample rate (Hz) as a float with 6 digit precision\n"
-             "  h : Host name of client submitting data \n"
-             "  %% : The percent (%%) character\n"
-             "  # : The number (#) character\n"
-             "\n"
-             "The flags are prefaced with either the %% or # modifier.  The %% modifier\n"
-             "indicates a defining flag while the # indicates a non-defining flag.\n"
-             "All records with the same set of defining flags will be written to the\n"
-             "same file. Non-defining flags will be expanded using the values in the\n"
-             "first record for the resulting file name.\n"
-             "\n");
-  }
-
-  exit (1);
-} /* End of Usage() */
