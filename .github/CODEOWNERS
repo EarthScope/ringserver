@@ -1,0 +1,3 @@
+# Required EarthScope CODEOWNERS
+.github/ @earthscope/cloud-enablement
+.gitlab-ci.yml @earthscope/cloud-enablement
