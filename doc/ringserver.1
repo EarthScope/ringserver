@@ -336,20 +336,24 @@ END CLIENT host.iris.edu [192.168.255.255] total TX bytes: 4608
 .SH "External packet IDs"
 
 With the DataLink v1.1 protocol a client may submit packets with a
-packet ID for use in tracking the packet through the system.  This
-may be useful to implement multiple servers that share common
-packet IDs for use with a network load balancer, such that it does
-not matter to which server a client connects.
+specified packet ID to use instead of a generated ID.  This is useful
+to implement multiple servers that share common packet IDs for use
+with a network load balancer, such that it does not matter to which
+server a client connects.
 
 These packet IDs are used in the SeedLink and DataLink protocols by
 clients to track and resume data streams.  In SeedLink these are called
 sequence numbers.
 
-For ringserver, packet IDs, aka sequence numbers, cannot be larger
-than (UINT64_MAX - 10), or 18446744073709551605.  The last 10 values
+For ringserver, packet IDs, aka sequence numbers, must be between 0 and
+(UINT64_MAX - 10), or 18446744073709551605.  The last 10 values
 of the uint64 range are reserved for internal use to indicate special
-conditions.  These values are not expected to be encountered in normal
+conditions.  These values are not expected to be encountered in typical
 data streaming operation.
+
+Furthermore, external IDs submitted with packets are strongly recommended
+to be unique and monotonically increasing.  Such a sequence of IDs
+support efficient data stream resumption and tracking.
 
 .SH "miniSEED Archiving"
 Using either the \fB-MSWRITE\fP command line option or the

@@ -8,7 +8,7 @@ BIN = ../ringserver
 
 SRCS = stack.c rbtree.c logging.c clients.c slclient.c dlclient.c \
        http.c dsarchive.c mseedscan.c generic.c ring.c ringserver.c \
-       config.c infojson.c infoxml.c cJSON.c tls.c
+       config.c loadbuffer.c infojson.c infoxml.c cJSON.c tls.c
 OBJS = $(SRCS:.c=.o)
 
 MBEDTLS_OBJS = $(wildcard ../mbedtls/library/*.o)

@@ -17,6 +17,7 @@
 	- All configuration options can be specified with environment variables.
 
 	Other changes:
+	- Automatically convert packet buffer from previous version to current.
 	- Convert internal time stamps from microsecond ticks (hptime) to use
 	nanosecond ticks, as used by the libmseed3.
 	- Most generated time strings are now YYYY-MM-DDThh:mm:ss.sss*Z formatted.

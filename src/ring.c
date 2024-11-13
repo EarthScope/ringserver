@@ -79,8 +79,10 @@ static int DelStreamIdx (RBTree *streamidx, char *streamid);
  * ring file = main packet buffer file, optionally memory mapped
  * stream file = stream index file, loaded into ringparams->streams
  *
- * Returns 0 on success, and -1 on corruption errors and -2 on
- * non-recoverable errors.
+ * Return >0 on buffer version mismatch, the version number is returned
+ * Return  0 on success
+ * Return -1 on corruption errors
+ * Return -2 on non-recoverable errors
  ***************************************************************************/
 int
 RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
@@ -263,6 +265,15 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
     return -1;
   }
 
+  /* If signature match but version mismatch return current buffer version */
+  if (!ringinit &&
+      memcmp ((*ringparams)->signature, RING_SIGNATURE, sizeof ((*ringparams)->signature)) == 0 &&
+      (*ringparams)->version != RING_VERSION)
+  {
+    lprintf (0, "Packet buffer version %d detected", (*ringparams)->version);
+    return (*ringparams)->version;
+  }
+
   /* Initialize locks */
   if ((rc = pthread_mutex_init (&writelock, NULL)))
   {
@@ -301,7 +312,7 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
       if (memcmp ((*ringparams)->signature, RING_SIGNATURE, sizeof ((*ringparams)->signature)))
         lprintf (0, "** Packet buffer signature mismatch: %.4s <-> %.4s", (*ringparams)->signature, RING_SIGNATURE);
       if ((*ringparams)->version != RING_VERSION)
-        lprintf (0, "** Packet buffer version change: %d -> %d", (*ringparams)->version, RING_VERSION);
+        lprintf (0, "** Packet buffer version change: %u -> %u", (*ringparams)->version, RING_VERSION);
       if ((*ringparams)->ringsize != ringsize)
         lprintf (0, "** Packet buffer size change: %" PRIu64 " -> %" PRIu64, (*ringparams)->ringsize, ringsize);
       if ((*ringparams)->pktsize != pktsize)
@@ -464,8 +475,6 @@ RingInitialize (char *ringfilename, char *streamfilename, uint64_t ringsize,
   }
 
   lprintf (0, "Ring initialized");
-
-  LogRingParameters (*ringparams);
 
   return 0;
 } /* End of RingInitialize() */

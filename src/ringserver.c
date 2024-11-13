@@ -52,6 +52,7 @@
 #include "ring.h"
 #include "ringserver.h"
 #include "config.h"
+#include "loadbuffer.h"
 
 /* Reserve connection count, allows connections from addresses with write
  * permission even when the maximum connection count has been reached. */
@@ -118,8 +119,10 @@ static RingParams *ringparams = NULL;
 int
 main (int argc, char *argv[])
 {
-  char ringfilename[512]   = {0};
-  char streamfilename[512] = {0};
+  char ringfilename[PATH_MAX]      = {0};
+  char streamfilename[PATH_MAX]    = {0};
+  char ringfile_backup[PATH_MAX]   = {0};
+  char streamfile_backup[PATH_MAX] = {0};
   nstime_t hpcurtime;
   time_t curtime;
   time_t chktime;
@@ -141,6 +144,8 @@ main (int argc, char *argv[])
   struct stat cfstat;
   int configreset = 0;
   int ringinit;
+
+  uint16_t convert_version = 0;
 
   struct protoent *pe_tcp;
 
@@ -208,7 +213,7 @@ main (int argc, char *argv[])
                                     config.memorymapring, config.volatilering,
                                     &ringfd, &ringparams)))
     {
-      /* Exit on unrecoverable errors and if no auto recovery */
+      /* Exit on unrecoverable errors or if no auto recovery */
       if (ringinit == -2 || !config.autorecovery)
       {
         lprintf (0, "Error initializing ring buffer (%d)", ringinit);
@@ -224,27 +229,34 @@ main (int argc, char *argv[])
       }
 
       /* Move corrupt packet buffer and index to backup (.corrupt) files */
-      if (config.autorecovery == 1)
+      if (config.autorecovery == 1 && (ringinit == -1 || ringinit > 0))
       {
-        char ringfilecorr[520];
-        char streamfilecorr[520];
-
-        lprintf (0, "Auto recovery, moving packet buffer and stream index files");
-
-        /* Create .corrupt ring and stream file names */
-        snprintf (ringfilecorr, sizeof (ringfilecorr), "%s.corrupt", ringfilename);
-        snprintf (streamfilecorr, sizeof (streamfilecorr), "%s.corrupt", streamfilename);
-
-        /* Rename original ring and stream files to the corrupt names */
-        if (rename (ringfilename, ringfilecorr) && errno != ENOENT)
+        if (ringinit == -1)
         {
-          lprintf (0, "Error renaming %s to %s: %s", ringfilename, ringfilecorr,
+          lprintf (0, "Auto recovery, moving packet buffer and stream index files to .corrupt");
+
+          snprintf (ringfile_backup, sizeof (ringfile_backup), "%s.corrupt", ringfilename);
+          snprintf (streamfile_backup, sizeof (streamfile_backup), "%s.corrupt", streamfilename);
+        }
+        else
+        {
+          lprintf (0, "Auto recovery, moving packet buffer and stream index files to .version%d", ringinit);
+
+          snprintf (ringfile_backup, sizeof (ringfile_backup), "%s.version%d", ringfilename, ringinit);
+          snprintf (streamfile_backup, sizeof (streamfile_backup), "%s.version%d", streamfilename, ringinit);
+          convert_version = ringinit;
+        }
+
+        /* Rename original ring and stream files to the backup names */
+        if (rename (ringfilename, ringfile_backup) && errno != ENOENT)
+        {
+          lprintf (0, "Error renaming %s to %s: %s", ringfilename, ringfile_backup,
                    strerror (errno));
           return 1;
         }
-        if (rename (streamfilename, streamfilecorr) && errno != ENOENT)
+        if (rename (streamfilename, streamfile_backup) && errno != ENOENT)
         {
-          lprintf (0, "Error renaming %s to %s: %s", streamfilename, streamfilecorr,
+          lprintf (0, "Error renaming %s to %s: %s", streamfilename, streamfile_backup,
                    strerror (errno));
           return 1;
         }
@@ -268,7 +280,8 @@ main (int argc, char *argv[])
       }
       else
       {
-        lprintf (0, "Unrecognized auto recovery value: %u", config.autorecovery);
+        lprintf (0, "Unrecognized combination of auto recovery: %u, and ringinit return %d",
+                 config.autorecovery, ringinit);
         return 1;
       }
 
@@ -280,6 +293,42 @@ main (int argc, char *argv[])
       {
         lprintf (0, "Error re-initializing ring buffer on auto-recovery (%d)", ringinit);
         return 1;
+      }
+
+      if (config.autorecovery == 1 && convert_version > 0)
+      {
+        int64_t loaded_packets = 0;
+
+        if (convert_version == 1)
+        {
+          loaded_packets = LoadBufferV1 (ringfile_backup, ringparams);
+        }
+        else
+        {
+          lprintf (0, "Error: unsupported conversion version %d", convert_version);
+          return 1;
+        }
+
+        if (loaded_packets >= 0)
+        {
+          lprintf (0, "Loaded %" PRId64 " packets, removing backup files", loaded_packets);
+
+          /* Remove the backup files that have been converted */
+          if (unlink (ringfile_backup) && errno != ENOENT)
+          {
+            lprintf (0, "Error removing %s: %s", ringfile_backup, strerror (errno));
+            return 1;
+          }
+          if (unlink (streamfile_backup) && errno != ENOENT)
+          {
+            lprintf (0, "Error renaming %s: %s", streamfile_backup, strerror (errno));
+            return 1;
+          }
+        }
+        else
+        {
+          lprintf (0, "Error loading packets from backup file: %s", ringfile_backup);
+        }
       }
     }
   }
@@ -309,6 +358,7 @@ main (int argc, char *argv[])
     }
   }
 
+  LogRingParameters (ringparams);
   LogServerParameters ();
 
   /* Set loop interval check tick to 1/4 second */
