@@ -153,7 +153,7 @@ struct config_s
   uint32_t maxclientsperip; /* Enforce maximum number of clients per IP */
   uint32_t clienttimeout;   /* Drop clients if no communication within this limit */
   float timewinlimit;       /* Time window search limit in percent */
-  int resolvehosts;         /* Flag to control resolving of client hostnames */
+  uint8_t resolvehosts;     /* Flag to control resolving of client hostnames */
   uint8_t memorymapring;    /* Flag to control mmap'ing of packet buffer */
   uint8_t volatilering;     /* Flag to control if ring is volatile or not */
   uint8_t autorecovery;     /* Flag to control auto recovery from corruption */
