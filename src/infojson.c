@@ -35,6 +35,7 @@
 #include "infojson.h"
 #include "slclient.h"
 #include "ring.h"
+#include "mseedscan.h"
 
 /***************************************************************************
  * info_create_root:
@@ -200,6 +201,90 @@ info_add_filters (cJSON *root)
   }
 
   return filters;
+}
+
+/***************************************************************************
+ * info_add_streams:
+ *
+ * Add stream array to the JSON document.
+ *
+ * Returns pointer to JSON object added on success and NULL on error.
+ ***************************************************************************/
+static cJSON *
+info_add_streams (ClientInfo *cinfo, cJSON *root, const char *matchexpr)
+{
+  Stack *ringstreams;
+  RingStream *ringstream;
+
+  cJSON *streams  = NULL;
+  cJSON *stream   = NULL;
+
+  char string32[32] = {0};
+
+  pcre2_code *match_code       = NULL;
+  pcre2_match_data *match_data = NULL;
+
+  /* Compile match expression if provided */
+  if (matchexpr && UpdatePattern (&match_code, &match_data, matchexpr, "stream match expression"))
+  {
+    return NULL;
+  }
+
+  /* Get copy of streams as a Stack, sorted by stream ID */
+  if ((ringstreams = GetStreamsStack (cinfo->ringparams, cinfo->reader)) == NULL)
+  {
+    lprintf (0, "[%s] Error getting streams stack", cinfo->hostname);
+    return NULL;
+  }
+
+  /* Create JSON */
+  if ((streams = cJSON_AddArrayToObject (root, "stream")) == NULL)
+  {
+    return NULL;
+  }
+
+  /* Add streams to array */
+  while ((ringstream = (RingStream *)StackPop (ringstreams)))
+  {
+    /* Skip if stream ID does not match provided expression */
+    if (match_code &&
+        pcre2_match (match_code, (PCRE2_SPTR8)ringstream->streamid, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0)
+    {
+      free (ringstream);
+      continue;
+    }
+
+    if ((stream = cJSON_CreateObject ()) == NULL)
+    {
+      break;
+    }
+    cJSON_AddItemToArray (streams, stream);
+
+    cJSON_AddStringToObject (stream, "id", ringstream->streamid);
+
+    ms_nstime2timestr (ringstream->earliestdstime, string32, ISOMONTHDAY_Z, MICRO);
+    cJSON_AddStringToObject (stream, "start_time", string32);
+
+    ms_nstime2timestr (ringstream->latestdetime, string32, ISOMONTHDAY_Z, MICRO);
+    cJSON_AddStringToObject (stream, "end_time", string32);
+
+    ms_nstime2timestr (ringstream->earliestptime, string32, ISOMONTHDAY_Z, MICRO);
+    cJSON_AddStringToObject (stream, "earliest_packet_time", string32);
+
+    ms_nstime2timestr (ringstream->latestptime, string32, ISOMONTHDAY_Z, MICRO);
+    cJSON_AddStringToObject (stream, "latest_packet_time", string32);
+
+    free (ringstream);
+  }
+
+  StackDestroy (ringstreams, free);
+
+  if (match_code)
+    pcre2_code_free (match_code);
+  if (match_data)
+    pcre2_match_data_free (match_data);
+
+  return streams;
 }
 
 /***************************************************************************
@@ -502,6 +587,7 @@ info_add_connections (ClientInfo *cinfo, cJSON *root, const char *matchexpr)
   char *conntype;
   char conntime[50];
   char packettime[50];
+  char intstring[32];
 
   cJSON *connections;
   cJSON *clients;
@@ -521,7 +607,7 @@ info_add_connections (ClientInfo *cinfo, cJSON *root, const char *matchexpr)
     return NULL;
   }
 
-  if ((clients = cJSON_AddArrayToObject (connections, "clients")) == NULL)
+  if ((clients = cJSON_AddArrayToObject (connections, "client")) == NULL)
   {
     return NULL;
   }
@@ -605,7 +691,11 @@ info_add_connections (ClientInfo *cinfo, cJSON *root, const char *matchexpr)
     cJSON_AddStringToObject (connection, "client_id", tcinfo->clientid);
     cJSON_AddStringToObject (connection, "connect_time", conntime);
 
-    cJSON_AddNumberToObject (connection, "current_packet", tcinfo->reader->pktid);
+    if (tcinfo->reader->pktid <= RINGID_MAXIMUM)
+    {
+      snprintf (intstring, sizeof (intstring), "%" PRIu64, tcinfo->reader->pktid);
+      cJSON_AddStringToObject (connection, "current_packet", intstring);
+    }
 
     if (tcinfo->reader->pkttime != NSTUNSET)
       cJSON_AddStringToObject (connection, "packet_time", packettime);
@@ -613,14 +703,18 @@ info_add_connections (ClientInfo *cinfo, cJSON *root, const char *matchexpr)
     cJSON_AddNumberToObject (connection, "lag_percent", (tcinfo->reader->pktid > RINGID_MAXIMUM) ? 0 : tcinfo->percentlag);
     cJSON_AddNumberToObject (connection, "lag_seconds", (double)MS_NSTIME2EPOCH ((nsnow - tcinfo->lastxchange)));
 
-    cJSON_AddNumberToObject (connection, "transmit_packets", tcinfo->txpackets[0]);
+    snprintf (intstring, sizeof (intstring), "%" PRIu64, tcinfo->txpackets[0]);
+    cJSON_AddStringToObject (connection, "transmit_packets", intstring);
     cJSON_AddNumberToObject (connection, "transmit_packet_rate", tcinfo->txpacketrate);
-    cJSON_AddNumberToObject (connection, "transmit_bytes", tcinfo->txbytes[0]);
+    snprintf (intstring, sizeof (intstring), "%" PRIu64, tcinfo->txbytes[0]);
+    cJSON_AddStringToObject (connection, "transmit_bytes", intstring);
     cJSON_AddNumberToObject (connection, "transmit_byte_rate", tcinfo->txbyterate);
 
-    cJSON_AddNumberToObject (connection, "receive_packets", tcinfo->rxpackets[0]);
+    snprintf (intstring, sizeof (intstring), "%" PRIu64, tcinfo->rxpackets[0]);
+    cJSON_AddStringToObject (connection, "receive_packets", intstring);
     cJSON_AddNumberToObject (connection, "receive_packet_rate", tcinfo->rxpacketrate);
-    cJSON_AddNumberToObject (connection, "receive_bytes", tcinfo->rxbytes[0]);
+    snprintf (intstring, sizeof (intstring), "%" PRIu64, tcinfo->rxbytes[0]);
+    cJSON_AddStringToObject (connection, "receive_bytes", intstring);
     cJSON_AddNumberToObject (connection, "receive_byte_rate", tcinfo->rxbyterate);
     cJSON_AddNumberToObject (connection, "stream_count", (double)tcinfo->streamscount);
 
@@ -642,17 +736,135 @@ info_add_connections (ClientInfo *cinfo, cJSON *root, const char *matchexpr)
 }
 
 /***************************************************************************
+ * info_add_status:
+ *
+ * Add server status to the JSON document.
+ *
+ * Returns pointer to JSON object added on success and NULL on error.
+ ***************************************************************************/
+static cJSON *
+info_add_status (ClientInfo *cinfo, cJSON *root)
+{
+  struct sthread *loopstp;
+
+  char packettime[50];
+  char intstring[32];
+
+  cJSON *server;
+  cJSON *threads;
+  cJSON *thread;
+
+  if ((server = cJSON_AddObjectToObject (root, "server")) == NULL)
+  {
+    return NULL;
+  }
+
+  if ((threads = cJSON_AddArrayToObject (server, "thread")) == NULL)
+  {
+    return NULL;
+  }
+
+  cJSON_AddNumberToObject (server, "ring_version", cinfo->ringparams->version);
+  cJSON_AddNumberToObject (server, "ring_size", cinfo->ringparams->ringsize);
+  cJSON_AddNumberToObject (server, "packet_size", cinfo->ringparams->pktsize);
+  cJSON_AddNumberToObject (server, "maximum_packets", cinfo->ringparams->maxpackets);
+  cJSON_AddBoolToObject (server, "memory_mapped", cinfo->ringparams->mmapflag);
+  cJSON_AddBoolToObject (server, "volatile_ring", cinfo->ringparams->volatileflag);
+  cJSON_AddNumberToObject (server, "connection_count", param.clientcount);
+  cJSON_AddNumberToObject (server, "stream_count", cinfo->ringparams->streamcount);
+
+  cJSON_AddNumberToObject (server, "transmit_packet_rate", cinfo->ringparams->txpacketrate);
+  cJSON_AddNumberToObject (server, "transmit_byte_rate", cinfo->ringparams->txbyterate);
+  cJSON_AddNumberToObject (server, "receive_packet_rate", cinfo->ringparams->rxpacketrate);
+  cJSON_AddNumberToObject (server, "receive_byte_rate", cinfo->ringparams->rxbyterate);
+
+  if (cinfo->ringparams->earliestid <= RINGID_MAXIMUM)
+  {
+    snprintf (intstring, sizeof (intstring), "%" PRIu64, cinfo->ringparams->earliestid);
+    cJSON_AddStringToObject (server, "earliest_packet_id", intstring);
+    ms_nstime2timestr (cinfo->ringparams->earliestptime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    cJSON_AddStringToObject (server, "earliest_packet_time", packettime);
+    ms_nstime2timestr (cinfo->ringparams->earliestdstime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    cJSON_AddStringToObject (server, "earliest_data_start", packettime);
+    ms_nstime2timestr (cinfo->ringparams->earliestdetime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    cJSON_AddStringToObject (server, "earliest_data_end", packettime);
+  }
+
+  if (cinfo->ringparams->latestid <= RINGID_MAXIMUM)
+  {
+    snprintf (intstring, sizeof (intstring), "%" PRIu64, cinfo->ringparams->latestid);
+    cJSON_AddStringToObject (server, "latest_packet_id", intstring);
+    ms_nstime2timestr (cinfo->ringparams->latestptime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    cJSON_AddStringToObject (server, "latest_packet_time", packettime);
+    ms_nstime2timestr (cinfo->ringparams->latestdstime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    cJSON_AddStringToObject (server, "latest_data_start", packettime);
+    ms_nstime2timestr (cinfo->ringparams->latestdetime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    cJSON_AddStringToObject (server, "latest_data_end", packettime);
+  }
+
+  /* List server threads, lock thread list while looping */
+  pthread_mutex_lock (&param.sthreads_lock);
+  loopstp = param.sthreads;
+  while (loopstp)
+  {
+    if ((thread = cJSON_CreateObject ()) == NULL)
+    {
+      break;
+    }
+    cJSON_AddItemToArray (threads, thread);
+
+    if (loopstp->type == LISTEN_THREAD)
+    {
+      char protocolstr[100];
+      ListenPortParams *lpp = loopstp->params;
+
+      cJSON_AddStringToObject (thread, "type", "Listener");
+
+      if (GenProtocolString (lpp->protocols, lpp->options, protocolstr, sizeof (protocolstr)) > 0)
+      {
+        cJSON_AddStringToObject (thread, "protocol", protocolstr);
+      }
+
+      cJSON_AddStringToObject (thread, "port", lpp->portstr);
+    }
+    else if (loopstp->type == MSEEDSCAN_THREAD)
+    {
+      MSScanInfo *mssinfo = loopstp->params;
+
+      cJSON_AddStringToObject (thread, "type", "miniSEED scanner");
+      cJSON_AddStringToObject (thread, "directory", mssinfo->dirname);
+      cJSON_AddNumberToObject (thread, "max_recursion", mssinfo->maxrecur);
+      cJSON_AddStringToObject (thread, "state_file", mssinfo->statefile);
+      cJSON_AddStringToObject (thread, "match", mssinfo->matchstr);
+      cJSON_AddStringToObject (thread, "reject", mssinfo->rejectstr);
+      cJSON_AddNumberToObject (thread, "scan_time", mssinfo->scantime);
+      cJSON_AddNumberToObject (thread, "packet_rate", mssinfo->rxpacketrate);
+      cJSON_AddNumberToObject (thread, "byte_rate", mssinfo->rxbyterate);
+    }
+    else
+    {
+      cJSON_AddStringToObject (thread, "type", "Unknown");
+    }
+
+    loopstp = loopstp->next;
+  }
+  pthread_mutex_unlock (&param.sthreads_lock);
+
+  return server;
+}
+
+/***************************************************************************
  * info_json:
  *
  * Return a JSON document with server details, conforming to the SeedLink
  * v4 JSON info schema.
  *
- * Which elements are includedis controlled by the elements bitmask.
+ * Which elements are included is controlled by the elements bitmask.
  *
  * The returned string is minified JSON document and allocated on the heap
- * that must be freed by the caller.
+ * that must be free'd by the caller.
  *
- * Returns pointer to JSON strng on success and NULL on error.
+ * Returns pointer to JSON string on success and NULL on error.
  ***************************************************************************/
 char *
 info_json (ClientInfo *cinfo, const char *software, InfoElements elements,
@@ -702,8 +914,15 @@ info_json (ClientInfo *cinfo, const char *software, InfoElements elements,
     return NULL;
   }
 
-  if (elements & INFO_STREAMS &&
+  if (elements & INFO_STATION_STREAMS &&
       info_add_stations (cinfo, root, 1, matchexpr) == NULL)
+  {
+    cJSON_Delete (root);
+    return NULL;
+  }
+
+  if (elements & INFO_STREAMS &&
+      info_add_streams (cinfo, root, matchexpr) == NULL)
   {
     cJSON_Delete (root);
     return NULL;
@@ -711,6 +930,13 @@ info_json (ClientInfo *cinfo, const char *software, InfoElements elements,
 
   if (elements & INFO_CONNECTIONS &&
       info_add_connections (cinfo, root, matchexpr) == NULL)
+  {
+    cJSON_Delete (root);
+    return NULL;
+  }
+
+  if (elements & INFO_STATUS &&
+      info_add_status (cinfo, root) == NULL)
   {
     cJSON_Delete (root);
     return NULL;

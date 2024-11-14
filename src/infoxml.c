@@ -66,14 +66,14 @@ info_xml_slv3_id (ClientInfo *cinfo, const char *software)
 
   if (!(xmldoc = mxmlNewXML ("1.0")))
   {
-    free (json_string);
+    cJSON_Delete (json);
     return NULL;
   }
 
   if (!(seedlink = mxmlNewElement (xmldoc, "seedlink")))
   {
     mxmlRelease (xmldoc);
-    free (json_string);
+    cJSON_Delete (json);
     return NULL;
   }
 
@@ -134,14 +134,14 @@ info_xml_slv3_capabilities (ClientInfo *cinfo, const char *software)
 
   if (!(xmldoc = mxmlNewXML ("1.0")))
   {
-    free (json_string);
+    cJSON_Delete (json);
     return NULL;
   }
 
   if (!(seedlink = mxmlNewElement (xmldoc, "seedlink")))
   {
+    cJSON_Delete (json);
     mxmlRelease (xmldoc);
-    free (json_string);
     return NULL;
   }
 
@@ -205,7 +205,7 @@ info_xml_slv3_stations (ClientInfo *cinfo, const char *software, int include_str
 
   /* Generate JSON formatted document for INFO STREAMS or STATIONS level */
   if ((json_string = info_json (cinfo, software,
-                                (include_streams) ? INFO_STREAMS : INFO_STATIONS,
+                                (include_streams) ? INFO_STATION_STREAMS : INFO_STATIONS,
                                 NULL)) == NULL)
   {
     return NULL;
@@ -220,14 +220,14 @@ info_xml_slv3_stations (ClientInfo *cinfo, const char *software, int include_str
 
   if (!(xmldoc = mxmlNewXML ("1.0")))
   {
-    free (json_string);
+    cJSON_Delete (json);
     return NULL;
   }
 
   if (!(seedlink = mxmlNewElement (xmldoc, "seedlink")))
   {
+    cJSON_Delete (json);
     mxmlRelease (xmldoc);
-    free (json_string);
     return NULL;
   }
 
@@ -360,14 +360,14 @@ info_xml_slv3_connections (ClientInfo *cinfo, const char *software)
 
   if (!(xmldoc = mxmlNewXML ("1.0")))
   {
-    free (json_string);
+    cJSON_Delete (json);
     return NULL;
   }
 
   if (!(seedlink = mxmlNewElement (xmldoc, "seedlink")))
   {
+    cJSON_Delete (json);
     mxmlRelease (xmldoc);
-    free (json_string);
     return NULL;
   }
 

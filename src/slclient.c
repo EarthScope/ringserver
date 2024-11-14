@@ -1468,7 +1468,7 @@ HandleInfo_v4 (ClientInfo *cinfo)
       }
     }
 
-    json_string = info_json (cinfo, SLSERVER_ID, INFO_STREAMS, matchregex);
+    json_string = info_json (cinfo, SLSERVER_ID, INFO_STATION_STREAMS, matchregex);
   }
   else if (!strncasecmp (item, "CONNECTIONS", 11))
   {

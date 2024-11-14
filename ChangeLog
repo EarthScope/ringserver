@@ -17,6 +17,8 @@
 	- All configuration options can be specified with environment variables.
 
 	Other changes:
+	- Add HTTP endpoints that return status information in JSON format:
+	/id/json, /streams/json, /status/json, /connections/json
 	- Add -C command line option to print a configuration file.
 	- Automatically convert packet buffer from previous version to current.
 	- Convert internal time stamps from microsecond ticks (hptime) to use
