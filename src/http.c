@@ -38,10 +38,10 @@
 #include "mseedscan.h"
 #include "ring.h"
 #include "ringserver.h"
-#include "cJSON.h"
 #include "infojson.h"
+#include "yyjson.h"
 
-#define MIN(X, Y) (X < Y) ? X : Y
+#define DASHNULL(x) ((x) ? (x) : "-")
 
 typedef enum
 {
@@ -343,7 +343,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       /* Create header */
       headlen = GenerateHeader (cinfo, 403, UNSET, 0, "Forbidden, no soup for you!");
 
-      rv = SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen), 0);
+      rv = SendData (cinfo, cinfo->sendbuf, (size_t)headlen, 0);
 
       return (rv) ? -1 : 1;
     }
@@ -441,17 +441,11 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       lprintf (1, "[%s] Received SeedLink WebSocket request on non-SeedLink port", cinfo->hostname);
 
       /* Create header */
-      headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                          "HTTP/1.1 400 Cannot request SeedLink WebSocket on non-SeedLink port\r\n"
-                          "Connection: close\r\n"
-                          "%s"
-                          "\r\n"
-                          "Cannot request SeedLink WebSocket on non-SeedLink port",
-                          (cinfo->httpheaders) ? cinfo->httpheaders : "");
+      headlen = GenerateHeader (cinfo, 400, UNSET, 0, "Cannot request SeedLink WebSocket on non-SeedLink port");
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen), 0);
+        SendData (cinfo, cinfo->sendbuf, (size_t)headlen, 0);
       }
       else
       {
@@ -494,17 +488,11 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       lprintf (1, "[%s] Received DataLink WebSocket request on non-DataLink port", cinfo->hostname);
 
       /* Create header */
-      headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                          "HTTP/1.1 400 Cannot request DataLink WebSocket on non-DataLink port\r\n"
-                          "Connection: close\r\n"
-                          "%s"
-                          "\r\n"
-                          "Cannot request DataLink WebSocket on non-DataLink port",
-                          (cinfo->httpheaders) ? cinfo->httpheaders : "");
+      headlen = GenerateHeader (cinfo, 400, UNSET, 0, "Cannot request DataLink WebSocket on non-DataLink port");
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, MIN ((size_t)headlen, cinfo->sendbuflen), 0);
+        SendData (cinfo, cinfo->sendbuf, (size_t)headlen, 0);
       }
       else
       {
@@ -906,7 +894,6 @@ GenerateID (ClientInfo *cinfo, const char *path, char **response, MediaType *typ
   int responsebytes = 0;
 
   char *json_string;
-  cJSON *json;
 
   if (!cinfo || !path || !response || !type)
     return -1;
@@ -924,22 +911,26 @@ GenerateID (ClientInfo *cinfo, const char *path, char **response, MediaType *typ
   }
   else if (!strcasecmp (path, "/id"))
   {
-    if ((json = cJSON_Parse (json_string)) == NULL)
+    yyjson_doc *json;
+    yyjson_val *root;
+
+    if ((json = yyjson_read (json_string, strlen (json_string), 0)) == NULL)
     {
       free (json_string);
       return -1;
     }
     free (json_string);
+    root = yyjson_doc_get_root (json);
 
     responsebytes = asprintf (response,
                               "%s\n"
                               "Organization: %s\n"
                               "Server start: %s",
-                              cJSON_GetStringValue (cJSON_GetObjectItem (json, "software")),
-                              cJSON_GetStringValue (cJSON_GetObjectItem (json, "organization")),
-                              cJSON_GetStringValue (cJSON_GetObjectItem (json, "server_start")));
+                              DASHNULL (yyjson_get_str (yyjson_obj_get (root, "software"))),
+                              DASHNULL (yyjson_get_str (yyjson_obj_get (root, "organization"))),
+                              DASHNULL (yyjson_get_str (yyjson_obj_get (root, "server_start"))));
 
-    cJSON_Delete (json);
+    yyjson_doc_free (json);
 
     *type = TEXT;
   }
@@ -981,12 +972,8 @@ GenerateStreams (ClientInfo *cinfo, const char *path, char **response, MediaType
   char *writeptr    = NULL;
   int written       = 0;
   int responsebytes = 0;
-  int just_ids      = 0;
 
   char *json_string;
-  cJSON *json;
-  cJSON *stream_array;
-  cJSON *stream_iter = NULL;
 
   if (!cinfo || !path || !response || !type)
     return -1;
@@ -1023,18 +1010,25 @@ GenerateStreams (ClientInfo *cinfo, const char *path, char **response, MediaType
   else if (!strcasecmp (mypath, "/streams") ||
            !strcasecmp (mypath, "/streamids"))
   {
-    just_ids = (!strcasecmp (mypath, "/streamids")) ? 1 : 0;
+    yyjson_doc *json;
+    yyjson_val *root;
+    yyjson_val *stream_array;
+    yyjson_val *stream_iter = NULL;
+    size_t idx, max;
 
-    if ((json = cJSON_Parse (json_string)) == NULL)
+    int just_ids = (!strcasecmp (mypath, "/streamids")) ? 1 : 0;
+
+    if ((json = yyjson_read (json_string, strlen (json_string), 0)) == NULL)
     {
       free (json_string);
       return -1;
     }
     free (json_string);
+    root = yyjson_doc_get_root (json);
 
-    if ((stream_array = cJSON_GetObjectItem (json, "stream")) != NULL)
+    if ((stream_array = yyjson_obj_get (root, "stream")) != NULL)
     {
-      streamcount = cJSON_GetArraySize (stream_array);
+      streamcount = yyjson_arr_size (stream_array);
 
       /* Allocate stream list buffer with maximum expected:
        * for level-specific output, maximum per entry is 60 characters + newline
@@ -1046,7 +1040,7 @@ GenerateStreams (ClientInfo *cinfo, const char *path, char **response, MediaType
       {
         lprintf (0, "[%s] Error for HTTP STREAM[ID]S (cannot allocate response buffer of size %zu)",
                  cinfo->hostname, streamlistsize);
-        cJSON_Delete (json);
+        yyjson_doc_free (json);
         return -1;
       }
 
@@ -1054,26 +1048,26 @@ GenerateStreams (ClientInfo *cinfo, const char *path, char **response, MediaType
 
       responsebytes = 0;
 
-      cJSON_ArrayForEach (stream_iter, stream_array)
+      yyjson_arr_foreach (stream_array, idx, max, stream_iter)
       {
         if (just_ids)
         {
           written = snprintf (writeptr, streamlistsize - responsebytes, "%s\n",
-                              cJSON_GetStringValue (cJSON_GetObjectItem (stream_iter, "id")));
+                              DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "id"))));
         }
         else
         {
           written = snprintf (writeptr, streamlistsize - responsebytes, "%s %s %s\n",
-                              cJSON_GetStringValue (cJSON_GetObjectItem (stream_iter, "id")),
-                              cJSON_GetStringValue (cJSON_GetObjectItem (stream_iter, "start_time")),
-                              cJSON_GetStringValue (cJSON_GetObjectItem (stream_iter, "end_time")));
+                              DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "id"))),
+                              DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "start_time"))),
+                              DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "end_time"))));
         }
 
         if ((responsebytes + written) >= streamlistsize)
         {
           lprintf (0, "[%s] Error for HTTP STREAM[ID]S (response buffer overflow)",
                    cinfo->hostname);
-          cJSON_Delete (json);
+          yyjson_doc_free (json);
           return -1;
         }
 
@@ -1084,7 +1078,7 @@ GenerateStreams (ClientInfo *cinfo, const char *path, char **response, MediaType
       /* Add a final terminator to stream list buffer */
       *writeptr = '\0';
 
-      cJSON_Delete (json);
+      yyjson_doc_free (json);
       *type = TEXT;
     }
   }
@@ -1114,10 +1108,6 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
   int responsebytes = 0;
 
   char *json_string;
-  cJSON *json;
-  cJSON *server;
-  cJSON *thread_array;
-  cJSON *thread_iter = NULL;
 
   if (!cinfo || !path || !response || !type)
     return -1;
@@ -1135,14 +1125,22 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
   }
   else if (!strcasecmp (path, "/status"))
   {
-    if ((json = cJSON_Parse (json_string)) == NULL)
+    yyjson_doc *json;
+    yyjson_val *root;
+    yyjson_val *server;
+    yyjson_val *thread_array;
+    yyjson_val *thread_iter = NULL;
+    size_t idx, max;
+
+    if ((json = yyjson_read (json_string, strlen (json_string), 0)) == NULL)
     {
       free (json_string);
       return -1;
     }
     free (json_string);
+    root = yyjson_doc_get_root (json);
 
-    if ((server = cJSON_GetObjectItem (json, "server")) != NULL)
+    if ((server = yyjson_obj_get (root, "server")) != NULL)
     {
       responsesize = 2048;
 
@@ -1150,7 +1148,7 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
       {
         lprintf (0, "[%s] Error for HTTP CONNECTIONS (cannot allocate response buffer of size %zu)",
                  cinfo->hostname, responsesize);
-        cJSON_Delete (json);
+        yyjson_doc_free (json);
         return -1;
       }
 
@@ -1162,8 +1160,8 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
                           "%s\n"
                           "Organization: %s\n"
                           "Server start time: %s\n"
-                          "Ring version: %d\n"
-                          "Ring size: %d\n"
+                          "Ring version: %" PRIu64 "\n"
+                          "Ring size: %" PRIu64 "\n"
                           "Packet size: %d\n"
                           "Max packets: %d\n"
                           "Memory mapped ring: %s\n"
@@ -1174,59 +1172,59 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
                           "TX byte rate: %.1f\n"
                           "RX packet rate: %.1f\n"
                           "RX byte rate: %.1f\n"
-                          "Earliest packet: %s\n"
+                          "Earliest packet: %" PRIu64 "\n"
                           "  Create: %s  Data start: %s  Data end: %s\n"
-                          "Latest packet: %s\n"
+                          "Latest packet: %" PRIu64 "\n"
                           "  Create: %s  Data start: %s  Data end: %s\n",
-                          cJSON_GetStringValue (cJSON_GetObjectItem (json, "software")),
-                          cJSON_GetStringValue (cJSON_GetObjectItem (json, "organization")),
-                          cJSON_GetStringValue (cJSON_GetObjectItem (json, "server_start")),
-                          (int)(cJSON_GetNumberValue (cJSON_GetObjectItem (server, "ring_version")) + 0.5),
-                          (int)(cJSON_GetNumberValue (cJSON_GetObjectItem (server, "ring_size")) + 0.5),
-                          (int)(cJSON_GetNumberValue (cJSON_GetObjectItem (server, "packet_size")) + 0.5),
-                          (int)(cJSON_GetNumberValue (cJSON_GetObjectItem (server, "maximum_packets")) + 0.5),
-                          (cJSON_IsTrue (cJSON_GetObjectItem (server, "memory_mapped"))) ? "TRUE" : "FALSE",
-                          (cJSON_IsTrue (cJSON_GetObjectItem (server, "volatile_ring"))) ? "TRUE" : "FALSE",
-                          (int)(cJSON_GetNumberValue (cJSON_GetObjectItem (server, "connection_count")) + 0.5),
-                          (int)(cJSON_GetNumberValue (cJSON_GetObjectItem (server, "stream_count")) + 0.5),
-                          cJSON_GetNumberValue (cJSON_GetObjectItem (server, "transmit_packet_rate")),
-                          cJSON_GetNumberValue (cJSON_GetObjectItem (server, "transmit_byte_rate")),
-                          cJSON_GetNumberValue (cJSON_GetObjectItem (server, "receive_packet_rate")),
-                          cJSON_GetNumberValue (cJSON_GetObjectItem (server, "receive_byte_rate")),
-                          cJSON_GetStringValue (cJSON_GetObjectItem (server, "earliest_packet_id")),
-                          cJSON_GetStringValue (cJSON_GetObjectItem (server, "earliest_packet_time")),
-                          cJSON_GetStringValue (cJSON_GetObjectItem (server, "earliest_data_start")),
-                          cJSON_GetStringValue (cJSON_GetObjectItem (server, "earliest_data_end")),
-                          cJSON_GetStringValue (cJSON_GetObjectItem (server, "latest_packet_id")),
-                          cJSON_GetStringValue (cJSON_GetObjectItem (server, "latest_packet_time")),
-                          cJSON_GetStringValue (cJSON_GetObjectItem (server, "latest_data_start")),
-                          cJSON_GetStringValue (cJSON_GetObjectItem (server, "latest_data_end")));
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (root, "software"))),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (root, "organization"))),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (root, "server_start"))),
+                          yyjson_get_uint (yyjson_obj_get (server, "ring_version")),
+                          yyjson_get_uint (yyjson_obj_get (server, "ring_size")),
+                          yyjson_get_int (yyjson_obj_get (server, "packet_size")),
+                          yyjson_get_int (yyjson_obj_get (server, "maximum_packets")),
+                          (yyjson_get_bool (yyjson_obj_get (server, "memory_mapped"))) ? "TRUE" : "FALSE",
+                          (yyjson_get_bool (yyjson_obj_get (server, "volatile_ring"))) ? "TRUE" : "FALSE",
+                          yyjson_get_int (yyjson_obj_get (server, "connection_count")),
+                          yyjson_get_int (yyjson_obj_get (server, "stream_count")),
+                          yyjson_get_real (yyjson_obj_get (server, "transmit_packet_rate")),
+                          yyjson_get_real (yyjson_obj_get (server, "transmit_byte_rate")),
+                          yyjson_get_real (yyjson_obj_get (server, "receive_packet_rate")),
+                          yyjson_get_real (yyjson_obj_get (server, "receive_byte_rate")),
+                          yyjson_get_uint (yyjson_obj_get (server, "earliest_packet_id")),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "earliest_packet_time"))),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "earliest_data_start"))),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "earliest_data_end"))),
+                          yyjson_get_uint (yyjson_obj_get (server, "latest_packet_id")),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "latest_packet_time"))),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "latest_data_start"))),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "latest_data_end"))));
 
       writeptr += written;
       responsebytes += written;
 
-      if ((thread_array = cJSON_GetObjectItem (server, "thread")) != NULL)
+      if ((thread_array = yyjson_obj_get (server, "thread")) != NULL)
       {
         written = snprintf (writeptr, responsesize - responsebytes,
                             "\nServer threads:\n");
         writeptr += written;
         responsebytes += written;
 
-        cJSON_ArrayForEach (thread_iter, thread_array)
+        yyjson_arr_foreach (thread_array, idx, max, thread_iter)
         {
-          char *thread_type = cJSON_GetStringValue (cJSON_GetObjectItem (thread_iter, "type"));
+          const char *thread_type = yyjson_get_str (yyjson_obj_get (thread_iter, "type"));
 
-          if (!strcasecmp (thread_type, "Listener"))
+          if (thread_type && !strcasecmp (thread_type, "Listener"))
           {
             written = snprintf (writeptr, responsesize - responsebytes,
                                 "  Thread type: %s\n"
                                 "    Protocol: %s\n"
                                 "    Port: %s\n",
                                 thread_type,
-                                cJSON_GetStringValue (cJSON_GetObjectItem (thread_iter, "protocol")),
-                                cJSON_GetStringValue (cJSON_GetObjectItem (thread_iter, "port")));
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "protocol"))),
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "port"))));
           }
-          else if (!strcasecmp (thread_type, "miniSEED scanner"))
+          else if (thread_type && !strcasecmp (thread_type, "miniSEED scanner"))
           {
             written = snprintf (writeptr, responsesize - responsebytes,
                                 "  Thread type: %s\n"
@@ -1239,14 +1237,14 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
                                 "    Packet rate: %g\n"
                                 "    Byte rate: %g\n",
                                 thread_type,
-                                cJSON_GetStringValue (cJSON_GetObjectItem (thread_iter, "directory")),
-                                (int)(cJSON_GetNumberValue (cJSON_GetObjectItem (thread_iter, "max_recursion")) + 0.5),
-                                cJSON_GetStringValue (cJSON_GetObjectItem (thread_iter, "state_file")),
-                                cJSON_GetStringValue (cJSON_GetObjectItem (thread_iter, "match")),
-                                cJSON_GetStringValue (cJSON_GetObjectItem (thread_iter, "reject")),
-                                cJSON_GetNumberValue (cJSON_GetObjectItem (thread_iter, "scan_time")),
-                                cJSON_GetNumberValue (cJSON_GetObjectItem (thread_iter, "packet_rate")),
-                                cJSON_GetNumberValue (cJSON_GetObjectItem (thread_iter, "byte_rate")));
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "directory"))),
+                                yyjson_get_int (yyjson_obj_get (thread_iter, "max_recursion")),
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "state_file"))),
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "match"))),
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "reject"))),
+                                yyjson_get_real (yyjson_obj_get (thread_iter, "scan_time")),
+                                yyjson_get_real (yyjson_obj_get (thread_iter, "packet_rate")),
+                                yyjson_get_real (yyjson_obj_get (thread_iter, "byte_rate")));
           }
           else
           {
@@ -1259,7 +1257,7 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
           {
             lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
                      cinfo->hostname);
-            cJSON_Delete (json);
+            yyjson_doc_free (json);
             return -1;
           }
 
@@ -1267,10 +1265,10 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
           responsebytes += written;
         }
       }
-
-      cJSON_Delete (json);
-      *type = TEXT;
     }
+
+    yyjson_doc_free (json);
+    *type = TEXT;
   }
   else
   {
@@ -1309,10 +1307,6 @@ GenerateConnections (ClientInfo *cinfo, const char *path, char **response, Media
   int responsebytes = 0;
 
   char *json_string;
-  cJSON *json;
-  cJSON *connections;
-  cJSON *client_array;
-  cJSON *client_iter = NULL;
 
   if (!cinfo || !path || !response || !type)
     return -1;
@@ -1348,18 +1342,23 @@ GenerateConnections (ClientInfo *cinfo, const char *path, char **response, Media
   }
   else if (!strcasecmp (mypath, "/connections"))
   {
-    if ((json = cJSON_Parse (json_string)) == NULL)
+    yyjson_doc *json;
+    yyjson_val *root;
+    yyjson_val *client_array;
+    yyjson_val *client_iter = NULL;
+    size_t idx, max;
+
+    if ((json = yyjson_read (json_string, strlen (json_string), 0)) == NULL)
     {
       free (json_string);
       return -1;
     }
     free (json_string);
+    root = yyjson_doc_get_root (json);
 
-    connections = cJSON_GetObjectItem (json, "connections");
-
-    if ((client_array = cJSON_GetObjectItem (connections, "client")) != NULL)
+    if ((client_array = yyjson_ptr_get (root, "/connections/client")) != NULL)
     {
-      clientcount = cJSON_GetArraySize (client_array);
+      clientcount = yyjson_arr_size (client_array);
 
       /* Allocate stream list buffer with maximum expected: 1024 bytes per client */
       responsesize = clientcount * 1024;
@@ -1368,7 +1367,7 @@ GenerateConnections (ClientInfo *cinfo, const char *path, char **response, Media
       {
         lprintf (0, "[%s] Error for HTTP CONNECTIONS (cannot allocate response buffer of size %zu)",
                  cinfo->hostname, responsesize);
-        cJSON_Delete (json);
+        yyjson_doc_free (json);
         return -1;
       }
 
@@ -1376,59 +1375,40 @@ GenerateConnections (ClientInfo *cinfo, const char *path, char **response, Media
 
       responsebytes = 0;
 
-      cJSON_ArrayForEach (client_iter, client_array)
+      yyjson_arr_foreach (client_array, idx, max, client_iter)
       {
-        char *host             = cJSON_GetStringValue (cJSON_GetObjectItem (client_iter, "host"));
-        char *ipaddress        = cJSON_GetStringValue (cJSON_GetObjectItem (client_iter, "ip_address"));
-        char *port             = cJSON_GetStringValue (cJSON_GetObjectItem (client_iter, "port"));
-        char *client_type      = cJSON_GetStringValue (cJSON_GetObjectItem (client_iter, "type"));
-        char *client_id        = cJSON_GetStringValue (cJSON_GetObjectItem (client_iter, "client_id"));
-        char *connect_time     = cJSON_GetStringValue (cJSON_GetObjectItem (client_iter, "connect_time"));
-        char *current_packet   = cJSON_GetStringValue (cJSON_GetObjectItem (client_iter, "current_packet"));
-        char *packet_time      = cJSON_GetStringValue (cJSON_GetObjectItem (client_iter, "packet_time"));
-        int lag_percent        = cJSON_GetNumberValue (cJSON_GetObjectItem (client_iter, "lag_percent"));
-        double lag_seconds     = cJSON_GetNumberValue (cJSON_GetObjectItem (client_iter, "lag_seconds"));
-        char *transmit_packets = cJSON_GetStringValue (cJSON_GetObjectItem (client_iter, "transmit_packets"));
-        double tx_packet_rate  = cJSON_GetNumberValue (cJSON_GetObjectItem (client_iter, "transmit_packet_rate"));
-        char *transmit_bytes   = cJSON_GetStringValue (cJSON_GetObjectItem (client_iter, "transmit_bytes"));
-        double tx_byte_rate    = cJSON_GetNumberValue (cJSON_GetObjectItem (client_iter, "transmit_byte_rate"));
-        char *receive_packets  = cJSON_GetStringValue (cJSON_GetObjectItem (client_iter, "receive_packets"));
-        double rx_packet_rate  = cJSON_GetNumberValue (cJSON_GetObjectItem (client_iter, "receive_packet_rate"));
-        char *receive_bytes    = cJSON_GetStringValue (cJSON_GetObjectItem (client_iter, "receive_bytes"));
-        double rx_byte_rate    = cJSON_GetNumberValue (cJSON_GetObjectItem (client_iter, "receive_byte_rate"));
-        int stream_count       = cJSON_GetNumberValue (cJSON_GetObjectItem (client_iter, "stream_count"));
-
         written = snprintf (writeptr, responsesize - responsebytes,
                             "%s [%s:%s]\n"
                             "  [%s] %s  %s\n"
-                            "  Packet %s (%s)  Lag %d, %.1f\n"
-                            "  TX %s packets, %.1f packets/sec  %s bytes, %.1f bytes/sec\n"
-                            "  RX %s packets, %.1f packets/sec  %s bytes, %.1f bytes/sec\n"
+                            "  Packet %" PRIu64 " (%s)  Lag %d, %.1f\n"
+                            "  TX %" PRIu64 " packets, %.1f packets/sec  %" PRIu64 " bytes, %.1f bytes/sec\n"
+                            "  RX %" PRIu64 " packets, %.1f packets/sec  %" PRIu64 " bytes, %.1f bytes/sec\n"
                             "  Stream count: %d\n\n",
-                            (host) ? host : "-",
-                            (ipaddress) ? ipaddress : "-",
-                            (port) ? port : "-",
-                            (client_type) ? client_type : "-",
-                            (client_id) ? client_id : "-",
-                            (connect_time) ? connect_time : "-",
-                            (current_packet) ? current_packet : "-",
-                            (packet_time) ? packet_time : "-",
-                            lag_percent, lag_seconds,
-                            (transmit_packets) ? transmit_packets : "-",
-                            tx_packet_rate,
-                            (transmit_bytes) ? transmit_bytes : "-",
-                            tx_byte_rate,
-                            (receive_packets) ? receive_packets : "-",
-                            rx_packet_rate,
-                            (receive_bytes) ? receive_bytes : "-",
-                            rx_byte_rate,
-                            stream_count);
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "host"))),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "ip_address"))),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "port"))),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "type"))),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "client_id"))),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "connect_time"))),
+                            yyjson_get_uint (yyjson_obj_get (client_iter, "current_packet")),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "packet_time"))),
+                            yyjson_get_int (yyjson_obj_get (client_iter, "lag_percent")),
+                            yyjson_get_real (yyjson_obj_get (client_iter, "lag_seconds")),
+                            yyjson_get_uint (yyjson_obj_get (client_iter, "transmit_packets")),
+                            yyjson_get_real (yyjson_obj_get (client_iter, "transmit_packet_rate")),
+                            yyjson_get_uint (yyjson_obj_get (client_iter, "transmit_bytes")),
+                            yyjson_get_real (yyjson_obj_get (client_iter, "transmit_byte_rate")),
+                            yyjson_get_uint (yyjson_obj_get (client_iter, "receive_packets")),
+                            yyjson_get_real (yyjson_obj_get (client_iter, "receive_packet_rate")),
+                            yyjson_get_uint (yyjson_obj_get (client_iter, "receive_bytes")),
+                            yyjson_get_real (yyjson_obj_get (client_iter, "receive_byte_rate")),
+                            yyjson_get_int (yyjson_obj_get (client_iter, "stream_count")));
 
         if ((responsebytes + written) >= responsesize)
         {
           lprintf (0, "[%s] Error for HTTP STREAM[ID]S (response buffer overflow)",
                    cinfo->hostname);
-          cJSON_Delete (json);
+          yyjson_doc_free (json);
           return -1;
         }
 
@@ -1438,10 +1418,10 @@ GenerateConnections (ClientInfo *cinfo, const char *path, char **response, Media
 
       /* Add a final terminator to stream list buffer */
       *writeptr = '\0';
-
-      cJSON_Delete (json);
-      *type = TEXT;
     }
+
+    yyjson_doc_free (json);
+    *type = TEXT;
   }
   else
   {
