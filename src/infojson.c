@@ -274,11 +274,19 @@ info_add_streams (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matchexpr)
     ms_nstime2timestr (ringstream->latestdetime, string32, ISOMONTHDAY_Z, MICRO);
     yyjson_mut_obj_add_strcpy (doc, stream, "end_time", string32);
 
+    yyjson_mut_obj_add_uint (doc, stream, "earliest_packet_id", ringstream->earliestid);
+
     ms_nstime2timestr (ringstream->earliestptime, string32, ISOMONTHDAY_Z, MICRO);
     yyjson_mut_obj_add_strcpy (doc, stream, "earliest_packet_time", string32);
 
     ms_nstime2timestr (ringstream->latestptime, string32, ISOMONTHDAY_Z, MICRO);
     yyjson_mut_obj_add_strcpy (doc, stream, "latest_packet_time", string32);
+
+    yyjson_mut_obj_add_uint (doc, stream, "latest_packet_id", ringstream->latestid);
+
+    /* Data latency: the difference between the current time and time of last sample in seconds */
+    yyjson_mut_obj_add_real (doc, stream, "data_latency",
+                             (double)MS_NSTIME2EPOCH ((NSnow () - ringstream->latestdetime)));
 
     free (ringstream);
   }
@@ -672,15 +680,20 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
 
     if (tcinfo->reader->pktid <= RINGID_MAXIMUM)
     {
-      yyjson_mut_obj_add_uint (doc, client, "current_packet", tcinfo->reader->pktid);
+      yyjson_mut_obj_add_uint (doc, client, "packet_id", tcinfo->reader->pktid);
+    }
+
+    if (tcinfo->reader->datastart != NSTUNSET)
+    {
+      ms_nstime2timestr (tcinfo->reader->pkttime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+      yyjson_mut_obj_add_strcpy (doc, client, "packet_data_start_time", packettime);
     }
 
     if (tcinfo->reader->pkttime != NSTUNSET)
     {
       ms_nstime2timestr (tcinfo->reader->pkttime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-      yyjson_mut_obj_add_strcpy (doc, client, "packet_time", packettime);
+      yyjson_mut_obj_add_strcpy (doc, client, "packet_creation_time", packettime);
     }
-
 
     yyjson_mut_obj_add_int (doc, client, "lag_percent", (tcinfo->reader->pktid > RINGID_MAXIMUM) ? 0 : tcinfo->percentlag);
     yyjson_mut_obj_add_real (doc, client, "lag_seconds", (double)MS_NSTIME2EPOCH ((nsnow - tcinfo->lastxchange)));
@@ -784,6 +797,21 @@ info_add_status (ClientInfo *cinfo, yyjson_mut_doc *doc)
   {
     thread = yyjson_mut_arr_add_obj (doc, thread_array);
 
+    /* Add thread state to Thread element */
+    if (loopstp->td->td_state == TDS_SPAWNING)
+      yyjson_mut_obj_add_strcpy (doc, thread, "state", "SPAWNING");
+    else if (loopstp->td->td_state == TDS_ACTIVE)
+      yyjson_mut_obj_add_strcpy (doc, thread, "state", "ACTIVE");
+    else if (loopstp->td->td_state == TDS_CLOSE)
+      yyjson_mut_obj_add_strcpy (doc, thread, "state", "CLOSE");
+    else if (loopstp->td->td_state == TDS_CLOSING)
+      yyjson_mut_obj_add_strcpy (doc, thread, "state", "CLOSING");
+    else if (loopstp->td->td_state == TDS_CLOSED)
+      yyjson_mut_obj_add_strcpy (doc, thread, "state", "CLOSED");
+    else
+      yyjson_mut_obj_add_strcpy (doc, thread, "state", "UNKNOWN");
+
+    /* Determine server thread type and add specifics */
     if (loopstp->type == LISTEN_THREAD)
     {
       char protocolstr[100];

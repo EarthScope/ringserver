@@ -1372,7 +1372,15 @@ SetParameter (const char *paramstring, int dynamiconly)
     if (dynamiconly)
       return fieldcount;
 
-    if (AddMSeedScanThread (paramstring + strlen ("MSeedScan")))
+    /* Recombine option parameters for AddMSeedScanThread() to parse, TODO improve this */
+    char scanparams[1024] = {0};
+    for (int idx = 1; idx < fieldcount; idx++)
+    {
+      strcat (scanparams, field[idx]);
+      strcat (scanparams, " ");
+    }
+
+    if (AddMSeedScanThread (scanparams))
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;

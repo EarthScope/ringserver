@@ -32,7 +32,6 @@
 #include <time.h>
 
 #include <libmseed.h>
-#include <mxml.h>
 
 #include "clients.h"
 #include "dlclient.h"
@@ -43,6 +42,7 @@
 #include "rbtree.h"
 #include "ring.h"
 #include "ringserver.h"
+#include "infoxml.h"
 
 /* Define the number of no-action loops that trigger the throttle */
 #define THROTTLE_TRIGGER 10
@@ -300,9 +300,9 @@ HandleNegotiation (ClientInfo *cinfo)
       lprintf (2, "[%s] Received ID", cinfo->hostname);
     }
 
-    /* Create server version and capability flags string (DLCAPSFLAGS + WRITE if permission) */
+    /* Create server version and capability flags string (DLSERVER_ID + PACKETSIZE + WRITE if permission) */
     snprintf (sendbuffer, sizeof (sendbuffer),
-              "ID DataLink " VERSION " :: %s PACKETSIZE:%lu%s", DLCAPFLAGS,
+              "ID " DLSERVER_ID " PACKETSIZE:%lu%s",
               (unsigned long int)(cinfo->ringparams->pktsize - sizeof (RingPacket)),
               (cinfo->writeperm) ? " WRITE" : "");
 
@@ -943,14 +943,11 @@ HandleRead (ClientInfo *cinfo)
 static int
 HandleInfo (ClientInfo *cinfo, int socket)
 {
-  mxml_node_t *xmldoc = NULL;
-  mxml_node_t *status;
   char string[200];
   char *xmlstr = NULL;
   int xmllength;
   char *type      = NULL;
   char *matchexpr = NULL;
-  char errflag    = 0;
 
   if (!cinfo)
     return -1;
@@ -977,237 +974,23 @@ HandleInfo (ClientInfo *cinfo, int socket)
     return -1;
   }
 
-  /* Initialize the XML response */
-  if (!(xmldoc = mxmlNewElement (MXML_NO_PARENT, "DataLink")))
-  {
-    lprintf (0, "[%s] Error initializing XML response", cinfo->hostname);
-    return -1;
-  }
-
-  /* All INFO responses contain these attributes in the root DataLink element */
-  mxmlElementSetAttr (xmldoc, "Version", VERSION);
-  mxmlElementSetAttr (xmldoc, "ServerID", config.serverid);
-  mxmlElementSetAttrf (xmldoc, "Capabilities", "%s PACKETSIZE:%lu%s", DLCAPFLAGS,
-                       (unsigned long int)(cinfo->ringparams->pktsize - sizeof (RingPacket)),
-                       (cinfo->writeperm) ? " WRITE" : "");
-
-  /* All INFO responses contain the "Status" element */
-  if (!(status = mxmlNewElement (xmldoc, "Status")))
-  {
-    lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-    errflag = 1;
-  }
-  else
-  {
-    /* Convert server start time to YYYY-MM-DD HH:MM:SS */
-    ms_nstime2timestr (param.serverstarttime, string, ISOMONTHDAY_Z, NONE);
-    mxmlElementSetAttr (status, "StartTime", string);
-    mxmlElementSetAttrf (status, "RingVersion", "%u", (unsigned int)cinfo->ringparams->version);
-    mxmlElementSetAttrf (status, "RingSize", "%" PRIu64, cinfo->ringparams->ringsize);
-    mxmlElementSetAttrf (status, "PacketSize", "%lu",
-                         (unsigned long int)(cinfo->ringparams->pktsize - sizeof (RingPacket)));
-    mxmlElementSetAttrf (status, "MaximumPackets", "%" PRIu64, cinfo->ringparams->maxpackets);
-    mxmlElementSetAttrf (status, "MemoryMappedRing", "%s", (cinfo->ringparams->mmapflag) ? "TRUE" : "FALSE");
-    mxmlElementSetAttrf (status, "VolatileRing", "%s", (cinfo->ringparams->volatileflag) ? "TRUE" : "FALSE");
-    mxmlElementSetAttrf (status, "TotalConnections", "%d", param.clientcount);
-    mxmlElementSetAttrf (status, "TotalStreams", "%d", cinfo->ringparams->streamcount);
-    mxmlElementSetAttrf (status, "TXPacketRate", "%.1f", cinfo->ringparams->txpacketrate);
-    mxmlElementSetAttrf (status, "TXByteRate", "%.1f", cinfo->ringparams->txbyterate);
-    mxmlElementSetAttrf (status, "RXPacketRate", "%.1f", cinfo->ringparams->rxpacketrate);
-    mxmlElementSetAttrf (status, "RXByteRate", "%.1f", cinfo->ringparams->rxbyterate);
-    if (cinfo->ringparams->earliestid <= RINGID_MAXIMUM)
-      mxmlElementSetAttrf (status, "EarliestPacketID", "%" PRIu64, cinfo->ringparams->earliestid);
-    ms_nstime2timestr (cinfo->ringparams->earliestptime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-    mxmlElementSetAttr (status, "EarliestPacketCreationTime",
-                        (cinfo->ringparams->earliestptime != NSTUNSET) ? string : "-");
-    ms_nstime2timestr (cinfo->ringparams->earliestdstime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-    mxmlElementSetAttr (status, "EarliestPacketDataStartTime",
-                        (cinfo->ringparams->earliestdstime != NSTUNSET) ? string : "-");
-    ms_nstime2timestr (cinfo->ringparams->earliestdetime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-    mxmlElementSetAttr (status, "EarliestPacketDataEndTime",
-                        (cinfo->ringparams->earliestdetime != NSTUNSET) ? string : "-");
-    if (cinfo->ringparams->latestid <= RINGID_MAXIMUM)
-      mxmlElementSetAttrf (status, "LatestPacketID", "%" PRIu64, cinfo->ringparams->latestid);
-    ms_nstime2timestr (cinfo->ringparams->latestptime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-    mxmlElementSetAttr (status, "LatestPacketCreationTime",
-                        (cinfo->ringparams->latestptime != NSTUNSET) ? string : "-");
-    ms_nstime2timestr (cinfo->ringparams->latestdstime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-    mxmlElementSetAttr (status, "LatestPacketDataStartTime",
-                        (cinfo->ringparams->latestdstime != NSTUNSET) ? string : "-");
-    ms_nstime2timestr (cinfo->ringparams->latestdetime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-    mxmlElementSetAttr (status, "LatestPacketDataEndTime",
-                        (cinfo->ringparams->latestdetime != NSTUNSET) ? string : "-");
-  }
-
   /* Add contents to the XML structure depending on info request */
   if (!strncasecmp (type, "STATUS", 6))
   {
-    mxml_node_t *stlist, *st;
-    int totalcount = 0;
-    struct sthread *loopstp;
-
     lprintf (1, "[%s] Received INFO STATUS request", cinfo->hostname);
     type = "INFO STATUS";
 
-    /* Only add server threads if client is trusted */
-    if (cinfo->trusted)
-    {
-      /* Create "ServerThreads" element */
-      if (!(stlist = mxmlNewElement (xmldoc, "ServerThreads")))
-      {
-        lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-        errflag = 1;
-      }
-
-      /* Create a Thread element for each thread, lock thread list while looping */
-      pthread_mutex_lock (&param.sthreads_lock);
-      loopstp = param.sthreads;
-      while (loopstp)
-      {
-        totalcount++;
-
-        if (!(st = mxmlNewElement (stlist, "Thread")))
-        {
-          lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-          errflag = 1;
-        }
-        else
-        {
-          /* Add thread state to Thread element */
-          char *state;
-          if (loopstp->td->td_state == TDS_SPAWNING)
-            state = "SPAWNING";
-          else if (loopstp->td->td_state == TDS_ACTIVE)
-            state = "ACTIVE";
-          else if (loopstp->td->td_state == TDS_CLOSE)
-            state = "CLOSE";
-          else if (loopstp->td->td_state == TDS_CLOSING)
-            state = "CLOSING";
-          else if (loopstp->td->td_state == TDS_CLOSED)
-            state = "CLOSED";
-          else
-            state = "UNKNOWN";
-          mxmlElementSetAttr (st, "State", state);
-
-          /* Determine server thread type and add specifics */
-          if (loopstp->type == LISTEN_THREAD)
-          {
-            ListenPortParams *lpp = loopstp->params;
-            char protocolstr[100];
-
-            if (GenProtocolString (lpp->protocols, lpp->options, protocolstr, sizeof (protocolstr)) > 0)
-              mxmlElementSetAttr (st, "Type", protocolstr);
-            mxmlElementSetAttr (st, "Port", lpp->portstr);
-          }
-          else if (loopstp->type == MSEEDSCAN_THREAD)
-          {
-            MSScanInfo *mssinfo = loopstp->params;
-
-            mxmlElementSetAttr (st, "Type", "miniSEED Scanner");
-            mxmlElementSetAttr (st, "Directory", mssinfo->dirname);
-            mxmlElementSetAttrf (st, "MaxRecursion", "%d", mssinfo->maxrecur);
-            mxmlElementSetAttr (st, "StateFile", mssinfo->statefile);
-            mxmlElementSetAttr (st, "Match", mssinfo->matchstr);
-            mxmlElementSetAttr (st, "Reject", mssinfo->rejectstr);
-            mxmlElementSetAttrf (st, "ScanTime", "%g", mssinfo->scantime);
-            mxmlElementSetAttrf (st, "PacketRate", "%g", mssinfo->rxpacketrate);
-            mxmlElementSetAttrf (st, "ByteRate", "%g", mssinfo->rxbyterate);
-          }
-          else
-          {
-            mxmlElementSetAttr (st, "Type", "Unknown Thread");
-          }
-        }
-
-        loopstp = loopstp->next;
-      }
-      pthread_mutex_unlock (&param.sthreads_lock);
-
-      /* Add thread count attribute to ServerThreads element */
-      mxmlElementSetAttrf (stlist, "TotalServerThreads", "%d", totalcount);
-    }
+    xmlstr = info_xml_dlv1 (cinfo, DLSERVER_ID, "STATUS", matchexpr, cinfo->trusted);
   } /* End of STATUS */
   else if (!strncasecmp (type, "STREAMS", 7))
   {
-    mxml_node_t *streamlist, *stream;
-    nstime_t nsnow;
-    int selectedcount = 0;
-    Stack *streams;
-    RingStream *ringstream;
-
     lprintf (1, "[%s] Received INFO STREAMS request", cinfo->hostname);
     type = "INFO STREAMS";
 
-    /* Create "StreamList" element and add attributes */
-    if (!(streamlist = mxmlNewElement (xmldoc, "StreamList")))
-    {
-      lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-      errflag = 1;
-    }
-
-    /* Collect stream list */
-    if ((streams = GetStreamsStack (cinfo->ringparams, cinfo->reader)))
-    {
-      /* Get current time */
-      nsnow = NSnow ();
-
-      /* Create a "Stream" element for each stream */
-      while ((ringstream = (RingStream *)StackPop (streams)))
-      {
-        if (!(stream = mxmlNewElement (streamlist, "Stream")))
-        {
-          lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-          errflag = 1;
-        }
-        else
-        {
-          mxmlElementSetAttr (stream, "Name", ringstream->streamid);
-          mxmlElementSetAttrf (stream, "EarliestPacketID", "%" PRIu64, ringstream->earliestid);
-          ms_nstime2timestr (ringstream->earliestdstime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-          mxmlElementSetAttr (stream, "EarliestPacketDataStartTime", string);
-          ms_nstime2timestr (ringstream->earliestdetime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-          mxmlElementSetAttr (stream, "EarliestPacketDataEndTime", string);
-          mxmlElementSetAttrf (stream, "LatestPacketID", "%" PRIu64, ringstream->latestid);
-          ms_nstime2timestr (ringstream->latestdstime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-          mxmlElementSetAttr (stream, "LatestPacketDataStartTime", string);
-          ms_nstime2timestr (ringstream->latestdetime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-          mxmlElementSetAttr (stream, "LatestPacketDataEndTime", string);
-
-          /* DataLatency value is the difference between the current time and the time of last sample in seconds */
-          mxmlElementSetAttrf (stream, "DataLatency", "%.1f", (double)MS_NSTIME2EPOCH ((nsnow - ringstream->latestdetime)));
-        }
-
-        free (ringstream);
-        selectedcount++;
-      }
-
-      /* Cleanup stream stack */
-      StackDestroy (streams, free);
-    }
-    else
-    {
-      lprintf (0, "[%s] Error generating Stack of streams", cinfo->hostname);
-      errflag = 1;
-    }
-
-    /* Add stream count attributes to StreamList element */
-    mxmlElementSetAttrf (streamlist, "TotalStreams", "%d", cinfo->ringparams->streamcount);
-    mxmlElementSetAttrf (streamlist, "SelectedStreams", "%d", selectedcount);
-
+    xmlstr = info_xml_dlv1 (cinfo, DLSERVER_ID, "STREAMS", matchexpr, cinfo->trusted);
   } /* End of STREAMS */
   else if (!strncasecmp (type, "CONNECTIONS", 11))
   {
-    mxml_node_t *connlist, *conn;
-    nstime_t nsnow;
-    int selectedcount = 0;
-    int totalcount    = 0;
-    struct cthread *loopctp;
-    ClientInfo *tcinfo;
-    char *conntype;
-
-    pcre2_code *match_code       = NULL;
-    pcre2_match_data *match_data = NULL;
-
     /* Check for trusted flag, required to access this resource */
     if (!cinfo->trusted)
     {
@@ -1215,200 +998,46 @@ HandleInfo (ClientInfo *cinfo, int socket)
                cinfo->hostname);
       SendPacket (cinfo, "ERROR", "Access to CONNECTIONS denied", 0, 1, 1);
 
-      if (xmldoc)
-        mxmlRelease (xmldoc);
-
       return -1;
     }
 
     lprintf (1, "[%s] Received INFO CONNECTIONS request", cinfo->hostname);
     type = "INFO CONNECTIONS";
 
-    /* Get current time */
-    nsnow = NSnow ();
-
-    /* Compile match expression supplied with request */
-    if (matchexpr && UpdatePattern (&match_code, &match_data, matchexpr, "connection match expression"))
-    {
-      errflag   = 1;
-      matchexpr = NULL;
-    }
-
-    /* Create "ConnectionList" element */
-    if (!(connlist = mxmlNewElement (xmldoc, "ConnectionList")))
-    {
-      lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-      errflag = 1;
-    }
-
-    /* Create a Connection element for each client, lock client list while looping */
-    pthread_mutex_lock (&param.cthreads_lock);
-    loopctp = param.cthreads;
-    while (loopctp)
-    {
-      /* Skip if client thread is not in ACTIVE state */
-      if (loopctp->td->td_state != TDS_ACTIVE)
-      {
-        loopctp = loopctp->next;
-        continue;
-      }
-
-      totalcount++;
-      tcinfo = (ClientInfo *)loopctp->td->td_prvtptr;
-
-      /* Check matching expression against the client address string (host:port) and client ID */
-      if (match_code)
-        if (pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->hostname, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0 &&
-            pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->ipstr, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0 &&
-            pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->clientid, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0)
-        {
-          loopctp = loopctp->next;
-          continue;
-        }
-
-      if (!(conn = mxmlNewElement (connlist, "Connection")))
-      {
-        lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-        errflag = 1;
-      }
-      else
-      {
-        /* Determine connection type */
-        if (tcinfo->type == CLIENT_DATALINK)
-        {
-          if (tcinfo->websocket)
-            conntype = "WebSocket DataLink";
-          else
-            conntype = "DataLink";
-        }
-        else if (tcinfo->type == CLIENT_SEEDLINK)
-        {
-          if (tcinfo->websocket)
-            conntype = "WebSocket SeedLink";
-          else
-            conntype = "SeedLink";
-        }
-        else
-        {
-          conntype = "Unknown";
-        }
-
-        mxmlElementSetAttr (conn, "Type", conntype);
-        mxmlElementSetAttr (conn, "Host", tcinfo->hostname);
-        mxmlElementSetAttr (conn, "IP", tcinfo->ipstr);
-        mxmlElementSetAttr (conn, "Port", tcinfo->portstr);
-        mxmlElementSetAttr (conn, "ClientID", tcinfo->clientid);
-        ms_nstime2timestr (tcinfo->conntime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-        mxmlElementSetAttr (conn, "ConnectionTime", string);
-        mxmlElementSetAttrf (conn, "Match", "%s", (tcinfo->matchstr) ? tcinfo->matchstr : "");
-        mxmlElementSetAttrf (conn, "Reject", "%s", (tcinfo->rejectstr) ? tcinfo->rejectstr : "");
-        mxmlElementSetAttrf (conn, "StreamCount", "%d", tcinfo->streamscount);
-        mxmlElementSetAttrf (conn, "PacketID", "%" PRIu64, tcinfo->reader->pktid);
-        ms_nstime2timestr (tcinfo->reader->pkttime, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-        mxmlElementSetAttr (conn, "PacketCreationTime",
-                            (tcinfo->reader->pkttime != NSTUNSET) ? string : "-");
-        ms_nstime2timestr (tcinfo->reader->datastart, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-        mxmlElementSetAttr (conn, "PacketDataStartTime",
-                            (tcinfo->reader->datastart != NSTUNSET) ? string : "-");
-        ms_nstime2timestr (tcinfo->reader->dataend, string, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-        mxmlElementSetAttr (conn, "PacketDataEndTime",
-                            (tcinfo->reader->dataend != NSTUNSET) ? string : "-");
-        mxmlElementSetAttrf (conn, "TXPacketCount", "%" PRIu64, tcinfo->txpackets[0]);
-        mxmlElementSetAttrf (conn, "TXPacketRate", "%.1f", tcinfo->txpacketrate);
-        mxmlElementSetAttrf (conn, "TXByteCount", "%" PRIu64, tcinfo->txbytes[0]);
-        mxmlElementSetAttrf (conn, "TXByteRate", "%.1f", tcinfo->txbyterate);
-        mxmlElementSetAttrf (conn, "RXPacketCount", "%" PRIu64, tcinfo->rxpackets[0]);
-        mxmlElementSetAttrf (conn, "RXPacketRate", "%.1f", tcinfo->rxpacketrate);
-        mxmlElementSetAttrf (conn, "RXByteCount", "%" PRIu64, tcinfo->rxbytes[0]);
-        mxmlElementSetAttrf (conn, "RXByteRate", "%.1f", tcinfo->rxbyterate);
-
-        /* Latency value is the difference between the current time and the time of last packet exchange in seconds */
-        mxmlElementSetAttrf (conn, "Latency", "%.1f", (double)MS_NSTIME2EPOCH ((nsnow - tcinfo->lastxchange)));
-
-        if (tcinfo->reader->pktid > RINGID_MAXIMUM)
-          strncpy (string, "-", sizeof (string));
-        else
-          snprintf (string, sizeof (string), "%d", tcinfo->percentlag);
-
-        mxmlElementSetAttr (conn, "PercentLag", string);
-
-        selectedcount++;
-      }
-
-      loopctp = loopctp->next;
-    }
-    pthread_mutex_unlock (&param.cthreads_lock);
-
-    /* Add client count attribute to ConnectionList element */
-    mxmlElementSetAttrf (connlist, "TotalConnections", "%d", totalcount);
-    mxmlElementSetAttrf (connlist, "SelectedConnections", "%d", selectedcount);
-
-    /* Free compiled match expression */
-    if (match_code)
-      pcre2_code_free (match_code);
-    if (match_data)
-      pcre2_match_data_free (match_data);
-
+    xmlstr = info_xml_dlv1 (cinfo, DLSERVER_ID, "CONNECTIONS", matchexpr, cinfo->trusted);
   } /* End of CONNECTIONS */
   /* Unrecognized INFO request */
   else
   {
     lprintf (0, "[%s] Unrecognized INFO request type: %s", cinfo->hostname, type);
+
     snprintf (string, sizeof (string), "Unrecognized INFO request type: %s", type);
     SendPacket (cinfo, "ERROR", string, 0, 1, 1);
-    errflag = 2;
+
+    return -1;
   }
 
-  /* Send ERROR to client if not already done */
-  if (errflag == 1)
+  /* Trim final newline character if present */
+  xmllength = strlen (xmlstr);
+  if (xmlstr[xmllength - 1] == '\n')
   {
-    SendPacket (cinfo, "ERROR", "Error processing INFO request", 0, 1, 1);
+    xmlstr[xmllength - 1] = '\0';
+    xmllength--;
   }
-  /* Convert to XML string and send to client */
-  else if (xmldoc && !errflag)
+
+  /* Send XML to client */
+  if (SendPacket (cinfo, type, xmlstr, 0, 0, 1))
   {
-    /* Do not wrap the output XML */
-    mxmlSetWrapMargin (0);
+    if (cinfo->socketerr != -2)
+      lprintf (0, "[%s] Error sending INFO XML", cinfo->hostname);
 
-    /* Convert to XML string */
-    if (!(xmlstr = mxmlSaveAllocString (xmldoc, MXML_NO_CALLBACK)))
-    {
-      lprintf (0, "[%s] Error with mxmlSaveAllocString()", cinfo->hostname);
-      if (xmldoc)
-        mxmlRelease (xmldoc);
-      return -1;
-    }
-
-    /* Trim final newline character if present */
-    xmllength = strlen (xmlstr);
-    if (xmlstr[xmllength - 1] == '\n')
-    {
-      xmlstr[xmllength - 1] = '\0';
-      xmllength--;
-    }
-
-    /* Send XML to client */
-    if (SendPacket (cinfo, type, xmlstr, 0, 0, 1))
-    {
-      if (cinfo->socketerr != -2)
-        lprintf (0, "[%s] Error sending INFO XML", cinfo->hostname);
-
-      if (xmldoc)
-        mxmlRelease (xmldoc);
-      if (xmlstr)
-        free (xmlstr);
-      return -1;
-    }
-  }
-
-  /* Free allocated memory */
-  if (xmldoc)
-    mxmlRelease (xmldoc);
-
-  if (xmlstr)
     free (xmlstr);
+    return -1;
+  }
 
-  return (cinfo->socketerr || errflag) ? -1 : 0;
+  free (xmlstr);
+
+  return (cinfo->socketerr) ? -1 : 0;
 } /* End of HandleInfo */
 
 /***************************************************************************

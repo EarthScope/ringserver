@@ -37,6 +37,8 @@ extern char *info_xml_slv3_capabilities (ClientInfo *cinfo, const char *software
 extern char *info_xml_slv3_stations (ClientInfo *cinfo, const char *software,
                                      int include_streams);
 extern char *info_xml_slv3_connections (ClientInfo *cinfo, const char *software);
+extern char *info_xml_dlv1 (ClientInfo *cinfo, const char *software, const char *level,
+                            const char *matchexpr, uint8_t trusted);
 
 #ifdef __cplusplus
 }

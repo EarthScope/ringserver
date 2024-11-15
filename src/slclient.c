@@ -56,7 +56,6 @@
 
 #include <libmseed.h>
 #include <mseedformat.h>
-#include <mxml.h>
 
 #include "clients.h"
 #include "generic.h"
