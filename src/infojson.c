@@ -353,7 +353,7 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
 
   int error         = 0;
   char *type        = NULL;
-  char string32[32] = {0};
+  char string64[64] = {0};
 
   pcre2_code *match_code       = NULL;
   pcre2_match_data *match_data = NULL;
@@ -417,8 +417,8 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
     /* Otherwise use the stream ID as the station and stream IDs */
     else
     {
-      strncpy (staid, ringstream->streamid, sizeof (staid) - 1);
-      strncpy (streamid, ringstream->streamid, sizeof (streamid) - 1);
+      memcpy (staid, ringstream->streamid, sizeof (staid));
+      memcpy (streamid, ringstream->streamid, sizeof (streamid));
     }
 
     /* Create new station entry and add to stack */
@@ -433,7 +433,7 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
         break;
       }
 
-      strncpy (station_details->id, staid, sizeof (station_details->id) - 1);
+      memcpy (station_details->id, staid, sizeof (station_details->id));
       station_details->earliestid = ringstream->earliestid;
       station_details->latestid   = ringstream->latestid;
 
@@ -475,7 +475,7 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
         break;
       }
 
-      strncpy (stream_details->id, streamid, sizeof (stream_details->id) - 1);
+      memcpy (stream_details->id, streamid, sizeof (stream_details->id));
 
       if (type && strstr (type, "MSEED3"))
       {
@@ -514,8 +514,8 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
       station = yyjson_mut_arr_add_obj (doc, station_array);
 
       yyjson_mut_obj_add_strcpy (doc, station, "id", station_details->id);
-      snprintf (string32, sizeof (string32), "Station ID %s", station_details->id);
-      yyjson_mut_obj_add_strcpy (doc, station, "description", string32);
+      snprintf (string64, sizeof (string64), "Station ID %s", station_details->id);
+      yyjson_mut_obj_add_strcpy (doc, station, "description", string64);
       yyjson_mut_obj_add_uint (doc, station, "start_seq", station_details->earliestid);
       yyjson_mut_obj_add_uint (doc, station, "end_seq", station_details->latestid);
 
@@ -532,10 +532,10 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
           yyjson_mut_obj_add_strcpy (doc, stream, "format", stream_details->format);
           yyjson_mut_obj_add_strcpy (doc, stream, "subformat", stream_details->subformat);
 
-          ms_nstime2timestr (stream_details->earliesttime, string32, ISOMONTHDAY_Z, MICRO);
-          yyjson_mut_obj_add_strcpy (doc, stream, "start_time", string32);
-          ms_nstime2timestr (stream_details->latesttime, string32, ISOMONTHDAY_Z, MICRO);
-          yyjson_mut_obj_add_strcpy (doc, stream, "end_time", string32);
+          ms_nstime2timestr (stream_details->earliesttime, string64, ISOMONTHDAY_Z, MICRO);
+          yyjson_mut_obj_add_strcpy (doc, stream, "start_time", string64);
+          ms_nstime2timestr (stream_details->latesttime, string64, ISOMONTHDAY_Z, MICRO);
+          yyjson_mut_obj_add_strcpy (doc, stream, "end_time", string64);
 
           free (stream_details);
         }

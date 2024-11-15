@@ -1688,7 +1688,7 @@ SendRecord (RingPacket *packet, char *record, uint32_t reclen, void *vcinfo)
     /* Otherwise use the stream ID as the station ID */
     else
     {
-      strncpy (staid, packet->streamid, sizeof (staid) - 1);
+      memcpy (staid, packet->streamid, sizeof (staid));
     }
 
     if (MS3_ISVALIDHEADER (record))

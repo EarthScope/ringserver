@@ -1736,7 +1736,7 @@ AddMSeedScanThread (const char *scanconfig)
     *vptr++ = '\0';
 
   /* Initial portion of the config string is the directory to scan */
-  strncpy (mssinfo.dirname, configstr, sizeof (mssinfo.dirname) - 1);
+  snprintf (mssinfo.dirname, sizeof (mssinfo.dirname), "%s", configstr);
 
   /* Search for optional parameters */
   while (*vptr && (vptr = strchr (vptr, '=')))
@@ -2173,7 +2173,7 @@ AddIPNet (IPNet **pplist, const char *network, const char *limitstr)
   return 0;
 } /* End of AddIPNet() */
 
-static const char *config_file =
+static const char *config_file = \
 "# Example ringserver configuration file.\n\
 #\n\
 # Default values are in comments where appropriate.\n\

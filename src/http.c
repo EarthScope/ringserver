@@ -857,7 +857,7 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
                         "Connection: close\r\n"
                         "%s"
                         "\r\n",
-                        message,
+                        (message) ? message : "UNKNOWN",
                         (cinfo->httpheaders) ? cinfo->httpheaders : "");
   }
   else
@@ -868,7 +868,8 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
                         "Content-Type: %s\r\n"
                         "%s"
                         "\r\n",
-                        status, message,
+                        status,
+                        (message) ? message : "Undefined message",
                         contentlength,
                         MediaTypes[type],
                         (cinfo->httpheaders) ? cinfo->httpheaders : "");
@@ -1295,7 +1296,7 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
 static int
 GenerateConnections (ClientInfo *cinfo, const char *path, char **response, MediaType *type)
 {
-  char mypath[64] = {0};
+  char mypath[100] = {0};
   size_t clientcount = 0;
   size_t responsesize;
   char matchstr[50];
