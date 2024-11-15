@@ -1019,7 +1019,7 @@ RecoverState (RBTree *filetree, char *statefile)
 static int
 WriteRecord (MSScanInfo *mssinfo, char *record, uint64_t reclen)
 {
-  char streamid[MAXSTREAMID];
+  char streamid[100];
   RingPacket packet;
   uint32_t flags = MSF_VALIDATECRC;
   int rv;
@@ -1035,7 +1035,7 @@ WriteRecord (MSScanInfo *mssinfo, char *record, uint64_t reclen)
   snprintf (streamid, sizeof (streamid), "%s/MSEED", mssinfo->msr->sid);
 
   memset (&packet, 0, sizeof (RingPacket));
-  memcpy (packet.streamid, streamid, sizeof (packet.streamid));
+  memcpy (packet.streamid, streamid, sizeof (packet.streamid) - 1);
   packet.datastart = mssinfo->msr->starttime;
   packet.dataend   = msr3_endtime (mssinfo->msr);
   packet.datasize  = (uint32_t)mssinfo->msr->reclen;

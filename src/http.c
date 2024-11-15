@@ -1296,7 +1296,7 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
 static int
 GenerateConnections (ClientInfo *cinfo, const char *path, char **response, MediaType *type)
 {
-  char mypath[100] = {0};
+  char mypath[101]   = {0};
   size_t clientcount = 0;
   size_t responsesize;
   char matchstr[50];
