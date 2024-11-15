@@ -204,6 +204,7 @@ info_xml_slv3_stations (ClientInfo *cinfo, const char *software, int include_str
   yyjson_val *station_iter = NULL;
   yyjson_val *stream_iter  = NULL;
   size_t idx, max;
+  size_t idxsub, maxsub;
 
   char *json_string;
   char *xml_string = NULL;
@@ -281,7 +282,7 @@ info_xml_slv3_stations (ClientInfo *cinfo, const char *software, int include_str
 
       if ((stream_array = yyjson_obj_get (station_iter, "stream")) != NULL)
       {
-        yyjson_arr_foreach (stream_array, idx, max, stream_iter)
+        yyjson_arr_foreach (stream_array, idxsub, maxsub, stream_iter)
         {
           if (!(stream = mxmlNewElement (station, "stream")))
           {
