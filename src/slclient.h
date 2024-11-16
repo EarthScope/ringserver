@@ -15,86 +15,95 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
- * @author Chad Trabant, IRIS Data Management Center
+ * Copyright (C) 2024:
+ * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
 #ifndef SLCLIENT_H
 #define SLCLIENT_H 1
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-#include <pthread.h>
 #include "rbtree.h"
+#include <pthread.h>
 
 /* The total length of SLSERVERVER should be <= 98 bytes for compatibility
    with libslink versions < 2.0. */
-#define SLCAPABILITIES "SLPROTO:3.1 CAP EXTREPLY NSWILDCARD BATCH WS:13"
-#define SLSERVERVER "SeedLink v3.1 (" VERSION " RingServer) :: " SLCAPABILITIES
+#define SLSERVERVER "RingServer/" VERSION
+#define SLCAPABILITIES_ID "SLPROTO:4.0 SLPROTO:3.1 CAP WS:13"
+#define SLSERVER_ID "SeedLink v4.0 (" SLSERVERVER ") :: " SLCAPABILITIES_ID
 
-#define SLHEADSIZE          8        /* SeedLink header size */
-#define SELSIZE             8        /* Maximum selector size */
-#define SIGNATURE           "SL"     /* SeedLink header signature */
-#define INFOSIGNATURE       "SLINFO" /* SeedLink INFO packet signature */
-#define INFORECSIZE         512      /* miniSEED record size for INFO packets */
+/* Server capabilities for v4 */
+#define SLCAPABILITIESv4 "SLPROTO:4.0 SLPROTO:3.1 TIME WS:13 SEQWILDCARD"
 
-#define SLMAXREGEXLEN       1048576  /* Maximum length of match/reject regex pattern */
-#define SLMAXSELECTLEN      2048     /* Maximum length of per-station/global selector buffer */
+#define SLHEADSIZE_V3 8       /* SeedLink header size */
+#define SLHEADSIZE_V4 17      /* Extended SeedLink header fixed size */
+#define SLINFORECSIZE 512     /* miniSEED record size for INFO packets */
 
-#define SLINFO_ID           1
+#define SLMAXREGEXLEN 2097152 /* Maximum length of match/reject regex pattern */
+#define SLMAXSELECTLEN 2048   /* Maximum length of per-station/global selector buffer */
+
+#define SLINFO_ID 1
 #define SLINFO_CAPABILITIES 2
-#define SLINFO_STATIONS     3
-#define SLINFO_STREAMS      4
-#define SLINFO_GAPS         5
-#define SLINFO_CONNECTIONS  6
-#define SLINFO_ALL          7
+#define SLINFO_STATIONS 3
+#define SLINFO_STREAMS 4
+#define SLINFO_CONNECTIONS 5
+
+/* Error codes */
+typedef enum
+{
+  ERROR_NONE         = 0,
+  ERROR_INTERNAL     = 1u << 1,
+  ERROR_UNSUPPORTED  = 1u << 2,
+  ERROR_UNEXPECTED   = 1u << 3,
+  ERROR_UNAUTHORIZED = 1u << 4,
+  ERROR_LIMIT        = 1u << 5,
+  ERROR_ARGUMENTS    = 1u << 6,
+  ERROR_AUTH         = 1u << 7,
+} ErrorCode;
 
 /* Structure to hold SeedLink specific parameters */
-typedef struct SLInfo_s {
-  int         extreply;     /* Extended messages should be included in reply */
-  int         dialup;       /* Connection is in dialup/fetch mode */
-  int         batch;        /* Connection is in batch mode */
-  int         terminfo;     /* Terminating INFO packet flag */
-  int64_t     startid;      /* Starting packet ID */
-  char       *selectors;    /* List of SeedLink selectors */
-  int         stationcount; /* Number of stations requested with STATION */
-  int         timewinchannels; /* Count of channels for time window completion check */
-  RBTree     *stations;     /* Binary tree of stations requested */
-  char        reqnet[10];   /* Requested network, used during negotiation */
-  char        reqsta[10];   /* Requested station, used during negotiation */
+typedef struct SLInfo
+{
+  uint8_t proto_major;   /* Major protocol version */
+  uint8_t proto_minor;   /* Minor protocol version */
+  int extreply;          /* Capability flag: client can recieve extended replies */
+  int dialup;            /* Connection is in dialup/fetch mode */
+  int batch;             /* Connection is in batch mode */
+  int terminfo;          /* Terminating INFO packet flag */
+  uint64_t startid;      /* Starting packet ID */
+  char *selectors;       /* List of SeedLink selectors */
+  int stationcount;      /* Number of stations requested with STATION */
+  int timewinchannels;   /* Count of channels for time window completion check */
+  RBTree *stations;      /* Binary tree of stations requested */
+  char reqstaid[51];     /* Requested station ID, used during negotiation */
 } SLInfo;
 
-/* The StaKey and StaNode structures form the key and data elements
- * of a balanced tree that is used to store station level parameters.
- */
+/* Requested station IDs, used as the data for B-tree at SL.stations */
+typedef struct ReqStationID
+{
+  nstime_t starttime; /* Requested start time for StaID */
+  nstime_t endtime;   /* Requested end time for StaID */
+  uint64_t packetid;  /* Requested packet ID */
+  nstime_t datastart; /* Data start time of requested packet */
+  char *selectors;    /* List of SeedLink stream ID selectors */
+} ReqStationID;
 
-/* Structure used as the key for B-tree of stations (SLStaNode) */
-typedef struct SLStaKey_s {
-  char net[10];
-  char sta[10];
-} SLStaKey;
-
-/* Structure used as the data for B-tree of stations */
-typedef struct SLStaNode_s {
-  hptime_t  starttime;       /* Requested start time for NET_STA */
-  hptime_t  endtime;         /* Requested end time for NET_STA */
-  int64_t   packetid;        /* Requested packet ID */
-  hptime_t  datastart;       /* Data start time of requested packet */
-  char     *selectors;       /* List of SeedLink selectors for NET_STA */
-} SLStaNode;
-
-/* Structure used as the data for B-tree of network-stations */
-typedef struct SLNetStaNode_s {
-  char      net[10];         /* Network code */
-  char      sta[10];         /* Station code */
-  hptime_t  earliestdstime;  /* Data start time of earliest packet for NET_STA */
-  int64_t   earliestid;      /* Earliest ID for NET_STA */
-  hptime_t  latestdstime;    /* Data start time of latest packet for NET_STA */
-  int64_t   latestid;        /* Latest ID for NET_STA */
-  Stack    *streams;         /* Stack of associated streams */
-} SLNetStaNode;
+/* Station ID listings, used for INFO requests */
+typedef struct ListStationID
+{
+  char staid[MAXSTREAMID]; /* Station ID */
+  char network[16];        /* Network code from Station ID, if available */
+  char station[16];        /* Station code from Station ID, if available */
+  nstime_t earliestdstime; /* Data start time of earliest packet Station ID */
+  uint64_t earliestid;     /* Earliest packet ID Station ID */
+  nstime_t latestdstime;   /* Data start time of latest packet Station ID */
+  uint64_t latestid;       /* Latest packet ID Station ID */
+  Stack *streams;          /* Stack of associated streams */
+} ListStationID;
 
 extern int SLHandleCmd (ClientInfo *cinfo);
 extern int SLStreamPackets (ClientInfo *cinfo);

@@ -15,8 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
- * @author Chad Trabant, IRIS Data Management Center
+ * Copyright (C) 2024:
+ * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
 #ifndef CLIENTS_H
@@ -32,28 +32,38 @@ extern "C" {
 
 #include "ring.h"
 #include "rbtree.h"
+#include "ringserver.h"
 #include "dsarchive.h"
 
 /* Client types */
-#define CLIENT_UNDETERMINED 0
-#define CLIENT_DATALINK     1
-#define CLIENT_SEEDLINK     2
-#define CLIENT_HTTP         3
+typedef enum
+{
+  CLIENT_UNDETERMINED,
+  CLIENT_DATALINK,
+  CLIENT_SEEDLINK,
+  CLIENT_HTTP
+} ClientType;
 
 /* Client states */
-#define STATE_COMMAND       1  /* Initial, base, command state */
-#define STATE_STATION       2  /* SeedLink STATION negotiation */
-#define STATE_RINGCONFIG    3  /* SeedLink ring configuration */
-#define STATE_STREAM        4  /* Data streaming */
+typedef enum
+{
+  STATE_COMMAND,    /* Initial command state */
+  STATE_STATION,    /* SeedLink STATION negotiation */
+  STATE_RINGCONFIG, /* SeedLink ring configuration */
+  STATE_STREAM      /* Data streaming */
+} ClientState;
 
 /* Connection information for client threads */
-typedef struct ClientInfo_s {
+typedef struct ClientInfo
+{
   int         socket;       /* Socket descriptor */
-  int         socketerr;    /* Socket error flag */
+  uint8_t     tls;          /* Flag identifying TLS connection */
+  void       *tlsctx;       /* TLS context */
+  int         socketerr;    /* Socket error flag, -1: error, -2: orderly shutdown */
   char       *sendbuf;      /* Client specific send buffer */
-  int         sendbuflen;   /* Length of send buffer */
+  size_t      sendbuflen;   /* Length of send buffer */
   char       *recvbuf;      /* Client specific receive buffer */
-  int         recvbuflen;   /* Length of receive buffer */
+  size_t      recvbuflen;   /* Length of receive buffer */
   RingPacket  packet;       /* Client specific ring packet header */
   char       *packetdata;   /* Client specific packet buffer, size of RingParams.pktsize */
   struct sockaddr *addr;    /* client socket structure */
@@ -62,9 +72,9 @@ typedef struct ClientInfo_s {
   char        portstr[32];  /* Remote host port */
   char        hostname[200];/* Remote hostname */
   char        clientid[100];/* Client identifier string */
-  uint8_t     state;        /* Client state flag */
-  uint8_t     type;         /* Client type flag */
-  uint8_t     protocols;    /* Procotol flags for this client */
+  ClientState state;        /* Client state flag */
+  ClientType  type;         /* Client type flag */
+  ListenProtocols protocols;/* Protocol flags for this client */
   uint8_t     websocket;    /* Flag identifying websocket connection */
   union {
     uint32_t one;
@@ -76,34 +86,35 @@ typedef struct ClientInfo_s {
   float       timewinlimit; /* Time window ring search limit in percent */
   RingParams *ringparams;   /* Ring buffer parameters */
   RingReader *reader;       /* Ring reader parameters */
-  hptime_t    conntime;     /* Client connect time */
+  nstime_t    conntime;     /* Client connect time */
   char       *limitstr;     /* Regular expression string to limit streams */
   char       *matchstr;     /* Regular expression string to match streams */
   char       *rejectstr;    /* Regular expression string to reject streams */
   char       *httpheaders;  /* Fixed headers to add to HTTP responses */
-  int64_t     lastid;       /* Last packet ID sent to client */
-  hptime_t    starttime;    /* Requested start time */
-  hptime_t    endtime;      /* Requested end time */
+  uint64_t    lastid;       /* Last packet ID sent to client */
+  nstime_t    starttime;    /* Requested start time */
+  nstime_t    endtime;      /* Requested end time */
   DataStream *mswrite;      /* miniSEED data write parameters */
   RBTree     *streams;      /* Tracking of streams transferred */
   pthread_mutex_t streams_lock; /* Mutex lock for streams tree */
   int         streamscount; /* Count of streams in tree */
   int         percentlag;   /* Percent lag of client in ring buffer */
-  hptime_t    lastxchange;  /* Time of last data transmission or reception */
+  nstime_t    lastxchange;  /* Time of last data transmission or reception */
   uint64_t    txpackets[2]; /* Track total number of packets transmitted to client */
-  double      txpacketrate; /* Track rate of packet trasmission */
+  double      txpacketrate; /* Track rate of packet transmission */
   uint64_t    txbytes[2];   /* Track total number of data bytes transmitted */
-  double      txbyterate;   /* Track rate of data byte trasmission */
+  double      txbyterate;   /* Track rate of data byte transmission */
   uint64_t    rxpackets[2]; /* Track total number of packets received from client */
   double      rxpacketrate; /* Track rate of packet reception */
   uint64_t    rxbytes[2];   /* Track total number of data bytes received */
   double      rxbyterate;   /* Track rate of data byte reception */
-  hptime_t    ratetime;     /* Time stamp for TX and RX rate calculations */
+  nstime_t    ratetime;     /* Time stamp for TX and RX rate calculations */
   void       *extinfo;      /* Extended client info, protocol specific */
 } ClientInfo;
 
 /* Structure used as the data for B-tree of stream tracking */
-typedef struct StreamNode_s {
+typedef struct StreamNode
+{
   char      streamid[MAXSTREAMID]; /* Stream ID */
   uint64_t  txpackets;      /* Total packets transmitted */
   uint64_t  txbytes;        /* Total bytes transmitted */
@@ -114,23 +125,24 @@ typedef struct StreamNode_s {
 
 extern void *ClientThread (void *arg);
 
-extern int SendData (ClientInfo *cinfo, void *buffer, size_t buflen);
+extern int SendData (ClientInfo *cinfo, void *buffer, size_t buflen, int no_wsframe);
 
-extern int SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[], int bufcount);
+extern int SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
+                       int bufcount, int no_wsframe);
 
-extern int RecvCmd (ClientInfo *cinfo);
+extern int RecvData (ClientInfo *cinfo, void *buffer, size_t recvlen, int fulfill);
 
-extern int RecvData (ClientInfo *cinfo, char *buffer, size_t buflen);
+extern int RecvDLCommand (ClientInfo *cinfo);
 
 extern int RecvLine (ClientInfo *cinfo);
 
-extern int GenProtocolString (uint8_t protocols, char *protocolstr, size_t maxlength);
+extern int PollSocket (int socket, int readability, int writability, int timeout_ms);
 
 extern StreamNode *GetStreamNode (RBTree *tree, pthread_mutex_t *plock,
-				  char *streamid, int *new);
+                                  char *streamid, int *new);
 
-extern int  AddToString (char **string, char *source, char *delim,
-			 int where, int maxlen);
+extern int AddToString (char **string, char *source, char *delim,
+                        size_t where, size_t maxlen);
 
 #ifdef __cplusplus
 }

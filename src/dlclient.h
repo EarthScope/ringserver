@@ -15,8 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
- * @author Chad Trabant, IRIS Data Management Center
+ * Copyright (C) 2024:
+ * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
 #ifndef DLCLIENT_H
@@ -31,12 +31,22 @@ extern "C" {
 #include "ringserver.h"
 
 /* DataLink server capability flags */
-#define DLCAPFLAGS "DLPROTO:1.0"
+#define DLSERVERVER "RingServer/" VERSION
+#define DLCAPABILITIES_ID "DLPROTO:1.1"
+#define DLSERVER_ID "DataLink v1.1 (" DLSERVERVER ") :: " DLCAPABILITIES_ID
 
 #define DLMAXREGEXLEN  1048576  /* Maximum regex pattern size */
 
+/* Structure to hold DataLink specific parameters */
+typedef struct DLInfo
+{
+  pcre2_code *legacy_mseed_streamid_match;      /* Compiled match expression */
+  pcre2_match_data *legacy_mseed_streamid_data; /* Match data results */
+} DLInfo;
+
 extern int DLHandleCmd (ClientInfo *cinfo);
 extern int DLStreamPackets (ClientInfo *cinfo);
+extern void DLFree (ClientInfo *cinfo);
 
 #ifdef __cplusplus
 }

@@ -17,8 +17,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
- * @author Chad Trabant, IRIS Data Management Center
+ * Copyright (C) 2024:
+ * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
 /* _GNU_SOURCE needed to get strcasestr() under Linux */
@@ -31,20 +31,47 @@
 
 #include "clients.h"
 #include "dlclient.h"
+#include "slclient.h"
 #include "generic.h"
 #include "http.h"
 #include "logging.h"
 #include "mseedscan.h"
 #include "ring.h"
 #include "ringserver.h"
-#include "slclient.h"
+#include "infojson.h"
+#include "yyjson.h"
 
-#define MIN(X, Y) (X < Y) ? X : Y
+#define DASHNULL(x) ((x) ? (x) : "-")
+
+typedef enum
+{
+  UNSET,
+  RAW,
+  TEXT,
+  HTML,
+  JSON,
+  CSS,
+  JS,
+  XML
+} MediaType;
+
+const char *MediaTypes[] = {
+    "",
+    "application/octet-stream",
+    "text/plain",
+    "text/html",
+    "application/json",
+    "text/css",
+    "application/javascript",
+    "application/xml"};
 
 static int ParseHeader (char *header, char **value);
-static int GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly);
-static int GenerateStatus (ClientInfo *cinfo, char **status);
-static int GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path);
+static int GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
+                           uint64_t contentlength, const char *message);
+static int GenerateID (ClientInfo *cinfo, const char *path, char **response, MediaType *type);
+static int GenerateStreams (ClientInfo *cinfo, const char *path, char **response, MediaType *type);
+static int GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType *type);
+static int GenerateConnections (ClientInfo *cinfo, const char *path, char **response, MediaType *type);
 static int SendFileHTTP (ClientInfo *cinfo, char *path);
 static int NegotiateWebSocket (ClientInfo *cinfo, char *version,
                                char *upgradeHeader, char *connectionHeader,
@@ -52,6 +79,7 @@ static int NegotiateWebSocket (ClientInfo *cinfo, char *version,
                                char *secWebSocketProtocolHeader);
 static int apr_base64_encode_binary (char *encoded, const unsigned char *string, int len);
 static int sha1digest (uint8_t *digest, char *hexdigest, const uint8_t *data, size_t databytes);
+
 
 /***************************************************************************
  * urldecode:
@@ -110,39 +138,40 @@ urldecode (char *dst, const char *src)
  * implementation.
  *
  * The following end points are handled:
- *   /id          - return server ID and version
- *   /streams     - return list of server streams
- *   /streamids   - return list of server stream IDs
- *                    match=<pattern> supported to limit streams
- *                    limit=<1-6> specified level of ID
- *   /status      - return server status, limited via trust-permissions
- *   /connections - return list of connections, limited via trust-permissions
- *                    match=<pattern> supported to limit connections
- *   /seedlink    - initiate WebSocket connection for SeedLink
- *   /datalink    - initiate WebSocket connection for DataLink
+ *   /id[/json]          - return server ID and version
+ *   /streams[/json]     - return list of server streams
+ *   /streamids          - return list of server stream IDs
+ *                           match=<pattern> supported to limit streams
+ *   /status[/json]      - return server status, limited via trust-permissions
+ *   /connections[/json] - return list of connections, limited via trust-permissions
+ *                           match=<pattern> supported to limit connections
+ *   /seedlink           - initiate WebSocket connection for SeedLink
+ *   /datalink           - initiate WebSocket connection for DataLink
  *
- * Returns 1 on success and should disconnect, 0 on success and -1 on
- * error which should disconnect.
+ * Return 1 on success and should disconnect
+ * Return 0 on success
+ * Return -1 on error which should disconnect.
  ***************************************************************************/
 int
 HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 {
-  size_t headlen;
   char method[10];
   char path[100];
   char version[100];
+  int headlen;
   int fields;
   int nread;
   int rv;
 
-  char upgradeHeader[100] = "";
-  char connectionHeader[100] = "";
-  char secWebSocketKeyHeader[100] = "";
-  char secWebSocketVersionHeader[100] = "";
+  char upgradeHeader[100]              = "";
+  char connectionHeader[100]           = "";
+  char secWebSocketKeyHeader[100]      = "";
+  char secWebSocketVersionHeader[100]  = "";
   char secWebSocketProtocolHeader[100] = "";
 
+  MediaType type = RAW;
   char *response = NULL;
-  char *value = NULL;
+  char *value    = NULL;
   int responsebytes;
 
   /* Decode percent-encoding in URL */
@@ -166,18 +195,11 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     lprintf (0, "[%s] HandleHTTP unrecognized HTTP method '%s'",
              cinfo->hostname, method);
 
-    headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                        "HTTP/1.1 501 Method %s Not Implemented\r\n"
-                        "Content-Length: 0\r\n"
-                        "Connection: close\r\n"
-                        "%s"
-                        "\r\n",
-                        method,
-                        (cinfo->httpheaders) ? cinfo->httpheaders : "");
+    headlen = GenerateHeader (cinfo, 501, UNSET, 0, method);
 
     if (headlen > 0)
     {
-      SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+      SendData (cinfo, cinfo->sendbuf, headlen, 0);
     }
     else
     {
@@ -235,94 +257,82 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     return -1;
   }
 
-  /* Handle specific end points */
-  if (!strcasecmp (path, "/id"))
-  {
-    /* This may be used to "ping" the server so only log at high verbosity */
-    lprintf (2, "[%s] Received HTTP ID request", cinfo->hostname);
+  lprintf (2, "[%s] Received HTTP request %.20s", cinfo->hostname, path);
 
-    responsebytes = asprintf (&response,
-                              "%s/%s\n"
-                              "Organization: %s",
-                              PACKAGE, VERSION, serverid);
+  /* Handle specific end points */
+  if (!strncasecmp (path, "/id", 3))
+  {
+    responsebytes = GenerateID (cinfo, path, &response, &type);
 
     /* Create header */
-    headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                        "HTTP/1.1 200\r\n"
-                        "Content-Length: %d\r\n"
-                        "Content-Type: text/plain\r\n"
-                        "%s"
-                        "\r\n",
-                        (response) ? responsebytes : 0,
-                        (cinfo->httpheaders) ? cinfo->httpheaders : "");
-
-    if (headlen > 0)
+    if (responsebytes > 0)
     {
-      rv = SendDataMB (cinfo,
-                       (void *[]){cinfo->sendbuf, response},
-                       (size_t[]){MIN (headlen, cinfo->sendbuflen), (response) ? responsebytes : 0},
-                       2);
+      headlen = GenerateHeader (cinfo, 200, type, (uint64_t)responsebytes, NULL);
+    }
+    else if (responsebytes == 0)
+    {
+      headlen = GenerateHeader (cinfo, 404, type, 0, NULL);
     }
     else
     {
       lprintf (0, "Error creating response (ID request)");
-      rv = -1;
+      headlen = GenerateHeader (cinfo, 500, type, 0, NULL);
     }
-
-    if (response)
-      free (response);
-
-    return (rv) ? -1 : 0;
-  } /* Done with /id request */
-  else if (!strncasecmp (path, "/streams", 8) ||
-           !strncasecmp (path, "/streamids", 10))
-  {
-    lprintf (1, "[%s] Received HTTP STREAM[ID]S request", cinfo->hostname);
-
-    /* Generate stream list with or without time extents for /streams versus /streamids */
-    if (!strncasecmp (path, "/streams", 8))
-      responsebytes = GenerateStreams (cinfo, &response, path, 0);
-    else
-      responsebytes = GenerateStreams (cinfo, &response, path, 1);
-
-    if (responsebytes < 0)
-    {
-      lprintf (0, "[%s] Error generating stream list", cinfo->hostname);
-
-      if (response)
-        free (response);
-      return -1;
-    }
-
-    /* Create header */
-    headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                        "HTTP/1.1 200\r\n"
-                        "Content-Length: %d\r\n"
-                        "Content-Type: text/plain\r\n"
-                        "%s"
-                        "\r\n",
-                        (response) ? responsebytes : 0,
-                        (cinfo->httpheaders) ? cinfo->httpheaders : "");
 
     if (headlen > 0)
     {
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
-                       (size_t[]){MIN (headlen, cinfo->sendbuflen), (response) ? responsebytes : 0},
-                       2);
+                       (size_t[]){(size_t)headlen, (response) ? (size_t)responsebytes : 0},
+                       2, 0);
     }
     else
     {
-      lprintf (0, "Error creating response (STREAMS/STREAMIDS request)");
+      lprintf (0, "Error creating response header (ID request)");
       rv = -1;
     }
 
-    if (response)
-      free (response);
+    free (response);
+
+    return (rv) ? -1 : 0;
+  } /* Done with /id request */
+  else if (!strncasecmp (path, "/stream", 7))
+  {
+    responsebytes = GenerateStreams (cinfo, path, &response, &type);
+
+    /* Create header */
+    if (responsebytes > 0)
+    {
+      headlen = GenerateHeader (cinfo, 200, type, (uint64_t)responsebytes, NULL);
+    }
+    else if (responsebytes == 0)
+    {
+      headlen = GenerateHeader (cinfo, 404, type, 0, NULL);
+    }
+    else
+    {
+      lprintf (0, "Error creating response (STREAM[ID]S request)");
+      headlen = GenerateHeader (cinfo, 500, type, 0, NULL);
+    }
+
+    if (headlen > 0)
+    {
+      rv = SendDataMB (cinfo,
+                       (void *[]){cinfo->sendbuf, response},
+                       (size_t[]){(size_t)headlen, (response) ? (size_t)responsebytes : 0},
+                       2, 0);
+    }
+    else
+    {
+      lprintf (0, "Error creating response header (STREAM[ID]S request)");
+      rv = -1;
+    }
+
+    free (response);
 
     return (rv) ? -1 : 0;
   } /* Done with /streams or /streamids request */
-  else if (!strcasecmp (path, "/status"))
+  else if (!strncasecmp (path, "/status", 7))
   {
     /* Check for trusted flag, required to access this resource */
     if (!cinfo->trusted)
@@ -331,47 +341,36 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                cinfo->hostname);
 
       /* Create header */
-      headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                          "HTTP/1.1 403 Forbidden, no soup for you!\r\n"
-                          "Connection: close\r\n"
-                          "%s"
-                          "\r\n",
-                          (cinfo->httpheaders) ? cinfo->httpheaders : "");
+      headlen = GenerateHeader (cinfo, 403, UNSET, 0, "Forbidden, no soup for you!");
 
-      rv = SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+      rv = SendData (cinfo, cinfo->sendbuf, (size_t)headlen, 0);
 
       return (rv) ? -1 : 1;
     }
 
-    lprintf (1, "[%s] Received HTTP STATUS request", cinfo->hostname);
-
-    responsebytes = GenerateStatus (cinfo, &response);
-
-    if (responsebytes <= 0)
-    {
-      lprintf (0, "[%s] Error generating server status", cinfo->hostname);
-
-      if (response)
-        free (response);
-      return -1;
-    }
+    responsebytes = GenerateStatus (cinfo, path, &response, &type);
 
     /* Create header */
-    headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                        "HTTP/1.1 200\r\n"
-                        "Content-Length: %d\r\n"
-                        "Content-Type: text/plain\r\n"
-                        "%s"
-                        "\r\n",
-                        (response) ? responsebytes : 0,
-                        (cinfo->httpheaders) ? cinfo->httpheaders : "");
+    if (responsebytes > 0)
+    {
+      headlen = GenerateHeader (cinfo, 200, type, (uint64_t)responsebytes, NULL);
+    }
+    else if (responsebytes == 0)
+    {
+      headlen = GenerateHeader (cinfo, 404, type, 0, NULL);
+    }
+    else
+    {
+      lprintf (0, "Error creating response (STATUS request)");
+      headlen = GenerateHeader (cinfo, 500, type, 0, NULL);
+    }
 
     if (headlen > 0)
     {
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
-                       (size_t[]){MIN (headlen, cinfo->sendbuflen), (response) ? responsebytes : 0},
-                       2);
+                       (size_t[]){(size_t)headlen, (response) ? (size_t)responsebytes : 0},
+                       2, 0);
     }
     else
     {
@@ -379,8 +378,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       rv = -1;
     }
 
-    if (response)
-      free (response);
+    free (response);
 
     return (rv) ? -1 : 0;
   } /* Done with /status request */
@@ -393,56 +391,46 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                cinfo->hostname);
 
       /* Create header */
-      headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                          "HTTP/1.1 403 Forbidden, no soup for you!\r\n"
-                          "Connection: close\r\n"
-                          "%s"
-                          "\r\n",
-                          (cinfo->httpheaders) ? cinfo->httpheaders : "");
+      headlen = GenerateHeader (cinfo, 403, UNSET, 0, "Forbidden, no soup for you!");
 
-      rv = SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+      rv = SendData (cinfo, cinfo->sendbuf, (size_t)headlen, 0);
 
       return (rv) ? -1 : 1;
     }
 
     lprintf (1, "[%s] Received HTTP CONNECTIONS request", cinfo->hostname);
 
-    responsebytes = GenerateConnections (cinfo, &response, path);
-
-    if (responsebytes <= 0)
-    {
-      lprintf (0, "[%s] Error generating server status", cinfo->hostname);
-
-      if (response)
-        free (response);
-      return -1;
-    }
+    responsebytes = GenerateConnections (cinfo, path, &response, &type);
 
     /* Create header */
-    headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                        "HTTP/1.1 200\r\n"
-                        "Content-Length: %d\r\n"
-                        "Content-Type: text/plain\r\n"
-                        "%s"
-                        "\r\n",
-                        (response) ? responsebytes : 0,
-                        (cinfo->httpheaders) ? cinfo->httpheaders : "");
+    if (responsebytes > 0)
+    {
+      headlen = GenerateHeader (cinfo, 200, type, (uint64_t)responsebytes, NULL);
+    }
+    else if (responsebytes == 0)
+    {
+      headlen = GenerateHeader (cinfo, 404, type, 0, NULL);
+    }
+    else
+    {
+      lprintf (0, "Error creating response (CONNECTIONS request)");
+      headlen = GenerateHeader (cinfo, 500, type, 0, NULL);
+    }
 
     if (headlen > 0)
     {
       rv = SendDataMB (cinfo,
                        (void *[]){cinfo->sendbuf, response},
-                       (size_t[]){MIN (headlen, cinfo->sendbuflen), (response) ? responsebytes : 0},
-                       2);
+                       (size_t[]){(size_t)headlen, (response) ? (size_t)responsebytes : 0},
+                       2, 0);
     }
     else
     {
-      lprintf (0, "Error creating response (CONNECTIONS request)");
+      lprintf (0, "Error creating response header (CONNECTIONS request)");
       rv = -1;
     }
 
-    if (response)
-      free (response);
+    free (response);
 
     return (rv) ? -1 : 0;
   } /* Done with /connections request */
@@ -453,17 +441,11 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       lprintf (1, "[%s] Received SeedLink WebSocket request on non-SeedLink port", cinfo->hostname);
 
       /* Create header */
-      headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                          "HTTP/1.1 400 Cannot request SeedLink WebSocket on non-SeedLink port\r\n"
-                          "Connection: close\r\n"
-                          "%s"
-                          "\r\n"
-                          "Cannot request SeedLink WebSocket on non-SeedLink port",
-                          (cinfo->httpheaders) ? cinfo->httpheaders : "");
+      headlen = GenerateHeader (cinfo, 400, UNSET, 0, "Cannot request SeedLink WebSocket on non-SeedLink port");
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+        SendData (cinfo, cinfo->sendbuf, (size_t)headlen, 0);
       }
       else
       {
@@ -476,7 +458,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     /* Check subprotocol header for acceptable values, rewrite to echo in response */
     if (*secWebSocketProtocolHeader)
     {
-      if (strstr (secWebSocketProtocolHeader, "SeedLink3.1"))
+      if (strstr (secWebSocketProtocolHeader, "SeedLink4.0"))
+        snprintf (secWebSocketProtocolHeader, sizeof (secWebSocketProtocolHeader),
+                  "SeedLink4.0");
+      else if (strstr (secWebSocketProtocolHeader, "SeedLink3.1"))
         snprintf (secWebSocketProtocolHeader, sizeof (secWebSocketProtocolHeader),
                   "SeedLink3.1");
       else
@@ -503,17 +488,11 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       lprintf (1, "[%s] Received DataLink WebSocket request on non-DataLink port", cinfo->hostname);
 
       /* Create header */
-      headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                          "HTTP/1.1 400 Cannot request DataLink WebSocket on non-DataLink port\r\n"
-                          "Connection: close\r\n"
-                          "%s"
-                          "\r\n"
-                          "Cannot request DataLink WebSocket on non-DataLink port",
-                          (cinfo->httpheaders) ? cinfo->httpheaders : "");
+      headlen = GenerateHeader (cinfo, 400, UNSET, 0, "Cannot request DataLink WebSocket on non-DataLink port");
 
       if (headlen > 0)
       {
-        SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+        SendData (cinfo, cinfo->sendbuf, (size_t)headlen, 0);
       }
       else
       {
@@ -551,24 +530,16 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     lprintf (1, "[%s] Received HTTP request for %s", cinfo->hostname, path);
 
     /* If WebRoot is configured send file */
-    if (webroot && (rv = SendFileHTTP (cinfo, path)) >= 0)
+    if (config.webroot && (rv = SendFileHTTP (cinfo, path)) >= 0)
     {
       lprintf (2, "[%s] Sent %s (%d bytes)", cinfo->hostname, path, rv);
     }
     else
     {
       /* Create header */
-      headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                          "HTTP/1.1 404 Not Found\r\n"
-                          "Connection: close\r\n"
-                          "%s"
-                          "\r\n"
-                          "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">"
-                          "<html><head><title>404 Not Found</title></head>"
-                          "<body><h1>Not Found</h1></body></html>",
-                          (cinfo->httpheaders) ? cinfo->httpheaders : "");
+      headlen = GenerateHeader (cinfo, 404, HTML, 0, NULL);
 
-      rv = SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+      rv = SendData (cinfo, cinfo->sendbuf, (size_t)headlen, 0);
 
       return (rv) ? -1 : 1;
     }
@@ -613,8 +584,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
  * |                     Payload Data continued ...                |
  * +---------------------------------------------------------------+
  *
- * Return number of characters read on success, 0 if no data is
- * available, -1 on connection shutdown and -2 on error.
+ * Return >0 as number of bytes read on success
+ * Return  0 when no data is available
+ * Return -1 on error or timeout, ClientInfo.socketerr is set
+ * Return -2 on orderly shutdown, ClientInfo.socketerr is set
  ***************************************************************************/
 int
 RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
@@ -623,43 +596,21 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
   uint8_t onetwo[2];
   uint16_t length16;
   uint8_t length7;
-  ssize_t nrecv;
   int totalrecv = 0;
+  int nrecv;
   int opcode;
 
   if (!cinfo || !length || !mask)
     return -1;
 
-  /* Recv first two bytes, no handling of fragmented receives */
-  nrecv = recv (cinfo->socket, onetwo, 2, 0);
+  /* Recv first two bytes */
+  nrecv = RecvData (cinfo, onetwo, 2, 0);
 
-  /* The only acceptable error is EAGAIN (no data on non-blocking) */
-  if (nrecv == -1 && errno != EAGAIN)
-  {
-    lprintf (0, "[%s] Error recv'ing data from client: %s",
-             cinfo->hostname, strerror (errno));
-    return -2;
-  }
-
-  /* No data on non-blocking socket, nothing to read */
-  if (nrecv == -1 && errno == EAGAIN)
-  {
-    return 0;
-  }
-
-  /* Peer completed an orderly shutdown */
-  if (nrecv == 0)
-  {
-    return -1;
-  }
-
-  /* Check for short read, which we do not handle */
   if (nrecv != 2)
   {
-    lprintf (0, "[%s] Error, only read %zd byte of 2 byte WebSocket start",
-             cinfo->hostname, nrecv);
-    return -2;
+    return nrecv;
   }
+
   totalrecv += 2;
 
   /* Check if FIN flag is set, bit 0 of the 1st byte */
@@ -676,30 +627,30 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
   /* If 126, the length is a 16-bit value in the next 2 bytes */
   if (length7 == 126)
   {
-    nrecv = recv (cinfo->socket, &length16, 2, MSG_WAITALL);
+    nrecv = RecvData (cinfo, &length16, 2, 1);
 
     if (nrecv != 2)
-      return -2;
+      return nrecv;
 
     totalrecv += 2;
 
     if (!ms_bigendianhost ())
-      ms_gswap2a (&length16);
+      ms_gswap2 (&length16);
 
     *length = length16;
   }
   /* If 127, the length is a 64-bit value in the next 8 bytes */
   else if (length7 == 127)
   {
-    nrecv = recv (cinfo->socket, length, 8, MSG_WAITALL);
+    nrecv = RecvData (cinfo, length, 8, 1);
 
     if (nrecv != 8)
-      return -2;
+      return nrecv;
 
     totalrecv += 8;
 
     if (!ms_bigendianhost ())
-      ms_gswap8a (length);
+      ms_gswap8 (length);
   }
   else
   {
@@ -709,10 +660,10 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
   /* If mask flag, the masking key is the next 4 bytes */
   if (onetwo[1] & 0x80)
   {
-    nrecv = recv (cinfo->socket, mask, 4, MSG_WAITALL);
+    nrecv = RecvData (cinfo, mask, 4, 1);
 
     if (nrecv != 4)
-      return -2;
+      return nrecv;
 
     totalrecv += 4;
   }
@@ -725,19 +676,19 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
   {
     if (*length > 125)
     {
-      lprintf (0, "[%s] Error, WebSocket payload length of %llu > 125, which is not allowed for a ping",
-               cinfo->hostname, (unsigned long long int)*length);
+      lprintf (0, "[%s] Error, WebSocket payload length of %" PRIu64 " > 125, which is not allowed for a ping",
+               cinfo->hostname, *length);
       return -2;
     }
 
     if (*length > 0)
     {
-      nrecv = recv (cinfo->socket, payload, (size_t)*length, MSG_WAITALL);
+      nrecv = RecvData (cinfo, payload, *length, 1);
 
-      if (nrecv != (ssize_t)*length)
+      if (nrecv != (int)*length)
       {
-        lprintf (0, "[%s] Error receiving payload for WebSocket ping, nrecv: %zu, expected length: %llu\n",
-                 cinfo->hostname, (size_t)nrecv, (unsigned long long int)(*length));
+        lprintf (0, "[%s] Error receiving payload for WebSocket ping, nrecv: %d, expected length: %" PRIu64 "\n",
+                 cinfo->hostname, nrecv, *length);
         return -2;
       }
 
@@ -746,8 +697,8 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
 
     /* Send pong with same payload data */
     onetwo[0] = 0x8a; /* Change opcode to pong */
-    send (cinfo->socket, onetwo, 2, 0);
-    send (cinfo->socket, payload, *length, 0);
+    SendData (cinfo, onetwo, 2, 1);
+    SendData (cinfo, payload, *length, 1);
 
     return 0;
   }
@@ -757,19 +708,19 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
   {
     if (*length > 125)
     {
-      lprintf (0, "[%s] Error, WebSocket payload length of %llu > 125, which is not allowed for a pong",
-               cinfo->hostname, (unsigned long long int)*length);
+      lprintf (0, "[%s] Error, WebSocket payload length of %" PRIu64 " > 125, which is not allowed for a pong",
+               cinfo->hostname, *length);
       return -2;
     }
 
     if (*length > 0)
     {
-      nrecv = recv (cinfo->socket, payload, (size_t)*length, MSG_WAITALL);
+      nrecv = RecvData (cinfo, payload, *length, 1);
 
-      if (nrecv != (ssize_t)*length)
+      if (nrecv != (int)*length)
       {
-        lprintf (0, "[%s] Error receiving payload for unexpected WebSocket pong, nrecv: %zu, expected length: %llu\n",
-                 cinfo->hostname, (size_t)nrecv, (unsigned long long int)*length);
+        lprintf (0, "[%s] Error receiving payload for unexpected WebSocket pong, nrecv: %d, expected length: %" PRIu64 "\n",
+                 cinfo->hostname, nrecv, *length);
         return -2;
       }
 
@@ -783,7 +734,7 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
     /* Send Close frame in response */
     onetwo[0] = 0x88;
     onetwo[1] = 0;
-    send (cinfo->socket, onetwo, 2, 0);
+    SendData (cinfo, onetwo, 2, 1);
 
     return -1;
   }
@@ -831,7 +782,7 @@ ParseHeader (char *header, char **value)
 
   /* Find first non-space character backwards from end of value and terminate */
   length = strlen (*value);
-  cp = *value + length - 1;
+  cp     = *value + length - 1;
   while (*cp == ' ' && cp != *value)
     cp--;
 
@@ -839,6 +790,159 @@ ParseHeader (char *header, char **value)
 
   return 0;
 } /* End of ParseHeader() */
+
+/***************************************************************************
+ * GenerateHeader:
+ *
+ * Generate HTTP header for status, type, length with optional message
+ * and write to the ClientInfo send buffer.
+ *
+ * The caller must free the header buffer allocated by this routine.
+ *
+ * Return >0 size of response on success
+ * Return -1 on error which should disconnect
+ ***************************************************************************/
+static int
+GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
+                uint64_t contentlength, const char *message)
+{
+  int headlen;
+
+  if (status == 200)
+  {
+    headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
+                        "HTTP/1.1 200 OK\r\n"
+                        "Content-Length: %" PRIu64 "\r\n"
+                        "Content-Type: %s\r\n"
+                        "%s"
+                        "\r\n",
+                        contentlength,
+                        MediaTypes[type],
+                        (cinfo->httpheaders) ? cinfo->httpheaders : "");
+  }
+  else if (status == 403)
+  {
+    headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
+                        "HTTP/1.1 403 %s!\r\n"
+                        "Connection: close\r\n"
+                        "%s"
+                        "\r\n",
+                        (message) ? message : "Forbidden",
+                        (cinfo->httpheaders) ? cinfo->httpheaders : "");
+  }
+  else if (status == 404)
+  {
+    const char *body = "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">"
+                       "<html><head><title>404 Not Found</title></head>"
+                       "<body><h1>Not Found</h1></body></html>";
+
+    headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
+                        "HTTP/1.1 404 Not Found\r\n"
+                        "Content-Length: %zu\r\n"
+                        "Content-Type: %s\r\n"
+                        "Connection: close\r\n"
+                        "%s"
+                        "\r\n"
+                        "%s",
+                        strlen (body),
+                        MediaTypes[HTML],
+                        (cinfo->httpheaders) ? cinfo->httpheaders : "",
+                        body);
+  }
+  else if (status == 501)
+  {
+    headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
+                        "HTTP/1.1 501 Method %s Not Implemented\r\n"
+                        "Content-Length: 0\r\n"
+                        "Connection: close\r\n"
+                        "%s"
+                        "\r\n",
+                        (message) ? message : "UNKNOWN",
+                        (cinfo->httpheaders) ? cinfo->httpheaders : "");
+  }
+  else
+  {
+    headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
+                        "HTTP/1.1 %d %s\r\n"
+                        "Content-Length: %" PRIu64 "\r\n"
+                        "Content-Type: %s\r\n"
+                        "%s"
+                        "\r\n",
+                        status,
+                        (message) ? message : "Undefined message",
+                        contentlength,
+                        MediaTypes[type],
+                        (cinfo->httpheaders) ? cinfo->httpheaders : "");
+  }
+
+  return (headlen > cinfo->sendbuflen) ? cinfo->sendbuflen : headlen;
+}
+
+/***************************************************************************
+ * GenerateID:
+ *
+ * Generate response for ID request.
+ *
+ * The caller must free the response buffer allocated by this routine.
+ *
+ * Return >0 size of response on success
+ * Return  0 for unrecognized path
+ * Return -1 on error
+ ***************************************************************************/
+static int
+GenerateID (ClientInfo *cinfo, const char *path, char **response, MediaType *type)
+{
+  int responsebytes = 0;
+
+  char *json_string;
+
+  if (!cinfo || !path || !response || !type)
+    return -1;
+
+  json_string = info_json (cinfo, PACKAGE "/" VERSION, INFO_ID, NULL);
+
+  if (!json_string)
+    return -1;
+
+  if (!strcasecmp (path, "/id/json"))
+  {
+    *response     = json_string;
+    responsebytes = (*response) ? strlen (*response) : 0;
+    *type         = JSON;
+  }
+  else if (!strcasecmp (path, "/id"))
+  {
+    yyjson_doc *json;
+    yyjson_val *root;
+
+    if ((json = yyjson_read (json_string, strlen (json_string), 0)) == NULL)
+    {
+      free (json_string);
+      return -1;
+    }
+    free (json_string);
+    root = yyjson_doc_get_root (json);
+
+    responsebytes = asprintf (response,
+                              "%s\n"
+                              "Organization: %s\n"
+                              "Server start: %s",
+                              DASHNULL (yyjson_get_str (yyjson_obj_get (root, "software"))),
+                              DASHNULL (yyjson_get_str (yyjson_obj_get (root, "organization"))),
+                              DASHNULL (yyjson_get_str (yyjson_obj_get (root, "server_start"))));
+
+    yyjson_doc_free (json);
+
+    *type = TEXT;
+  }
+  else
+  {
+    free (json_string);
+    return 0;
+  }
+
+  return (responsebytes > 0) ? responsebytes : -1;
+} /* End of GenerateID() */
 
 /***************************************************************************
  * GenerateStreams:
@@ -852,46 +956,33 @@ ParseHeader (char *header, char **value)
  * Check for 'match' parameter in 'path' and use value as a regular
  * expression to match against stream identifiers.
  *
- * Returns length of stream list response in bytes on success and -1 on error.
+ * Return >0 size of response on success
+ * Return  0 for unrecognized path
+ * Return -1 on error
  ***************************************************************************/
 static int
-GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly)
+GenerateStreams (ClientInfo *cinfo, const char *path, char **response, MediaType *type)
 {
-  Stack *streams;
-  StackNode *streamnode;
-  RingStream *ringstream;
-  int streamcount;
+  size_t streamcount;
   size_t streamlistsize;
-  size_t headlen;
-  size_t streaminfolen;
-  char streaminfo[200];
-  char earliest[50];
-  char latest[50];
-  char matchstr[50];
+  char mypath[64]   = {0};
+  char matchstr[64] = {0};
+  int matchlen      = 0;
+
   char *cp;
-  int matchlen = 0;
+  char *writeptr    = NULL;
+  int written       = 0;
+  int responsebytes = 0;
 
-  int level = 0;
-  char levelstream[100] = {0};
-  char prevlevelstream[100] = {0};
-  int splitcount;
-  char delim = '_';
-  char id1[16];
-  char id2[16];
-  char id3[16];
-  char id4[16];
-  char id5[16];
-  char id6[16];
+  char *json_string;
 
-  if (!cinfo || !streamlist || !path)
+  if (!cinfo || !path || !response || !type)
     return -1;
 
-  /* If only printing IDs, set output to highest level */
-  if (idsonly)
-    level = 6;
+  strncpy (mypath, path, sizeof (mypath) - 1);
 
-  /* If match parameter is supplied, set reader match to limit streams */
-  if ((cp = strstr (path, "match=")))
+  /* If match parameter is supplied, extract value */
+  if ((cp = strstr (mypath, "match=")))
   {
     cp += 6; /* Advance to character after '=' */
 
@@ -901,233 +992,104 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly)
       matchstr[matchlen] = *cp;
     }
     matchstr[matchlen] = '\0';
+  }
 
-    if (matchlen > 0 && cinfo->reader)
+  if ((cp = strchr (mypath, '?')))
+    *cp = '\0';
+
+  json_string = info_json (cinfo, PACKAGE "/" VERSION, INFO_STREAMS, (matchlen > 0) ? matchstr : NULL);
+
+  if (!json_string)
+    return -1;
+
+  if (!strcasecmp (mypath, "/streams/json"))
+  {
+    *response     = json_string;
+    responsebytes = (*response) ? strlen (*response) : 0;
+    *type         = JSON;
+  }
+  else if (!strcasecmp (mypath, "/streams") ||
+           !strcasecmp (mypath, "/streamids"))
+  {
+    yyjson_doc *json;
+    yyjson_val *root;
+    yyjson_val *stream_array;
+    yyjson_val *stream_iter = NULL;
+    size_t idx, max;
+
+    int just_ids = (!strcasecmp (mypath, "/streamids")) ? 1 : 0;
+
+    if ((json = yyjson_read (json_string, strlen (json_string), 0)) == NULL)
     {
-      if (RingMatch (cinfo->reader, matchstr))
-      {
-        /* Create and send error response */
-        headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                            "HTTP/1.1 400 Invalid match expression\r\n"
-                            "Connection: close\r\n"
-                            "%s"
-                            "\r\n"
-                            "Invalid match expression: '%s'",
-                            (cinfo->httpheaders) ? cinfo->httpheaders : "",
-                            matchstr);
+      free (json_string);
+      return -1;
+    }
+    free (json_string);
+    root = yyjson_doc_get_root (json);
 
-        if (headlen > 0)
+    if ((stream_array = yyjson_obj_get (root, "stream")) != NULL)
+    {
+      streamcount = yyjson_arr_size (stream_array);
+
+      /* Allocate stream list buffer with maximum expected:
+       * for level-specific output, maximum per entry is 60 characters + newline
+       * otherwise the maximum per entry is 60 + 2x32 (time strings) plus a few spaces and newline */
+      streamlistsize = (just_ids) ? 64 : 124;
+      streamlistsize *= streamcount;
+
+      if (!(*response = (char *)malloc (streamlistsize)))
+      {
+        lprintf (0, "[%s] Error for HTTP STREAM[ID]S (cannot allocate response buffer of size %zu)",
+                 cinfo->hostname, streamlistsize);
+        yyjson_doc_free (json);
+        return -1;
+      }
+
+      writeptr = *response;
+
+      responsebytes = 0;
+
+      yyjson_arr_foreach (stream_array, idx, max, stream_iter)
+      {
+        if (just_ids)
         {
-          SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
+          written = snprintf (writeptr, streamlistsize - responsebytes, "%s\n",
+                              DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "id"))));
         }
         else
         {
-          lprintf (0, "Error creating response (invalid match expression)");
+          written = snprintf (writeptr, streamlistsize - responsebytes, "%s %s %s\n",
+                              DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "id"))),
+                              DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "start_time"))),
+                              DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "end_time"))));
         }
 
-        return -1;
-      }
-    }
-  }
-
-  /* If level parameter is supplied, parse and validate */
-  if ((cp = strstr (path, "level=")))
-  {
-    cp += 6; /* Advance to character after '=' */
-
-    level = strtoul (cp, NULL, 10);
-
-    if (level == 0 || level > 6)
-    {
-      /* Create and send error response */
-      headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                          "HTTP/1.1 400 Unsupported value for level: %d\r\n"
-                          "Connection: close\r\n"
-                          "%s"
-                          "\r\n"
-                          "Unsupported value for level: %d",
-                          level,
-                          (cinfo->httpheaders) ? cinfo->httpheaders : "",
-                          level);
-
-      if (headlen > 0)
-      {
-        SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
-      }
-      else
-      {
-        lprintf (0, "Error creating response (unexpected level value: %d)", level);
-      }
-
-      return -1;
-    }
-  }
-
-  /* Collect stream list and send a line for each stream */
-  if ((streams = GetStreamsStack (cinfo->ringparams, cinfo->reader)))
-  {
-    /* Count streams */
-    streamcount = 0;
-    streamnode = streams->top;
-    while (streamnode)
-    {
-      streamcount++;
-      streamnode = streamnode->next;
-    }
-
-    /* Allocate stream list buffer with maximum expected:
-       for level-specific output, maximum per entry is 60 characters + newline
-       otherwise the maximum per entry is 60 + 2x25 (time strings) plus a few spaces and newline */
-    streamlistsize = (level) ? 61 : 120;
-    streamlistsize *= streamcount;
-
-    if (!(*streamlist = (char *)malloc (streamlistsize)))
-    {
-      lprintf (0, "[%s] Error for HTTP STREAMS (cannot allocate response buffer of size %zu)",
-               cinfo->hostname, streamlistsize);
-
-      StackDestroy (streams, free);
-
-      /* Create and send error response */
-      headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                          "HTTP/1.1 500 Internal error, cannot allocate response buffer\r\n"
-                          "Connection: close\r\n"
-                          "%s"
-                          "\r\n"
-                          "Cannot allocate response buffer of %zu bytes",
-                          (cinfo->httpheaders) ? cinfo->httpheaders : "",
-                          streamlistsize);
-
-      if (headlen > 0)
-      {
-        SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
-      }
-      else
-      {
-        lprintf (0, "Error creating response (cannot allocate stream list buffer)");
-      }
-
-      return -1;
-    }
-
-    /* Set write pointer to beginning of buffer */
-    cp = *streamlist;
-
-    while ((ringstream = (RingStream *)StackPop (streams)))
-    {
-      /* If a specific level has been specified, split the stream ID into components
-         and generate a list of unique entries for the specified level. */
-      if (level > 0)
-      {
-        splitcount = SplitStreamID (ringstream->streamid, delim, 16, id1, id2, id3, id4, id5, id6, NULL);
-
-        if (splitcount <= 0)
+        if ((responsebytes + written) >= streamlistsize)
         {
-          lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, ringstream->streamid);
+          lprintf (0, "[%s] Error for HTTP STREAM[ID]S (response buffer overflow)",
+                   cinfo->hostname);
+          yyjson_doc_free (json);
           return -1;
         }
 
-        if (level >= 6 && splitcount >= 6)
-          snprintf (levelstream, sizeof (levelstream),
-                    "%s%c%s%c%s%c%s%c%s%c%s\n", id1, delim, id2, delim, id3, delim, id4, delim, id5, delim, id6);
-        else if (level >= 5 && splitcount >= 5)
-          snprintf (levelstream, sizeof (levelstream),
-                    "%s%c%s%c%s%c%s%c%s\n", id1, delim, id2, delim, id3, delim, id4, delim, id5);
-        else if (level >= 4 && splitcount >= 4)
-          snprintf (levelstream, sizeof (levelstream),
-                    "%s%c%s%c%s%c%s\n", id1, delim, id2, delim, id3, delim, id4);
-        else if (level >= 3 && splitcount >= 3)
-          snprintf (levelstream, sizeof (levelstream),
-                    "%s%c%s%c%s\n", id1, delim, id2, delim, id3);
-        else if (level >= 2 && splitcount >= 2)
-          snprintf (levelstream, sizeof (levelstream),
-                    "%s%c%s\n", id1, delim, id2);
-        else if (level >= 1 && splitcount >= 1)
-          snprintf (levelstream, sizeof (levelstream),
-                    "%s\n", id1);
-
-        /* Determine if this level of stream information has been included yet by comparing
-           to the previous entry (the Stack is sorted), if not copy to the streaminfo buffer */
-        if (strcmp (levelstream, prevlevelstream))
-        {
-          strncpy (streaminfo, levelstream, sizeof (streaminfo));
-          streaminfo[sizeof (streaminfo) - 1] = '\0';
-
-          strcpy (prevlevelstream, levelstream);
-        }
-        /* Otherwise, skip this entry */
-        else
-        {
-          free (ringstream);
-          continue;
-        }
-      }
-      /* Otherwise include the full stream ID and the earliest and latest data times */
-      else
-      {
-        ms_hptime2isotimestr (ringstream->earliestdstime, earliest, 1);
-        ms_hptime2isotimestr (ringstream->latestdetime, latest, 1);
-
-        snprintf (streaminfo, sizeof (streaminfo), "%s  %sZ  %sZ\n",
-                  ringstream->streamid, earliest, latest);
-        streaminfo[sizeof (streaminfo) - 1] = '\0';
+        writeptr += written;
+        responsebytes += written;
       }
 
-      /* Add streaminfo entry to buffer */
-      streaminfolen = strlen (streaminfo);
-      if ((streamlistsize - (cp - *streamlist)) > streaminfolen)
-      {
-        memcpy (cp, streaminfo, streaminfolen);
-        cp += streaminfolen;
-      }
-      else
-      {
-        lprintf (0, "[%s] Error for HTTP STREAMS (cannot allocate response buffer of size %zu)",
-                 cinfo->hostname, streamlistsize);
+      /* Add a final terminator to stream list buffer */
+      *writeptr = '\0';
 
-        free (ringstream);
-        StackDestroy (streams, free);
-
-        /* Create and send error response */
-        headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
-                            "HTTP/1.1 500 Internal error, stream list buffer too small\r\n"
-                            "Connection: close\r\n"
-                            "%s"
-                            "\r\n"
-                            "Stream list buffer too small: %zu bytes for %d streams",
-                            (cinfo->httpheaders) ? cinfo->httpheaders : "",
-                            streamlistsize,
-                            streamcount);
-
-        if (headlen > 0)
-        {
-          SendData (cinfo, cinfo->sendbuf, MIN (headlen, cinfo->sendbuflen));
-        }
-        else
-        {
-          lprintf (0, "Error creating response (stream list buffer too small)");
-        }
-
-        return -1;
-      }
-
-      free (ringstream);
+      yyjson_doc_free (json);
+      *type = TEXT;
     }
-
-    /* Cleanup stream stack */
-    StackDestroy (streams, free);
   }
-
-  /* Add a final terminator to stream list buffer */
-  *cp = '\0';
-
-  /* Clear match expression if set for this request */
-  if (matchlen > 0 && cinfo->reader)
+  else
   {
-    RingMatch (cinfo->reader, NULL);
+    free (json_string);
+    return 0;
   }
 
-  return (*streamlist) ? strlen (*streamlist) : 0;
+  return responsebytes;
 } /* End of GenerateStreams() */
 
 /***************************************************************************
@@ -1139,160 +1101,183 @@ GenerateStreams (ClientInfo *cinfo, char **streamlist, char *path, int idsonly)
  * Returns length of status response in bytes on sucess and -1 on error.
  ***************************************************************************/
 static int
-GenerateStatus (ClientInfo *cinfo, char **status)
+GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType *type)
 {
-  struct sthread *loopstp;
-  char string[4096];
-  char serverstart[50];
-  char ringversion[15];
-  char ringsize[30];
-  char packetsize[10];
-  char maxpacketid[20];
-  char maxpackets[20];
-  char memorymapped[10];
-  char volatileflag[10];
-  char totalconnections[10];
-  char totalstreams[10];
-  char txpacketrate[10];
-  char txbyterate[10];
-  char rxpacketrate[10];
-  char rxbyterate[10];
-  char earliestpacketid[20];
-  char earliestpacketcreate[50];
-  char earliestpacketstart[50];
-  char earliestpacketend[50];
-  char latestpacketid[20];
-  char latestpacketcreate[50];
-  char latestpacketstart[50];
-  char latestpacketend[50];
-  int rv;
+  size_t responsesize;
+  char *writeptr    = NULL;
+  int written       = 0;
+  int responsebytes = 0;
 
-  if (!cinfo || !status)
+  char *json_string;
+
+  if (!cinfo || !path || !response || !type)
     return -1;
 
-  ms_hptime2mdtimestr (serverstarttime, serverstart, 0);
-  snprintf (ringversion, sizeof (ringversion), "%u", (unsigned int)cinfo->ringparams->version);
-  snprintf (ringsize, sizeof (ringsize), "%" PRIu64, cinfo->ringparams->ringsize);
-  snprintf (packetsize, sizeof (packetsize), "%lu",
-            (unsigned long int)(cinfo->ringparams->pktsize - sizeof (RingPacket)));
-  snprintf (maxpacketid, sizeof (maxpacketid), "%" PRId64, cinfo->ringparams->maxpktid);
-  snprintf (maxpackets, sizeof (maxpackets), "%" PRId64, cinfo->ringparams->maxpackets);
-  snprintf (memorymapped, sizeof (memorymapped), "%s", (cinfo->ringparams->mmapflag) ? "TRUE" : "FALSE");
-  snprintf (volatileflag, sizeof (volatileflag), "%s", (cinfo->ringparams->volatileflag) ? "TRUE" : "FALSE");
-  snprintf (totalconnections, sizeof (totalconnections), "%d", clientcount);
-  snprintf (totalstreams, sizeof (totalstreams), "%d", cinfo->ringparams->streamcount);
-  snprintf (txpacketrate, sizeof (txpacketrate), "%.1f", cinfo->ringparams->txpacketrate);
-  snprintf (txbyterate, sizeof (txbyterate), "%.1f", cinfo->ringparams->txbyterate);
-  snprintf (rxpacketrate, sizeof (rxpacketrate), "%.1f", cinfo->ringparams->rxpacketrate);
-  snprintf (rxbyterate, sizeof (rxbyterate), "%.1f", cinfo->ringparams->rxbyterate);
-  snprintf (earliestpacketid, sizeof (earliestpacketid), "%" PRId64, cinfo->ringparams->earliestid);
-  ms_hptime2mdtimestr (cinfo->ringparams->earliestptime, earliestpacketcreate, 1);
-  ms_hptime2mdtimestr (cinfo->ringparams->earliestdstime, earliestpacketstart, 1);
-  ms_hptime2mdtimestr (cinfo->ringparams->earliestdetime, earliestpacketend, 1);
-  snprintf (latestpacketid, sizeof (latestpacketid), "%" PRId64, cinfo->ringparams->latestid);
-  ms_hptime2mdtimestr (cinfo->ringparams->latestptime, latestpacketcreate, 1);
-  ms_hptime2mdtimestr (cinfo->ringparams->latestdstime, latestpacketstart, 1);
-  ms_hptime2mdtimestr (cinfo->ringparams->latestdetime, latestpacketend, 1);
+  json_string = info_json (cinfo, PACKAGE "/" VERSION, INFO_ID | INFO_STATUS, NULL);
 
-  rv = asprintf (status,
-                 "%s/%s\n"
-                 "Organization: %s\n"
-                 "Server start time (UTC): %s\n"
-                 "Ring version: %s\n"
-                 "Ring size: %s\n"
-                 "Packet size: %s\n"
-                 "Max packet ID: %s\n"
-                 "Max packets: %s\n"
-                 "Memory mapped ring: %s\n"
-                 "Volatile ring: %s\n"
-                 "Total connections: %s\n"
-                 "Total streams: %s\n"
-                 "TX packet rate: %s\n"
-                 "TX byte rate: %s\n"
-                 "RX packet rate: %s\n"
-                 "RX byte rate: %s\n"
-                 "Earliest packet: %s\n"
-                 "  Create: %s  Data start: %s  Data end: %s\n"
-                 "Latest packet: %s\n"
-                 "  Create: %s  Data start: %s  Data end: %s\n",
-                 PACKAGE, VERSION,
-                 serverid,
-                 serverstart,
-                 ringversion,
-                 ringsize,
-                 packetsize,
-                 maxpacketid,
-                 maxpackets,
-                 memorymapped,
-                 volatileflag,
-                 totalconnections,
-                 totalstreams,
-                 txpacketrate,
-                 txbyterate,
-                 rxpacketrate,
-                 rxbyterate,
-                 earliestpacketid,
-                 earliestpacketcreate, earliestpacketstart, earliestpacketend,
-                 latestpacketid,
-                 latestpacketcreate, latestpacketstart, latestpacketend);
-
-  if (rv < 0)
+  if (!json_string)
     return -1;
 
-  AddToString (status, "\nServer threads:\n", "", 0, 8388608);
-
-  /* List server threads, lock thread list while looping */
-  pthread_mutex_lock (&sthreads_lock);
-  loopstp = sthreads;
-  while (loopstp)
+  if (!strcasecmp (path, "/status/json"))
   {
-    if (loopstp->type == LISTEN_THREAD)
-    {
-      char protocolstr[100];
-      ListenPortParams *lpp = loopstp->params;
+    *response     = json_string;
+    responsebytes = (*response) ? strlen (*response) : 0;
+    *type         = JSON;
+  }
+  else if (!strcasecmp (path, "/status"))
+  {
+    yyjson_doc *json;
+    yyjson_val *root;
+    yyjson_val *server;
+    yyjson_val *thread_array;
+    yyjson_val *thread_iter = NULL;
+    size_t idx, max;
 
-      if (GenProtocolString (lpp->protocols, protocolstr, sizeof (protocolstr)) > 0)
+    if ((json = yyjson_read (json_string, strlen (json_string), 0)) == NULL)
+    {
+      free (json_string);
+      return -1;
+    }
+    free (json_string);
+    root = yyjson_doc_get_root (json);
+
+    if ((server = yyjson_obj_get (root, "server")) != NULL)
+    {
+      responsesize = 2048;
+
+      if (!(*response = (char *)malloc (responsesize)))
       {
-        if (snprintf (string, sizeof (string),
-                      "  %s, Port: %s\n", protocolstr, lpp->portstr) > 0)
-          AddToString (status, string, "", 0, 8388608);
+        lprintf (0, "[%s] Error for HTTP CONNECTIONS (cannot allocate response buffer of size %zu)",
+                 cinfo->hostname, responsesize);
+        yyjson_doc_free (json);
+        return -1;
+      }
+
+      writeptr = *response;
+
+      responsebytes = 0;
+
+      written = snprintf (writeptr, responsesize - responsebytes,
+                          "%s\n"
+                          "Organization: %s\n"
+                          "Server start time: %s\n"
+                          "Ring version: %" PRIu64 "\n"
+                          "Ring size: %" PRIu64 "\n"
+                          "Packet size: %d\n"
+                          "Max packets: %d\n"
+                          "Memory mapped ring: %s\n"
+                          "Volatile ring: %s\n"
+                          "Total connections: %d\n"
+                          "Total streams: %d\n"
+                          "TX packet rate: %.1f\n"
+                          "TX byte rate: %.1f\n"
+                          "RX packet rate: %.1f\n"
+                          "RX byte rate: %.1f\n"
+                          "Earliest packet: %" PRIu64 "\n"
+                          "  Create: %s  Data start: %s  Data end: %s\n"
+                          "Latest packet: %" PRIu64 "\n"
+                          "  Create: %s  Data start: %s  Data end: %s\n",
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (root, "software"))),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (root, "organization"))),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (root, "server_start"))),
+                          yyjson_get_uint (yyjson_obj_get (server, "ring_version")),
+                          yyjson_get_uint (yyjson_obj_get (server, "ring_size")),
+                          yyjson_get_int (yyjson_obj_get (server, "packet_size")),
+                          yyjson_get_int (yyjson_obj_get (server, "maximum_packets")),
+                          (yyjson_get_bool (yyjson_obj_get (server, "memory_mapped"))) ? "TRUE" : "FALSE",
+                          (yyjson_get_bool (yyjson_obj_get (server, "volatile_ring"))) ? "TRUE" : "FALSE",
+                          yyjson_get_int (yyjson_obj_get (server, "connection_count")),
+                          yyjson_get_int (yyjson_obj_get (server, "stream_count")),
+                          yyjson_get_real (yyjson_obj_get (server, "transmit_packet_rate")),
+                          yyjson_get_real (yyjson_obj_get (server, "transmit_byte_rate")),
+                          yyjson_get_real (yyjson_obj_get (server, "receive_packet_rate")),
+                          yyjson_get_real (yyjson_obj_get (server, "receive_byte_rate")),
+                          yyjson_get_uint (yyjson_obj_get (server, "earliest_packet_id")),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "earliest_packet_time"))),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "earliest_data_start"))),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "earliest_data_end"))),
+                          yyjson_get_uint (yyjson_obj_get (server, "latest_packet_id")),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "latest_packet_time"))),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "latest_data_start"))),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "latest_data_end"))));
+
+      writeptr += written;
+      responsebytes += written;
+
+      if ((thread_array = yyjson_obj_get (server, "thread")) != NULL)
+      {
+        written = snprintf (writeptr, responsesize - responsebytes,
+                            "\nServer threads:\n");
+        writeptr += written;
+        responsebytes += written;
+
+        yyjson_arr_foreach (thread_array, idx, max, thread_iter)
+        {
+          const char *thread_type = yyjson_get_str (yyjson_obj_get (thread_iter, "type"));
+
+          if (thread_type && !strcasecmp (thread_type, "Listener"))
+          {
+            written = snprintf (writeptr, responsesize - responsebytes,
+                                "  Thread type: %s\n"
+                                "    Protocol: %s\n"
+                                "    Port: %s\n",
+                                thread_type,
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "protocol"))),
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "port"))));
+          }
+          else if (thread_type && !strcasecmp (thread_type, "miniSEED scanner"))
+          {
+            written = snprintf (writeptr, responsesize - responsebytes,
+                                "  Thread type: %s\n"
+                                "    Directory: %s\n"
+                                "    Max recursion: %d\n"
+                                "    State file: %s\n"
+                                "    Match: %s\n"
+                                "    Reject: %s\n"
+                                "    Scan time: %g\n"
+                                "    Packet rate: %g\n"
+                                "    Byte rate: %g\n",
+                                thread_type,
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "directory"))),
+                                yyjson_get_int (yyjson_obj_get (thread_iter, "max_recursion")),
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "state_file"))),
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "match"))),
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "reject"))),
+                                yyjson_get_real (yyjson_obj_get (thread_iter, "scan_time")),
+                                yyjson_get_real (yyjson_obj_get (thread_iter, "packet_rate")),
+                                yyjson_get_real (yyjson_obj_get (thread_iter, "byte_rate")));
+          }
+          else
+          {
+            written = snprintf (writeptr, responsesize - responsebytes,
+                                "  Thread type: %s\n",
+                                thread_type);
+          }
+
+          if ((responsebytes + written) >= responsesize)
+          {
+            lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
+                     cinfo->hostname);
+            yyjson_doc_free (json);
+            return -1;
+          }
+
+          writeptr += written;
+          responsebytes += written;
+        }
       }
     }
-    else if (loopstp->type == MSEEDSCAN_THREAD)
-    {
-      MSScanInfo *mssinfo = loopstp->params;
 
-      snprintf (string, sizeof (string),
-                "  miniSEED Scanner\n"
-                "    Directory: %s\n"
-                "    Max recursion: %d\n"
-                "    State file: %s\n"
-                "    Match: %s\n"
-                "    Reject: %s\n"
-                "    Scan time: %g\n"
-                "    Packet rate: %g\n"
-                "    Byte rate: %g\n",
-                mssinfo->dirname,
-                mssinfo->maxrecur,
-                mssinfo->statefile,
-                mssinfo->matchstr,
-                mssinfo->rejectstr,
-                mssinfo->scantime,
-                mssinfo->rxpacketrate,
-                mssinfo->rxbyterate);
-
-      AddToString (status, string, "", 0, 8388608);
-    }
-    else
-    {
-      AddToString (status, "  Unknown Thread\n", "", 0, 8388608);
-    }
-
-    loopstp = loopstp->next;
+    yyjson_doc_free (json);
+    *type = TEXT;
   }
-  pthread_mutex_unlock (&sthreads_lock);
+  else
+  {
+    free (json_string);
+    return 0;
+  }
 
-  return (*status) ? strlen (*status) : 0;
+  return responsebytes;
 } /* End of GenerateStatus() */
 
 /***************************************************************************
@@ -1304,36 +1289,33 @@ GenerateStatus (ClientInfo *cinfo, char **status)
  * Check for 'match' parameter in 'path' and use value as a regular
  * expression to match against stream identifiers.
  *
- * Returns length of connection list response in bytes on sucess and -1 on error.
+ * Return >0 size of response on success
+ * Return  0 for unrecognized path
+ * Return -1 on error
  ***************************************************************************/
 static int
-GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
+GenerateConnections (ClientInfo *cinfo, const char *path, char **response, MediaType *type)
 {
-  struct cthread *loopctp;
-  ClientInfo *tcinfo;
-  hptime_t hpnow;
-  int totalcount = 0;
-  int selectedcount = 0;
-  char conninfo[1024];
-  char *conntype;
-  char conntime[50];
-  char packettime[50];
-  char datastart[50];
-  char dataend[50];
-  char lagstr[5];
-
+  char mypath[101]   = {0};
+  size_t clientcount = 0;
+  size_t responsesize;
   char matchstr[50];
-  char *cp;
   int matchlen = 0;
-  pcre *match = 0;
-  const char *errptr;
-  int erroffset;
 
-  if (!cinfo || !connectionlist || !path)
+  char *cp;
+  char *writeptr    = NULL;
+  int written       = 0;
+  int responsebytes = 0;
+
+  char *json_string;
+
+  if (!cinfo || !path || !response || !type)
     return -1;
 
+  strncpy (mypath, path, sizeof (mypath) - 1);
+
   /* If match parameter is supplied, set reader match to limit streams */
-  if ((cp = strstr (path, "match=")))
+  if ((cp = strstr (mypath, "match=")))
   {
     cp += 6; /* Advance to character after '=' */
 
@@ -1343,119 +1325,112 @@ GenerateConnections (ClientInfo *cinfo, char **connectionlist, char *path)
       matchstr[matchlen] = *cp;
     }
     matchstr[matchlen] = '\0';
-
-    if (matchlen > 0 && cinfo->reader)
-    {
-      RingMatch (cinfo->reader, matchstr);
-    }
   }
 
-  /* Compile match expression supplied with request */
-  if (matchlen > 0)
+  if ((cp = strchr (mypath, '?')))
+    *cp = '\0';
+
+  json_string = info_json (cinfo, PACKAGE "/" VERSION, INFO_CONNECTIONS, (matchlen > 0) ? matchstr : NULL);
+
+  if (!json_string)
+    return -1;
+
+  if (!strcasecmp (mypath, "/connections/json"))
   {
-    match = pcre_compile (matchstr, 0, &errptr, &erroffset, NULL);
-    if (errptr)
-    {
-      lprintf (0, "[%s] Error with pcre_compile: %s", cinfo->hostname, errptr);
-      matchlen = 0;
-    }
+    *response     = json_string;
+    responsebytes = (*response) ? strlen (*response) : 0;
+    *type         = JSON;
   }
-
-  /* Get current time */
-  hpnow = HPnow ();
-
-  /* List connections, lock client list while looping */
-  pthread_mutex_lock (&cthreads_lock);
-  loopctp = cthreads;
-  while (loopctp)
+  else if (!strcasecmp (mypath, "/connections"))
   {
-    /* Skip if client thread is not in ACTIVE state */
-    if (!(loopctp->td->td_flags & TDF_ACTIVE))
+    yyjson_doc *json;
+    yyjson_val *root;
+    yyjson_val *client_array;
+    yyjson_val *client_iter = NULL;
+    size_t idx, max;
+
+    if ((json = yyjson_read (json_string, strlen (json_string), 0)) == NULL)
     {
-      loopctp = loopctp->next;
-      continue;
+      free (json_string);
+      return -1;
     }
+    free (json_string);
+    root = yyjson_doc_get_root (json);
 
-    totalcount++;
-    tcinfo = (ClientInfo *)loopctp->td->td_prvtptr;
+    if ((client_array = yyjson_ptr_get (root, "/connections/client")) != NULL)
+    {
+      clientcount = yyjson_arr_size (client_array);
 
-    /* Check matching expression against the client address string (host:port) and client ID */
-    if (match)
-      if (pcre_exec (match, NULL, tcinfo->hostname, strlen (tcinfo->hostname), 0, 0, NULL, 0) &&
-          pcre_exec (match, NULL, tcinfo->ipstr, strlen (tcinfo->ipstr), 0, 0, NULL, 0) &&
-          pcre_exec (match, NULL, tcinfo->clientid, strlen (tcinfo->clientid), 0, 0, NULL, 0))
+      /* Allocate stream list buffer with maximum expected: 1024 bytes per client */
+      responsesize = clientcount * 1024;
+
+      if (!(*response = (char *)malloc (responsesize)))
       {
-        loopctp = loopctp->next;
-        continue;
+        lprintf (0, "[%s] Error for HTTP CONNECTIONS (cannot allocate response buffer of size %zu)",
+                 cinfo->hostname, responsesize);
+        yyjson_doc_free (json);
+        return -1;
       }
 
-    /* Determine connection type */
-    if (tcinfo->type == CLIENT_DATALINK)
-    {
-      if (tcinfo->websocket)
-        conntype = "WebSocket DataLink";
-      else
-        conntype = "DataLink";
+      writeptr = *response;
+
+      responsebytes = 0;
+
+      yyjson_arr_foreach (client_array, idx, max, client_iter)
+      {
+        written = snprintf (writeptr, responsesize - responsebytes,
+                            "%s [%s:%s]\n"
+                            "  [%s] %s  %s\n"
+                            "  Packet %" PRIu64 " (%s)  Lag %d, %.1f\n"
+                            "  TX %" PRIu64 " packets, %.1f packets/sec  %" PRIu64 " bytes, %.1f bytes/sec\n"
+                            "  RX %" PRIu64 " packets, %.1f packets/sec  %" PRIu64 " bytes, %.1f bytes/sec\n"
+                            "  Stream count: %d\n\n",
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "host"))),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "ip_address"))),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "port"))),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "type"))),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "client_id"))),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "connect_time"))),
+                            yyjson_get_uint (yyjson_obj_get (client_iter, "current_packet")),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "packet_time"))),
+                            yyjson_get_int (yyjson_obj_get (client_iter, "lag_percent")),
+                            yyjson_get_real (yyjson_obj_get (client_iter, "lag_seconds")),
+                            yyjson_get_uint (yyjson_obj_get (client_iter, "transmit_packets")),
+                            yyjson_get_real (yyjson_obj_get (client_iter, "transmit_packet_rate")),
+                            yyjson_get_uint (yyjson_obj_get (client_iter, "transmit_bytes")),
+                            yyjson_get_real (yyjson_obj_get (client_iter, "transmit_byte_rate")),
+                            yyjson_get_uint (yyjson_obj_get (client_iter, "receive_packets")),
+                            yyjson_get_real (yyjson_obj_get (client_iter, "receive_packet_rate")),
+                            yyjson_get_uint (yyjson_obj_get (client_iter, "receive_bytes")),
+                            yyjson_get_real (yyjson_obj_get (client_iter, "receive_byte_rate")),
+                            yyjson_get_int (yyjson_obj_get (client_iter, "stream_count")));
+
+        if ((responsebytes + written) >= responsesize)
+        {
+          lprintf (0, "[%s] Error for HTTP STREAM[ID]S (response buffer overflow)",
+                   cinfo->hostname);
+          yyjson_doc_free (json);
+          return -1;
+        }
+
+        writeptr += written;
+        responsebytes += written;
+      }
+
+      /* Add a final terminator to stream list buffer */
+      *writeptr = '\0';
     }
-    else if (tcinfo->type == CLIENT_SEEDLINK)
-    {
-      if (tcinfo->websocket)
-        conntype = "WebSocket SeedLink";
-      else
-        conntype = "SeedLink";
-    }
-    else
-    {
-      conntype = "Unknown";
-    }
 
-    ms_hptime2mdtimestr (tcinfo->conntime, conntime, 1);
-    ms_hptime2mdtimestr (tcinfo->reader->pkttime, packettime, 1);
-    ms_hptime2mdtimestr (tcinfo->reader->datastart, datastart, 1);
-    ms_hptime2mdtimestr (tcinfo->reader->dataend, dataend, 1);
-
-    if (tcinfo->reader->pktid <= 0)
-      strncpy (lagstr, "-", sizeof (lagstr));
-    else
-      snprintf (lagstr, sizeof (lagstr), "%d%%", tcinfo->percentlag);
-
-    snprintf (conninfo, sizeof (conninfo),
-              "%s [%s:%s]\n"
-              "  [%s] %s  %s\n"
-              "  Packet %" PRId64 " (%s)  Lag %s, %.1f\n"
-              "  TX %" PRId64 " packets, %.1f packets/sec  %" PRId64 " bytes, %.1f bytes/sec\n"
-              "  RX %" PRId64 " packets, %.1f packets/sec  %" PRId64 " bytes, %.1f bytes/sec\n"
-              "  Stream count: %d\n"
-              "  Match: %.50s\n"
-              "  Reject: %.50s\n\n",
-              tcinfo->hostname, tcinfo->ipstr, tcinfo->portstr,
-              conntype, tcinfo->clientid, conntime,
-              tcinfo->reader->pktid, packettime, lagstr,
-              (double)MS_HPTIME2EPOCH ((hpnow - tcinfo->lastxchange)),
-              tcinfo->txpackets[0], tcinfo->txpacketrate, tcinfo->txbytes[0], tcinfo->txbyterate,
-              tcinfo->rxpackets[0], tcinfo->rxpacketrate, tcinfo->rxbytes[0], tcinfo->rxbyterate,
-              tcinfo->streamscount,
-              (tcinfo->matchstr) ? tcinfo->matchstr : "-",
-              (tcinfo->rejectstr) ? tcinfo->rejectstr : "-");
-
-    AddToString (connectionlist, conninfo, "", 0, 8388608);
-
-    selectedcount++;
-    loopctp = loopctp->next;
+    yyjson_doc_free (json);
+    *type = TEXT;
   }
-  pthread_mutex_unlock (&cthreads_lock);
+  else
+  {
+    free (json_string);
+    return 0;
+  }
 
-  snprintf (conninfo, sizeof (conninfo),
-            "%d of %d connections\n",
-            selectedcount, totalcount);
-
-  AddToString (connectionlist, conninfo, "", 0, 8388608);
-
-  /* Free compiled match expression */
-  if (match)
-    pcre_free (match);
-
-  return (*connectionlist) ? strlen (*connectionlist) : 0;
+  return responsebytes;
 } /* End of GenerateConnections() */
 
 /***************************************************************************
@@ -1471,21 +1446,20 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
 {
   FILE *fp = NULL;
   struct stat filestat;
-  char *contenttype = "application/octet-stream";
-  char *response = NULL;
-  char *webpath = NULL;
-  char *filename = NULL;
-  char *indexfile = NULL;
-  char *cp = NULL;
+  MediaType type    = RAW;
+  char *response    = NULL;
+  char *webpath     = NULL;
+  char *filename    = NULL;
+  char *indexfile   = NULL;
+  char *cp          = NULL;
   char filebuffer[65535];
-  size_t bytes;
   size_t length;
 
   if (!path || !cinfo)
     return -1;
 
   /* Build path using web root and resolve absolute */
-  if (asprintf (&webpath, "%s/%s", webroot, path) < 0)
+  if (asprintf (&webpath, "%s/%s", config.webroot, path) < 0)
     return -1;
 
   filename = realpath (webpath, NULL);
@@ -1498,7 +1472,7 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   free (webpath);
 
   /* Sanity check that file is within web root */
-  if (strncmp (webroot, filename, strlen (webroot)))
+  if (strncmp (config.webroot, filename, strlen (config.webroot)))
   {
     lprintf (0, "Refusing to send file outside of WebRoot: %s", filename);
     return -1;
@@ -1529,21 +1503,21 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
     length = strlen (cp);
 
     if (length == 5 && !strcmp (cp, ".html"))
-      contenttype = "text/html";
+      type = HTML;
     else if (length == 4 && !strcmp (cp, ".htm"))
-      contenttype = "text/html";
+      type = HTML;
     else if (length == 4 && !strcmp (cp, ".css"))
-      contenttype = "text/css";
+      type = CSS;
     else if (length == 3 && !strcmp (cp, ".js"))
-      contenttype = "application/javascript";
+      type = JS;
     else if (length == 5 && !strcmp (cp, ".json"))
-      contenttype = "application/json";
+      type = JSON;
     else if (length == 5 && !strcmp (cp, ".text"))
-      contenttype = "text/plain";
+      type = TEXT;
     else if (length == 4 && !strcmp (cp, ".txt"))
-      contenttype = "text/plain";
+      type = TEXT;
     else if (length == 4 && !strcmp (cp, ".xml"))
-      contenttype = "application/xml";
+      type = XML;
   }
 
   if ((fp = fopen (filename, "r")) == NULL)
@@ -1554,26 +1528,20 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   }
 
   /* Create header */
-  if (asprintf (&response,
-                "HTTP/1.1 200\r\n"
-                "Content-Length: %llu\r\n"
-                "Content-Type: %s\n"
-                "%s"
-                "\r\n",
-                (long long unsigned int)filestat.st_size,
-                contenttype,
-                (cinfo->httpheaders) ? cinfo->httpheaders : "") < 0)
+  length = GenerateHeader (cinfo, 200, type, (uint64_t)filestat.st_size, NULL);
+
+  if (length <= 0)
   {
     fclose (fp);
     return -1;
   }
 
   /* Send header and file */
-  SendData (cinfo, response, strlen (response));
+  SendData (cinfo, cinfo->sendbuf, length, 0);
 
-  while ((bytes = fread (filebuffer, 1, sizeof (filebuffer), fp)) > 0)
+  while ((length = fread (filebuffer, 1, sizeof (filebuffer), fp)) > 0)
   {
-    if (SendData (cinfo, filebuffer, bytes) < 0)
+    if (SendData (cinfo, filebuffer, length, 0))
       break;
   }
 
@@ -1602,13 +1570,13 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
                     char *secWebSocketVersionHeader,
                     char *secWebSocketProtocolHeader)
 {
-  char *response = NULL;
+  char *response              = NULL;
   char subprotocolheader[100] = "";
-  unsigned char *keybuf = NULL;
+  unsigned char *keybuf       = NULL;
   uint8_t digest[20];
 
-  int keybufsize;
-  int keylength;
+  size_t keybufsize;
+  size_t keylength;
 
   if (!cinfo || !version)
     return -1;
@@ -1637,7 +1605,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
     if (response)
     {
-      SendData (cinfo, response, strlen (response));
+      SendData (cinfo, response, strlen (response), 0);
       free (response);
     }
 
@@ -1660,7 +1628,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
     if (response)
     {
-      SendData (cinfo, response, strlen (response));
+      SendData (cinfo, response, strlen (response), 0);
       free (response);
     }
 
@@ -1683,7 +1651,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
     if (response)
     {
-      SendData (cinfo, response, strlen (response));
+      SendData (cinfo, response, strlen (response), 0);
       free (response);
     }
 
@@ -1706,7 +1674,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
     if (response)
     {
-      SendData (cinfo, response, strlen (response));
+      SendData (cinfo, response, strlen (response), 0);
       free (response);
     }
 
@@ -1727,7 +1695,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
     if (response)
     {
-      SendData (cinfo, response, strlen (response));
+      SendData (cinfo, response, strlen (response), 0);
       free (response);
     }
 
@@ -1735,11 +1703,11 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   }
 
   /* Allocate space for key + 36 bytes for magic string */
-  keylength = strlen (secWebSocketKeyHeader);
+  keylength  = strlen (secWebSocketKeyHeader);
   keybufsize = keylength + 36;
   if (!(keybuf = (unsigned char *)malloc (keybufsize)))
   {
-    lprintf (0, "Cannot allocate memory for decoded key buffer (%d bytes)", keybufsize);
+    lprintf (0, "Cannot allocate memory for decoded key buffer (%zu bytes)", keybufsize);
     return -1;
   }
 
@@ -1777,7 +1745,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
   if (response)
   {
-    SendData (cinfo, response, strlen (response));
+    SendData (cinfo, response, strlen (response), 0);
     free (response);
   }
   else
@@ -1888,9 +1856,9 @@ sha1digest (uint8_t *digest, char *hexdigest, const uint8_t *data, size_t databy
 
   int32_t wcount;
   uint32_t temp;
-  uint64_t databits = ((uint64_t)databytes) * 8;
-  uint32_t loopcount = (databytes + 8) / 64 + 1;
-  uint32_t tailbytes = 64 * loopcount - databytes;
+  uint64_t databits     = ((uint64_t)databytes) * 8;
+  uint32_t loopcount    = (databytes + 8) / 64 + 1;
+  uint32_t tailbytes    = 64 * loopcount - databytes;
   uint8_t datatail[128] = {0};
 
   if (!digest && !hexdigest)
@@ -1902,15 +1870,15 @@ sha1digest (uint8_t *digest, char *hexdigest, const uint8_t *data, size_t databy
   /* Pre-processing of data tail (includes padding to fill out 512-bit chunk):
      Add bit '1' to end of message (big-endian)
      Add 64-bit message length in bits at very end (big-endian) */
-  datatail[0] = 0x80;
-  datatail[tailbytes - 8] = (uint8_t) (databits >> 56 & 0xFF);
-  datatail[tailbytes - 7] = (uint8_t) (databits >> 48 & 0xFF);
-  datatail[tailbytes - 6] = (uint8_t) (databits >> 40 & 0xFF);
-  datatail[tailbytes - 5] = (uint8_t) (databits >> 32 & 0xFF);
-  datatail[tailbytes - 4] = (uint8_t) (databits >> 24 & 0xFF);
-  datatail[tailbytes - 3] = (uint8_t) (databits >> 16 & 0xFF);
-  datatail[tailbytes - 2] = (uint8_t) (databits >> 8 & 0xFF);
-  datatail[tailbytes - 1] = (uint8_t) (databits >> 0 & 0xFF);
+  datatail[0]             = 0x80;
+  datatail[tailbytes - 8] = (uint8_t)(databits >> 56 & 0xFF);
+  datatail[tailbytes - 7] = (uint8_t)(databits >> 48 & 0xFF);
+  datatail[tailbytes - 6] = (uint8_t)(databits >> 40 & 0xFF);
+  datatail[tailbytes - 5] = (uint8_t)(databits >> 32 & 0xFF);
+  datatail[tailbytes - 4] = (uint8_t)(databits >> 24 & 0xFF);
+  datatail[tailbytes - 3] = (uint8_t)(databits >> 16 & 0xFF);
+  datatail[tailbytes - 2] = (uint8_t)(databits >> 8 & 0xFF);
+  datatail[tailbytes - 1] = (uint8_t)(databits >> 0 & 0xFF);
 
   /* Process each 512-bit chunk */
   for (lidx = 0; lidx < loopcount; lidx++)
@@ -1980,11 +1948,11 @@ sha1digest (uint8_t *digest, char *hexdigest, const uint8_t *data, size_t databy
         k = 0xCA62C1D6;
       }
       temp = SHA1ROTATELEFT (a, 5) + f + e + k + W[idx];
-      e = d;
-      d = c;
-      c = SHA1ROTATELEFT (b, 30);
-      b = a;
-      a = temp;
+      e    = d;
+      d    = c;
+      c    = SHA1ROTATELEFT (b, 30);
+      b    = a;
+      a    = temp;
     }
 
     H[0] += a;
@@ -1999,10 +1967,10 @@ sha1digest (uint8_t *digest, char *hexdigest, const uint8_t *data, size_t databy
   {
     for (idx = 0; idx < 5; idx++)
     {
-      digest[idx * 4 + 0] = (uint8_t) (H[idx] >> 24);
-      digest[idx * 4 + 1] = (uint8_t) (H[idx] >> 16);
-      digest[idx * 4 + 2] = (uint8_t) (H[idx] >> 8);
-      digest[idx * 4 + 3] = (uint8_t) (H[idx]);
+      digest[idx * 4 + 0] = (uint8_t)(H[idx] >> 24);
+      digest[idx * 4 + 1] = (uint8_t)(H[idx] >> 16);
+      digest[idx * 4 + 2] = (uint8_t)(H[idx] >> 8);
+      digest[idx * 4 + 3] = (uint8_t)(H[idx]);
     }
   }
 

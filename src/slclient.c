@@ -5,20 +5,26 @@
  *
  * Mapping SeedLink sequence numbers <-> ring packet ID's:
  *
- * SeedLink sequence numbers are mapped directly to ring packet IDs.
- * With a large ring it is possible to have more IDs than fit into the
- * SeedLink sequence number address space (6 hexidecimal numbers,
- * maximum of 0xFFFFFF which is 16,777,215), an error will be logged
- * when IDs are encountered that are too large to map into a sequence
- * number.
+ * SeedLink v4 sequence numbers are directly mapped to ringer buffer
+ * packet IDs as both are unsigned 64-bt integers.
  *
- * The SeedLink protocol is designed around a multi-ring backend
- * whereas the ringserver implements a single ring.  This is important
- * because a client will request data from network-station rings and
- * optionally specify starting sequence numbers for each ring to
- * resume a connection.  This is handled in this client by determining
- * the most recent packet ID requested by the client and setting the
- * ring to that position.
+ * SeedLink v3 sequence numbers are limited to 24-bit values.  They
+ * are mapped to ring packet IDs by combining the highest 40-bits of
+ * the latest ring packet ID with the 24-bit SeedLink sequence number.
+ * If the packet ID series is well behaved, increasing monotonically,
+ * this will result in v3 clients being able to resume from the last
+ * 16,777,215 packets received.
+ *
+ * The SeedLink protocol is designed with the concept of a station ID
+ * where sequenences may be specific to each station ID.  Ringserver
+ * implements a single buffer with a shared set of sequences for all
+ * streams in the buffer.  This detail is important because a client
+ * can request data from multiple station IDs with each specifying a
+ * starting sequence number to resume a connection.  This is handled
+ * in this client-handler by determining the most recent sequence
+ * requested by the client and setting the ring to that position.  The
+ * rationale is that the client has already received all data up to
+ * the most recent sequence requested during a previous connection.
  *
  * This file is part of the ringserver.
  *
@@ -34,15 +40,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
- * @author Chad Trabant, IRIS Data Management Center
+ * Copyright (C) 2024:
+ * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
-
-/* Unsupported protocol features:
- * CAT listing (oh the irony)
- * INFO GAPS
- * INFO ALL
- */
 
 #include <errno.h>
 #include <fcntl.h>
@@ -55,7 +55,7 @@
 #include <time.h>
 
 #include <libmseed.h>
-#include <mxml.h>
+#include <mseedformat.h>
 
 #include "clients.h"
 #include "generic.h"
@@ -65,28 +65,31 @@
 #include "ring.h"
 #include "ringserver.h"
 #include "slclient.h"
+#include "infojson.h"
+#include "infoxml.h"
 
 /* Define list of valid characters for selectors and station & network codes */
-#define VALIDSELECTCHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?!-"
-#define VALIDNETSTACHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*"
+#define VALIDSELECTCHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_-!"
+#define VALIDSTAIDCHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_"
 
 /* Define the number of no-action loops that trigger the throttle */
 #define THROTTLE_TRIGGER 10
 
 static int HandleNegotiation (ClientInfo *cinfo);
-static int HandleInfo (ClientInfo *cinfo);
-static int SendReply (ClientInfo *cinfo, char *reply, char *extreply);
-static int SendRecord (RingPacket *packet, char *record, int reclen,
+static int HandleInfo_v3 (ClientInfo *cinfo);
+static int HandleInfo_v4 (ClientInfo *cinfo);
+static int SendReply (ClientInfo *cinfo, char *reply, ErrorCode code, char *extreply);
+static int SendPacket (uint64_t pktid, char *payload, uint32_t payloadlen,
+                       const char *staid, char format, char subformat, void *vcinfo);
+static int SendRecord (RingPacket *packet, char *record, uint32_t reclen,
                        void *vcinfo);
-static void SendInfoRecord (char *record, int reclen, void *vcinfo);
-static void FreeStaNode (void *rbnode);
-static void FreeNetStaNode (void *rbnode);
+static void SendInfoRecord (char *record, uint32_t reclen, void *vcinfo);
+static void FreeReqStationID (void *rbnode);
 static int StaKeyCompare (const void *a, const void *b);
-static SLStaNode *GetStaNode (RBTree *tree, const char *net, const char *sta);
-static SLNetStaNode *GetNetStaNode (RBTree *tree, const char *net, const char *sta);
-static int StationToRegex (const char *net, const char *sta, const char *selectors,
+static ReqStationID *GetReqStationID (RBTree *tree, char *staid);
+static int StationToRegex (const char *staid, const char *selectors,
                            char **matchregex, char **rejectregex);
-static int SelectToRegex (const char *net, const char *sta, const char *select,
+static int SelectToRegex (const char *staid, const char *select,
                           char **regex);
 
 /***********************************************************************
@@ -102,10 +105,9 @@ int
 SLHandleCmd (ClientInfo *cinfo)
 {
   SLInfo *slinfo;
-  SLStaKey *stakey;
-  SLStaNode *stanode;
-  int64_t readid;
-  int64_t retval;
+  ReqStationID *stationid;
+  uint64_t readid;
+  uint64_t retval;
 
   if (!cinfo)
     return -1;
@@ -121,7 +123,11 @@ SLHandleCmd (ClientInfo *cinfo)
 
     cinfo->extinfo = slinfo;
 
-    slinfo->stations = RBTreeCreate (StaKeyCompare, free, FreeStaNode);
+    /* Default protocol expectation */
+    slinfo->proto_major = 3;
+    slinfo->proto_minor = 0;
+
+    slinfo->stations = RBTreeCreate (StaKeyCompare, free, FreeReqStationID);
   }
 
   slinfo = (SLInfo *)cinfo->extinfo;
@@ -129,9 +135,19 @@ SLHandleCmd (ClientInfo *cinfo)
   /* Determine if this is an INFO request and handle */
   if (!strncasecmp (cinfo->recvbuf, "INFO", 4))
   {
-    if (HandleInfo (cinfo))
+    if (slinfo->proto_major == 4)
     {
-      return -1;
+      if (HandleInfo_v4 (cinfo))
+      {
+        return -1;
+      }
+    }
+    else
+    {
+      if (HandleInfo_v3 (cinfo))
+      {
+        return -1;
+      }
     }
   }
 
@@ -159,11 +175,11 @@ SLHandleCmd (ClientInfo *cinfo)
     /* If no stations specified convert any global selectors to regexes */
     if (slinfo->stationcount == 0 && slinfo->selectors)
     {
-      if (StationToRegex (NULL, NULL, slinfo->selectors,
+      if (StationToRegex (NULL, slinfo->selectors,
                           &(cinfo->matchstr), &(cinfo->rejectstr)))
       {
         lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
-        SendReply (cinfo, "ERROR", "Error with StationToRegex");
+        SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error with StationToRegex()");
         return -1;
       }
     }
@@ -176,62 +192,61 @@ SLHandleCmd (ClientInfo *cinfo)
     {
       Stack *stack;
       RBNode *rbnode;
-      hptime_t newesttime = 0;
+      nstime_t newesttime = NSTUNSET;
 
       stack = StackCreate ();
       RBBuildStack (slinfo->stations, stack);
 
       while ((rbnode = (RBNode *)StackPop (stack)))
       {
-        stakey = (SLStaKey *)rbnode->key;
-        stanode = (SLStaNode *)rbnode->data;
+        stationid = (ReqStationID *)rbnode->data;
 
         /* Configure regexes for this station */
-        if (StationToRegex (stakey->net, stakey->sta, stanode->selectors,
+        if (StationToRegex ((const char *)rbnode->key, stationid->selectors,
                             &(cinfo->matchstr), &(cinfo->rejectstr)))
         {
           lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
-          SendReply (cinfo, "ERROR", "Error with StationToRegex");
+          SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error with StationToRegex()");
           return -1;
         }
 
         /* Track the widest time window requested */
 
         /* Set or expand the global starttime */
-        if (stanode->starttime != HPTERROR)
+        if (stationid->starttime != NSTUNSET)
         {
           if (!cinfo->starttime)
-            cinfo->starttime = stanode->starttime;
-          else if (cinfo->starttime > stanode->starttime)
-            cinfo->starttime = stanode->starttime;
+            cinfo->starttime = stationid->starttime;
+          else if (cinfo->starttime > stationid->starttime)
+            cinfo->starttime = stationid->starttime;
         }
 
         /* Set or expand the global endtime */
-        if (stanode->endtime != HPTERROR)
+        if (stationid->endtime != NSTUNSET)
         {
           if (!cinfo->endtime)
-            cinfo->endtime = stanode->endtime;
-          else if (cinfo->endtime < stanode->endtime)
-            cinfo->endtime = stanode->endtime;
+            cinfo->endtime = stationid->endtime;
+          else if (cinfo->endtime < stationid->endtime)
+            cinfo->endtime = stationid->endtime;
         }
 
         /* Track the newest packet ID while validating their existence */
-        if (stanode->packetid)
-          retval = RingRead (cinfo->reader, stanode->packetid, &cinfo->packet, 0);
+        if (stationid->packetid != RINGID_NONE)
+          retval = RingRead (cinfo->reader, stationid->packetid, &cinfo->packet, 0);
         else
           retval = 0;
 
         /* Requested packet must be valid and have a matching data start time
          * Limit packet time matching to integer seconds to match SeedLink syntax limits */
-        if (retval == stanode->packetid &&
-            (stanode->datastart == HPTERROR ||
-             (int64_t)(MS_HPTIME2EPOCH(stanode->datastart)) == (int64_t)(MS_HPTIME2EPOCH(cinfo->packet.datastart))))
+        if (retval == stationid->packetid &&
+            (stationid->datastart == NSTUNSET ||
+             (int64_t)(MS_NSTIME2EPOCH (stationid->datastart)) == (int64_t)(MS_NSTIME2EPOCH (cinfo->packet.datastart))))
         {
           /* Use this packet ID if it is newer than any previous newest */
-          if (newesttime == 0 || cinfo->packet.pkttime > newesttime)
+          if (newesttime == NSTUNSET || cinfo->packet.pkttime > newesttime)
           {
-            slinfo->startid = stanode->packetid;
-            newesttime = cinfo->packet.pkttime;
+            slinfo->startid = stationid->packetid;
+            newesttime      = cinfo->packet.pkttime;
           }
         }
       }
@@ -245,22 +260,22 @@ SLHandleCmd (ClientInfo *cinfo)
     /* Position ring to starting packet ID if specified */
     if (slinfo->startid > 0)
     {
-      retval = RingPosition (cinfo->reader, slinfo->startid, HPTERROR);
+      retval = RingPosition (cinfo->reader, slinfo->startid, NSTUNSET);
 
-      if (retval < 0)
+      if (retval == RINGID_ERROR)
       {
-        lprintf (0, "[%s] Error with RingPosition for %" PRId64,
+        lprintf (0, "[%s] Error with RingPosition for %" PRIu64,
                  cinfo->hostname, slinfo->startid);
         return -1;
       }
-      else if (retval == 0)
+      else if (retval == RINGID_NONE)
       {
-        lprintf (0, "[%s] Could not find and position to packet ID: %" PRId64,
+        lprintf (0, "[%s] Could not find and position to packet ID: %" PRIu64,
                  cinfo->hostname, slinfo->startid);
       }
       else
       {
-        lprintf (2, "[%s] Positioned ring to packet ID: %" PRId64,
+        lprintf (2, "[%s] Positioned ring to packet ID: %" PRIu64,
                  cinfo->hostname, slinfo->startid);
       }
     }
@@ -272,7 +287,7 @@ SLHandleCmd (ClientInfo *cinfo)
       {
         lprintf (0, "[%s] Error with RingMatch for (%lu bytes) '%s'",
                  cinfo->hostname, (unsigned long)strlen (cinfo->matchstr), cinfo->matchstr);
-        SendReply (cinfo, "ERROR", "cannot compile matches (combined matches too large?)");
+        SendReply (cinfo, "ERROR", ERROR_INTERNAL, "cannot compile matches (combined matches too large?)");
         return -1;
       }
     }
@@ -284,18 +299,16 @@ SLHandleCmd (ClientInfo *cinfo)
       {
         lprintf (0, "[%s] Error with RingReject for (%lu bytes) '%s'",
                  cinfo->hostname, (unsigned long)strlen (cinfo->rejectstr), cinfo->rejectstr);
-        SendReply (cinfo, "ERROR", "cannot compile rejections (combined rejection too large?)");
+        SendReply (cinfo, "ERROR", ERROR_INTERNAL, "cannot compile rejections (combined rejection too large?)");
         return -1;
       }
     }
 
     /* Set ring position based on time if start time specified and not a packet ID */
-    if (cinfo->starttime && cinfo->starttime != HPTERROR && !slinfo->startid)
+    if (cinfo->starttime && cinfo->starttime != NSTUNSET && !slinfo->startid)
     {
-      char timestr[50];
-
-      ms_hptime2seedtimestr (cinfo->starttime, timestr, 1);
-      readid = 0;
+      char timestr[32];
+      ms_nstime2timestr (cinfo->starttime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
 
       /* Position ring according to start time, use reverse search if limited */
       if (cinfo->timewinlimit == 1.0)
@@ -304,42 +317,41 @@ SLHandleCmd (ClientInfo *cinfo)
       }
       else if (cinfo->timewinlimit < 1.0)
       {
-        int64_t pktlimit = (int64_t) (cinfo->timewinlimit * cinfo->ringparams->maxpackets);
+        uint64_t pktlimit = (uint64_t)(cinfo->timewinlimit * cinfo->ringparams->maxpackets);
 
         readid = RingAfterRev (cinfo->reader, cinfo->starttime, pktlimit, 0);
       }
       else
       {
         lprintf (0, "Time window search limit is invalid: %f", cinfo->timewinlimit);
-        SendReply (cinfo, "ERROR", "time window search limit is invalid");
+        SendReply (cinfo, "ERROR", ERROR_INTERNAL, "time window search limit is invalid");
         return -1;
       }
 
-      if (readid < 0)
+      if (readid == RINGID_ERROR)
       {
-        lprintf (0, "[%s] Error with RingAfter time: %s [%" PRId64 "]",
+        lprintf (0, "[%s] Error with RingAfter[Rev] time: %s [%" PRId64 "]",
                  cinfo->hostname, timestr, cinfo->starttime);
-        SendReply (cinfo, "ERROR", "Error positioning reader to start of time window");
+        SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error positioning reader to start of time window");
         return -1;
       }
-
-      if (readid == 0)
+      else if (readid == RINGID_NONE)
       {
         lprintf (2, "[%s] No packet found for RingAfter time: %s [%" PRId64 "], positioning to next packet",
                  cinfo->hostname, timestr, cinfo->starttime);
-        cinfo->reader->pktid = RINGNEXT;
+        cinfo->reader->pktid = RINGID_NEXT;
       }
       else
       {
-        lprintf (2, "[%s] Positioned to packet %" PRId64 ", first after: %s",
+        lprintf (3, "[%s] Positioned to packet %" PRIu64 ", first after: %s",
                  cinfo->hostname, readid, timestr);
       }
     }
 
     /* Set read position to next packet if not already done */
-    if (cinfo->reader->pktid == 0)
+    if (cinfo->reader->pktid == RINGID_NONE)
     {
-      cinfo->reader->pktid = RINGNEXT;
+      cinfo->reader->pktid = RINGID_NEXT;
     }
 
     lprintf (1, "[%s] Configured ring parameters", cinfo->hostname);
@@ -368,7 +380,7 @@ SLStreamPackets (ClientInfo *cinfo)
 {
   SLInfo *slinfo;
   StreamNode *stream;
-  int64_t readid;
+  uint64_t readid;
   int skiprecord = 0;
   int newstream;
 
@@ -380,21 +392,35 @@ SLStreamPackets (ClientInfo *cinfo)
   /* Read next packet from ring */
   readid = RingReadNext (cinfo->reader, &cinfo->packet, cinfo->packetdata);
 
-  if (readid < 0)
+  if (readid == RINGID_ERROR)
   {
     lprintf (0, "[%s] Error reading next packet from ring", cinfo->hostname);
     return -1;
   }
-  else if (readid > 0 && MS_ISVALIDHEADER (cinfo->packetdata))
+  else if (readid == RINGID_NONE)
   {
-    lprintf (3, "[%s] Read %s (%u bytes) packet ID %" PRId64 " from ring",
+    if (slinfo->dialup)
+    {
+      lprintf (2, "[%s] Dial-up mode reached end of buffer", cinfo->hostname);
+      SendData (cinfo, "END", 3, 0);
+      return -1;
+    }
+    else
+    {
+      return 0;
+    }
+  }
+  else if ((MS2_ISVALIDHEADER (cinfo->packetdata) ||
+            MS3_ISVALIDHEADER (cinfo->packetdata)))
+  {
+    lprintf (3, "[%s] Read %s (%u bytes) packet ID %" PRIu64 " from ring",
              cinfo->hostname, cinfo->packet.streamid, cinfo->packet.datasize, cinfo->packet.pktid);
 
     /* Get (creating if needed) the StreamNode for this streamid */
     if ((stream = GetStreamNode (cinfo->streams, &cinfo->streams_lock,
-                                 cinfo->packet.streamid, &newstream)) == 0)
+                                 cinfo->packet.streamid, &newstream)) == NULL)
     {
-      lprintf (0, "[%s] Error with GetStreamNode for %s",
+      lprintf (0, "[%s] Error with GetStreamNode() for %s",
                cinfo->hostname, cinfo->packet.streamid);
       return -1;
     }
@@ -406,7 +432,7 @@ SLStreamPackets (ClientInfo *cinfo)
     }
 
     /* Perform time-windowing end time checks */
-    if (cinfo->endtime != 0 && cinfo->endtime != HPTERROR)
+    if (cinfo->endtime != 0 && cinfo->endtime != NSTUNSET)
     {
       /* Track count of number of channels for time-windowing */
       slinfo->timewinchannels += newstream;
@@ -431,7 +457,7 @@ SLStreamPackets (ClientInfo *cinfo)
       if (slinfo->timewinchannels <= 0)
       {
         lprintf (2, "[%s] End of time window reached for all channels", cinfo->hostname);
-        SendData (cinfo, "END", 3);
+        SendData (cinfo, "END", 3, 0);
         return -1;
       }
     }
@@ -442,7 +468,7 @@ SLStreamPackets (ClientInfo *cinfo)
       /* Send miniSEED record to client */
       if (SendRecord (&cinfo->packet, cinfo->packetdata, cinfo->packet.datasize, cinfo))
       {
-        if (cinfo->socketerr != 2)
+        if (cinfo->socketerr != -2)
           lprintf (0, "[%s] Error sending record to client", cinfo->hostname);
 
         return -1;
@@ -463,18 +489,11 @@ SLStreamPackets (ClientInfo *cinfo)
     }
     else
     {
-      readid = 0;
+      readid = RINGID_NONE;
     }
   }
-  /* If in dial-up mode check if we are at the end of the ring */
-  else if (readid == 0 && slinfo->dialup)
-  {
-    lprintf (2, "[%s] Dial-up mode reached end of buffer", cinfo->hostname);
-    SendData (cinfo, "END", 3);
-    return -1;
-  }
 
-  return (readid) ? cinfo->packet.datasize : 0;
+  return (readid != RINGID_NONE) ? (int)cinfo->packet.datasize : 0;
 } /* End of SLStreamPackets() */
 
 /***********************************************************************
@@ -494,8 +513,10 @@ SLFree (ClientInfo *cinfo)
   slinfo = (SLInfo *)cinfo->extinfo;
 
   RBTreeDestroy (slinfo->stations);
-  slinfo->stations = 0;
+  slinfo->stations = NULL;
+
   free (slinfo);
+  cinfo->extinfo = NULL;
 
   return;
 } /* End of SLFree() */
@@ -514,15 +535,15 @@ HandleNegotiation (ClientInfo *cinfo)
 {
   SLInfo *slinfo;
   char sendbuffer[400];
-  SLStaNode *stanode;
+  ReqStationID *stationid;
   int fields;
 
-  hptime_t starttime = HPTERROR;
-  hptime_t endtime = HPTERROR;
-  char starttimestr[51];
-  char endtimestr[51];
-  char pattern[9];
-  unsigned int startpacket = 0;
+  nstime_t starttime    = NSTUNSET;
+  nstime_t endtime      = NSTUNSET;
+  char starttimestr[51] = {0};
+  char endtimestr[51]   = {0};
+  char selector[64]     = {0};
+  uint64_t startpacket  = RINGID_NEXT;
 
   char *ptr;
   char OKGO = 1;
@@ -533,15 +554,14 @@ HandleNegotiation (ClientInfo *cinfo)
 
   slinfo = (SLInfo *)cinfo->extinfo;
 
-
-  /* HELLO - Return server version and ID */
+  /* HELLO (v3.x and v4.0) - Return server version and ID */
   if (!strncasecmp (cinfo->recvbuf, "HELLO", 5))
   {
     int bytes;
 
     /* Create and send server version information */
     bytes = snprintf (sendbuffer, sizeof (sendbuffer),
-                      SLSERVERVER "\r\n%s\r\n", serverid);
+                      SLSERVER_ID "\r\n%s\r\n", config.serverid);
 
     if (bytes >= sizeof (sendbuffer))
     {
@@ -549,81 +569,143 @@ HandleNegotiation (ClientInfo *cinfo)
                cinfo->hostname, (int)sizeof (sendbuffer), sendbuffer);
     }
 
-    if (SendData (cinfo, sendbuffer, strlen (sendbuffer)))
+    if (SendData (cinfo, sendbuffer, strlen (sendbuffer), 0))
       return -1;
   }
 
-  /* CAPABILITIES - Parse capabilities flags */
+  /* SLPROTO (v4.0) - Parse requested protocol version */
+  else if (!strncasecmp (cinfo->recvbuf, "SLPROTO", 7))
+  {
+    uint8_t proto_major = 0;
+    uint8_t proto_minor = 0;
+
+    fields = sscanf (cinfo->recvbuf, "%*s %" SCNu8 ".%" SCNu8,
+                     &proto_major, &proto_minor);
+
+    if ((proto_major == 3) ||
+        (proto_major == 4 && proto_minor == 0))
+    {
+      if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
+        return -1;
+
+      slinfo->proto_major = proto_major;
+      slinfo->proto_minor = proto_minor;
+
+      lprintf (2, "[%s] Received %s, protocol accepted", cinfo->hostname, cinfo->recvbuf);
+    }
+    else
+    {
+      lprintf (2, "[%s] Received %s, protocol rejected", cinfo->hostname, cinfo->recvbuf);
+
+      if (!slinfo->batch && SendReply (cinfo, "ERROR UNSUPPORTED unsupported protocol version", ERROR_NONE, NULL))
+        return -1;
+    }
+  }
+
+  /* USERAGENT (v4.0) - Parse user agent command */
+  else if (!strncasecmp (cinfo->recvbuf, "USERAGENT", 9))
+  {
+    ptr = cinfo->recvbuf + 9;
+    while (isspace ((int)*ptr))
+      ptr++;
+
+    strncpy (cinfo->clientid, ptr, sizeof (cinfo->clientid) - 1);
+    cinfo->clientid[sizeof (cinfo->clientid) - 1] = '\0';
+
+    lprintf (2, "[%s] Received USERAGENT (%s)", cinfo->hostname, cinfo->clientid);
+
+    if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
+      return -1;
+  }
+
+  /* CAPABILITIES (v3.x) - Parse capabilities flags */
   else if (!strncasecmp (cinfo->recvbuf, "CAPABILITIES", 12))
   {
-    /* Check for enhanced status flags*/
+    /* Extended reply capability */
     if (strstr (cinfo->recvbuf, "EXTREPLY"))
       slinfo->extreply = 1;
 
-    if (!slinfo->batch && SendReply (cinfo, "OK", 0))
+    if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
       return -1;
   }
 
-  /* CAT - Return ASCII list of stations */
+  /* CAT (v3.x) - Return text list of stations */
   else if (!strncasecmp (cinfo->recvbuf, "CAT", 3))
   {
     snprintf (sendbuffer, sizeof (sendbuffer),
               "CAT command not implemented\r\n");
-    if (SendData (cinfo, sendbuffer, strlen (sendbuffer)))
+
+    if (SendData (cinfo, sendbuffer, strlen (sendbuffer), 0))
       return -1;
   }
 
-  /* BATCH - Batch mode for subsequent commands */
+  /* BATCH (v3.x) - Batch mode for subsequent commands */
   else if (!strncasecmp (cinfo->recvbuf, "BATCH", 5))
   {
     slinfo->batch = 1;
 
-    if (SendReply (cinfo, "OK", 0))
+    if (SendReply (cinfo, "OK", ERROR_NONE, NULL))
       return -1;
   }
 
-  /* STATION sta_code [net_code] - Select specified network and station */
+  /* STATION (v3.x and v4.0) - Select specified station */
   else if (!strncasecmp (cinfo->recvbuf, "STATION", 7))
   {
     OKGO = 1;
 
-    /* Parse station and network from request */
-    slinfo->reqsta[0] = '\0';
-    slinfo->reqnet[0] = '\0';
-    fields = sscanf (cinfo->recvbuf, "%*s %9s %9s %c",
-                     slinfo->reqsta, slinfo->reqnet, &junk);
+    /* Parse station ID from request */
+    slinfo->reqstaid[0] = '\0';
 
-    if (fields == 1)
-      slinfo->reqnet[0] = '\0';
-
-    /* Make sure we got a station code and optionally a network code */
-    if (fields <= 0 || fields > 2)
+    if (slinfo->proto_major == 4)
     {
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", "STATION requires 1 or 2 arguments"))
-        return -1;
+      /* STATION stationID */
+      fields = sscanf (cinfo->recvbuf, "%*s %20s %c", slinfo->reqstaid, &junk);
 
-      OKGO = 0;
+      slinfo->reqstaid[sizeof (slinfo->reqstaid) - 1] = '\0';
+
+      /* Make sure we got a station ID */
+      if (fields != 1)
+      {
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "STATION requires 1 argument"))
+          return -1;
+
+        OKGO = 0;
+      }
+    }
+    else /* Protocol 3.x */
+    {
+      char reqnet[10] = {0};
+      char reqsta[10] = {0};
+
+      /* STATION STA NET */
+      fields = sscanf (cinfo->recvbuf, "%*s %9s %9s %c", reqsta, reqnet, &junk);
+
+      /* Make sure we got a station code and optionally a network code */
+      if (fields < 1 || fields > 2)
+      {
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "STATION requires 1 or 2 arguments"))
+          return -1;
+
+        OKGO = 0;
+      }
+      /* Use wildcard network if not specified */
+      else if (fields == 1)
+      {
+        reqnet[0] = '*';
+        reqnet[1] = '\0';
+      }
+
+      /* Combine network and station codes into station ID */
+      snprintf (slinfo->reqstaid, sizeof (slinfo->reqstaid), "%s_%s", reqnet, reqsta);
     }
 
-    /* Sanity check, only allowed characters in network code */
-    if (OKGO && strspn (slinfo->reqnet, VALIDNETSTACHARS) != strlen (slinfo->reqnet))
-    {
-      lprintf (0, "[%s] Error, requested network code illegal characters: '%s'",
-               cinfo->hostname, slinfo->reqnet);
-
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", "Invalid characters in network code"))
-        return -1;
-
-      OKGO = 0;
-    }
-
-    /* Sanity check, only allowed characters in station code */
-    if (OKGO && strspn (slinfo->reqsta, VALIDNETSTACHARS) != strlen (slinfo->reqsta))
+    /* Sanity check, only allowed characters in station ID */
+    if (OKGO && strspn (slinfo->reqstaid, VALIDSTAIDCHARS) != strlen (slinfo->reqstaid))
     {
       lprintf (0, "[%s] Error, requested station code illegal characters: '%s'",
-               cinfo->hostname, slinfo->reqsta);
+               cinfo->hostname, slinfo->reqstaid);
 
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", "Invalid characters in station code"))
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Invalid characters in station ID"))
         return -1;
 
       OKGO = 0;
@@ -632,15 +714,15 @@ HandleNegotiation (ClientInfo *cinfo)
     if (OKGO)
     {
       /* Add to the stations list */
-      if (!GetStaNode (slinfo->stations, slinfo->reqnet, slinfo->reqsta))
+      if (GetReqStationID (slinfo->stations, slinfo->reqstaid) == NULL)
       {
-        lprintf (0, "[%s] Error in GetStaNode for command STATION", cinfo->hostname);
+        lprintf (0, "[%s] Error in GetReqStationID() for command STATION", cinfo->hostname);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", "Error in GetStaNode"))
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetReqStationID()"))
           return -1;
       }
 
-      if (!slinfo->batch && SendReply (cinfo, "OK", 0))
+      if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
         return -1;
 
       slinfo->stationcount++;
@@ -648,78 +730,115 @@ HandleNegotiation (ClientInfo *cinfo)
     }
   } /* End of STATION */
 
-  /* SELECT [pattern] - Refine selection of channels for STATION */
+  /* SELECT (v3.x and v4.0) - Refine selection of channels for STATION */
   else if (!strncasecmp (cinfo->recvbuf, "SELECT", 6))
   {
     OKGO = 1;
 
     /* Parse pattern from request */
-    pattern[0] = '\0';
-    fields = sscanf (cinfo->recvbuf, "%*s %8s %c", pattern, &junk);
+    fields = sscanf (cinfo->recvbuf, "%*s %63s %c", selector, &junk);
 
     /* Make sure we got a single pattern */
     if (fields != 1)
     {
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", "SELECT requires a single argument"))
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "SELECT requires a single argument"))
         return -1;
 
       OKGO = 0;
     }
 
-    /* Truncate pattern at a '.', DECTOL subtypes are accepted but not supported */
-    if (OKGO && (ptr = strrchr (pattern, '.')))
+    /* For SeedLink v4, check for unsupported filter (conversion) requests */
+    if (OKGO && slinfo->proto_major == 4 && (ptr = strrchr (selector, ':')))
+    {
+      /* Any filter except "native" is not supported */
+      if (strcmp (ptr + 1, "native") != 0)
+      {
+        lprintf (0, "[%s] Error, SELECT filter '%s' not supported", cinfo->hostname, ptr + 1);
+
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Filter not supported"))
+          return -1;
+
+        OKGO = 0;
+      }
+
       *ptr = '\0';
+    }
+
+    /* Truncate pattern at a '.', subtypes are accepted but not supported */
+    if (OKGO && (ptr = strrchr (selector, '.')))
+    {
+      *ptr = '\0';
+    }
+
+    /* Convert v3 style LLCCC selectors to v4 style (FDSN Source ID) for consistency */
+    if (OKGO && slinfo->proto_major == 3)
+    {
+      char newselector[sizeof (selector)];
+      char *negate     = (selector[0] == '!') ? "!" : "";
+      char *v3selector = (selector[0] == '!') ? selector + 1 : selector;
+
+      if (strlen (v3selector) == 5)
+      {
+        snprintf (newselector, sizeof (newselector), "%s%c%c_%c_%c_%c",
+                  negate, v3selector[0], v3selector[1], v3selector[2], v3selector[3], v3selector[4]);
+      }
+      else if (strlen (v3selector) == 3)
+      {
+        snprintf (newselector, sizeof (newselector), "%s??_%c_%c_%c",
+                  negate, v3selector[0], v3selector[1], v3selector[2]);
+      }
+      else
+      {
+        lprintf (0, "[%s] Error, SELECT pattern '%s' is not a valid SeedLink v3 LLCCC or CCC pattern",
+                 cinfo->hostname, selector);
+
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Invalid selector pattern"))
+          return -1;
+
+        OKGO = 0;
+      }
+
+      strncpy (selector, newselector, sizeof (selector));
+    }
 
     /* Sanity check, only allowed characters */
-    if (OKGO && strspn (pattern, VALIDSELECTCHARS) != strlen (pattern))
+    if (OKGO && strspn (selector, VALIDSELECTCHARS) != strlen (selector))
     {
       lprintf (0, "[%s] Error, select pattern contains illegal characters: '%s'",
-               cinfo->hostname, pattern);
+               cinfo->hostname, selector);
 
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", "Selector contains illegal characters"))
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Selector contains illegal characters"))
         return -1;
 
       OKGO = 0;
     }
 
-    /* Sanity check, pattern can only be [!][LL][CCC], 2, 3, 4, 5 or 6 characters */
-    if (OKGO && (strlen (pattern) < 2 || strlen (pattern) > 6))
-    {
-      lprintf (0, "[%s] Error, selector not 2-6 characters: %s",
-               cinfo->hostname, pattern);
-
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", "Selector must be 2-6 characters"))
-        return -1;
-
-      OKGO = 0;
-    }
-
-    /* If modifying a STATION add selector to it's Node */
+    /* If modifying a STATION add selector to it's entry */
     if (OKGO && cinfo->state == STATE_STATION)
     {
-      /* Find the appropriate StaNode */
-      if (!(stanode = GetStaNode (slinfo->stations, slinfo->reqnet, slinfo->reqsta)))
+      /* Find the appropriate station ID */
+      if (!(stationid = GetReqStationID (slinfo->stations, slinfo->reqstaid)))
       {
-        lprintf (0, "[%s] Error in GetStaNode for command SELECT", cinfo->hostname);
+        lprintf (0, "[%s] Error in GetReqStationID() for command SELECT", cinfo->hostname);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", "Error in GetStaNode"))
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetReqStationID()"))
           return -1;
       }
       else
       {
-        /* Add selector to the StaNode.selectors, maximum of SLMAXSELECTLEN bytes */
+        /* Add selector to the station ID selectors, maximum of SLMAXSELECTLEN bytes */
         /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
-        if (AddToString (&(stanode->selectors), pattern, ",", (pattern[0] == '!') ? 0 : 1, SLMAXSELECTLEN))
+        if (AddToString (&(stationid->selectors), selector, ",", (selector[0] == '!') ? 0 : 1, SLMAXSELECTLEN))
         {
-          lprintf (0, "[%s] Error for command SELECT (cannot AddToString), too many selectors for %s.%s",
-                   cinfo->hostname, slinfo->reqnet, slinfo->reqsta);
+          lprintf (0, "[%s] Error for command SELECT (cannot AddToString), too many selectors for %s",
+                   cinfo->hostname, slinfo->reqstaid);
 
-          if (!slinfo->batch && SendReply (cinfo, "ERROR", "Too many selectors for this station"))
+          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Too many selectors for this station"))
             return -1;
         }
         else
         {
-          if (!slinfo->batch && SendReply (cinfo, "OK", "Station specific"))
+          if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
             return -1;
         }
       }
@@ -727,60 +846,106 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Otherwise add selector to global list */
     else if (OKGO)
     {
-      /* Add selector to the SLStaNode.selectors, maximum of SLMAXSELECTLEN bytes */
+      /* Add selector to the  global selectors, maximum of SLMAXSELECTLEN bytes */
       /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
-      if (AddToString (&(slinfo->selectors), pattern, ",", (pattern[0] == '!') ? 0 : 1, SLMAXSELECTLEN))
+      if (AddToString (&(slinfo->selectors), selector, ",", (selector[0] == '!') ? 0 : 1, SLMAXSELECTLEN))
       {
         lprintf (0, "[%s] Error for command SELECT (cannot AddToString), too many global selectors",
                  cinfo->hostname);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", "Too many global selectors"))
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Too many global selectors"))
           return -1;
       }
       else
       {
-        if (!slinfo->batch && SendReply (cinfo, "OK", "All-stations mode"))
+        if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
           return -1;
       }
     }
   } /* End of SELECT */
 
-  /* DATA|FETCH [n [begin_time]] - Request data from a specific packet */
+  /* DATA (v3.x and 4.0) or FETCH (v3.x) - Request data from a specific packet */
   else if (!strncasecmp (cinfo->recvbuf, "DATA", 4) ||
-           !strncasecmp (cinfo->recvbuf, "FETCH", 5))
+           (!strncasecmp (cinfo->recvbuf, "FETCH", 5) && slinfo->proto_major == 3))
   {
-    /* Parse packet and start time from request */
+    /* Parse packet sequence, start and end times from request */
     starttimestr[0] = '\0';
-    fields = sscanf (cinfo->recvbuf, "%*s %x %50s %c",
-                     &startpacket, starttimestr, &junk);
+    endtimestr[0]   = '\0';
+
+    if (slinfo->proto_major == 4)
+    {
+      char seqstr[21] = {0};
+
+      /* DATA [seq_decimal [start [end]]] */
+      fields = sscanf (cinfo->recvbuf, "%*s %20s %50s %50s %c",
+                       seqstr, starttimestr, endtimestr, &junk);
+
+      if (strcmp (seqstr, "ALL") == 0)
+        startpacket = RINGID_EARLIEST;
+      else
+        startpacket = (uint64_t)strtoull (seqstr, NULL, 10);
+    }
+    else /* Protocol 3.x */
+    {
+      uint32_t seq;
+
+      /* DATA|FETCH [seq_hex [start]] */
+      fields = sscanf (cinfo->recvbuf, "%*s %" SCNx32 " %50s %c",
+                       &seq, starttimestr, &junk);
+
+      if (cinfo->ringparams->latestid <= RINGID_MAXIMUM)
+      {
+        /* To map the 24-bit SeedLink v3 sequence into the 64-bit packet ID range
+         * combine the highest 40-bits of latest ID with lowest 24-bits of requested sequence */
+        startpacket = (cinfo->ringparams->latestid & 0xFFFFFFFFFF000000) | (seq & 0xFFFFFF);
+      }
+      else
+      {
+        startpacket = (seq & 0xFFFFFF);
+      }
+    }
 
     /* SeedLink clients resume data flow by requesting: lastpacket + 1
-     * The ring needs to be positioned to the actual last packet ID for RINGNEXT,
-     * so set the starting packet to the last actual packet received by the client. */
-    startpacket = (startpacket == 1) ? cinfo->ringparams->maxpktid : (startpacket - 1);
+     * The ring needs to be positioned to the actual last packet ID for RingReadNext(),
+     * so set the starting packet to the last actual packet received by the client.
+     * An unfortunate side-effect: resuming from sequence 0 is not possible. */
+    if (startpacket < RINGID_MAXIMUM && startpacket > 0)
+      startpacket = startpacket - 1;
 
-    /* Make sure we got zero, one or two arguments */
-    if (fields > 2)
+    /* Make sure we got no extra arguments */
+    if ((slinfo->proto_major == 4 && fields > 3) ||
+        (slinfo->proto_major == 3 && fields > 2))
     {
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", "Too many arguments for DATA/FETCH"))
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Too many arguments for DATA/FETCH"))
         return -1;
 
       OKGO = 0;
     }
 
-    /* Convert time string if supplied */
+    /* Convert start time string if specified */
     if (OKGO && fields == 2)
     {
-      /* Change commas to dashes for parsing routine */
-      while ((ptr = strchr (starttimestr, ',')))
-        *ptr = '-';
-
-      if ((starttime = ms_timestr2hptime (starttimestr)) == HPTERROR)
+      if ((starttime = ms_mdtimestr2nstime (starttimestr)) == NSTERROR)
       {
         lprintf (0, "[%s] Error parsing time in DATA|FETCH: %s",
                  cinfo->hostname, starttimestr);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", "Error parsing start time"))
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Error parsing start time"))
+          return -1;
+
+        OKGO = 0;
+      }
+    }
+
+    /* Convert end time string if specified */
+    if (OKGO && fields == 3)
+    {
+      if ((endtime = ms_mdtimestr2nstime (endtimestr)) == NSTERROR)
+      {
+        lprintf (0, "[%s] Error parsing time in DATA|FETCH: %s",
+                 cinfo->hostname, endtimestr);
+
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Error parsing end time"))
           return -1;
 
         OKGO = 0;
@@ -792,28 +957,29 @@ HandleNegotiation (ClientInfo *cinfo)
     {
       if (fields >= 1)
       {
-        /* Find the appropriate SLStaNode and store the requested ID and time */
-        if (!(stanode = GetStaNode (slinfo->stations, slinfo->reqnet, slinfo->reqsta)))
+        /* Find the appropriate station ID and store the requested ID and time */
+        if (!(stationid = GetReqStationID (slinfo->stations, slinfo->reqstaid)))
         {
-          lprintf (0, "[%s] Error in GetStaNode for command DATA|FETCH",
+          lprintf (0, "[%s] Error in GetReqStationID() for command DATA|FETCH",
                    cinfo->hostname);
 
-          if (!slinfo->batch && SendReply (cinfo, "ERROR", "Error in GetStaNode"))
+          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetReqStationID()"))
             return -1;
 
           OKGO = 0;
         }
         else
         {
-          stanode->packetid = startpacket;
-          stanode->datastart = starttime;
-          stanode->starttime = starttime;
+          stationid->packetid  = startpacket;
+          stationid->datastart = starttime;
+          stationid->starttime = starttime;
+          stationid->endtime   = endtime;
         }
       }
 
       if (OKGO)
       {
-        if (!slinfo->batch && SendReply (cinfo, "OK", 0))
+        if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
           return -1;
 
         /* If any stations use FETCH the connection is dial-up */
@@ -829,8 +995,9 @@ HandleNegotiation (ClientInfo *cinfo)
       /* If no stations yet we are in all-station mode */
       if (slinfo->stationcount == 0 && fields >= 1)
       {
-        slinfo->startid = startpacket;
+        slinfo->startid  = startpacket;
         cinfo->starttime = starttime;
+        cinfo->endtime   = endtime;
       }
 
       /* If FETCH the connection is dial-up */
@@ -842,21 +1009,23 @@ HandleNegotiation (ClientInfo *cinfo)
     }
   } /* End of DATA|FETCH */
 
-  /* TIME [begin_time [end_time]] - Request data in time window */
-  else if (!strncasecmp (cinfo->recvbuf, "TIME", 4))
+  /* TIME (v3.x) - Request data in time window */
+  else if (!strncasecmp (cinfo->recvbuf, "TIME", 4) && slinfo->proto_major == 3)
   {
     OKGO = 1;
 
     /* Parse start and end time from request */
     starttimestr[0] = '\0';
-    endtimestr[0] = '\0';
+    endtimestr[0]   = '\0';
+
+    /* TIME [start_time [end_time]] */
     fields = sscanf (cinfo->recvbuf, "%*s %50s %50s %c",
                      starttimestr, endtimestr, &junk);
 
     /* Make sure we got start time and optionally end time */
     if (fields <= 0 || fields > 2)
     {
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", "TIME command requires 1 or 2 arguments"))
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "TIME command requires 1 or 2 arguments"))
         return -1;
 
       OKGO = 0;
@@ -865,28 +1034,24 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Convert start time string */
     if (OKGO && fields >= 1)
     {
-      /* Change commas to dashes for parsing routine */
-      while ((ptr = strchr (starttimestr, ',')))
-        *ptr = '-';
-
-      if ((starttime = ms_timestr2hptime (starttimestr)) == HPTERROR)
+      if ((starttime = ms_mdtimestr2nstime (starttimestr)) == NSTERROR)
       {
         lprintf (0, "[%s] Error parsing start time for TIME: %s",
                  cinfo->hostname, starttimestr);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", "Error parsing start time"))
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Error parsing start time"))
           return -1;
 
         OKGO = 0;
       }
 
       /* Sanity check for future start time */
-      if ((time_t)MS_HPTIME2EPOCH(starttime) > time(NULL))
+      if ((time_t)MS_NSTIME2EPOCH (starttime) > time (NULL))
       {
         lprintf (0, "[%s] Start cannot be in future for TIME: %s",
                  cinfo->hostname, starttimestr);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", "Start time cannot be in the future"))
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Start time cannot be in the future"))
           return -1;
 
         OKGO = 0;
@@ -896,16 +1061,12 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Convert end time string if supplied */
     if (OKGO && fields == 2)
     {
-      /* Change commas to dashes for parsing routine */
-      while ((ptr = strchr (endtimestr, ',')))
-        *ptr = '-';
-
-      if ((endtime = ms_timestr2hptime (endtimestr)) == HPTERROR)
+      if ((endtime = ms_mdtimestr2nstime (endtimestr)) == NSTERROR)
       {
         lprintf (0, "[%s] Error parsing end time for TIME: %s",
                  cinfo->hostname, endtimestr);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", "Error parsing end time"))
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Error parsing end time"))
           return -1;
 
         OKGO = 0;
@@ -917,27 +1078,27 @@ HandleNegotiation (ClientInfo *cinfo)
     {
       if (fields >= 1)
       {
-        /* Find the appropriate SLStaNode and store the requested times */
-        if (!(stanode = GetStaNode (slinfo->stations, slinfo->reqnet, slinfo->reqsta)))
+        /* Find the appropriate station ID and store the requested times */
+        if (!(stationid = GetReqStationID (slinfo->stations, slinfo->reqstaid)))
         {
-          lprintf (0, "[%s] Error in GetStaNode for command TIME",
+          lprintf (0, "[%s] Error in GetReqStationID() for command TIME",
                    cinfo->hostname);
 
-          if (!slinfo->batch && SendReply (cinfo, "ERROR", "Error in GetStaNode"))
+          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetReqStationID()"))
             return -1;
 
           OKGO = 0;
         }
         else
         {
-          stanode->starttime = starttime;
-          stanode->endtime = endtime;
+          stationid->starttime = starttime;
+          stationid->endtime   = endtime;
         }
       }
 
       if (OKGO)
       {
-        if (!slinfo->batch && SendReply (cinfo, "OK", 0))
+        if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
           return -1;
       }
 
@@ -950,7 +1111,7 @@ HandleNegotiation (ClientInfo *cinfo)
       if (slinfo->stationcount == 0 && fields >= 1)
       {
         cinfo->starttime = starttime;
-        cinfo->endtime = endtime;
+        cinfo->endtime   = endtime;
       }
 
       /* Trigger ring configuration and data flow */
@@ -958,14 +1119,14 @@ HandleNegotiation (ClientInfo *cinfo)
     }
   } /* End of TIME */
 
-  /* END - Stop negotiating, send data */
+  /* END (v3.x and v4.0) - Stop negotiating, send data */
   else if (!strncasecmp (cinfo->recvbuf, "END", 3))
   {
     /* Trigger ring configuration and data flow */
     cinfo->state = STATE_RINGCONFIG;
   }
 
-  /* BYE - End connection */
+  /* BYE (v3.x and v4.0) - End connection */
   else if (!strncasecmp (cinfo->recvbuf, "BYE", 3))
   {
     return -1;
@@ -974,10 +1135,12 @@ HandleNegotiation (ClientInfo *cinfo)
   /* Unrecognized command */
   else
   {
-    lprintf (1, "[%s] Unrecognized command: %.10s",
-             cinfo->hostname, cinfo->recvbuf);
+    snprintf (sendbuffer, sizeof (sendbuffer),
+              "Unrecognized command: %.50s", cinfo->recvbuf);
 
-    if (SendReply (cinfo, "ERROR", "Unrecognized command"))
+    lprintf (1, "[%s] %s", cinfo->hostname, sendbuffer);
+
+    if (SendReply (cinfo, "ERROR", ERROR_UNSUPPORTED, sendbuffer))
       return -1;
   }
 
@@ -985,32 +1148,33 @@ HandleNegotiation (ClientInfo *cinfo)
 } /* End of HandleNegotiation */
 
 /***************************************************************************
- * HandleInfo:
+ * HandleInfo_v3:
  *
- * Handle SeedLink INFO request.  Protocol INFO levels are:
- * ID, CAPABILITIES, STATIONS, STREAMS, GAPS, CONNECTIONS, ALL
+ * Handle SeedLink v3 INFO request.  Supported INFO levels are:
+ * ID, CAPABILITIES, STATIONS, STREAMS, CONNECTIONS
  *
- * Levels GAPS and ALL are not supported.
+ * The response is an XML document encoded in one or more miniSEED records.
  *
  * Returns 0 on success and -1 on error which should disconnect.
  ***************************************************************************/
 static int
-HandleInfo (ClientInfo *cinfo)
+HandleInfo_v3 (ClientInfo *cinfo)
 {
   SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
-  mxml_node_t *xmldoc = 0;
-  mxml_node_t *seedlink = 0;
-  char string[200];
-  char *xmlstr = 0;
+  char *xmlstr = NULL;
   int xmllength;
-  char *level = 0;
-  int infolevel = 0;
-  char errflag = 0;
+  char *level   = NULL;
+  char errflag  = 0;
 
-  char *record = 0;
-  struct fsdh_s *fsdh;
-  struct blkt_1000_s *b1000;
-  uint16_t ushort;
+  char *record = NULL;
+  int8_t swapflag;
+
+  uint16_t year = 0;
+  uint16_t yday = 0;
+  uint8_t hour  = 0;
+  uint8_t min   = 0;
+  uint8_t sec   = 0;
+  uint32_t nsec = 0;
 
   if (!strncasecmp (cinfo->recvbuf, "INFO", 4))
   {
@@ -1023,7 +1187,7 @@ HandleInfo (ClientInfo *cinfo)
   }
   else if (*level == '\0' || *level == '\r' || *level == '\n')
   {
-    lprintf (0, "[%s] HandleInfo: INFO specified without a level", cinfo->hostname);
+    lprintf (0, "[%s] HandleInfo: INFO requested without a level", cinfo->hostname);
     return -1;
   }
   else
@@ -1033,51 +1197,25 @@ HandleInfo (ClientInfo *cinfo)
   }
 
   /* Allocate miniSEED record buffer */
-  if ((record = calloc (1, INFORECSIZE)) == NULL)
+  if ((record = calloc (1, SLINFORECSIZE)) == NULL)
   {
     lprintf (0, "[%s] Error allocating receive buffer", cinfo->hostname);
     return -1;
   }
-
-  /* Initialize the XML response structure */
-  if (!(xmldoc = mxmlNewXML ("1.0")))
-  {
-    lprintf (0, "[%s] Error creating XML document", cinfo->hostname);
-    if (record)
-      free (record);
-    return -1;
-  }
-
-  /* Create seedlink XML element */
-  if (!(seedlink = mxmlNewElement (xmldoc, "seedlink")))
-  {
-    lprintf (0, "[%s] Error creating seedlink XML element", cinfo->hostname);
-    if (xmldoc)
-      mxmlRelease (xmldoc);
-    if (record)
-      free (record);
-    return -1;
-  }
-
-  /* Convert server start time to YYYY-MM-DD HH:MM:SS */
-  ms_hptime2mdtimestr (serverstarttime, string, 0);
-
-  /* All responses, even the error response contain these attributes */
-  mxmlElementSetAttr (seedlink, "software", SLSERVERVER);
-  mxmlElementSetAttr (seedlink, "organization", serverid);
-  mxmlElementSetAttr (seedlink, "started", string);
 
   /* Parse INFO request to determine level */
   if (!strncasecmp (level, "ID", 2))
   {
     /* This is used to "ping" the server so only report at high verbosity */
     lprintf (2, "[%s] Received INFO ID request", cinfo->hostname);
-    infolevel = SLINFO_ID;
+
+    xmlstr = info_xml_slv3_id (cinfo, SLSERVER_ID);
   }
   else if (!strncasecmp (level, "CAPABILITIES", 12))
   {
     lprintf (1, "[%s] Received INFO CAPABILITIES request", cinfo->hostname);
-    infolevel = SLINFO_CAPABILITIES;
+
+    xmlstr = info_xml_slv3_capabilities (cinfo, SLSERVER_ID);
   }
   else if (!strncasecmp (level, "STATIONS", 8))
   {
@@ -1089,7 +1227,8 @@ HandleInfo (ClientInfo *cinfo)
     else
     {
       lprintf (1, "[%s] Received INFO STATIONS request", cinfo->hostname);
-      infolevel = SLINFO_STATIONS;
+
+      xmlstr = info_xml_slv3_stations (cinfo, SLSERVER_ID, 0);
     }
   }
   else if (!strncasecmp (level, "STREAMS", 7))
@@ -1102,13 +1241,9 @@ HandleInfo (ClientInfo *cinfo)
     else
     {
       lprintf (1, "[%s] Received INFO STREAMS request", cinfo->hostname);
-      infolevel = SLINFO_STREAMS;
+
+      xmlstr = info_xml_slv3_stations (cinfo, SLSERVER_ID, 1);
     }
-  }
-  else if (!strncasecmp (level, "GAPS", 7))
-  {
-    lprintf (1, "[%s] Received INFO GAPS request, unsupported", cinfo->hostname);
-    errflag = 1;
   }
   else if (!strncasecmp (level, "CONNECTIONS", 11))
   {
@@ -1120,408 +1255,23 @@ HandleInfo (ClientInfo *cinfo)
     else
     {
       lprintf (1, "[%s] Received INFO CONNECTIONS request", cinfo->hostname);
-      infolevel = SLINFO_CONNECTIONS;
+
+      xmlstr = info_xml_slv3_connections (cinfo, SLSERVER_ID);
     }
-  }
-  else if (!strncasecmp (level, "ALL", 3))
-  {
-    lprintf (1, "[%s] Received INFO ALL request, unsupported", cinfo->hostname);
-    errflag = 1;
   }
   /* Unrecognized INFO request */
   else
   {
-    lprintf (0, "[%s] Unrecognized INFO level: %s", cinfo->hostname, level);
+    lprintf (0, "[%s] Unrecognized/unsupported INFO level: %s", cinfo->hostname, level);
+
+    xmlstr = info_xml_slv3_id (cinfo, SLSERVER_ID);
     errflag = 1;
   }
 
-  /* Add contents to the XML structure depending on info level */
 
-  /* CAPABILITIES */
-  if (infolevel == SLINFO_CAPABILITIES)
+  /* Pack XML into miniSEED and send to client */
+  if (xmlstr)
   {
-    int idx;
-    mxml_node_t *capability;
-    char *caps[10] = {"dialup", "multistation", "window-extraction", "info:id",
-                      "info:capabilities", "info:stations", "info:streams",
-                      "info:gaps", "info:connections", "info:all"};
-
-    lprintf (1, "[%s] Received INFO CAPABILITIES request", cinfo->hostname);
-    infolevel = SLINFO_CAPABILITIES;
-
-    for (idx = 0; idx < 10; idx++)
-    {
-      if (!(capability = mxmlNewElement (seedlink, "capability")))
-      {
-        lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-        errflag = 1;
-      }
-
-      mxmlElementSetAttr (capability, "name", caps[idx]);
-    }
-  } /* End of CAPABILITIES request processing */
-  /* STATIONS */
-  else if (infolevel == SLINFO_STATIONS)
-  {
-    mxml_node_t *station;
-    Stack *streams;
-    RingStream *stream;
-
-    RBTree *netsta;
-    Stack *netstas;
-    SLNetStaNode *netstanode;
-    RBNode *tnode;
-
-    char net[10], sta[10];
-
-    /* Get copy of streams as a Stack */
-    if (!(streams = GetStreamsStack (cinfo->ringparams, cinfo->reader)))
-    {
-      lprintf (0, "[%s] Error getting streams", cinfo->hostname);
-      errflag = 1;
-    }
-    else
-    {
-      netsta = RBTreeCreate (StaKeyCompare, free, FreeNetStaNode);
-
-      /* Loop through the streams and build a network-station tree */
-      while ((stream = (RingStream *)StackPop (streams)))
-      {
-        /* Split the streamid to get the network and station codes,
-           assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
-        if (SplitStreamID (stream->streamid, '_', 10, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
-        {
-          lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
-          return -1;
-        }
-
-        /* Find or create new netsta entry */
-        netstanode = GetNetStaNode (netsta, net, sta);
-
-        /* Check and update network-station values */
-        if (netstanode)
-        {
-          if (!netstanode->earliestdstime || netstanode->earliestdstime > stream->earliestdstime)
-          {
-            netstanode->earliestdstime = stream->earliestdstime;
-            netstanode->earliestid = stream->earliestid;
-          }
-          if (!netstanode->latestdstime || netstanode->latestdstime < stream->latestdstime)
-          {
-            netstanode->latestdstime = stream->latestdstime;
-            netstanode->latestid = stream->latestid;
-          }
-        }
-        else
-        {
-          lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
-          return -1;
-        }
-
-        /* Free the popped Stack entry */
-        free (stream);
-      }
-
-      /* Free the remaining stream Stack memory */
-      StackDestroy (streams, free);
-
-      /* Create Stack of network-station entries */
-      netstas = StackCreate ();
-      RBBuildStack (netsta, netstas);
-
-      /* Loop through array entries adding "station" elements */
-      while ((tnode = (RBNode *)StackPop (netstas)))
-      {
-        netstanode = (SLNetStaNode *)tnode->data;
-
-        if (!(station = mxmlNewElement (seedlink, "station")))
-        {
-          lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-          errflag = 1;
-        }
-        else
-        {
-          mxmlElementSetAttr (station, "name", netstanode->sta);
-          mxmlElementSetAttr (station, "network", netstanode->net);
-          mxmlElementSetAttrf (station, "description", "%s Station", netstanode->net);
-          mxmlElementSetAttrf (station, "begin_seq", "%06" PRIX64, netstanode->earliestid);
-          mxmlElementSetAttrf (station, "end_seq", "%06" PRIX64, netstanode->latestid);
-        }
-      }
-
-      /* Cleanup network-station structures */
-      RBTreeDestroy (netsta);
-      StackDestroy (netstas, 0);
-    }
-  } /* End of STATIONS request processing */
-  /* STREAMS */
-  else if (infolevel == SLINFO_STREAMS)
-  {
-    mxml_node_t *station;
-    mxml_node_t *streamxml;
-    Stack *streams;
-    RingStream *stream;
-
-    RBTree *netsta;
-    Stack *netstas;
-    SLNetStaNode *netstanode;
-    RBNode *tnode;
-
-    char net[10], sta[10], loc[10], chan[10];
-
-    /* Get streams as a Stack (this is copied data) */
-    if (!(streams = GetStreamsStack (cinfo->ringparams, cinfo->reader)))
-    {
-      lprintf (0, "[%s] Error getting streams", cinfo->hostname);
-      errflag = 1;
-    }
-    else
-    {
-      netsta = RBTreeCreate (StaKeyCompare, free, FreeNetStaNode);
-
-      /* Loop through the streams and build a network-station tree with associated streams */
-      while ((stream = (RingStream *)StackPop (streams)))
-      {
-        /* Split the streamid to get the network and station codes,
-           assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
-        if (SplitStreamID (stream->streamid, '_', 10, net, sta, NULL, NULL, NULL, NULL, NULL) != 2)
-        {
-          lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
-          return -1;
-        }
-
-        /* Find or create new netsta entry */
-        netstanode = GetNetStaNode (netsta, net, sta);
-
-        if (netstanode)
-        {
-          /* Add stream to associated streams stack */
-          StackUnshift (netstanode->streams, stream);
-
-          /* Check and update network-station earliest/latest values */
-          if (!netstanode->earliestdstime || netstanode->earliestdstime > stream->earliestdstime)
-          {
-            netstanode->earliestdstime = stream->earliestdstime;
-            netstanode->earliestid = stream->earliestid;
-          }
-          if (!netstanode->latestdstime || netstanode->latestdstime < stream->latestdstime)
-          {
-            netstanode->latestdstime = stream->latestdstime;
-            netstanode->latestid = stream->latestid;
-          }
-        }
-        else
-        {
-          lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
-          return -1;
-        }
-      }
-
-      /* Create Stack of network-station entries */
-      netstas = StackCreate ();
-      RBBuildStack (netsta, netstas);
-
-      /* Traverse network-station entries creating "station" elements */
-      while ((tnode = (RBNode *)StackPop (netstas)))
-      {
-        netstanode = (SLNetStaNode *)tnode->data;
-
-        if (!(station = mxmlNewElement (seedlink, "station")))
-        {
-          lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-          errflag = 1;
-        }
-        else
-        {
-          mxmlElementSetAttr (station, "name", netstanode->sta);
-          mxmlElementSetAttr (station, "network", netstanode->net);
-          mxmlElementSetAttrf (station, "description", "%s Station", netstanode->net);
-          mxmlElementSetAttrf (station, "begin_seq", "%06" PRIX64, netstanode->earliestid);
-          mxmlElementSetAttrf (station, "end_seq", "%06" PRIX64, netstanode->latestid);
-          mxmlElementSetAttr (station, "stream_check", "enabled");
-
-          /* Traverse associated streams to find locations and channels creating "stream" elements */
-          while ((stream = (RingStream *)StackPop (netstanode->streams)))
-          {
-            /* Split the streamid to get the network, station, location & channel codes
-               assumed stream pattern: "NET_STA_LOC_CHAN/MSEED" */
-            if (SplitStreamID (stream->streamid, '_', 10, net, sta, loc, chan, NULL, NULL, NULL) != 4)
-            {
-              lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, stream->streamid);
-              return -1;
-            }
-
-            if (!(streamxml = mxmlNewElement (station, "stream")))
-            {
-              lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-              errflag = 1;
-            }
-            else
-            {
-              mxmlElementSetAttr (streamxml, "location", loc);
-              mxmlElementSetAttr (streamxml, "seedname", chan);
-              mxmlElementSetAttr (streamxml, "type", "D");
-
-              /* Convert earliest and latest times to YYYY-MM-DD HH:MM:SS and add them */
-              ms_hptime2mdtimestr (stream->earliestdstime, string, 0);
-              mxmlElementSetAttr (streamxml, "begin_time", string);
-              ms_hptime2mdtimestr (stream->latestdetime, string, 0);
-              mxmlElementSetAttr (streamxml, "end_time", string);
-            }
-
-            /* Free the RingStream entry, this is a copy from GetStreamsStack() above */
-            free (stream);
-          }
-        }
-      }
-
-      /* Cleanup network-station structures */
-      RBTreeDestroy (netsta);
-      StackDestroy (netstas, 0);
-      StackDestroy (streams, 0);
-    }
-  } /* End of STREAMS request processing */
-  /* CONNECTIONS */
-  else if (infolevel == SLINFO_CONNECTIONS)
-  {
-    struct cthread *loopctp;
-    mxml_node_t *station, *connection, *window, *selector;
-    ClientInfo *tcinfo;
-    SLInfo *tslinfo;
-
-    /* Loop through client connections, lock client list while looping  */
-    pthread_mutex_lock (&cthreads_lock);
-    loopctp = cthreads;
-    while (loopctp)
-    {
-      /* Skip if client thread is not in ACTIVE state */
-      if (!(loopctp->td->td_flags & TDF_ACTIVE))
-      {
-        loopctp = loopctp->next;
-        continue;
-      }
-
-      tcinfo = (ClientInfo *)loopctp->td->td_prvtptr;
-      tslinfo = (tcinfo->type == CLIENT_SEEDLINK) ? (SLInfo *)tcinfo->extinfo : 0;
-
-      if (!(station = mxmlNewElement (seedlink, "station")))
-      {
-        lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-        errflag = 1;
-      }
-      else
-      {
-        mxmlElementSetAttr (station, "name", "CLIENT");
-        if (tcinfo->type == CLIENT_DATALINK)
-          mxmlElementSetAttr (station, "network", "DL");
-        else if (tcinfo->type == CLIENT_SEEDLINK)
-          mxmlElementSetAttr (station, "network", "SL");
-        else
-          mxmlElementSetAttr (station, "network", "RS");
-        mxmlElementSetAttr (station, "description", "Ringserver Client");
-        mxmlElementSetAttrf (station, "begin_seq", "%06" PRIX64, tcinfo->ringparams->earliestid);
-        mxmlElementSetAttrf (station, "end_seq", "%06" PRIX64, tcinfo->ringparams->latestid);
-        mxmlElementSetAttr (station, "stream_check", "enabled");
-
-        /* Add a "connection" element */
-        if (!(connection = mxmlNewElement (station, "connection")))
-        {
-          lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-          errflag = 1;
-        }
-        else
-        {
-          mxmlElementSetAttr (connection, "host", tcinfo->ipstr);
-          mxmlElementSetAttr (connection, "port", tcinfo->portstr);
-
-          /* Convert connect time to YYYY-MM-DD HH:MM:SS */
-          ms_hptime2mdtimestr (tcinfo->conntime, string, 0);
-          mxmlElementSetAttr (connection, "ctime", string);
-          mxmlElementSetAttr (connection, "begin_seq", "0");
-
-          if (tcinfo->reader->pktid <= 0)
-            mxmlElementSetAttr (connection, "current_seq", "unset");
-          else
-            mxmlElementSetAttrf (connection, "current_seq", "%06" PRIX64, tcinfo->reader->pktid);
-
-          mxmlElementSetAttr (connection, "sequence_gaps", "0");
-          mxmlElementSetAttrf (connection, "txcount", "%" PRIu64, tcinfo->txpackets[0]);
-          mxmlElementSetAttrf (connection, "totBytes", "%" PRIu64, tcinfo->txbytes[0]);
-          mxmlElementSetAttr (connection, "begin_seq_valid", "yes");
-          mxmlElementSetAttr (connection, "realtime", "yes");
-          mxmlElementSetAttr (connection, "end_of_data", "no");
-
-          /* Add "window" element if start or end times are set */
-          if (tcinfo->starttime || tcinfo->endtime)
-          {
-            if (!(window = mxmlNewElement (connection, "window")))
-            {
-              lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-              errflag = 1;
-            }
-            else
-            {
-              /* Convert start & end time to YYYY-MM-DD HH:MM:SS or "unset" */
-              if (tcinfo->starttime)
-                ms_hptime2mdtimestr (tcinfo->starttime, string, 0);
-              else
-                strncpy (string, "unset", sizeof (string));
-
-              mxmlElementSetAttr (window, "begin_time", string);
-
-              if (tcinfo->endtime)
-                ms_hptime2mdtimestr (tcinfo->endtime, string, 0);
-              else
-                strncpy (string, "unset", sizeof (string));
-
-              mxmlElementSetAttr (window, "end_time", string);
-            }
-          }
-
-          /* Add "selector" element if match or reject strings are set */
-          if (tcinfo->matchstr || tcinfo->rejectstr)
-          {
-            if (!(selector = mxmlNewElement (connection, "selector")))
-            {
-              lprintf (0, "[%s] Error adding child to XML INFO response", cinfo->hostname);
-              errflag = 1;
-            }
-            else
-            {
-              if (tslinfo && tslinfo->selectors)
-                mxmlElementSetAttr (selector, "pattern", tslinfo->selectors);
-              if (tcinfo->matchstr)
-                mxmlElementSetAttr (selector, "match", tcinfo->matchstr);
-              if (tcinfo->rejectstr)
-                mxmlElementSetAttr (selector, "reject", tcinfo->rejectstr);
-            }
-          }
-        }
-      }
-
-      loopctp = loopctp->next;
-    }
-    pthread_mutex_unlock (&cthreads_lock);
-
-  } /* End of CONNECTIONS request processing */
-
-  /* Convert to XML string, pack into miniSEED and send to client */
-  if (xmldoc)
-  {
-    /* Do not wrap the output XML */
-    mxmlSetWrapMargin (0);
-
-    /* Convert to XML string */
-    if (!(xmlstr = mxmlSaveAllocString (xmldoc, MXML_NO_CALLBACK)))
-    {
-      lprintf (0, "[%s] Error with mxmlSaveAllocString()", cinfo->hostname);
-      if (xmldoc)
-        mxmlRelease (xmldoc);
-      if (record)
-        free (record);
-      return -1;
-    }
-
     /* Trim final newline character if present */
     xmllength = strlen (xmlstr);
     if (xmlstr[xmllength - 1] == '\n')
@@ -1530,53 +1280,44 @@ HandleInfo (ClientInfo *cinfo)
       xmllength--;
     }
 
-    /* Set up encapsulating miniSEED record template */
-    fsdh = (struct fsdh_s *)record;
+    /* Check to see if byte swapping is needed, miniSEED 2 is written big endian */
+    swapflag = (ms_bigendianhost ()) ? 0 : 1;
 
-    /* Create miniSEED header primitive for 512-byte, ASCII encoded,
-     * host byte-order, 0 sample rate record, including a Blockette 1000.
-     * This leaves 456 bytes in each record for ASCII data. */
-    fsdh->dataquality = 'D';
-    fsdh->reserved = ' ';
-    memcpy (fsdh->station, "INFO ", 5);
-    memcpy (fsdh->location, "  ", 2);
-    memcpy (fsdh->channel, (errflag) ? "ERR" : "INF", 3);
-    memcpy (fsdh->network, "SL", 2);
-    ms_hptime2btime (HPnow (), &(fsdh->start_time));
-    fsdh->samprate_fact = 0;
-    fsdh->samprate_mult = 0;
-    fsdh->act_flags = 0;
-    fsdh->io_flags = 0;
-    fsdh->dq_flags = 0;
-    fsdh->numblockettes = 1;
-    fsdh->time_correct = 0;
-    fsdh->data_offset = 56;
-    fsdh->blockette_offset = 48;
+    ms_nstime2time (NSnow (), &year, &yday, &hour, &min, &sec, &nsec);
 
-    /* Create Blockette 1000 header at byte 48 */
-    ushort = 1000;
-    memcpy (record + 48, &ushort, 2);
-    ushort = 0;
-    memcpy (record + 50, &ushort, 2);
+    /* Build Fixed Section Data Header */
+    memcpy (pMS2FSDH_SEQNUM (record), "000000", 6);
+    *pMS2FSDH_DATAQUALITY (record) = 'D';
+    *pMS2FSDH_RESERVED (record)    = ' ';
+    memcpy (pMS2FSDH_STATION (record), "INFO ", 5);
+    memcpy (pMS2FSDH_LOCATION (record), "  ", 2);
+    memcpy (pMS2FSDH_CHANNEL (record), (errflag) ? "ERR" : "INF", 3);
+    memcpy (pMS2FSDH_NETWORK (record), "XX", 2);
+    *pMS2FSDH_YEAR (record)            = HO2u (year, swapflag);
+    *pMS2FSDH_DAY (record)             = HO2u (yday, swapflag);
+    *pMS2FSDH_HOUR (record)            = hour;
+    *pMS2FSDH_MIN (record)             = min;
+    *pMS2FSDH_SEC (record)             = sec;
+    *pMS2FSDH_UNUSED (record)          = 0;
+    *pMS2FSDH_FSEC (record)            = 0;
+    *pMS2FSDH_NUMSAMPLES (record)      = 0;
+    *pMS2FSDH_SAMPLERATEFACT (record)  = 0;
+    *pMS2FSDH_SAMPLERATEMULT (record)  = 0;
+    *pMS2FSDH_ACTFLAGS (record)        = 0;
+    *pMS2FSDH_IOFLAGS (record)         = 0;
+    *pMS2FSDH_DQFLAGS (record)         = 0;
+    *pMS2FSDH_NUMBLOCKETTES (record)   = 1;
+    *pMS2FSDH_TIMECORRECT (record)     = 0;
+    *pMS2FSDH_DATAOFFSET (record)      = HO2u (56, swapflag);
+    *pMS2FSDH_BLOCKETTEOFFSET (record) = HO2u (48, swapflag);
 
-    /* Create Blockette 1000 body at byte 52 */
-    b1000 = (struct blkt_1000_s *)(record + 52);
-    b1000->encoding = DE_ASCII;
-    b1000->byteorder = 1;
-    b1000->reclen = 9;
-    b1000->reserved = 0;
-
-    /* Make sure data records are in big-endian byte order */
-    if (!ms_bigendianhost ())
-    {
-      MS_SWAPBTIME (&fsdh->start_time);
-      ms_gswap2 (&fsdh->data_offset);
-      ms_gswap2 (&fsdh->blockette_offset);
-
-      /* Blockette 1000 type and next values */
-      ms_gswap2 (record + 48);
-      ms_gswap2 (record + 50);
-    }
+    /* Build Blockette 1000 */
+    *pMS2B1000_TYPE (record + 48)      = HO2u (1000, swapflag);
+    *pMS2B1000_NEXT (record + 48)      = 0;
+    *pMS2B1000_ENCODING (record + 48)  = DE_TEXT;
+    *pMS2B1000_BYTEORDER (record + 48) = 1; /* 1 = big endian */
+    *pMS2B1000_RECLEN (record + 48)    = 9; /* 2^9 = 512 byte record */
+    *pMS2B1000_RESERVED (record + 48)  = 0;
 
     /* Pack all XML into 512-byte records and send to client */
     if (!cinfo->socketerr)
@@ -1591,12 +1332,10 @@ HandleInfo (ClientInfo *cinfo)
         nsamps = ((xmllength - offset) > 456) ? 456 : (xmllength - offset);
 
         /* Update sequence number and number of samples */
-        snprintf (seqnumstr, sizeof(seqnumstr), "%06d", seqnum);
-        memcpy (fsdh->sequence_number, seqnumstr, 6);
+        snprintf (seqnumstr, sizeof (seqnumstr), "%06d", seqnum);
+        memcpy (pMS2FSDH_SEQNUM (record), seqnumstr, 6);
 
-        fsdh->numsamples = nsamps;
-        if (!ms_bigendianhost ())
-          ms_gswap2 (&fsdh->numsamples);
+        *pMS2FSDH_NUMSAMPLES (record) = HO2u (nsamps, swapflag);
 
         /* Copy XML data into record */
         memcpy (record + 56, xmlstr + offset, nsamps);
@@ -1621,15 +1360,12 @@ HandleInfo (ClientInfo *cinfo)
           slinfo->terminfo = 0;
 
         /* Send INFO record to client, blind toss */
-        SendInfoRecord (record, INFORECSIZE, cinfo);
+        SendInfoRecord (record, SLINFORECSIZE, cinfo);
       }
     }
   }
 
   /* Free allocated memory */
-  if (xmldoc)
-    mxmlRelease (xmldoc);
-
   if (xmlstr)
     free (xmlstr);
 
@@ -1637,7 +1373,144 @@ HandleInfo (ClientInfo *cinfo)
     free (record);
 
   return (cinfo->socketerr) ? -1 : 0;
-} /* End of HandleInfo */
+} /* End of HandleInfo_v3 */
+
+/***************************************************************************
+ * HandleInfo_v4:
+ *
+ * Handle SeedLink v4 INFO request.  Protocol INFO levels are:
+ * ID, FORMATS, CAPABILITIES, STATIONS, STREAMS, CONNECTIONS.
+ *
+ * The response is an JSON document encoded.
+ *
+ * Returns 0 on success and -1 on error which should disconnect.
+ ***************************************************************************/
+static int
+HandleInfo_v4 (ClientInfo *cinfo)
+{
+  char *json_string = NULL;
+  char item[64]     = {0};
+  char station[64]  = {0};
+  char stream[64]   = {0};
+  char *matchregex  = NULL;
+  char *rejectregex = NULL;
+  char junk;
+  int fields;
+  int errflag = 0;
+
+  if (strncasecmp (cinfo->recvbuf, "INFO", 4) != 0)
+  {
+    lprintf (0, "[%s] %s() cannot detect INFO", __func__, cinfo->hostname);
+    return -1;
+  }
+
+  /* Parse INFO item and optional station and stream patterns */
+  fields = sscanf (cinfo->recvbuf, "%*s %63s %63s %63s %c", item, station, stream, &junk);
+
+  if (fields == 0)
+  {
+    lprintf (0, "[%s] INFO requested without a level", cinfo->hostname);
+
+    json_string = error_json (cinfo, SLSERVER_ID, "ARGUMENTS", "No INFO item specified");
+    errflag = 1;
+  }
+  else if (!strncasecmp (item, "ID", 2))
+  {
+    /* This is used to "ping" the server so only report at high verbosity */
+    lprintf (2, "[%s] Received INFO ID request", cinfo->hostname);
+
+    json_string = info_json (cinfo, SLSERVER_ID, INFO_ID, NULL);
+  }
+  else if (!strncasecmp (item, "CAPABILITIES", 12))
+  {
+    lprintf (1, "[%s] Received INFO CAPABILITIES request", cinfo->hostname);
+
+    json_string = info_json (cinfo, SLSERVER_ID, INFO_CAPABILITIES, NULL);
+  }
+  else if (!strncasecmp (item, "FORMATS", 7))
+  {
+    lprintf (1, "[%s] Received INFO FORMATS request", cinfo->hostname);
+
+    json_string = info_json (cinfo, SLSERVER_ID, INFO_FORMATS | INFO_FILTERS, NULL);
+  }
+  else if (!strncasecmp (item, "STATIONS", 8))
+  {
+    lprintf (1, "[%s] Received INFO STATIONS request", cinfo->hostname);
+
+    /* Configure regex for matching included station and stream patterns */
+    if (station[0] != '\0')
+    {
+      if (StationToRegex (station, (stream[0] != '\0') ? stream : NULL,
+                          &matchregex, &rejectregex))
+      {
+        lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
+        SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error with StationToRegex()");
+        return -1;
+      }
+    }
+
+    json_string = info_json (cinfo, SLSERVER_ID, INFO_STATIONS, matchregex);
+  }
+  else if (!strncasecmp (item, "STREAMS", 7))
+  {
+    lprintf (1, "[%s] Received INFO STREAMS request", cinfo->hostname);
+
+    /* Configure regex for matching included station and stream patterns */
+    if (station[0] != '\0')
+    {
+      if (StationToRegex (station, (stream[0] != '\0') ? stream : NULL,
+                          &matchregex, &rejectregex))
+      {
+        lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
+        SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error with StationToRegex()");
+        return -1;
+      }
+    }
+
+    json_string = info_json (cinfo, SLSERVER_ID, INFO_STATION_STREAMS, matchregex);
+  }
+  else if (!strncasecmp (item, "CONNECTIONS", 11))
+  {
+    if (!cinfo->trusted)
+    {
+      lprintf (1, "[%s] Refusing INFO CONNECTIONS request from un-trusted client", cinfo->hostname);
+      json_string = error_json (cinfo, SLSERVER_ID, "UNAUTHORIZED", "Client is not authorized to request connections");
+      errflag = 1;
+    }
+    else
+    {
+      lprintf (1, "[%s] Received INFO CONNECTIONS request", cinfo->hostname);
+
+      json_string = info_json (cinfo, SLSERVER_ID, INFO_CONNECTIONS,
+                               (station[0] != '\0') ? station : NULL);
+    }
+  }
+  /* Unrecognized INFO request */
+  else
+  {
+    json_string = error_json (cinfo, SLSERVER_ID, "ARGUMENTS", "Unrecognized INFO item");
+    errflag = 1;
+
+    lprintf (0, "[%s] Unrecognized INFO item: %s", cinfo->hostname, item);
+  }
+
+  /* Send INFO response to client */
+  if (json_string)
+  {
+    SendPacket (0, json_string, strlen (json_string), "", 'J', (errflag) ? 'E' : 'I', cinfo);
+  }
+  else
+  {
+    lprintf (0, "[%s] Error creating INFO response", cinfo->hostname);
+  }
+
+  /* Free allocated memory */
+  free (json_string);
+  free (matchregex);
+  free (rejectregex);
+
+  return (cinfo->socketerr) ? -1 : 0;
+} /* End of HandleInfo_v4 */
 
 /***************************************************************************
  * SendReply:
@@ -1652,23 +1525,124 @@ HandleInfo (ClientInfo *cinfo)
  * Returns 0 on success and -1 on error.
  ***************************************************************************/
 static int
-SendReply (ClientInfo *cinfo, char *reply, char *extreply)
+SendReply (ClientInfo *cinfo, char *reply, ErrorCode code, char *extreply)
 {
   SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
   char sendstr[100];
+  char *codestr;
+
+  switch (code)
+  {
+  case ERROR_INTERNAL:
+    codestr = "INTERNAL";
+    break;
+  case ERROR_UNSUPPORTED:
+    codestr = "UNSUPPORTED";
+    break;
+  case ERROR_UNEXPECTED:
+    codestr = "UNEXPECTED";
+    break;
+  case ERROR_UNAUTHORIZED:
+    codestr = "UNAUTHORIZED";
+    break;
+  case ERROR_LIMIT:
+    codestr = "LIMIT";
+    break;
+  case ERROR_ARGUMENTS:
+    codestr = "ARGUMENTS";
+    break;
+  case ERROR_AUTH:
+    codestr = "AUTH";
+    break;
+  default:
+    codestr = "UNKNOWN";
+  }
 
   /* Create reply string to send */
-  if (slinfo->extreply && extreply)
-    snprintf (sendstr, sizeof (sendstr), "%s\r%s\r\n", reply, extreply);
+  if (slinfo->proto_major == 4)
+  {
+    if (code != ERROR_NONE && extreply)
+      snprintf (sendstr, sizeof (sendstr), "%s %s %s\r\n", reply, codestr, extreply);
+    else if (code != ERROR_NONE)
+      snprintf (sendstr, sizeof (sendstr), "%s %s\r\n", reply, codestr);
+    else
+      snprintf (sendstr, sizeof (sendstr), "%s\r\n", reply);
+  }
   else
-    snprintf (sendstr, sizeof (sendstr), "%s\r\n", reply);
+  {
+    if (slinfo->extreply && extreply)
+      snprintf (sendstr, sizeof (sendstr), "%s\r%s %s\r\n", reply, codestr, extreply);
+    else
+      snprintf (sendstr, sizeof (sendstr), "%s\r\n", reply);
+  }
 
   /* Send the reply */
-  if (SendData (cinfo, sendstr, strlen (sendstr)))
+  if (SendData (cinfo, sendstr, strlen (sendstr), 0))
     return -1;
 
   return 0;
 } /* End of SendReply() */
+
+/***************************************************************************
+ * SendPacket:
+ *
+ * Send 'length' bytes from 'payload' to 'cinfo->socket' and prefix
+ * with an appropriate SeedLink header.
+ *
+ * Returns 0 on success and -1 on error, the ClientInfo.socketerr value
+ * is set on socket errors.
+ ***************************************************************************/
+static int
+SendPacket (uint64_t pktid, char *payload, uint32_t payloadlen,
+            const char *staid, char format, char subformat, void *vcinfo)
+{
+  ClientInfo *cinfo = (ClientInfo *)vcinfo;
+  SLInfo *slinfo    = (SLInfo *)cinfo->extinfo;
+  char header[40]   = {0};
+  size_t headerlen  = 0;
+  uint8_t l_staidlen;
+
+  if (!payload || !vcinfo)
+    return -1;
+
+  if (slinfo->proto_major == 4) /* Create v4 header */
+  {
+    l_staidlen = (staid) ? (uint8_t)strlen (staid) : 0;
+
+    /* V4 header values are little-endian byte order */
+    if (ms_bigendianhost ())
+    {
+      ms_gswap4 (&payloadlen);
+      ms_gswap8 (&pktid);
+    }
+
+    /* Construct v4 header */
+    memcpy (header, "SE", 2);
+    memcpy (header + 2, &format, 1);
+    memcpy (header + 3, &subformat, 1);
+    memcpy (header + 4, &payloadlen, 4);
+    memcpy (header + 8, &pktid, 8);
+    memcpy (header + 16, &l_staidlen, 1);
+    memcpy (header + 17, staid, l_staidlen);
+
+    headerlen = SLHEADSIZE_V4 + l_staidlen;
+  }
+  else /* Create v3 header */
+  {
+    /* Create v3 SeedLink header: signature + sequence number
+     * Use ony the lowest 24-bits of pktid, maximum allowed in v3 sequence */
+    snprintf (header, sizeof (header), "SL%06X", (uint32_t)(pktid & 0xFFFFFF));
+    headerlen = SLHEADSIZE_V3;
+  }
+
+  if (SendDataMB (cinfo, (void *[]){header, payload}, (size_t[]){headerlen, payloadlen}, 2, 0))
+    return -1;
+
+  /* Update the time of the last packet exchange */
+  cinfo->lastxchange = NSnow ();
+
+  return 0;
+} /* End of SendPacket() */
 
 /***************************************************************************
  * SendRecord:
@@ -1680,31 +1654,53 @@ SendReply (ClientInfo *cinfo, char *reply, char *extreply)
  * is set on socket errors.
  ***************************************************************************/
 static int
-SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
+SendRecord (RingPacket *packet, char *record, uint32_t reclen, void *vcinfo)
 {
   ClientInfo *cinfo = (ClientInfo *)vcinfo;
-  char header[SLHEADSIZE + 1];
+  SLInfo *slinfo    = (SLInfo *)cinfo->extinfo;
+
+  char staid[MAXSTREAMID] = {0};
+
+  char format    = ' ';
+  char subformat = 'D'; /* All miniSEED records are data/generic */
 
   if (!record || !vcinfo)
     return -1;
 
-  /* Check that sequence number is not too big */
-  if (packet->pktid > 0xFFFFFF)
+  /* Prepare details needed for v4 protocol header */
+  if (slinfo->proto_major == 4)
   {
-    lprintf (0, "[%s] sequence number too large for SeedLink: %" PRId64,
-             cinfo->hostname, packet->pktid);
+    char net[16];
+    char sta[16];
+
+    /* Extract network and station codes from FDSN Source ID (streamid) */
+    if (strncmp (packet->streamid, "FDSN:", 5) == 0)
+    {
+      if (ms_sid2nslc (packet->streamid, net, sta, NULL, NULL))
+      {
+        lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, packet->streamid);
+        return -1;
+      }
+
+      /* Create station ID as combination of network and station codes */
+      snprintf (staid, sizeof (staid), "%s_%s", net, sta);
+    }
+    /* Otherwise use the stream ID as the station ID */
+    else
+    {
+      memcpy (staid, packet->streamid, sizeof (staid));
+    }
+
+    if (MS3_ISVALIDHEADER (record))
+      format = '3';
+    else if (MS2_ISVALIDHEADER (record))
+      format = '2';
+    else
+      return -1;
   }
 
-  /* Create SeedLink header: signature + sequence number */
-  snprintf (header, sizeof (header), "SL%06" PRIX64, packet->pktid);
-
-  if (SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE, reclen}, 2))
-    return -1;
-
-  /* Update the time of the last packet exchange */
-  cinfo->lastxchange = HPnow ();
-
-  return 0;
+  return SendPacket (packet->pktid, record, reclen, staid,
+                     format, subformat, vcinfo);
 } /* End of SendRecord() */
 
 /***************************************************************************
@@ -1716,66 +1712,47 @@ SendRecord (RingPacket *packet, char *record, int reclen, void *vcinfo)
  * The ClientInfo.socketerr value is set on socket errors.
  ***************************************************************************/
 static void
-SendInfoRecord (char *record, int reclen, void *vcinfo)
+SendInfoRecord (char *record, uint32_t reclen, void *vcinfo)
 {
   ClientInfo *cinfo = (ClientInfo *)vcinfo;
-  SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
-  char header[SLHEADSIZE];
+  SLInfo *slinfo    = (SLInfo *)cinfo->extinfo;
+  char header[SLHEADSIZE_V3];
 
   if (!record || !vcinfo)
     return;
 
   /* Create INFO signature according to termination flag */
   if (slinfo->terminfo)
-    memcpy (header, "SLINFO  ", SLHEADSIZE);
+    memcpy (header, "SLINFO  ", SLHEADSIZE_V3);
   else
-    memcpy (header, "SLINFO *", SLHEADSIZE);
+    memcpy (header, "SLINFO *", SLHEADSIZE_V3);
 
-  SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE, reclen}, 2);
+  SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE_V3, reclen}, 2, 0);
 
   /* Update the time of the last packet exchange */
-  cinfo->lastxchange = HPnow ();
+  cinfo->lastxchange = NSnow ();
 
   return;
 } /* End of SendInfoRecord() */
 
 /***************************************************************************
- * FreeStaNode:
+ * FreeReqStationID:
  *
- * Free all memory associated with a SLStaNode.
+ * Free all memory associated with a ReqStationID.
  *
  ***************************************************************************/
 static void
-FreeStaNode (void *rbnode)
+FreeReqStationID (void *rbnode)
 {
-  SLStaNode *stanode = (SLStaNode *)rbnode;
+  ReqStationID *stationid = (ReqStationID *)rbnode;
 
-  if (stanode->selectors)
-    free (stanode->selectors);
+  if (stationid->selectors)
+    free (stationid->selectors);
 
   free (rbnode);
 
   return;
-} /* End of FreeStaNode() */
-
-/***************************************************************************
- * FreeNetStaNode:
- *
- * Free all memory associated with a SLNetStaNode.
- *
- ***************************************************************************/
-static void
-FreeNetStaNode (void *rbnode)
-{
-  SLNetStaNode *netstanode = (SLNetStaNode *)rbnode;
-
-  if (netstanode->streams)
-    StackDestroy (netstanode->streams, free);
-
-  free (rbnode);
-
-  return;
-} /* End of FreeNetStaNode() */
+} /* End of FreeReqStationID() */
 
 /***************************************************************************
  * StaKeyCompare:
@@ -1789,16 +1766,8 @@ StaKeyCompare (const void *a, const void *b)
 {
   int cmpval;
 
-  /* Compare network codes */
-  cmpval = strcmp (((SLStaKey *)a)->net, ((SLStaKey *)b)->net);
-
-  if (cmpval > 0)
-    return 1;
-  else if (cmpval < 0)
-    return -1;
-
-  /* Compare station codes */
-  cmpval = strcmp (((SLStaKey *)a)->sta, ((SLStaKey *)b)->sta);
+  /* Compare station IDs */
+  cmpval = strcmp (a, b);
 
   if (cmpval > 0)
     return 1;
@@ -1809,128 +1778,64 @@ StaKeyCompare (const void *a, const void *b)
 } /* End of StaKeyCompare() */
 
 /***************************************************************************
- * GetStaNode:
+ * GetReqStationID:
  *
- * Search the specified binary tree for a given SLStaKey and return the
- * SLStaNode.  If the SLStaKey does not exist create it and add it to the
- * tree.
+ * Search the specified binary tree for a given entry.  If the entry does not
+ * exist create it and add it to the tree.
  *
- * Return a pointer to a SLStaNode or 0 for error.
+ * Return a pointer to the entry or 0 for error.
  ***************************************************************************/
-static SLStaNode *
-GetStaNode (RBTree *tree, const char *net, const char *sta)
+static ReqStationID *
+GetReqStationID (RBTree *tree, char *staid)
 {
-  SLStaKey stakey;
-  SLStaKey *newstakey;
-  SLStaNode *stanode = 0;
+  char *newkey            = NULL;
+  ReqStationID *stationid = NULL;
   RBNode *rbnode;
 
-  /* Create SLStaKey */
-  memset (&stakey, 0, sizeof (stakey));
-  strncpy (stakey.net, net, sizeof (stakey.net) - 1);
-  strncpy (stakey.sta, sta, sizeof (stakey.sta) - 1);
-
-  /* Search for a matching SLStaNode entry */
-  if ((rbnode = RBFind (tree, &stakey)))
+  /* Search for a matching entry */
+  if ((rbnode = RBFind (tree, staid)))
   {
-    stanode = (SLStaNode *)rbnode->data;
+    stationid = (ReqStationID *)rbnode->data;
   }
   else
   {
-    if ((newstakey = (SLStaKey *)malloc (sizeof (SLStaKey))) == NULL)
+    if ((newkey = strdup (staid)) == NULL)
     {
-      lprintf (0, "GetStaNode: Error allocating new key");
+      lprintf (0, "%s: Error allocating new key", __func__);
       return 0;
     }
 
-    memcpy (newstakey, &stakey, sizeof (SLStaKey));
-
-    if ((stanode = (SLStaNode *)malloc (sizeof (SLStaNode))) == NULL)
+    if ((stationid = (ReqStationID *)malloc (sizeof (ReqStationID))) == NULL)
     {
-      lprintf (0, "GetStaNode: Error allocating new node");
+      lprintf (0, "%s: Error allocating new node", __func__);
       return 0;
     }
 
-    stanode->starttime = HPTERROR;
-    stanode->endtime = HPTERROR;
-    stanode->packetid = 0;
-    stanode->datastart = HPTERROR;
-    stanode->selectors = NULL;
+    stationid->starttime = NSTUNSET;
+    stationid->endtime   = NSTUNSET;
+    stationid->packetid  = RINGID_NONE;
+    stationid->datastart = NSTUNSET;
+    stationid->selectors = NULL;
 
-    RBTreeInsert (tree, newstakey, stanode, 0);
+    RBTreeInsert (tree, newkey, stationid, 0);
   }
 
-  return stanode;
-} /* End of GetStaNode() */
-
-/***************************************************************************
- * GetNetStaNode:
- *
- * Search the specified binary tree for a given SLStaKey and return
- * the SLNetStaNode.  If the SLStaKey does not exist create it and add
- * it to the tree.
- *
- * Return a pointer to a SLNetStaNode or 0 for error.
- ***************************************************************************/
-static SLNetStaNode *
-GetNetStaNode (RBTree *tree, const char *net, const char *sta)
-{
-  SLStaKey stakey;
-  SLStaKey *newstakey;
-  SLNetStaNode *netstanode = 0;
-  RBNode *rbnode;
-
-  /* Create SLStaKey */
-  memset (&stakey, 0, sizeof (stakey));
-  strncpy (stakey.net, net, sizeof (stakey.net) - 1);
-  strncpy (stakey.sta, sta, sizeof (stakey.sta) - 1);
-
-  /* Search for a matching SLNetStaNode entry */
-  if ((rbnode = RBFind (tree, &stakey)))
-  {
-    netstanode = (SLNetStaNode *)rbnode->data;
-  }
-  else
-  {
-    if ((newstakey = (SLStaKey *)malloc (sizeof (SLStaKey))) == NULL)
-    {
-      lprintf (0, "GetStaNode: Error allocating new key");
-      return 0;
-    }
-
-    memcpy (newstakey, &stakey, sizeof (SLStaKey));
-
-    if ((netstanode = (SLNetStaNode *)calloc (1, sizeof (SLNetStaNode))) == NULL)
-    {
-      lprintf (0, "GetNetStaNode: Error allocating new node");
-      return 0;
-    }
-
-    strncpy (netstanode->net, net, sizeof (netstanode->net) - 1);
-    strncpy (netstanode->sta, sta, sizeof (netstanode->sta) - 1);
-
-    /* Initialize Stack of associated streams */
-    netstanode->streams = StackCreate ();
-
-    RBTreeInsert (tree, newstakey, netstanode, 0);
-  }
-
-  return netstanode;
-} /* End of GetNetStaNode() */
+  return stationid;
+} /* End of GetReqStationID() */
 
 /***************************************************************************
  * StationToRegex:
  *
- * Update match and reject regexes for the specified network, station
- * and selector list (comma delimited).
+ * Update match and reject regexes for the specified station ID
+ * and (comma delimited) selector list.
  *
  * Return 0 on success and -1 on error.
  ***************************************************************************/
 static int
-StationToRegex (const char *net, const char *sta, const char *selectors,
+StationToRegex (const char *staid, const char *selectors,
                 char **matchregex, char **rejectregex)
 {
-  char *selectorlist;
+  char *selectorlist = NULL;
   char *selector, *nextselector;
   int matched;
 
@@ -1944,7 +1849,7 @@ StationToRegex (const char *net, const char *sta, const char *selectors,
   if (selectors)
   {
     /* Copy selectors list so we can modify it while parsing */
-    if (!(selectorlist = strdup (selectors)))
+    if ((selectorlist = strdup (selectors)) == NULL)
     {
       lprintf (0, "Cannot allocate memory to duplicate selectors");
       return -1;
@@ -1957,7 +1862,7 @@ StationToRegex (const char *net, const char *sta, const char *selectors,
     selector = selectorlist;
     while (selector)
     {
-      /* Find deliminting comma */
+      /* Find delimiting comma */
       nextselector = strchr (selector, ',');
 
       /* Terminate string at comma and set pointer for next selector */
@@ -1971,9 +1876,9 @@ StationToRegex (const char *net, const char *sta, const char *selectors,
            implies all data for the specified station with the execption of the
            negated selection, therefore we need to match all channels from the
            station and then reject those in the negated selector */
-        if (!matched && net && sta)
+        if (!matched && staid)
         {
-          if (SelectToRegex (net, sta, NULL, matchregex))
+          if (SelectToRegex (staid, NULL, matchregex))
           {
             lprintf (0, "Error with SelectToRegex");
             if (selectorlist)
@@ -1984,7 +1889,7 @@ StationToRegex (const char *net, const char *sta, const char *selectors,
           matched++;
         }
 
-        if (SelectToRegex (net, sta, &selector[1], rejectregex))
+        if (SelectToRegex (staid, &selector[1], rejectregex))
         {
           lprintf (0, "Error with SelectToRegex");
           if (selectorlist)
@@ -1995,7 +1900,7 @@ StationToRegex (const char *net, const char *sta, const char *selectors,
       /* Handle regular selector */
       else
       {
-        if (SelectToRegex (net, sta, selector, matchregex))
+        if (SelectToRegex (staid, selector, matchregex))
         {
           lprintf (0, "Error with SelectToRegex");
           if (selectorlist)
@@ -2009,13 +1914,12 @@ StationToRegex (const char *net, const char *sta, const char *selectors,
       selector = nextselector;
     }
 
-    if (selectorlist)
-      free (selectorlist);
+    free (selectorlist);
   }
   /* Otherwise update regex for station without selectors */
   else
   {
-    if (SelectToRegex (net, sta, NULL, matchregex))
+    if (SelectToRegex (staid, NULL, matchregex))
     {
       lprintf (0, "Error with SelectToRegex");
       return -1;
@@ -2024,7 +1928,6 @@ StationToRegex (const char *net, const char *sta, const char *selectors,
 
   return 0;
 } /* End of StationToRegex() */
-
 
 /***************************************************************************
  * SelectToRegex:
@@ -2048,34 +1951,30 @@ StationToRegex (const char *net, const char *sta, const char *selectors,
  * Return 0 on success and -1 on error.
  ***************************************************************************/
 static int
-SelectToRegex (const char *net, const char *sta, const char *select, char **regex)
+SelectToRegex (const char *staid, const char *select, char **regex)
 {
   const char *ptr;
-  char pattern[50];
-  char *build = pattern;
-  int idx;
-  int length;
+  char pattern[200] = {0};
+  char *build       = pattern;
   int retval;
 
   if (!regex)
     return -1;
 
-  /* Start pattern with a '^' */
-  *build++ = '^';
-
-  /* Santiy check lengths of input strings */
-  if (net && strlen (net) > 10)
+  /* Sanity check lengths of input strings */
+  if (staid && strlen (staid) > 50)
     return -1;
-  if (sta && strlen (sta) > 10)
-    return -1;
-  if (select && strlen(select) > 7)
+  if (select && strlen (select) > 50)
     return -1;
 
-  if (net)
+  /* Add starting '^' anchor and FDSN Source ID prefix */
+  memcpy (build, "^(?:FDSN:)?", 11);
+  build += 11;
+
+  /* Copy station pattern if provided, translating globbing wildcards to regex */
+  if (staid)
   {
-    /* Translate network */
-    ptr = net;
-    while (*ptr)
+    for (ptr = staid; *ptr; ptr++)
     {
       if (*ptr == '?')
       {
@@ -2090,10 +1989,9 @@ SelectToRegex (const char *net, const char *sta, const char *select, char **rege
       {
         *build++ = *ptr;
       }
-
-      ptr++;
     }
   }
+  /* Otherwise add wildcard */
   else
   {
     *build++ = '.';
@@ -2103,15 +2001,18 @@ SelectToRegex (const char *net, const char *sta, const char *select, char **rege
   /* Add separator */
   *build++ = '_';
 
-  if (sta)
+  /* Copy stream pattern if provided, translating globbing wildcards to regex */
+  if (select)
   {
-    /* Translate station */
-    ptr = sta;
-    while (*ptr)
+    /* Skip '-' at the beginning of the selector representing empty location codes */
+    while (*select == '-')
+      select++;
+
+    for (ptr = select; *ptr; ptr++)
     {
       if (*ptr == '?')
       {
-        *build++ = '?';
+        *build++ = '.';
       }
       else if (*ptr == '*')
       {
@@ -2122,100 +2023,17 @@ SelectToRegex (const char *net, const char *sta, const char *select, char **rege
       {
         *build++ = *ptr;
       }
-
-      ptr++;
     }
   }
+  /* Otherwise add wildcard if station ID was added */
   else
   {
     *build++ = '.';
     *build++ = '*';
   }
 
-  /* Add separator */
-  *build++ = '_';
-
-  if (select)
-  {
-    /* Ingore selector after any period, DECOTL subtypes are not supported */
-    if ((ptr = strrchr (select, '.')))
-      length = ptr - select;
-    else
-      length = strlen (select);
-
-    /* If location and channel are specified */
-    if (length == 5)
-    {
-      /* Translate location, '-' means space location which is collapsed */
-      for (ptr = select, idx = 0; idx < 2; idx++, ptr++)
-      {
-        if (*ptr == '?')
-          *build++ = '.';
-        else if (*ptr != '-')
-          *build++ = *ptr;
-      }
-
-      /* Add separator */
-      *build++ = '_';
-
-      /* Translate channel */
-      for (ptr = &select[2], idx = 0; idx < 3; idx++, ptr++)
-      {
-        if (*ptr == '?')
-          *build++ = '.';
-        else
-          *build++ = *ptr;
-      }
-    }
-    /* If only location is specified */
-    else if (length == 2)
-    {
-      /* Translate location, '-' means space location which is collapsed */
-      for (ptr = select, idx = 0; idx < 2; idx++, ptr++)
-      {
-        if (*ptr == '?')
-          *build++ = '.';
-        else if (*ptr != '-')
-          *build++ = *ptr;
-      }
-
-      /* Add separator */
-      *build++ = '_';
-    }
-    /* If only channel is specified */
-    else if (length == 3)
-    {
-      /* Add wildcard for location and separator */
-      *build++ = '.';
-      *build++ = '*';
-      *build++ = '_';
-
-      /* Translate channel */
-      for (ptr = select, idx = 0; idx < 3; idx++, ptr++)
-      {
-        if (*ptr == '?')
-          *build++ = '.';
-        else
-          *build++ = *ptr;
-      }
-    }
-  }
-  else
-  {
-    *build++ = '.';
-    *build++ = '*';
-  }
-
-  /* Add final catch-all for remaining stream ID parts if not already done */
-  if (select)
-  {
-    *build++ = '.';
-    *build++ = '*';
-  }
-
-  /* End pattern with a '$' and terminate */
-  *build++ = '$';
-  *build++ = '\0';
+  /* Finish with optional /MSEED suffix and 2 or 3 annotation and a '$' anchor */
+  memcpy (build, "(?:/MSEED)?[23]?$", 17);
 
   /* Add new pattern to regex string, expanding as needed up to SLMAXREGEXLEN bytes*/
   if ((retval = AddToString (regex, pattern, "|", 0, SLMAXREGEXLEN)))

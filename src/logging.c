@@ -17,8 +17,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
- * @author Chad Trabant, IRIS Data Management Center
+ * Copyright (C) 2024:
+ * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
 #include <errno.h>
@@ -38,7 +38,7 @@
 #include "ringserver.h"
 
 /* Global logging parameters */
-int verbose;
+uint8_t verbose;
 
 struct TLogParams_s TLogParams = {0, 0, 1, 1, 86400, 0, 0, 0};
 
@@ -63,7 +63,7 @@ lprintf (int level, char *fmt, ...)
   struct tm *tp;
   time_t curtime;
 
-  char *day[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+  char *day[]   = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
   char *month[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
                    "Aug", "Sep", "Oct", "Nov", "Dec"};
 
@@ -72,7 +72,7 @@ lprintf (int level, char *fmt, ...)
 
     /* Build local time string and generate final output */
     curtime = time (NULL);
-    tp = localtime (&curtime);
+    tp      = localtime (&curtime);
 
     va_start (argptr, fmt);
     rv = vsnprintf (message, sizeof (message), fmt, argptr);
@@ -104,7 +104,7 @@ lprint (char *message)
 
   /* Set ptr to last character in the message string */
   length = strlen (message);
-  ptr = message + (length - 1);
+  ptr    = message + (length - 1);
 
   /* Trim trailing newline characters */
   while (*ptr == '\n' && ptr != message)
@@ -115,6 +115,13 @@ lprint (char *message)
   /* Send message to lprintf() */
   lprintf (0, "%s", message);
 } /* End of lprint() */
+
+/* Wrapper macro to explicitly discard const annotation */
+void
+lprint_wrapper (const char *message)
+{
+  lprint ((char *)message);
+}
 
 /***************************************************************************
  * WriteTLog:
@@ -136,17 +143,17 @@ WriteTLog (ClientInfo *cinfo, int reset)
   Stack *stack;
   int rv = 0;
 
-  hptime_t clock;
+  nstime_t clock;
   struct tm starttm;
   struct tm endtm;
 
-  char conntime[30];
-  char currtime[30];
-  char txfilename[500];
-  char rxfilename[500];
-  char *modestr = "";
-  FILE *txfp = 0;
-  FILE *rxfp = 0;
+  char txfilename[500] = {0};
+  char rxfilename[500] = {0};
+  char conntime[32]    = {0};
+  char currtime[32]    = {0};
+  char *modestr        = "";
+  FILE *txfp           = NULL;
+  FILE *rxfp           = NULL;
 
   /* If the base directory is not specified we are done */
   if (!TLogParams.tlogbasedir)
@@ -205,9 +212,9 @@ WriteTLog (ClientInfo *cinfo, int reset)
   }
 
   /* Generate pretty strings for current & connection time */
-  clock = HPnow ();
-  ms_hptime2mdtimestr (clock, currtime, 0);
-  ms_hptime2mdtimestr (cinfo->conntime, conntime, 0);
+  clock = NSnow ();
+  ms_nstime2timestr (clock, currtime, ISOMONTHDAY_Z, NONE);
+  ms_nstime2timestr (cinfo->conntime, conntime, ISOMONTHDAY_Z, NONE);
 
   stack = StackCreate ();
 
@@ -270,7 +277,7 @@ WriteTLog (ClientInfo *cinfo, int reset)
         /* Reset counts if requested */
         if (reset)
         {
-          streamnode->txbytes = 0;
+          streamnode->txbytes   = 0;
           streamnode->txpackets = 0;
         }
       }
@@ -285,7 +292,7 @@ WriteTLog (ClientInfo *cinfo, int reset)
         /* Reset counts if requested */
         if (reset)
         {
-          streamnode->rxbytes = 0;
+          streamnode->rxbytes   = 0;
           streamnode->rxpackets = 0;
         }
       }
@@ -350,8 +357,8 @@ CalcIntWin (time_t reftime, int interval, time_t *startint, time_t *endint)
     return -1;
 
   /* Round down to current day */
-  reftm.tm_sec = 0;
-  reftm.tm_min = 0;
+  reftm.tm_sec  = 0;
+  reftm.tm_min  = 0;
   reftm.tm_hour = 0;
 
   /* Calculate the new, rounded epoch time */

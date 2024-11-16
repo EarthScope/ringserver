@@ -4,27 +4,29 @@
 #   CC : Specify the C compiler to use
 #   CFLAGS : Specify compiler options to use
 
-BIN = ringserver
+BIN = ../ringserver
 
 SRCS = stack.c rbtree.c logging.c clients.c slclient.c dlclient.c \
-       http.c dsarchive.c mseedscan.c generic.c ring.c ringserver.c
+       http.c dsarchive.c mseedscan.c generic.c ring.c ringserver.c \
+       config.c loadbuffer.c infojson.c infoxml.c tls.c
 OBJS = $(SRCS:.c=.o)
 
-# Standard compiler parameters
-CFLAGS += -D_REENTRANT -D_POSIX_PTHREAD_SEMANTICS -I../libmseed -I../mxml -I../pcre 
+MBEDTLS_OBJS = $(wildcard ../mbedtls/library/*.o)
 
-LDLIBS  = ../pcre/.libs/libpcre.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread
+CFLAGS += -D_REENTRANT -D_POSIX_PTHREAD_SEMANTICS -I../libmseed -I../mxml -I../pcre2/src -I../mbedtls/include
+
+LDLIBS  = ../pcre2/.libs/libpcre2-8.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread
 
 # For SunOS/Solaris uncomment the following line
-#LDLIBS = ../pcre/.libs/libpcre.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread -lsocket -lnsl -lrt
+#LDLIBS = ../pcre2/.libs/libpcre2-8.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread -lsocket -lnsl -lrt
 
 all: $(BIN)
 
-$(BIN): $(OBJS)
-	$(CC) $(CFLAGS) -o ../$(BIN) $(OBJS) $(LDFLAGS) $(LDLIBS)
+$(BIN): $(OBJS) $(MBEDTLS_OBJS)
+	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(MBEDTLS_OBJS) $(LDFLAGS) $(LDLIBS)
 
 clean:
-	rm -f $(OBJS) ../$(BIN)
+	rm -f $(OBJS) $(BIN)
 
 install:
 	@echo

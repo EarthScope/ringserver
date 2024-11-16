@@ -17,8 +17,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
- * @author Chad Trabant, IRIS Data Management Center
+ * Copyright (C) 2024:
+ * @author Chad Trabant, EarthScope Data Services
  ***************************************************************************/
 
 #ifndef DSARCHIVE_H
@@ -41,31 +41,29 @@
 #define SDAYLAYOUT  "%n.%s.%Y:%j"
 #define HSDAYLAYOUT "%h/%n.%s.%Y:%j"
 
-typedef struct DataStreamGroup_s
+typedef struct DataStreamGroup
 {
   char   *defkey;
   int     filed;
   time_t  modtime;
   char    filename[MAX_FILENAME_LEN];
   char    postpath[MAX_FILENAME_LEN];
-  struct  DataStreamGroup_s *next;
+  struct  DataStreamGroup *next;
 }
 DataStreamGroup;
 
-typedef struct DataStream_s
+typedef struct DataStream
 {
   char   *path;
   int     idletimeout;
   int     maxopenfiles;
   int     openfilecount;
-  struct  DataStreamGroup_s *grouproot;
+  struct  DataStreamGroup *grouproot;
 }
 DataStream;
 
-
-extern int ds_streamproc (DataStream *datastream, MSRecord *msr, char *postpath,
-			  char *hostname);
+extern int ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
+                          char *hostname);
 extern int ds_closeidle (DataStream *datastream, int idletimeout, char *ident);
-
 
 #endif

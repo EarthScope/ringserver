@@ -1,3 +1,37 @@
+2024.320: v4.0.0
+	NOTE: the ring buffer format has changed in this release. Older versions
+	of the saved buffer format will be converted for a seamless upgrade. Once
+	this conversion is completed, older releases of ringserver will detect the
+	buffer as corrupt and discard the contents, a consequence of downgrading
+	to an earlier release.
+
+	Major new features:
+	- Add support for SeedLink protocol version 4.
+	- Support for buffer sizes up to UINT64_MAX (aka more than you need).
+	- Map 24-bit SeedLink v3 sequence numbers into 64-bit range, allowing
+	v3 clients to resume from the most recent 16,777,215 packets in the
+	buffer even if the buffer can contain more packets.
+	- Add support for TLS/SSL using mbedtls release 3.6.2
+	- Add TLS flag for listening port configuration
+	- Add TLSCertfile, TLSKeyFile, and TLSVerfiyClientCert parameters.
+	- Allow DataLink v1.1 WRITE command to accept a packet ID.
+	- All configuration options can be specified with environment variables.
+
+	Other changes:
+	- Add HTTP endpoints that return status information in JSON format:
+	/id/json, /streams/json, /status/json, /connections/json
+	- Add -C command line option to print a configuration file.
+	- Automatically convert packet buffer from previous version to current.
+	- Convert internal time stamps from microsecond ticks (hptime) to use
+	nanosecond ticks, as used by the libmseed3.
+	- Most generated time strings are now YYYY-MM-DDThh:mm:ss.sss*Z formatted.
+	- All legacy stream IDs for miniSEED of the form: NN_SSSSS_LL_CCC/MSEED
+	will be converted to FDSN Source ID form: FDSN:NN_SSSSS_LL_C_C_C/MSEED.
+	- Allow ring size to be specified in fractional large units, e.g. "1.5g".
+	- Update libmseed to 3, adapt for miniSEED 3 API.
+	- Upgrade to PCRE2 10.42 from legacy PCRE.
+	- Upgrade mini-XML (mxml) to 3.3.1.
+
 2020.075:
 	- Fix resuming SeedLink connections when both sequence and begin time are
 	included in multi-station mode.
@@ -41,7 +75,7 @@
 2018.044:
 	- Add HTTPHeader config file parameter that specifies custom HTTP headers
 	that will be added to HTTP responses.
-	
+
 2017.052:
 	- Fix time windowing when TimeWindowLimit is set by fixing RingAfterRev().
 	- Check for and echo WebSocket sub-protocols:
@@ -76,11 +110,11 @@
 	be between 1 and 6, to provide unique lists of stream ID components.
 
 2016.354:
-	- Add TrustedIP config file parameter to control access to server 
+	- Add TrustedIP config file parameter to control access to server
 	connection list and detailed status.
 
 2016.352:
-	- Network listening threads can now optionally respond to any supported 
+	- Network listening threads can now optionally respond to any supported
 	protocol (DataLink, SeedLink and HTTP).  This major refactor of client
 	code reduces redundancy and adds flexibility.  A new config file
 	parameter 'ListenPort' and command line option '-L' are used to specify
@@ -130,7 +164,7 @@
 	- InitServerSocket(): close socket on error return from setsockopt() to
 	avoid leaving an open socket in that error condition.
 	Thanks to Doug Neuhauser for reporting and suggesting above fixes.
-	- Close corrupt ring buffer file when performing autorecovery in 
+	- Close corrupt ring buffer file when performing autorecovery in
 	all cases.
 
 2015.074:
@@ -257,10 +291,10 @@
 2011.143:
 	- Use ClientInfo.socketerr to indicate clean shutdown of connection
 	to avoid logging ugly error messages when client has disconnected.
-	
+
 2011.141:
 	- Create a dedicated signal handling thread and block signals from
-	all other threads to avoid any signal handling by child threads. 
+	all other threads to avoid any signal handling by child threads.
 	- Rework storage and initialization of ring and stream locks.
 	- Add mutex locking to all ring read operations, all ring access
 	including both reading and writing is mutually exclusive.  This is a
@@ -320,7 +354,7 @@
 	- Add InitCurrentState suboption for MSeedScan that controls behavior
 	on initial startup, allowing the scanning to skip old data and start
 	reading only newly added data.
-	- Change initialization error return flagging in MS_ScanThread() to 
+	- Change initialization error return flagging in MS_ScanThread() to
 	TDF_CLOSED.
 
 2009.326:
@@ -465,7 +499,7 @@
 2008.231:
 	- Allow DataLink CONNECTIONS requests to match client hostnames in
 	addition to IP addresses and client IDs.
-	- Optionally resolve and store hostnames upon client connection and 
+	- Optionally resolve and store hostnames upon client connection and
 	indepedently store IP and port strings.
 	- Add config file parameter ResolveHostnames to control resolution
 	of hostnames.
@@ -543,7 +577,7 @@
 
 2008.064:
 	- Fix SeedLink INFO CONNECTIONS XML.
-	
+
 2008.063:
 	- Convert XML creation to Mini-XML library.
 	- Add Mini-XML library sources.

@@ -1,35 +1,43 @@
+# Build environment can be configured the following
+# environment variables:
+#   CC : Specify the C compiler to use
+#   CFLAGS : Specify compiler options to use
 
-DIRS = pcre mxml libmseed src
+.PHONY: all clean
+all clean: pcre2 mxml libmseed mbedtls
+	$(MAKE) -C src $@
 
-# Test for Makefile/makefile and run make, run configure if it exists
-# and no Makefile does.
+# Test for Makefile/makefile and run make, run configure if needed
+.PHONY: pcre2
+pcre2:
+	@if [ ! -f $@/Makefile -a ! -f $@/makefile ] ; then \
+	  ( cd $@ && ./configure --with-link-size=4  \
+                                 --with-match-limit=1000 \
+                                 --with-match-limit-depth=1000 \
+                                 --disable-unicode \
+                                 --enable-static --disable-shared ) ; \
+	fi
+	$(MAKE) -C $@ $(MAKECMDGOALS)
 
-# As a special case for pcre do not pass targets except "clean".
+# Test for Makefile/makefile and run make, run configure if needed
+.PHONY: mxml
+mxml:
+	@if [ ! -f $@/Makefile -a ! -f $@/makefile ] ; then \
+	  ( cd $@ && ./configure --disable-shared --enable-threads ) ; \
+	fi
+	$(MAKE) -C $@ $(MAKECMDGOALS)
 
-all clean install ::
-	@for d in $(DIRS) ; do \
-	  if [ ! -f $$d/Makefile -a ! -f $$d/makefile ] ; then \
-	    if [ -x $$d/configure -a "$$d" = "pcre" ] ; then \
-	      echo "Running configure in $$d" ; \
-              ( cd $$d && touch -c * ) ; \
-	      ( cd $$d && ./configure --with-link-size=4 --disable-shared --enable-static --disable-cpp ) ; \
-	    elif [ -x $$d/configure -a "$$d" = "mxml" ] ; then \
-	       echo "Running configure in $$d" ; \
-	      ( cd $$d && ./configure --disable-shared --enable-threads ) ; \
-	    else \
-	      echo "Running configure in $$d" ; \
-	      ( cd $$d && ./configure ) ; \
-	    fi ; \
-	  fi ; \
-	  echo "Running $(MAKE) $@ in $$d" ; \
-	  if [ -f $$d/Makefile -o -f $$d/makefile ] ; then \
-	    if [ "$$d" = "pcre" -a "$@" != "clean" ] ; then \
-	      ( cd $$d && $(MAKE) ) ; \
-	    else \
-	      ( cd $$d && $(MAKE) $@ ) ; \
-	    fi ; \
-	  elif [ -d $$d ] ; \
-	    then ( echo "ERROR: no Makefile/makefile in $$d for $(CC)" ) ; \
-	  fi ; \
-	done
-	
+.PHONY: libmseed
+libmseed:
+	$(MAKE) -C $@ $(MAKECMDGOALS)
+
+.PHONY: mbedtls
+mbedtls:
+	$(MAKE) -C $@ $(MAKECMDGOALS)
+
+.PHONY: install
+install:
+	@echo
+	@echo "No install method"
+	@echo "Copy the binary and documentation to desired location"
+	@echo

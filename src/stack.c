@@ -24,7 +24,7 @@ StackCreate ()
 {
   Stack *newStack;
 
-  newStack = (Stack *)malloc (sizeof (Stack));
+  newStack      = (Stack *)malloc (sizeof (Stack));
   newStack->top = newStack->tail = NULL;
   return (newStack);
 }
@@ -36,21 +36,21 @@ StackPush (Stack *theStack, STACK_DATA_TYPE newDataPtr)
 
   if (!theStack->top)
   {
-    newNode = (StackNode *)malloc (sizeof (StackNode));
-    newNode->data = newDataPtr;
-    newNode->prev = NULL;
-    newNode->next = NULL;
-    theStack->top = newNode;
+    newNode        = (StackNode *)malloc (sizeof (StackNode));
+    newNode->data  = newDataPtr;
+    newNode->prev  = NULL;
+    newNode->next  = NULL;
+    theStack->top  = newNode;
     theStack->tail = newNode;
   }
   else
   {
-    newNode = (StackNode *)malloc (sizeof (StackNode));
-    newNode->data = newDataPtr;
-    newNode->prev = NULL;
-    newNode->next = theStack->top;
+    newNode             = (StackNode *)malloc (sizeof (StackNode));
+    newNode->data       = newDataPtr;
+    newNode->prev       = NULL;
+    newNode->next       = theStack->top;
     theStack->top->prev = newNode;
-    theStack->top = newNode;
+    theStack->top       = newNode;
   }
 }
 
@@ -62,8 +62,8 @@ StackPop (Stack *theStack)
 
   if (theStack->top)
   {
-    popData = theStack->top->data;
-    oldNode = theStack->top;
+    popData       = theStack->top->data;
+    oldNode       = theStack->top;
     theStack->top = theStack->top->next;
     free (oldNode);
 
@@ -87,21 +87,21 @@ StackUnshift (Stack *theStack, STACK_DATA_TYPE newDataPtr)
 
   if (!theStack->tail)
   {
-    newNode = (StackNode *)malloc (sizeof (StackNode));
-    newNode->data = newDataPtr;
-    newNode->prev = NULL;
-    newNode->next = NULL;
-    theStack->top = newNode;
+    newNode        = (StackNode *)malloc (sizeof (StackNode));
+    newNode->data  = newDataPtr;
+    newNode->prev  = NULL;
+    newNode->next  = NULL;
+    theStack->top  = newNode;
     theStack->tail = newNode;
   }
   else
   {
-    newNode = (StackNode *)malloc (sizeof (StackNode));
-    newNode->data = newDataPtr;
-    newNode->prev = theStack->tail;
-    newNode->next = NULL;
+    newNode              = (StackNode *)malloc (sizeof (StackNode));
+    newNode->data        = newDataPtr;
+    newNode->prev        = theStack->tail;
+    newNode->next        = NULL;
     theStack->tail->next = newNode;
-    theStack->tail = newNode;
+    theStack->tail       = newNode;
   }
 }
 
@@ -113,8 +113,8 @@ StackShift (Stack *theStack)
 
   if (theStack->tail)
   {
-    shiftData = theStack->tail->data;
-    oldNode = theStack->tail;
+    shiftData      = theStack->tail->data;
+    oldNode        = theStack->tail;
     theStack->tail = theStack->tail->prev;
     free (oldNode);
 
@@ -168,7 +168,7 @@ StackJoin (Stack *stack1, Stack *stack2)
   else
   {
     stack1->tail->next = stack2->top;
-    stack1->tail = stack2->tail;
+    stack1->tail       = stack2->tail;
     free (stack2);
     return (stack1);
   }
@@ -194,14 +194,14 @@ StackSort (Stack *theStack, int (*StackNodeCmp) (StackNode *a, StackNode *b))
   if (!theStack || !StackNodeCmp)
     return -1;
 
-  top = theStack->top;
+  top         = theStack->top;
   totalmerges = 0;
-  insize = 1;
+  insize      = 1;
 
   for (;;)
   {
-    p = top;
-    top = NULL;
+    p    = top;
+    top  = NULL;
     tail = NULL;
 
     nmerges = 0; /* count number of merges we do in this pass */
@@ -212,7 +212,7 @@ StackSort (Stack *theStack, int (*StackNodeCmp) (StackNode *a, StackNode *b))
       totalmerges++;
 
       /* step `insize' places along from p */
-      q = p;
+      q     = p;
       psize = 0;
       for (i = 0; i < insize; i++)
       {
@@ -261,7 +261,7 @@ StackSort (Stack *theStack, int (*StackNodeCmp) (StackNode *a, StackNode *b))
           top = e;
 
         e->prev = tail;
-        tail = e;
+        tail    = e;
       }
 
       /* now p has stepped `insize' places along, and q has too */
@@ -273,7 +273,7 @@ StackSort (Stack *theStack, int (*StackNodeCmp) (StackNode *a, StackNode *b))
     /* If we have done only one merge, we're finished. */
     if (nmerges <= 1) /* allow for nmerges==0, the empty list case */
     {
-      theStack->top = top;
+      theStack->top  = top;
       theStack->tail = tail;
 
       return totalmerges;
