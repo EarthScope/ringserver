@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2024/11/09
+.TH RINGSERVER 1 2024/11/16
 .SH NAME
 ringserver \- stream oriented packet ring buffer
 
@@ -133,8 +133,15 @@ Network port to listen for incoming connections on.  By default the
 server will not listen for connections, setting at least one listen
 port is needed to communicate with the server.  By default, a listening
 port will accept all supported protocols.  Restricting a port to only
-allow specific protocols can be done using a configuration file, see
-\fBMulti-protocol Support\fP for more information.
+allow specific protocols can be done using a configuration file or adding
+flags to the port declaration, see \fBMulti-protocol Support\fP for more
+information.
+
+.IP "-SL \fIport\fP"
+.IP "-DL \fIport\fP"
+.IP "-HL \fIport\fP"
+These options are shortcuts for configuring a listening port for only
+SeedLink, DataLink or HTTP protocols respectively.
 
 .IP "-T \fIlogdir\fP"
 Transfer log file base directory, by default the server does not write
@@ -246,14 +253,23 @@ used by the client, all subsequent communication is expected in this
 protocol.  Listening ports configured for TLS encryption can only
 support a single protocol that must be specified.
 
-The protocols allowed by any given listening port can be set to any
-combination of the supported protocols by adding flags to the
-\fIListen\fP parameter of the server configuration file.
+Both IPv4 and IPv6 protocol familes are supported by default (if
+supported by the system).
 
-Both IPv4 and IPv6 are supported by default (if supported by the
-system). The server can be limited to a specified network protocol
-family by adding flags to the \fIListen\fP parameter of the server
-configuration file.
+The network protocols and families allowed by any given listening
+port can be set by adding flags to the port specification.  See the
+available flags in the \fBListen\fP description of the ringserver
+config file example, or by using the \fB-C\fP command line option
+to print a config file.
+
+Examples of adding flags to a port specification:
+
+.nf
+  \fB-L "18000 SeedLink HTTP"\fP        : CLI, SeedLink and HTTP on port 18000
+  \fB-SL "18000 IPv4 TLS"\fP            : CLI, SeedLink via TLS on port 18000, IPv4 only
+  \fBRS_LISTEN_PORT="8080 HTTP IPv6"\fP : EnvVar, HTTPS on port 8080, IPv6 only
+  \fBListenPort 16000 DataLink\fP       : Config file, DataLink on port 16000
+.fi
 
 .SH "HTTP Support"
 
@@ -337,8 +353,8 @@ An example "TX" file illustrating a transmission entry:
 
 .nf
 START CLIENT host.iris.edu [192.168.255.255] (SeedLink|Client) @ 2018-03-30 07:00:05 (connected 2018-03-30 06:59:36) TX
-IU_SNZO_10_BHZ/MSEED 2560 5
-IU_SNZO_00_BHZ/MSEED 2048 4
+FDSN:IU_SNZO_10_B_H_Z/MSEED 2560 5
+FDSN:IU_SNZO_00_B_H_Z/MSEED 2048 4
 END CLIENT host.iris.edu [192.168.255.255] total TX bytes: 4608
 .fi
 

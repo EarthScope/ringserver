@@ -94,7 +94,15 @@ ringserver [options] [configfile]
 
 <b>-L </b><i>port</i>
 
-<p style="padding-left: 30px;">Network port to listen for incoming connections on.  By default the server will not listen for connections, setting at least one listen port is needed to communicate with the server.  By default, a listening port will accept all supported protocols.  Restricting a port to only allow specific protocols can be done using a configuration file, see <b>Multi-protocol Support</b> for more information.</p>
+<p style="padding-left: 30px;">Network port to listen for incoming connections on.  By default the server will not listen for connections, setting at least one listen port is needed to communicate with the server.  By default, a listening port will accept all supported protocols.  Restricting a port to only allow specific protocols can be done using a configuration file or adding flags to the port declaration, see <b>Multi-protocol Support</b> for more information.</p>
+
+<b>-SL </b><i>port</i>
+
+<b>-DL </b><i>port</i>
+
+<b>-HL </b><i>port</i>
+
+<p style="padding-left: 30px;">These options are shortcuts for configuring a listening port for only SeedLink, DataLink or HTTP protocols respectively.</p>
 
 <b>-T </b><i>logdir</i>
 
@@ -160,9 +168,18 @@ ringserver [options] [configfile]
 
 <p >Network listening ports can respond to all supported protocols (SeedLink, DataLink and HTTP) for non-TLS ports.  The first command received by the server is used to determine which protocol is being used by the client, all subsequent communication is expected in this protocol.  Listening ports configured for TLS encryption can only support a single protocol that must be specified.</p>
 
-<p >The protocols allowed by any given listening port can be set to any combination of the supported protocols by adding flags to the <i>Listen</i> parameter of the server configuration file.</p>
+<p >Both IPv4 and IPv6 protocol familes are supported by default (if supported by the system).</p>
 
-<p >Both IPv4 and IPv6 are supported by default (if supported by the system). The server can be limited to a specified network protocol family by adding flags to the <i>Listen</i> parameter of the server configuration file.</p>
+<p >The network protocols and families allowed by any given listening port can be set by adding flags to the port specification.  See the available flags in the <b>Listen</b> description of the ringserver config file example, or by using the <b>-C</b> command line option to print a config file.</p>
+
+<p >Examples of adding flags to a port specification:</p>
+
+<pre >
+  <b>-L "18000 SeedLink HTTP"</b>        : CLI, SeedLink and HTTP on port 18000
+  <b>-SL "18000 IPv4 TLS"</b>            : CLI, SeedLink via TLS on port 18000, IPv4 only
+  <b>RS_LISTEN_PORT="8080 HTTP IPv6"</b> : EnvVar, HTTPS on port 8080, IPv6 only
+  <b>ListenPort 16000 DataLink</b>       : Config file, DataLink on port 16000
+</pre>
 
 ## <a id='http-support'>Http Support</a>
 
@@ -216,8 +233,8 @@ ringserver [options] [configfile]
 
 <pre >
 START CLIENT host.iris.edu [192.168.255.255] (SeedLink|Client) @ 2018-03-30 07:00:05 (connected 2018-03-30 06:59:36) TX
-IU_SNZO_10_BHZ/MSEED 2560 5
-IU_SNZO_00_BHZ/MSEED 2048 4
+FDSN:IU_SNZO_10_B_H_Z/MSEED 2560 5
+FDSN:IU_SNZO_00_B_H_Z/MSEED 2048 4
 END CLIENT host.iris.edu [192.168.255.255] total TX bytes: 4608
 </pre>
 
@@ -342,4 +359,4 @@ EarthScope Data Services
 </pre>
 
 
-(man page 2024/11/09)
+(man page 2024/11/16)
