@@ -1,12 +1,13 @@
-2024.xxx:
+2024.320: v4.0.0
 	NOTE: the ring buffer format has changed in this release. Older versions
 	of the saved buffer format will be converted for a seamless upgrade. Once
-	this conversion is completed older releases of ringserver will detect the
+	this conversion is completed, older releases of ringserver will detect the
 	buffer as corrupt and discard the contents, a consequence of downgrading
 	to an earlier release.
 
 	Major new features:
 	- Add support for SeedLink protocol version 4.
+	- Support for buffer sizes up to UINT64_MAX (aka more than you need).
 	- Map 24-bit SeedLink v3 sequence numbers into 64-bit range, allowing
 	v3 clients to resume from the most recent 16,777,215 packets in the
 	buffer even if the buffer can contain more packets.
