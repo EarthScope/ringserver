@@ -48,7 +48,7 @@ void   StackDestroy (Stack *theStack, void DestFunc(void *a));
 int    StackNotEmpty (Stack *theStack);
 Stack *StackJoin (Stack *stack1, Stack *stack2);
 int    StackSort (Stack *theStack, int (*StackNodeCmp)(StackNode *a, StackNode *b));
-  
+
 #ifdef __cplusplus
 }
 #endif

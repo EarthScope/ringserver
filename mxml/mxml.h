@@ -3,7 +3,7 @@
  *
  * https://www.msweet.org/mxml
  *
- * Copyright © 2003-2019 by Michael R Sweet.
+ * Copyright © 2003-2021 by Michael R Sweet.
  *
  * Licensed under Apache License v2.0.  See the file "LICENSE" for more
  * information.
@@ -32,7 +32,7 @@
  */
 
 #  define MXML_MAJOR_VERSION	3	/* Major version number */
-#  define MXML_MINOR_VERSION	1	/* Minor version number */
+#  define MXML_MINOR_VERSION	2	/* Minor version number */
 
 #  define MXML_TAB		8	/* Tabs every N columns */
 
@@ -258,7 +258,11 @@ extern mxml_node_t	*mxmlWalkPrev(mxml_node_t *node, mxml_node_t *top,
  * Semi-private functions...
  */
 
-extern void		mxml_error(const char *format, ...);
+extern void		mxml_error(const char *format, ...)
+#    ifdef __GNUC__
+__attribute__ ((__format__ (__printf__, 1, 2)))
+#    endif /* __GNUC__ */
+;
 extern mxml_type_t	mxml_ignore_cb(mxml_node_t *node);
 extern mxml_type_t	mxml_integer_cb(mxml_node_t *node);
 extern mxml_type_t	mxml_opaque_cb(mxml_node_t *node);

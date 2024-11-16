@@ -17,8 +17,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
- * @author Chad Trabant, IRIS Data Management Center
+ * Copyright (C) 2024:
+ * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
 #include <errno.h>
@@ -56,7 +56,7 @@
  * and -1 on error.
  ***************************************************************************/
 int
-SplitStreamID (char *streamid, char delim, int maxlength,
+SplitStreamID (const char *streamid, char delim, int maxlength,
                char *id1, char *id2, char *id3, char *id4, char *id5, char *id6,
                char *type)
 {
@@ -101,13 +101,13 @@ SplitStreamID (char *streamid, char delim, int maxlength,
   }
 
   /* Find delimeters, convert to terminators and set pointer array */
-  ptr = id;
+  ptr    = id;
   ids[0] = ptr;
   for (idx = 1; idx < 6 && *ptr != '\0'; ptr++)
   {
     if (*ptr == delim)
     {
-      *ptr = '\0';
+      *ptr     = '\0';
       ids[idx] = ptr + 1;
       idx++;
     }
@@ -191,55 +191,46 @@ SplitStreamID (char *streamid, char delim, int maxlength,
 } /* End of SplitStreamID() */
 
 /***************************************************************************
- * HPnow:
+ * NSnow:
  *
- * Return the current time as a high precision epoch on success or
- * HPTERROR on error.
+ * Return the current time as a high precision nanosecond epoch on success or
+ * NSTERROR on error.
  ***************************************************************************/
-hptime_t
-HPnow (void)
+nstime_t
+NSnow (void)
 {
-  hptime_t now;
   struct timeval tp;
 
   if (gettimeofday (&tp, NULL))
   {
-    lprintf (0, "HPnow(): error with gettimeofday()");
-    return HPTERROR;
+    lprintf (0, "%s(): error with gettimeofday()", __func__);
+    return NSTERROR;
   }
 
-  now = ((hptime_t)tp.tv_sec * HPTMODULUS) +
-        ((hptime_t)tp.tv_usec * (HPTMODULUS / 1000000));
-
-  return now;
-} /* End of HPnow() */
+  return ((int64_t)tp.tv_sec * 1000000000 +
+          (int64_t)tp.tv_usec * 1000);
+} /* End of NSnow() */
 
 /***************************************************************************
- * FVNhash64:
+ * FNVhash64:
  *
- * Perform a 64 bit Fowler/Noll/Vo hash on a string.  This is a
- * simplified version of the source code found here:
- * http://www.isthe.com/chongo/tech/comp/fnv/index.html.
+ * Perform a 64 bit Fowler/Noll/Vo hash (FNV-1a) on a string.  This is a
+ * simplified version of the source code found in draft-eastlake-fnv-21:
+ * https://datatracker.ietf.org/doc/html/draft-eastlake-fnv-21
  *
  * Returns the hash of the string.
  ***************************************************************************/
-int64_t
-FVNhash64 (char *str)
+uint64_t
+FNVhash64 (const char *str)
 {
-  unsigned char *s = (unsigned char *)str; /* unsigned string */
+  uint64_t hval = 0xCBF29CE484222325;
+  uint8_t ch;
 
-  /* Seed hash value with FVN1_64_INIT */
-  int64_t hval = (int64_t)0xcbf29ce484222325ULL;
+  if (!str)
+    return 0;
 
-  /* FNV-1 hash each octet of the string */
-  while (*s)
-  {
-    /* Multiply by the 64 bit FNV magic prime mod 2^64 */
-    hval *= (int64_t)0x100000001b3ULL;
-
-    /* XOR the bottom with the current octet */
-    hval ^= (int64_t)*s++;
-  }
+  while ((ch = *str++))
+    hval = 0x00000100000001B3 * (hval ^ ch);
 
   return hval;
 } /* End of FNVhash64() */
@@ -271,7 +262,7 @@ KeyCompare (const void *a, const void *b)
  * Return 1 if the specified string is all digits and 0 otherwise.
  *********************************************************************/
 int
-IsAllDigits (char *string)
+IsAllDigits (const char *string)
 {
   int idx;
   int length;
@@ -289,3 +280,40 @@ IsAllDigits (char *string)
 
   return 1;
 } /* End of IsAllDigits() */
+
+/*********************************************************************
+ * HumanSizeString:
+ *
+ * Convert a size in bytes to a human readable string in KiB, MiB,
+ * GiB, etc.
+ *
+ * A maximum of sizestringlen characters will be written to sizestring
+ * and an error will be returned if the string would be longer.
+ *
+ * Return 0 on success and -1 on error.
+ *********************************************************************/
+int
+HumanSizeString (uint64_t bytes, char *sizestring, size_t sizestringlen)
+{
+  const char *units[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"};
+
+  double size = (double)bytes;
+  int printed;
+  int idx = 0;
+
+  if (!sizestring)
+    return -1;
+
+  while (size >= 1024.0 && idx < 7)
+  {
+    size /= 1024.0;
+    idx++;
+  }
+
+  if (idx == 0)
+    printed = snprintf (sizestring, sizestringlen, "%" PRIu64 " %s", bytes, units[idx]);
+  else
+    printed = snprintf (sizestring, sizestringlen, "%.1f %s", size, units[idx]);
+
+  return (printed < 0 || printed >= sizestringlen) ? -1 : 0;
+} /* End of HumanSizeString() */

@@ -1,3 +1,28 @@
+# Changes in Mini-XML 3.3.1
+
+- Fixed POSIX thread cleanup bugs (Issue #293)
+
+
+# Changes in Mini-XML 3.3
+
+- Cleaned up usage of `free` throughout the library (Issue #276)
+- Added more error handling to the library (Issue #277)
+- Fixed potential memory leak in `mxmlLoad*` functions (Issue #278, Issue #279)
+- Fixed `mxmlSaveString` with a buffer size of 0 (Issue #284)
+- Fixed `MXML_MINOR_VERSION` value in "mxml.h" (Issue #285)
+- Fixed POSIX threading support for MingW (Issue #287)
+- Fixed some minor memory leaks found by Coverity.
+
+
+# Changes in Mini-XML 3.2
+
+- Added support for shared libraries on Haiku (Issue #262)
+- Fixed handling of unquoted attribute values that start with a Unicode
+  character (Issue #264)
+- Fixed handling of elements that start with a Unicode character (Issue #267)
+- Fixed some minor issues identified by the LGTM security scanner.
+
+
 # Changes in Mini-XML 3.1
 
 - The `mxmlLoad*` functions now print an error when the XML does not start with

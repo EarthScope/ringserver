@@ -15,8 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
- * @author Chad Trabant, IRIS Data Management Center
+ * Copyright (C) 2024:
+ * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
 #ifndef GENERIC_H
@@ -29,15 +29,16 @@ extern "C" {
 #include <libmseed.h>
 
 /* Key for B-trees */
-typedef int64_t Key;
+typedef uint64_t Key;
 
-extern int      SplitStreamID (char *streamid, char delim, int maxlength,
-                               char *id1, char *id2, char *id3, char *id4, char *id5, char *id6,
-                               char *type);
-extern hptime_t HPnow (void);
-extern int64_t  FVNhash64 (char *str);
-extern int      KeyCompare (const void *a, const void *b);
-extern int      IsAllDigits (char *string);
+extern int SplitStreamID (const char *streamid, char delim, int maxlength,
+                          char *id1, char *id2, char *id3, char *id4, char *id5, char *id6,
+                          char *type);
+extern nstime_t NSnow (void);
+extern uint64_t FNVhash64 (const char *str);
+extern int KeyCompare (const void *a, const void *b);
+extern int IsAllDigits (const char *string);
+extern int HumanSizeString (uint64_t bytes, char *sizestring, size_t sizestringlen);
 
 #ifdef __cplusplus
 }

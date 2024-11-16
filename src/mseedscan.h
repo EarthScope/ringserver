@@ -17,8 +17,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
- * @author Chad Trabant, IRIS Data Management Center
+ * Copyright (C) 2024:
+ * @author Chad Trabant, EarthScope Data Services
  ***************************************************************************/
 
 #ifndef MSEEDSCAN_H
@@ -28,14 +28,17 @@
 extern "C" {
 #endif
 
-#include <pcre.h>
+#define PCRE2_STATIC
+#define PCRE2_CODE_UNIT_WIDTH 8
+#include <pcre2.h>
+#define PCRE2_COMPILE_OPTIONS (PCRE2_NO_AUTO_CAPTURE | PCRE2_NEVER_UTF)
 
 #include "rbtree.h"
 
 /* Maximum filename length */
 #define MSSCAN_MAXFILENAME 512
 
-typedef struct MSScanInfo_s {
+typedef struct MSScanInfo {
   /* Configuration parameters */
   char  dirname[512];     /* Base directory to scan */
   int   maxrecur;         /* Maximum level of directory recursion */
@@ -53,16 +56,16 @@ typedef struct MSScanInfo_s {
   char  statefile[512];   /* State file to save/restore time stamps (abs path) */
   char  matchstr[512];    /* Filename match expression */
   char  rejectstr[512];   /* Filename reject expression */
-  pcre *fnmatch;          /* Compiled match expression */
-  pcre_extra *fnmatch_extra;  /* Match expression extra study information */
-  pcre *fnreject;         /* Compiled reject expression */
-  pcre_extra *fnreject_extra; /* Reject expression extra study information */
+  pcre2_code *fnmatch;    /* Compiled match expression */
+  pcre2_match_data *fnmatch_data;  /* Match data results */
+  pcre2_code *fnreject;   /* Compiled reject expression */
+  pcre2_match_data *fnreject_data; /* Match data results */
 
   /* Internal tracking parameters */
   uint32_t readbuffersize;/* Size of file read buffer */
   char    *readbuffer;    /* File read buffer */
   RingParams *ringparams; /* Ring buffer parameters */
-  MSRecord *msr;          /* Parsed miniSEED record */
+  MS3Record *msr;         /* Parsed miniSEED record */
   RBTree  *filetree;      /* Working list of scanned files in a tree */
   int      accesserr;     /* Flag to indicate directory access errors */
   int      recurlevel;    /* Track recursion level */
@@ -72,7 +75,7 @@ typedef struct MSScanInfo_s {
   uint64_t rxbytes[2];    /* Track total number of data bytes read */
   double   rxbyterate;    /* Track rate of data byte reading */
   double   scantime;      /* Duration of last scan in seconds */
-  hptime_t ratetime;      /* Time stamp for RX rate calculations */
+  nstime_t ratetime;      /* Time stamp for RX rate calculations */
 
   int scanfileschecked;   /* Track files checked per scan */
   int scanfilesread;      /* Track files read per scan */

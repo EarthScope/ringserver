@@ -49,8 +49,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
- * @author Chad Trabant, IRIS Data Management Center
+ * Copyright (C) 2024:
+ * @author Chad Trabant, EarthScope Data Services
  ***************************************************************************/
 
 /* _GNU_SOURCE needed to get pread() under Linux */
@@ -70,7 +70,6 @@
 #include <unistd.h>
 
 #include <libmseed.h>
-#include <pcre.h>
 
 #include "generic.h"
 #include "logging.h"
@@ -127,7 +126,7 @@ static void PruneFiles (RBTree *filetree, time_t scantime);
 static void PrintFileList (RBTree *filetree, FILE *fd);
 static int SaveState (RBTree *filetree, char *statefile);
 static int RecoverState (RBTree *filetree, char *statefile);
-static int WriteRecord (MSScanInfo *mssinfo, char *record, int reclen);
+static int WriteRecord (MSScanInfo *mssinfo, char *record, uint64_t reclen);
 static int Initialize (MSScanInfo *mssinfo);
 static int MSS_KeyCompare (const void *a, const void *b);
 static time_t CalcDayTime (int year, int day);
@@ -158,9 +157,9 @@ MS_ScanThread (void *arg)
   struct stat st;
   double iostatsinterval;
   int iostatscount = 0;
-  int scanerror = 0;
+  int scanerror    = 0;
 
-  mytdp = (struct thread_data *)arg;
+  mytdp   = (struct thread_data *)arg;
   mssinfo = (MSScanInfo *)mytdp->td_prvtptr;
 
   mssinfo->filetree = RBTreeCreate (MSS_KeyCompare, free, free);
@@ -169,16 +168,16 @@ MS_ScanThread (void *arg)
   if (Initialize (mssinfo) < 0)
   {
     pthread_mutex_lock (&(mytdp->td_lock));
-    mytdp->td_flags = TDF_CLOSED;
+    mytdp->td_state = TDS_CLOSED;
     pthread_mutex_unlock (&(mytdp->td_lock));
 
     return 0;
   }
 
   /* Initilize timers */
-  treq.tv_sec = (time_t)mssinfo->scansleep;
-  treq.tv_nsec = (long)0;
-  treq0.tv_sec = (time_t)mssinfo->scansleep0;
+  treq.tv_sec   = (time_t)mssinfo->scansleep;
+  treq.tv_nsec  = (long)0;
+  treq0.tv_sec  = (time_t)mssinfo->scansleep0;
   treq0.tv_nsec = (long)0;
 
   statetime = time (NULL);
@@ -189,31 +188,31 @@ MS_ScanThread (void *arg)
   /* Initialize rate variables */
   mssinfo->rxpackets[0] = mssinfo->rxpackets[1] = 0;
   mssinfo->rxbytes[0] = mssinfo->rxbytes[1] = 0;
-  mssinfo->rxpacketrate = 0.0;
-  mssinfo->rxbyterate = 0.0;
-  mssinfo->scantime = 0.0;
-  mssinfo->ratetime = HPnow ();
+  mssinfo->rxpacketrate                     = 0.0;
+  mssinfo->rxbyterate                       = 0.0;
+  mssinfo->scantime                         = 0.0;
+  mssinfo->ratetime                         = NSnow ();
 
   /* Set thread active status */
   pthread_mutex_lock (&(mytdp->td_lock));
-  if (mytdp->td_flags == TDF_SPAWNING)
-    mytdp->td_flags = TDF_ACTIVE;
+  if (mytdp->td_state == TDS_SPAWNING)
+    mytdp->td_state = TDS_ACTIVE;
   pthread_mutex_unlock (&(mytdp->td_lock));
 
   /* Report start of scanning */
   lprintf (1, "miniSEED scanning started [%s]", mssinfo->dirname);
 
   /* Start scan sequence */
-  while (mytdp->td_flags != TDF_CLOSE && scanerror == 0)
+  while (mytdp->td_state != TDS_CLOSE && scanerror == 0)
   {
-    scantime = time (NULL);
+    scantime                 = time (NULL);
     mssinfo->scanrecordsread = 0;
 
     if (mssinfo->iostats && mssinfo->iostats == iostatscount)
     {
       gettimeofday (&scanstarttime, NULL);
-      mssinfo->scanfileschecked = 0;
-      mssinfo->scanfilesread = 0;
+      mssinfo->scanfileschecked   = 0;
+      mssinfo->scanfilesread      = 0;
       mssinfo->scanrecordswritten = 0;
     }
 
@@ -245,7 +244,7 @@ MS_ScanThread (void *arg)
         scanerror = 1;
     }
 
-    if (mytdp->td_flags != TDF_CLOSE && !scanerror)
+    if (mytdp->td_state != TDS_CLOSE && !scanerror)
     {
       /* Prune files that were not found from the filelist */
       PruneFiles (mssinfo->filetree, scantime);
@@ -273,22 +272,22 @@ MS_ScanThread (void *arg)
     /* Rate calculation */
     if (mssinfo->rxpackets[0] > 0)
     {
-      hptime_t hpnow = HPnow ();
+      nstime_t nsnow = NSnow ();
 
       /* Calculate scan duration in seconds and make sure it's not zero */
-      mssinfo->scantime = (double)(hpnow - mssinfo->ratetime) / HPTMODULUS;
+      mssinfo->scantime = (double)(nsnow - mssinfo->ratetime) / NSTMODULUS;
       if (mssinfo->scantime == 0.0)
         mssinfo->scantime = 1.0;
 
       /* Calculate the reception rates */
       mssinfo->rxpacketrate = (double)(mssinfo->rxpackets[0] - mssinfo->rxpackets[1]) / mssinfo->scantime;
-      mssinfo->rxbyterate = (double)(mssinfo->rxbytes[0] - mssinfo->rxbytes[1]) / mssinfo->scantime;
+      mssinfo->rxbyterate   = (double)(mssinfo->rxbytes[0] - mssinfo->rxbytes[1]) / mssinfo->scantime;
 
       /* Shift current values to history values */
       mssinfo->rxpackets[1] = mssinfo->rxpackets[0];
-      mssinfo->rxbytes[1] = mssinfo->rxbytes[0];
+      mssinfo->rxbytes[1]   = mssinfo->rxbytes[0];
 
-      mssinfo->ratetime = hpnow;
+      mssinfo->ratetime = nsnow;
     }
 
     if (mssinfo->iostats && iostatscount <= 1)
@@ -320,7 +319,7 @@ MS_ScanThread (void *arg)
 
   /* Set thread closing status */
   pthread_mutex_lock (&(mytdp->td_lock));
-  mytdp->td_flags = TDF_CLOSING;
+  mytdp->td_state = TDS_CLOSING;
   pthread_mutex_unlock (&(mytdp->td_lock));
 
   /* Save the state file */
@@ -333,25 +332,25 @@ MS_ScanThread (void *arg)
 
   /* Free regex matching memory */
   if (mssinfo->fnmatch)
-    pcre_free (mssinfo->fnmatch);
-  if (mssinfo->fnmatch_extra)
-    pcre_free (mssinfo->fnmatch_extra);
+    pcre2_code_free (mssinfo->fnmatch);
+  if (mssinfo->fnmatch_data)
+    pcre2_match_data_free (mssinfo->fnmatch_data);
   if (mssinfo->fnreject)
-    pcre_free (mssinfo->fnreject);
-  if (mssinfo->fnreject_extra)
-    pcre_free (mssinfo->fnreject_extra);
+    pcre2_code_free (mssinfo->fnreject);
+  if (mssinfo->fnreject_data)
+    pcre2_match_data_free (mssinfo->fnreject_data);
 
   if (mssinfo->readbuffer)
     free (mssinfo->readbuffer);
 
   if (mssinfo->msr)
-    msr_free (&(mssinfo->msr));
+    msr3_free (&(mssinfo->msr));
 
   lprintf (1, "miniSEED scanning stopped [%s]", mssinfo->dirname);
 
   /* Set thread CLOSED status */
   pthread_mutex_lock (&(mytdp->td_lock));
-  mytdp->td_flags = TDF_CLOSED;
+  mytdp->td_state = TDS_CLOSED;
   pthread_mutex_unlock (&(mytdp->td_lock));
 
   return 0;
@@ -405,7 +404,7 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
     currentday = CalcDayTime (cday.tm_year + 1900, cday.tm_yday + 1);
   }
 
-  while (shutdownsig == 0 && (ede = EReadDir (dir)) != NULL)
+  while (param.shutdownsig == 0 && (ede = EReadDir (dir)) != NULL)
   {
     int filenamelen;
 
@@ -463,7 +462,7 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
     /* Stat the file */
     if (lstat (fkey->filename, &st) < 0)
     {
-      if (!(shutdownsig && errno == EINTR))
+      if (!(param.shutdownsig && errno == EINTR))
         lprintf (0, "[MSeedScan] Cannot stat %s: %s", fkey->filename, strerror (errno));
       continue;
     }
@@ -474,7 +473,7 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
       if (stat (fkey->filename, &st) < 0)
       {
         /* Interruption signals when the stop signal is set should break out */
-        if (shutdownsig && errno == EINTR)
+        if (param.shutdownsig && errno == EINTR)
           break;
 
         /* Log an error if the error is anything but a disconnected link */
@@ -505,13 +504,15 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
       mssinfo->scanfileschecked++;
 
     /* Do regex matching if an expression was specified */
-    if (mssinfo->fnmatch != 0)
-      if (pcre_exec (mssinfo->fnmatch, NULL, ede->d_name, strlen (ede->d_name), 0, 0, NULL, 0) != 0)
+    if (mssinfo->fnmatch)
+      if (pcre2_match (mssinfo->fnmatch, (PCRE2_SPTR8)ede->d_name, PCRE2_ZERO_TERMINATED, 0, 0,
+                       mssinfo->fnmatch_data, NULL) < 0)
         continue;
 
     /* Do regex rejecting if an expression was specified */
-    if (mssinfo->fnreject != 0)
-      if (pcre_exec (mssinfo->fnreject, NULL, ede->d_name, strlen (ede->d_name), 0, 0, NULL, 0) == 0)
+    if (mssinfo->fnreject)
+      if (pcre2_match (mssinfo->fnreject, (PCRE2_SPTR8)ede->d_name, PCRE2_ZERO_TERMINATED, 0, 0,
+                       mssinfo->fnreject_data, NULL) >= 0)
         continue;
 
     /* Sanity check for a regular file */
@@ -602,7 +603,7 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
 static FileNode *
 FindFile (RBTree *filetree, FileKey *fkey)
 {
-  FileNode *fnode = 0;
+  FileNode *fnode = NULL;
   RBNode *tnode;
 
   /* Search for a matching inode + file name entry */
@@ -645,8 +646,8 @@ AddFile (RBTree *filetree, ino_t inode, char *filename, time_t modtime)
   newfkey->inode = inode;
   memcpy (newfkey->filename, filename, filelen + 1);
 
-  newfnode->offset = 0;
-  newfnode->modtime = modtime;
+  newfnode->offset    = 0;
+  newfnode->modtime   = modtime;
   newfnode->idledelay = 0;
 
   RBTreeInsert (filetree, newfkey, newfnode, 0);
@@ -667,19 +668,20 @@ static off_t
 ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
              off_t newsize, time_t newmodtime)
 {
+  ssize_t nread;
+  ssize_t detlen;
   int fd;
-  int nread;
-  int reccnt = 0;
+  int reccnt     = 0;
   int reachedmax = 0;
-  int detlen;
   int flags;
+  uint8_t msversion;
   off_t newoffset = fnode->offset;
   struct timespec treq, trem;
 
   lprintf (3, "[MSeedScan] Processing file %s", filename);
 
   /* Set the throttling sleep time */
-  treq.tv_sec = (time_t)0;
+  treq.tv_sec  = (time_t)0;
   treq.tv_nsec = (long)mssinfo->throttlensec;
 
 /* Set open flags */
@@ -692,7 +694,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
   /* Open target file */
   if ((fd = open (filename, flags, 0)) == -1)
   {
-    if (!(shutdownsig && errno == EINTR))
+    if (!(param.shutdownsig && errno == EINTR))
     {
       lprintf (0, "[MSeedScan] Error opening %s: %s", filename, strerror (errno));
       return -1;
@@ -715,7 +717,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
     /* Read up to MSSCAN_READLEN bytes into buffer */
     if ((nread = pread (fd, mssinfo->readbuffer, MSSCAN_READLEN, newoffset)) <= 0)
     {
-      if (!(shutdownsig && errno == EINTR))
+      if (!(param.shutdownsig && errno == EINTR))
       {
         lprintf (0, "[MSeedScan] Error: cannot read data from %s", filename);
         close (fd);
@@ -728,7 +730,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
     }
 
     /* Check buffer for miniSEED */
-    detlen = ms_detect (mssinfo->readbuffer, nread);
+    detlen = ms3_detect (mssinfo->readbuffer, (uint64_t)nread, &msversion);
 
     /* If miniSEED not detected or length could not be determined */
     if (detlen <= 0)
@@ -753,8 +755,8 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
     /* Record is larger than packet payload maximum, aka read buffer size */
     else if (detlen > mssinfo->readbuffersize)
     {
-      lprintf (0, "[MSeedScan] %s: Record length (%d) at offset %lld, larger than packet payload size (%u), ignoring file",
-               filename, detlen, (long long)newoffset, mssinfo->readbuffersize);
+      lprintf (0, "[MSeedScan] %s: Record length (%" PRId64 ") at offset %" PRId64 ", larger than packet payload size (%u), ignoring file",
+               filename, (int64_t)detlen, (int64_t)newoffset, mssinfo->readbuffersize);
       close (fd);
       return -1;
     }
@@ -767,9 +769,11 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
     /* Read the rest of the record */
     if (detlen > nread)
     {
-      if (pread (fd, mssinfo->readbuffer + nread, detlen - nread, newoffset + nread) != detlen - nread)
+      if (pread (fd, mssinfo->readbuffer + nread,
+                 (size_t)(detlen - nread),
+                 newoffset + nread) != detlen - nread)
       {
-        if (!(shutdownsig && errno == EINTR))
+        if (!(param.shutdownsig && errno == EINTR))
         {
           lprintf (0, "[MSeedScan] Error: cannot read remaining record data from %s", filename);
           close (fd);
@@ -788,7 +792,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
     mssinfo->scanrecordsread++;
 
     /* Write record to ring buffer */
-    if (WriteRecord (mssinfo, mssinfo->readbuffer, detlen))
+    if (WriteRecord (mssinfo, mssinfo->readbuffer, (uint64_t)detlen))
     {
       return -newoffset;
     }
@@ -847,7 +851,7 @@ PruneFiles (RBTree *filetree, time_t scantime)
 
   while ((tnode = (RBNode *)StackPop (stack)))
   {
-    fkey = (FileKey *)tnode->key;
+    fkey  = (FileKey *)tnode->key;
     fnode = (FileNode *)tnode->data;
 
     if (fnode->scantime < scantime)
@@ -879,7 +883,7 @@ PrintFileList (RBTree *filetree, FILE *fp)
 
   while ((tnode = (RBNode *)StackPop (stack)))
   {
-    fkey = (FileKey *)tnode->key;
+    fkey  = (FileKey *)tnode->key;
     fnode = (FileNode *)tnode->data;
 
     fprintf (fp, "%s\t%llu\t%lld\t%lld\n",
@@ -993,7 +997,7 @@ RecoverState (RBTree *filetree, char *statefile)
 
     if (fnode)
     {
-      fnode->offset = (off_t)offset;
+      fnode->offset   = (off_t)offset;
       fnode->scantime = 0;
     }
 
@@ -1013,29 +1017,29 @@ RecoverState (RBTree *filetree, char *statefile)
  * Returns 0 on success, and -1 on failure
  ***************************************************************************/
 static int
-WriteRecord (MSScanInfo *mssinfo, char *record, int reclen)
+WriteRecord (MSScanInfo *mssinfo, char *record, uint64_t reclen)
 {
   char streamid[100];
   RingPacket packet;
+  uint32_t flags = MSF_VALIDATECRC;
   int rv;
 
   /* Parse miniSEED header */
-  if ((rv = msr_unpack (record, reclen, &(mssinfo->msr), 0, 0)) != MS_NOERROR)
+  if ((rv = msr3_parse (record, reclen, &(mssinfo->msr), flags, 0)) != MS_NOERROR)
   {
-    ms_recsrcname (record, streamid, 0);
-    lprintf (0, "[MSeedScan] Error unpacking %s: %s", streamid, ms_errorstr (rv));
+    lprintf (0, "[MSeedScan] Error unpacking record: %s", ms_errorstr (rv));
     return -1;
   }
 
-  /* Generate stream ID for this record: NET_STA_LOC_CHAN/MSEED */
-  msr_srcname (mssinfo->msr, streamid, 0);
-  strcat (streamid, "/MSEED");
+  /* Generate stream ID for this record: SourceID/MSEED */
+  snprintf (streamid, sizeof (streamid), "%s/MSEED", mssinfo->msr->sid);
 
   memset (&packet, 0, sizeof (RingPacket));
-  strncpy (packet.streamid, streamid, sizeof (packet.streamid) - 1);
+  memcpy (packet.streamid, streamid, sizeof (packet.streamid) - 1);
   packet.datastart = mssinfo->msr->starttime;
-  packet.dataend = msr_endtime (mssinfo->msr);
-  packet.datasize = mssinfo->msr->reclen;
+  packet.dataend   = msr3_endtime (mssinfo->msr);
+  packet.datasize  = (uint32_t)mssinfo->msr->reclen;
+  packet.pktid     = RINGID_NONE;
 
   /* Add the packet to the ring */
   if ((rv = RingWrite (mssinfo->ringparams, &packet, record, packet.datasize)))
@@ -1047,7 +1051,7 @@ WriteRecord (MSScanInfo *mssinfo, char *record, int reclen)
 
     /* Set the shutdown signal if ring corruption was detected */
     if (rv == -2)
-      shutdownsig = 1;
+      param.shutdownsig = 1;
 
     return -1;
   }
@@ -1069,47 +1073,20 @@ WriteRecord (MSScanInfo *mssinfo, char *record, int reclen)
 static int
 Initialize (MSScanInfo *mssinfo)
 {
-  const char *errptr;
-  int erroffset;
-
   /* Compile the match regex if specified */
-  if (*(mssinfo->matchstr) != '\0')
+  if (*(mssinfo->matchstr) != '\0' &&
+      UpdatePattern (&mssinfo->fnmatch, &mssinfo->fnmatch_data,
+                     mssinfo->matchstr, "msscan filename match expression"))
   {
-    /* Compile regex */
-    mssinfo->fnmatch = pcre_compile (mssinfo->matchstr, 0, &errptr, &erroffset, NULL);
-    if (errptr)
-    {
-      lprintf (0, "[MSeedScan] Error with pcre_compile: %s (%s)", errptr, mssinfo->matchstr);
-      return -1;
-    }
-
-    /* Study regex */
-    mssinfo->fnmatch_extra = pcre_study (mssinfo->fnmatch, 0, &errptr);
-    if (errptr)
-    {
-      lprintf (0, "[MSeedScan] Error with pcre_study: %s (%s)", errptr, mssinfo->matchstr);
-      return -1;
-    }
+    return -1;
   }
 
   /* Compile the reject regex if specified */
-  if (*(mssinfo->rejectstr) != '\0')
+  if (*(mssinfo->rejectstr) != '\0' &&
+      UpdatePattern (&mssinfo->fnreject, &mssinfo->fnreject_data,
+                     mssinfo->rejectstr, "msscan filename reject expression"))
   {
-    /* Compile regex */
-    mssinfo->fnreject = pcre_compile (mssinfo->rejectstr, 0, &errptr, &erroffset, NULL);
-    if (errptr)
-    {
-      lprintf (0, "[MSeedScan] Error with pcre_compile: %s (%s)", errptr, mssinfo->rejectstr);
-      return -1;
-    }
-
-    /* Study regex */
-    mssinfo->fnreject_extra = pcre_study (mssinfo->fnreject, 0, &errptr);
-    if (errptr)
-    {
-      lprintf (0, "[MSeedScan] Error with pcre_study: %s (%s)", errptr, mssinfo->rejectstr);
-      return -1;
-    }
+    return -1;
   }
 
   /* Calculate maximum allowed record length and allocate file read buffer */
@@ -1180,14 +1157,14 @@ CalcDayTime (int year, int day)
 
   shortyear = year - 1900;
 
-  a4 = (shortyear >> 2) + 475 - !(shortyear & 3);
-  a100 = a4 / 25 - (a4 % 25 < 0);
-  a400 = a100 >> 2;
+  a4                    = (shortyear >> 2) + 475 - !(shortyear & 3);
+  a100                  = a4 / 25 - (a4 % 25 < 0);
+  a400                  = a100 >> 2;
   intervening_leap_days = (a4 - 492) - (a100 - 19) + (a400 - 4);
 
   days = (365 * (shortyear - 70) + intervening_leap_days + (day - 1));
 
-  daytime = (time_t) (60 * (60 * (24 * days)));
+  daytime = (time_t)(60 * (60 * (24 * days)));
 
   return daytime;
 } /* End of CalcDayTime() */
@@ -1223,7 +1200,7 @@ BudFileDayTime (char *filename)
       isdigit (*(filename + length - 1)))
   {
     iyear = strtol ((filename + length - 8), NULL, 10);
-    iday = strtol ((filename + length - 3), NULL, 10);
+    iday  = strtol ((filename + length - 3), NULL, 10);
 
     daytime = CalcDayTime (iyear, iday);
   }
@@ -1251,14 +1228,14 @@ SortEDirEntries (EDIR *edirp)
   if (!edirp)
     return -1;
 
-  top = edirp->ents;
+  top         = edirp->ents;
   totalmerges = 0;
-  insize = 1;
+  insize      = 1;
 
   for (;;)
   {
-    p = top;
-    top = NULL;
+    p    = top;
+    top  = NULL;
     tail = NULL;
 
     nmerges = 0; /* count number of merges we do in this pass */
@@ -1269,7 +1246,7 @@ SortEDirEntries (EDIR *edirp)
       totalmerges++;
 
       /* step `insize' places along from p */
-      q = p;
+      q     = p;
       psize = 0;
       for (i = 0; i < insize; i++)
       {
@@ -1318,7 +1295,7 @@ SortEDirEntries (EDIR *edirp)
           top = e;
 
         e->prev = tail;
-        tail = e;
+        tail    = e;
       }
 
       /* now p has stepped `insize' places along, and q has too */
@@ -1357,7 +1334,7 @@ EOpenDir (const char *dirname)
   EDIR *edirp;
   struct dirent *de;
   struct edirent *ede;
-  struct edirent *prevede = 0;
+  struct edirent *prevede = NULL;
   int namelen;
 
   if (!dirname)
@@ -1399,10 +1376,10 @@ EOpenDir (const char *dirname)
 
     strncpy (ede->d_name, de->d_name, sizeof (ede->d_name));
     ede->d_ino = de->d_ino;
-    ede->prev = prevede;
+    ede->prev  = prevede;
 
     /* Add new enhanced directory entry to the list */
-    if (prevede == 0)
+    if (prevede == NULL)
     {
       edirp->ents = ede;
     }

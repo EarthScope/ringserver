@@ -1,5 +1,12 @@
-Mini-XML Version 3.1
-====================
+Mini-XML - Tiny XML Parsing Library
+===================================
+
+![Version](https://img.shields.io/github/v/release/michaelrsweet/mxml?include_prereleases)
+![Apache 2.0](https://img.shields.io/github/license/michaelrsweet/mxml)
+![Build](https://github.com/michaelrsweet/mxml/workflows/Build/badge.svg)
+[![Coverity Scan Status](https://img.shields.io/coverity/scan/23959.svg)](https://scan.coverity.com/projects/michaelrsweet-mxml)
+[![LGTM Grade](https://img.shields.io/lgtm/grade/cpp/github/michaelrsweet/mxml)](https://lgtm.com/projects/g/michaelrsweet/mxml/context:cpp)
+[![LGTM Alerts](https://img.shields.io/lgtm/alerts/github/michaelrsweet/mxml)](https://lgtm.com/projects/g/michaelrsweet/mxml/)
 
 Mini-XML is a small XML parsing library that you can use to read XML data files
 or strings in your application without requiring large non-standard libraries.
@@ -192,8 +199,17 @@ current version of this software, documentation, and Github issue tracking page.
 Legal Stuff
 -----------
 
-Copyright © 2003-2019 by Michael R Sweet
+Copyright © 2003-2022 by Michael R Sweet
 
 The Mini-XML library is licensed under the Apache License Version 2.0 with an
-exception to allow linking against GPL2/LGPL2-only software.  See the files
-"LICENSE" and "NOTICE" for more information.
+*optional* exception to allow linking against GPL2/LGPL2-only software.  See the
+files "LICENSE" and "NOTICE" for more information.
+
+> Note: The exception listed in the NOTICE file only applies when linking
+> against GPL2/LGPL2-only software.  Some Apache License purists have objected
+> to linking Apache Licensed code against Mini-XML with these exceptions on the
+> grounds that it makes Mini-XML somehow incompatible with the Apache License.
+> For that reason, people wishing to retain their Apache License purity may
+> omit the exception from their copy of Mini-XML.
+
+> Note 2: IANAL, but I am beginning to dislike them!

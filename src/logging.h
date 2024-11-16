@@ -15,8 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2020:
- * @author Chad Trabant, IRIS Data Management Center
+ * Copyright (C) 2024:
+ * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
 #ifndef LOGGING_H
@@ -42,7 +42,7 @@ struct TLogParams_s {
 };
 
 /* Global logging parameters declared in logging.c */
-extern int verbose;
+extern uint8_t verbose;
 extern struct TLogParams_s TLogParams;
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -50,6 +50,7 @@ __attribute__((__format__ (__printf__, 2, 3)))
 #endif
 extern int lprintf (int level, char *fmt, ...);
 extern void lprint (char *message);
+extern void lprint_wrapper (const char *message);
 
 extern int WriteTLog (ClientInfo *cinfo, int reset);
 extern int CalcIntWin (time_t reftime, int interval,

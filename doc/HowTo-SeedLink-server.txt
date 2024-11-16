@@ -2,23 +2,23 @@
 How to configure ringserver as a simple SeedLink streaming server
   version 2010/03/13
 
-Overview: The IRIS DMC 'ringserver' software is capable of
-continuously scanning one or more directories for Mini-SEED data
+Overview: The EarthScope 'ringserver' software is capable of
+continuously scanning one or more directories for miniSEED data
 records and serving them as near real-time data streams using the
 SeedLink protocol.  This software allows a data collection center that
-can create Mini-SEED data to redistribute their data in near
+can create miniSEED data to redistribute their data in near
 real-time.
 
 Requirements:
  1) Linux, Solaris or Mac OSX operating system
  2) C compiler to build the ringserver software
       (testing is done with gcc and the Sun compiler)
- 3) Process to create 512-byte Mini-SEED data records
+ 3) Process to create 512-byte miniSEED data records
 
 ## Quick start ########################################################
 
-1) Get ringserver source code from the IRIS website:
-  http://www.iris.edu/pub/programs/ringserver/
+1) Get ringserver source code from:
+  https://github.com/EarthScope/ringserver
 
 2) Compile ringserver and copy binary to a dedicated directory.
    Note: for SunOS/Solaris the 'src/Makefile' needs to be edited.
@@ -40,7 +40,7 @@ configured to allow connections from the clients on the SeedLink port
 
 ## The ringserver concept #############################################
 
-The ringserver program reads Mini-SEED records from files and inserts
+The ringserver program reads miniSEED records from files and inserts
 them into an internal ring buffer.  The ring buffer operates as a FIFO
 (first-in-first-out) queue, newer data inserted into the buffer pushes
 the oldest data out.  Remote clients can access data in the buffer
@@ -113,7 +113,7 @@ TransferLogRX - Turn off reception logging to TransferLogDirectory;
   clients so there is no need to write reception logs.
 
 MseedScan - Configure scanning of the /data/miniseed/ directory and
-  sub-directories for Mini-SEED data.  Use 'scan.state' as the
+  sub-directories for miniSEED data.  Use 'scan.state' as the
   statefile (created if necessary), allowing the server to be
   restarted without scanning duplicate data.  Turn on the
   InitCurrentState option to avoid scanning current data when no
@@ -166,8 +166,8 @@ incorporated into such systems.
 
 If the server is configured to listen for DataLink connections the
 DataLink Tool (dalitool) can be used to query the server.  Source code
-for dalitool is available from the IRIS website:
-http://www.iris.edu/pub/programs/ringserver/
+for dalitool is available from:
+https://github.com/EarthScope/dalitool
 
 Developed in conjunction with ringserver the dalitool program can be
 used to monitor data flow from a server, query for data availability
@@ -176,8 +176,8 @@ in the buffer, query for connected clients and query for server stats.
 Alternatively the SeedLink Tool (slinktool) can be used for very
 similar queries to the server, slinktool uses the same SeedLink
 interface as client data users.  Source code for slinktool is
-available from the IRIS website:
-http://www.iris.edu/pub/programs/SeedLink/
+available from:
+https://github.com/earthscope/slinktool
 
 If configured to write transfer logs ringserver will write packet
 transfer logs to a specified directory at a specified interval
