@@ -240,6 +240,12 @@ ProcessParam (int argcount, char **argvec)
       if (SetParameter (paramstr, 0) <= 0)
         exit (1);
     }
+    else if (strcmp (argvec[optind], "-HL") == 0)
+    {
+      snprintf (paramstr, sizeof (paramstr), "HTTPPort %s", GetOptVal (argcount, argvec, optind++));
+      if (SetParameter (paramstr, 0) <= 0)
+        exit (1);
+    }
     else if (strcmp (argvec[optind], "-T") == 0)
     {
       snprintf (paramstr, sizeof (paramstr), "TransferLogDirectory \"%s\"", GetOptVal (argcount, argvec, optind++));
@@ -492,6 +498,14 @@ ReadEnvironmentVariables (void)
   if ((envvar = getenv ("RS_DATALINK_PORT")))
   {
     snprintf (paramstr, sizeof (paramstr), "DataLinkPort %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_HTTP_PORT")))
+  {
+    snprintf (paramstr, sizeof (paramstr), "HTTPPort %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
       return -1;
     count++;
@@ -896,6 +910,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
  * ListenPort <port> [flags]
  * SeedLinkPort <port> [flags]
  * DataLinkPort <port> [flags]
+ * HTTPPort <port> [flags]
  * [D] ServerID <server id>
  * [D] Verbosity <level>
  * [D] MaxClientsPerIP <max>
@@ -1063,7 +1078,8 @@ SetParameter (const char *paramstring, int dynamiconly)
   }
   else if ((!strcasecmp ("ListenPort", field[0]) ||
             !strcasecmp ("DataLinkPort", field[0]) ||
-            !strcasecmp ("SeedLinkPort", field[0])) &&
+            !strcasecmp ("SeedLinkPort", field[0]) ||
+            !strcasecmp ("HTTPPort", field[0])) &&
            fieldcount >= 2)
   {
     if (dynamiconly)
@@ -1081,6 +1097,8 @@ SetParameter (const char *paramstring, int dynamiconly)
       lpp.protocols = PROTO_DATALINK;
     else if (!strcasecmp ("SeedLinkPort", field[0]))
       lpp.protocols = PROTO_SEEDLINK;
+    else if (!strcasecmp ("HTTPPort", field[0]))
+      lpp.protocols = PROTO_HTTP;
     else
       lpp.protocols = 0;
 
@@ -2173,8 +2191,8 @@ AddIPNet (IPNet **pplist, const char *network, const char *limitstr)
   return 0;
 } /* End of AddIPNet() */
 
-static const char *config_file = \
-"# Example ringserver configuration file.\n\
+static const char *config_file =
+    "# Example ringserver configuration file.\n\
 #\n\
 # Default values are in comments where appropriate.\n\
 #\n\
@@ -2247,6 +2265,13 @@ ListenPort 18000\n\
 # Equivalent environment variable: RS_SEEDLINK_PORT\n\
 \n\
 #SeedLinkPort 18000\n\
+\n\
+\n\
+# Listen for HTTP connections on a specified port. This is an alias\n\
+# for a ListenPort configured with only HTTP allowed.\n\
+# Equivalent environment variable: RS_HTTP_PORT\n\
+\n\
+#HTTPPort 80\n\
 \n\
 \n\
 # Certficate file for TLS connections.  This is a dynamic parameter.\n\
