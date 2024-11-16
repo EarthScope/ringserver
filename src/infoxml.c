@@ -694,10 +694,13 @@ info_xml_dlv1 (ClientInfo *cinfo, const char *software, const char *level,
                            yyjson_get_real (yyjson_obj_get (stream_iter, "data_latency")));
     }
 
+    mxmlElementSetAttrf (streamlist, "TotalStreams", "%" PRIu64,
+                         yyjson_get_uint (yyjson_obj_get (server, "stream_count")));
     mxmlElementSetAttrf (streamlist, "SelectedStreams", "%d", selectedcount);
   }
   else if (elements & INFO_CONNECTIONS)
   {
+    yyjson_val *connections;
     yyjson_val *client_array;
     yyjson_val *client_iter = NULL;
     mxml_node_t *connlist, *conn;
@@ -712,7 +715,9 @@ info_xml_dlv1 (ClientInfo *cinfo, const char *software, const char *level,
       return NULL;
     }
 
-    client_array = yyjson_ptr_get (root, "/connections/client");
+    connections = yyjson_obj_get (root, "connections");
+
+    client_array = yyjson_obj_get (connections, "client");
 
     yyjson_arr_foreach (client_array, idx, max, client_iter)
     {
@@ -772,6 +777,8 @@ info_xml_dlv1 (ClientInfo *cinfo, const char *software, const char *level,
                            yyjson_get_int (yyjson_obj_get (client_iter, "lag_percent")));
     }
 
+    mxmlElementSetAttrf (connlist, "TotalConnections", "%" PRIu64,
+                         yyjson_get_uint (yyjson_obj_get (connections, "client_count")));
     mxmlElementSetAttrf (connlist, "SelectedConnections", "%d", selectedcount);
   }
 

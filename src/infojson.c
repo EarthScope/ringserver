@@ -247,6 +247,8 @@ info_add_streams (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matchexpr)
     return NULL;
   }
 
+  yyjson_mut_obj_add_uint (doc, root, "stream_count", cinfo->ringparams->streamcount);
+
   /* Create JSON */
   if ((stream_array = yyjson_mut_obj_add_arr (doc, root, "stream")) == NULL)
   {
@@ -605,6 +607,8 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
   {
     return NULL;
   }
+
+  yyjson_mut_obj_add_int (doc, connection, "client_count", param.clientcount);
 
   nsnow = NSnow ();
 
