@@ -212,31 +212,25 @@ NSnow (void)
 } /* End of NSnow() */
 
 /***************************************************************************
- * FVNhash64:
+ * FNVhash64:
  *
- * Perform a 64 bit Fowler/Noll/Vo hash on a string.  This is a
- * simplified version of the source code found here:
- * http://www.isthe.com/chongo/tech/comp/fnv/index.html.
+ * Perform a 64 bit Fowler/Noll/Vo hash (FNV-1a) on a string.  This is a
+ * simplified version of the source code found in draft-eastlake-fnv-21:
+ * https://datatracker.ietf.org/doc/html/draft-eastlake-fnv-21
  *
  * Returns the hash of the string.
  ***************************************************************************/
-int64_t
-FVNhash64 (const char *str)
+uint64_t
+FNVhash64 (const char *str)
 {
-  unsigned char *s = (unsigned char *)str; /* unsigned string */
+  uint64_t hval = 0xCBF29CE484222325;
+  uint8_t ch;
 
-  /* Seed hash value with FVN1_64_INIT */
-  int64_t hval = (int64_t)0xcbf29ce484222325ULL;
+  if (!str)
+    return 0;
 
-  /* FNV-1 hash each octet of the string */
-  while (*s)
-  {
-    /* Multiply by the 64 bit FNV magic prime mod 2^64 */
-    hval *= (int64_t)0x100000001b3ULL;
-
-    /* XOR the bottom with the current octet */
-    hval ^= (int64_t)*s++;
-  }
+  while ((ch = *str++))
+    hval = 0x00000100000001B3 * (hval ^ ch);
 
   return hval;
 } /* End of FNVhash64() */

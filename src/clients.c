@@ -1163,7 +1163,7 @@ GetStreamNode (RBTree *tree, pthread_mutex_t *plock, char *streamid, int *new)
   StreamNode *stream = NULL;
 
   /* Generate key */
-  key = FVNhash64 (streamid);
+  key = FNVhash64 (streamid);
 
   /* Search for a matching entry */
   if ((rbnode = RBFind (tree, &key)))

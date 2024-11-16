@@ -806,7 +806,7 @@ RingWrite (RingParams *ringparams, RingPacket *packet,
       ringparams->streamcount++;
     }
 
-    lprintf (2, "Added stream entry for %s (key: %" PRId64 ")", packet->streamid, *skey);
+    lprintf (2, "Added stream entry for %s (key: %" PRIx64 ")", packet->streamid, *skey);
   }
 
   /* Copy packet header into ring */
@@ -1853,7 +1853,7 @@ AddStreamIdx (RBTree *streamidx, RingStream *stream, Key **ppkey)
 
   /* Populate the new data node and key */
   memcpy (newdata, stream, sizeof (RingStream));
-  *newkey = FVNhash64 (newdata->streamid);
+  *newkey = FNVhash64 (newdata->streamid);
 
   /* Add to the stream index */
   RBTreeInsert (streamidx, newkey, newdata, 0);
@@ -1883,7 +1883,7 @@ GetStreamIdx (RBTree *streamidx, char *streamid)
     return 0;
 
   /* Generate key from streamid */
-  key = FVNhash64 (streamid);
+  key = FNVhash64 (streamid);
 
   /* Search for a matching key */
   if ((tnode = RBFind (streamidx, &key)))
@@ -1911,7 +1911,7 @@ DelStreamIdx (RBTree *streamidx, char *streamid)
     return -1;
 
   /* Generate key from streamid */
-  key = FVNhash64 (streamid);
+  key = FNVhash64 (streamid);
 
   /* Search for a matching key */
   if ((tnode = RBFind (streamidx, &key)))
