@@ -38,7 +38,7 @@
 #include "logging.h"
 #include "config.h"
 
-static const char *config_file;
+static const char *reference_config_file;
 
 static char *GetOptVal (int argcount, char **argvec, int argopt);
 static int ReadEnvironmentVariables (void);
@@ -170,7 +170,7 @@ ProcessParam (int argcount, char **argvec)
     }
     else if (strcmp (argvec[optind], "-C") == 0)
     {
-      printf ("%s", config_file);
+      printf ("%s", reference_config_file);
       exit (0);
     }
     else if (strncmp (argvec[optind], "-v", 2) == 0)
@@ -428,6 +428,8 @@ GetOptVal (int argcount, char **argvec, int argopt)
  * ReadEnvironmentVariables:
  *
  * Check for and processes recognized environment variables.
+ * If the value of an environment variable is 'DISABLE' then the
+ * corresponding parameter is not set.
  *
  * Returns >=0 on the number of variables read on success
  * Returns  -1 on error
@@ -439,7 +441,14 @@ ReadEnvironmentVariables (void)
   char paramstr[512] = {0};
   int count = 0;
 
-  if ((envvar = getenv ("RS_RING_DIRECTORY")))
+  if ((envvar = getenv ("RS_CONFIG_FILE")) && strcasecmp (envvar, "DISABLE"))
+  {
+    free (config.configfile);
+    config.configfile = strdup (envvar);
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_RING_DIRECTORY")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "RingDirectory \"%s\"", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -447,7 +456,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_RING_SIZE")))
+  if ((envvar = getenv ("RS_RING_SIZE")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "RingSize %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -455,7 +464,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_MAX_PACKET_SIZE")))
+  if ((envvar = getenv ("RS_MAX_PACKET_SIZE")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "MaxPacketSize %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -463,7 +472,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_MEMORY_MAP_RING")))
+  if ((envvar = getenv ("RS_MEMORY_MAP_RING")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "MemoryMapRing %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -471,7 +480,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_AUTO_RECOVERY")))
+  if ((envvar = getenv ("RS_AUTO_RECOVERY")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "AutoRecovery %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -479,7 +488,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_LISTEN_PORT")))
+  if ((envvar = getenv ("RS_LISTEN_PORT")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "ListenPort %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -487,7 +496,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_SEEDLINK_PORT")))
+  if ((envvar = getenv ("RS_SEEDLINK_PORT")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "SeedLinkPort %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -495,7 +504,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_DATALINK_PORT")))
+  if ((envvar = getenv ("RS_DATALINK_PORT")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "DataLinkPort %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -503,7 +512,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_HTTP_PORT")))
+  if ((envvar = getenv ("RS_HTTP_PORT")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "HTTPPort %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -511,7 +520,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_SERVER_ID")))
+  if ((envvar = getenv ("RS_SERVER_ID")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "ServerID \"%s\"", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -519,7 +528,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_VERBOSITY")))
+  if ((envvar = getenv ("RS_VERBOSITY")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "Verbosity %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -527,7 +536,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_MAX_CLIENTS_PER_IP")))
+  if ((envvar = getenv ("RS_MAX_CLIENTS_PER_IP")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "MaxClientsPerIP %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -535,7 +544,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_MAX_CLIENTS")))
+  if ((envvar = getenv ("RS_MAX_CLIENTS")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "MaxClients %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -543,7 +552,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_CLIENT_TIMEOUT")))
+  if ((envvar = getenv ("RS_CLIENT_TIMEOUT")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "ClientTimeout %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -551,7 +560,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_RESOLVE_HOSTNAMES")))
+  if ((envvar = getenv ("RS_RESOLVE_HOSTNAMES")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "ResolveHostnames %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -559,7 +568,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_TIME_WINDOW_LIMIT")))
+  if ((envvar = getenv ("RS_TIME_WINDOW_LIMIT")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "TimeWindowLimit %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -567,7 +576,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_TRANSFER_LOG_DIRECTORY")))
+  if ((envvar = getenv ("RS_TRANSFER_LOG_DIRECTORY")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "TransferLogDirectory \"%s\"", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -575,7 +584,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_TRANSFER_LOG_INTERVAL")))
+  if ((envvar = getenv ("RS_TRANSFER_LOG_INTERVAL")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "TransferLogInterval %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -583,7 +592,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_TRANSFER_LOG_PREFIX")))
+  if ((envvar = getenv ("RS_TRANSFER_LOG_PREFIX")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "TransferLogPrefix \"%s\"", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -591,7 +600,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_TRANSFER_LOG_TX")))
+  if ((envvar = getenv ("RS_TRANSFER_LOG_TX")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "TransferLogTX %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -599,7 +608,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_TRANSFER_LOG_RX")))
+  if ((envvar = getenv ("RS_TRANSFER_LOG_RX")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "TransferLogRX %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -607,7 +616,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_WRITE_IP")))
+  if ((envvar = getenv ("RS_WRITE_IP")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "WriteIP %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -615,7 +624,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_TRUSTED_IP")))
+  if ((envvar = getenv ("RS_TRUSTED_IP")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "TrustedIP %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -623,7 +632,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_LIMIT_IP")))
+  if ((envvar = getenv ("RS_LIMIT_IP")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "LimitIP %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -631,7 +640,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_MATCH_IP")))
+  if ((envvar = getenv ("RS_MATCH_IP")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "MatchIP %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -639,7 +648,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_REJECT_IP")))
+  if ((envvar = getenv ("RS_REJECT_IP")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "RejectIP %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -647,7 +656,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_WEB_ROOT")))
+  if ((envvar = getenv ("RS_WEB_ROOT")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "WebRoot \"%s\"", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -655,7 +664,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_HTTP_HEADER")))
+  if ((envvar = getenv ("RS_HTTP_HEADER")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "HTTPHeader \"%s\"", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -663,7 +672,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_MSEED_WRITE")))
+  if ((envvar = getenv ("RS_MSEED_WRITE")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "MSeedWrite \"%s\"", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -671,7 +680,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_TLS_CERT_FILE")))
+  if ((envvar = getenv ("RS_TLS_CERT_FILE")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "TLSCertFile \"%s\"", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -679,7 +688,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_TLS_KEY_FILE")))
+  if ((envvar = getenv ("RS_TLS_KEY_FILE")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "TLSKeyFile \"%s\"", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -687,7 +696,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_TLS_VERIFY_CLIENT_CERT")))
+  if ((envvar = getenv ("RS_TLS_VERIFY_CLIENT_CERT")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "TLSVerifyClientCert %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -695,7 +704,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_MSEED_SCAN")))
+  if ((envvar = getenv ("RS_MSEED_SCAN")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "MSeedScan %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -703,7 +712,7 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_VOLATILE_RING")))
+  if ((envvar = getenv ("RS_VOLATILE_RING")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "VolatileRing %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
@@ -2191,8 +2200,8 @@ AddIPNet (IPNet **pplist, const char *network, const char *limitstr)
   return 0;
 } /* End of AddIPNet() */
 
-static const char *config_file =
-    "# Example ringserver configuration file.\n\
+static const char *reference_config_file = \
+"# Example ringserver configuration file.\n\
 #\n\
 # Default values are in comments where appropriate.\n\
 #\n\
@@ -2203,6 +2212,9 @@ static const char *config_file =
 # and via a configuration file like this one.  The order of precedence is:\n\
 # command line, environment variables, configuration file.\n\
 # Equivalent variables are listed in the description of each parameter.\n\
+#\n\
+# A configuration file can be specified on the command line or with\n\
+# the environment variable RS_CONFIG_FILE.\n\
 #\n\
 # Comment lines begin with a '#' character.\n\
 \n\
