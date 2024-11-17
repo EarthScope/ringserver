@@ -91,8 +91,10 @@ info_xml_slv3_id (ClientInfo *cinfo, const char *software)
                       yyjson_get_str (yyjson_obj_get (root, "server_start")));
 
   /* Generate XML string */
-  mxmlSetWrapMargin (0);
-  xml_string = mxmlSaveAllocString (xmldoc, MXML_NO_CALLBACK);
+  mxml_options_t *options = mxmlOptionsNew ();
+  mxmlOptionsSetWrapMargin (options, 0);
+  xml_string = mxmlSaveAllocString (xmldoc, options);
+  mxmlOptionsDelete (options);
 
   yyjson_doc_free (json);
   mxmlRelease (xmldoc);
@@ -172,8 +174,10 @@ info_xml_slv3_capabilities (ClientInfo *cinfo, const char *software)
   }
 
   /* Generate XML string */
-  mxmlSetWrapMargin (0);
-  xml_string = mxmlSaveAllocString (xmldoc, MXML_NO_CALLBACK);
+  mxml_options_t *options = mxmlOptionsNew ();
+  mxmlOptionsSetWrapMargin (options, 0);
+  xml_string = mxmlSaveAllocString (xmldoc, options);
+  mxmlOptionsDelete (options);
 
   yyjson_doc_free (json);
   mxmlRelease (xmldoc);
@@ -321,8 +325,10 @@ info_xml_slv3_stations (ClientInfo *cinfo, const char *software, int include_str
   }
 
   /* Generate XML string */
-  mxmlSetWrapMargin (0);
-  xml_string = mxmlSaveAllocString (xmldoc, MXML_NO_CALLBACK);
+  mxml_options_t *options = mxmlOptionsNew ();
+  mxmlOptionsSetWrapMargin (options, 0);
+  xml_string = mxmlSaveAllocString (xmldoc, options);
+  mxmlOptionsDelete (options);
 
   yyjson_doc_free (json);
   mxmlRelease (xmldoc);
@@ -445,8 +451,10 @@ info_xml_slv3_connections (ClientInfo *cinfo, const char *software)
   }
 
   /* Generate XML string */
-  mxmlSetWrapMargin (0);
-  xml_string = mxmlSaveAllocString (xmldoc, MXML_NO_CALLBACK);
+  mxml_options_t *options = mxmlOptionsNew ();
+  mxmlOptionsSetWrapMargin (options, 0);
+  xml_string = mxmlSaveAllocString (xmldoc, options);
+  mxmlOptionsDelete (options);
 
   yyjson_doc_free (json);
   mxmlRelease (xmldoc);
@@ -504,7 +512,7 @@ info_xml_dlv1 (ClientInfo *cinfo, const char *software, const char *level,
   root = yyjson_doc_get_root (json);
 
   /* Initialize the XML response */
-  if (!(xmldoc = mxmlNewElement (MXML_NO_PARENT, "DataLink")))
+  if (!(xmldoc = mxmlNewElement (NULL, "DataLink")))
   {
     yyjson_doc_free (json);
     return NULL;
@@ -783,8 +791,10 @@ info_xml_dlv1 (ClientInfo *cinfo, const char *software, const char *level,
   }
 
   /* Generate XML string */
-  mxmlSetWrapMargin (0);
-  xml_string = mxmlSaveAllocString (xmldoc, MXML_NO_CALLBACK);
+  mxml_options_t *options = mxmlOptionsNew ();
+  mxmlOptionsSetWrapMargin (options, 0);
+  xml_string = mxmlSaveAllocString (xmldoc, options);
+  mxmlOptionsDelete (options);
 
   yyjson_doc_free (json);
   mxmlRelease (xmldoc);

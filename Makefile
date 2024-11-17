@@ -7,17 +7,12 @@
 all clean: pcre2 mxml libmseed mbedtls
 	$(MAKE) -C src $@
 
-# Test for Makefile/makefile and run make, run configure if needed
 .PHONY: pcre2
 pcre2:
 	$(MAKE) -C $@ $(MAKECMDGOALS)
 
-# Test for Makefile/makefile and run make, run configure if needed
 .PHONY: mxml
 mxml:
-	@if [ ! -f $@/Makefile -a ! -f $@/makefile ] ; then \
-	  ( cd $@ && ./configure --disable-shared --enable-threads ) ; \
-	fi
 	$(MAKE) -C $@ $(MAKECMDGOALS)
 
 .PHONY: libmseed
