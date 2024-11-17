@@ -1,3 +1,23 @@
+2024.165: 3.1.3
+	- Use sequence number from extra headers (/FDSN/Sequence) if present when writing format v2.
+
+2024.148: 3.1.2
+	- Update yyjson to v0.9.0.
+	- Simplify mstl3_addmsr_recordptr() a bit.
+
+2024.146:
+	- Replace ms_dabs() with macro to use system fabs(), document as deprecated.
+	- Add CRC values to diagnostic message when header values does not match calculated.
+
+2024.137:
+	- Add msr3_nsperiod() to calculate the sample period in nanoseconds.
+	- Add tests for msr3 utility functions.
+
+2024.106:
+	- When writing v2 derive the quality code from the publication version when the
+	extra-header "/FDSN/DataQuality" is not present.  Use quality indicator 'D' when
+	the publication version cannot be mapped, e.g. > 4.
+
 2024.024: 3.1.1
 	- Change library compatibility version in Makefile to MAJOR.1.0, as this is now
 	incompatible with the x.0.0 releases.

@@ -986,13 +986,51 @@ msr3_pack_header2 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_
   }
 
   /* Build fixed header */
-  memcpy (pMS2FSDH_SEQNUM (record), "000000", 6);
 
+  /* Use sequence number from extra headers if present */
+  if (yyjson_ptr_get_uint (ehroot, "/FDSN/Sequence", &header_uint))
+  {
+    if (header_uint <= 999999)
+    {
+      char seqnum[7];
+      snprintf (seqnum, sizeof (seqnum), "%06" PRIu64, header_uint);
+      memcpy (pMS2FSDH_SEQNUM (record), seqnum, 6);
+    }
+    else
+    {
+      memcpy (pMS2FSDH_SEQNUM (record), "999999", 6);
+    }
+  }
+  else
+  {
+    memcpy (pMS2FSDH_SEQNUM (record), "000000", 6);
+  }
+
+  /* Use DataQuality indicator in extra headers if present */
   if (yyjson_ptr_get_str (ehroot, "/FDSN/DataQuality", &header_string) &&
       MS2_ISDATAINDICATOR (header_string[0]))
+  {
     *pMS2FSDH_DATAQUALITY (record) = header_string[0];
+  }
+  /* Otherwise map publication version, defaulting to 'D' */
   else
-    *pMS2FSDH_DATAQUALITY (record) = 'D';
+  {
+    switch (msr->pubversion)
+    {
+    case 1:
+      *pMS2FSDH_DATAQUALITY (record) = 'R';
+      break;
+    case 3:
+      *pMS2FSDH_DATAQUALITY (record) = 'Q';
+      break;
+    case 4:
+      *pMS2FSDH_DATAQUALITY (record) = 'M';
+      break;
+    default:
+      *pMS2FSDH_DATAQUALITY (record) = 'D';
+      break;
+    }
+  }
 
   *pMS2FSDH_RESERVED (record) = ' ';
   ms_strncpopen (pMS2FSDH_STATION (record), station, 5);
@@ -1122,7 +1160,7 @@ msr3_pack_header2 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_
   }
 
   /* Add Blockette 100 if sample rate is not well represented by factor/multiplier */
-  if (ms_dabs(msr3_sampratehz(msr) - ms_nomsamprate(factor, multiplier)) > 0.0001)
+  if (fabs(msr3_sampratehz(msr) - ms_nomsamprate(factor, multiplier)) > 0.0001)
   {
     *next_blockette = HO2u ((uint16_t)written, swapflag);
     next_blockette = pMS2B100_NEXT (record + written);
@@ -1825,7 +1863,7 @@ ms_ratapprox (double real, int *num, int *den, int maxval, double precision)
   if (!pos)
     *num = -*num;
 
-  while (ms_dabs (preal - (double)Aj / (double)Bj) > precision &&
+  while (fabs (preal - (double)Aj / (double)Bj) > precision &&
          Aj < maxval && Bj < maxval)
   {
     Aj2   = Aj1;
@@ -1926,7 +1964,7 @@ ms_reduce_rate (double samprate, int16_t *factor1, int16_t *factor2)
   int32_t diff;
 
   /* Handle case of integer sample values. */
-  if (ms_dabs (samprate - intsamprate) < 0.0000001)
+  if (fabs (samprate - intsamprate) < 0.0000001)
   {
     /* If integer sample rate is less than range of 16-bit int set it directly */
     if (intsamprate <= 32767)

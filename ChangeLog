@@ -29,9 +29,9 @@
 	- All legacy stream IDs for miniSEED of the form: NN_SSSSS_LL_CCC/MSEED
 	will be converted to FDSN Source ID form: FDSN:NN_SSSSS_LL_C_C_C/MSEED.
 	- Allow ring size to be specified in fractional large units, e.g. "1.5g".
-	- Update libmseed to 3, adapt for miniSEED 3 API.
-	- Upgrade to PCRE2 10.42 from legacy PCRE.
-	- Upgrade mini-XML (mxml) to 3.3.1.
+	- Update libmseed to 3.1.3, adapt for miniSEED 3 API.
+	- Upgrade to PCRE2 10.44 from legacy PCRE.
+	- Upgrade mini-XML (mxml) to 4.0.3.
 
 2020.075:
 	- Fix resuming SeedLink connections when both sequence and begin time are
