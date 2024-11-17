@@ -9,7 +9,7 @@ The Mbed TLS build system is not used in ringserver.  Instead a custom
 Makefile is provided in this directory to build the objects that are
 directly linked to the ringserver executable.
 
-Only a minimal amount of the Mbed TLS releases are needed by ringserver,
+Only a minimal number of the Mbed TLS release files are needed by ringserver,
 Specifically just the library source and include files.
 
 Steps to update Mbed TLS to a newer release:
