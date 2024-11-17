@@ -28,8 +28,8 @@
 extern "C" {
 #endif
 
-#define LIBMSEED_VERSION "3.1.1"     //!< Library version
-#define LIBMSEED_RELEASE "2024.024"  //!< Library release date
+#define LIBMSEED_VERSION "3.1.3"     //!< Library version
+#define LIBMSEED_RELEASE "2024.165"  //!< Library release date
 
 /** @defgroup io-functions File and URL I/O */
 /** @defgroup miniseed-record Record Handling */
@@ -63,6 +63,7 @@ extern "C" {
 #include <time.h>
 #include <string.h>
 #include <ctype.h>
+#include <math.h>
 
 /** @def PRIsize_t
     @brief A printf() macro for portably printing size_t values */
@@ -140,7 +141,7 @@ extern "C" {
 
 /** @def MS_ISRATETOLERABLE
     @brief Macro to test default sample rate tolerance: abs(1-sr1/sr2) < 0.0001 */
-#define MS_ISRATETOLERABLE(A,B) (ms_dabs (1.0 - ((A) / (B))) < 0.0001)
+#define MS_ISRATETOLERABLE(A,B) (fabs (1.0 - ((A) / (B))) < 0.0001)
 
 /** @def MS2_ISDATAINDICATOR
     @brief Macro to test a character for miniSEED 2.x data record/quality indicators */
@@ -409,6 +410,7 @@ extern nstime_t   msr3_endtime (const MS3Record *msr);
 extern void       msr3_print (const MS3Record *msr, int8_t details);
 extern int        msr3_resize_buffer (MS3Record *msr);
 extern double     msr3_sampratehz (const MS3Record *msr);
+extern nstime_t   msr3_nsperiod (const MS3Record *msr);
 extern double     msr3_host_latency (const MS3Record *msr);
 
 extern int64_t ms3_detect (const char *record, uint64_t recbuflen, uint8_t *formatversion);
@@ -1252,8 +1254,10 @@ extern const char *ms_encodingstr (uint8_t encoding);
 extern const char *ms_errorstr (int errorcode);
 
 extern nstime_t ms_sampletime (nstime_t time, int64_t offset, double samprate);
-extern double ms_dabs (double val);
 extern int ms_bigendianhost (void);
+
+/** DEPRECATED legacy implementation of fabs(), now a macro */
+#define ms_dabs(val) fabs(val)
 
 /** Portable version of POSIX ftello() to get file position in large files */
 extern int64_t lmp_ftell64 (FILE *stream);
