@@ -18,7 +18,7 @@ CFLAGS += -D_REENTRANT -D_POSIX_PTHREAD_SEMANTICS -I../libmseed -I../mxml -I../p
 LDLIBS  = ../pcre2/libpcre2.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread
 
 # For SunOS/Solaris uncomment the following line
-#LDLIBS = ../pcre2/.libs/libpcre2-8.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread -lsocket -lnsl -lrt
+#LDLIBS = ./pcre2/libpcre2.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread -lsocket -lnsl -lrt
 
 all: $(BIN)
 

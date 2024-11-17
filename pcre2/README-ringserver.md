@@ -7,7 +7,7 @@ ringserver for regular expression support.
 
 The PCRE2 build system is not used in ringserver.  Instead a custom
 Makefile is provided in this directory to build the objects that are
-directly linked to the ringserver executable.
+combined into a static library.
 
 Only a minimal number of the PCRE2 release files are needed by ringserver.
 
