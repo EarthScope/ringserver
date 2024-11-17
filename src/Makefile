@@ -15,7 +15,7 @@ MBEDTLS_OBJS = $(wildcard ../mbedtls/library/*.o)
 
 CFLAGS += -D_REENTRANT -D_POSIX_PTHREAD_SEMANTICS -I../libmseed -I../mxml -I../pcre2/src -I../mbedtls/include
 
-LDLIBS  = ../pcre2/.libs/libpcre2-8.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread
+LDLIBS  = ../pcre2/libpcre2.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread
 
 # For SunOS/Solaris uncomment the following line
 #LDLIBS = ../pcre2/.libs/libpcre2-8.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread -lsocket -lnsl -lrt
