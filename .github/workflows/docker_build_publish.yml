@@ -2,8 +2,11 @@ name: Publish Docker image
 
 on:
   workflow_dispatch:   # Trigger on manual run
-  release:
-    types: [published] # Trigger on release publishing
+  push:
+    branches:
+      - main
+    tags:
+      - v*.*.*         # Trigger on version tag push
 
 jobs:
   push_to_registry:
@@ -47,4 +50,4 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
           repository: earthscope/ringserver
           readme-filepath: ./README-docker.md
-          short-description: "Ringserver: A SeedLink and DataLink streaming server"
+          short-description: "ringserver: A SeedLink and DataLink streaming server"
