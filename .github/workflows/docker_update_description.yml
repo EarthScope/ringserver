@@ -1,0 +1,26 @@
+name: Update Docker Hub description from README-docker.md
+
+on:
+  workflow_dispatch:   # Trigger on manual run
+
+jobs:
+  push_to_registry:
+    name: Push description to Docker Hub repository
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+      attestations: write
+      id-token: write
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Sync README-docker.md with Docker Hub description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          repository: earthscope/ringserver
+          readme-filepath: ./README-docker.md
+          short-description: "ringserver: A SeedLink and DataLink streaming server"

@@ -1,7 +1,7 @@
 /**************************************************************************
  * loadbuffer.c
  *
- * TODO: Add description
+ * Load ring buffer data from older ring buffer versions.
  *
  * This file is part of the ringserver.
  *
