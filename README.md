@@ -6,131 +6,136 @@ supported protocols are all TCP-based: DataLink, SeedLink and HTTP/WebSocket.
 
 The ring buffer is implemented as a FIFO with newly arriving packets pushing
 older packets out of the buffer.  The ring packets are not format specific
-and may contain any type of data. 
+and may contain any type of data.
 
 Some features are specific to miniSEED, the standard data format in seismology,
 such as the SeedLink protocol, built-in miniSEED file scanner and built-in
 miniSEED archiver.  These are format-specific enhancements built on the core
 transport that is agnostic to data format.
 
-For usage infromation see the [ringserver manual](https://github.com/EarthScope/ringserver/tree/main/doc) in the
-'doc' directory.
+For usage information see the [ringserver manual](https://github.com/EarthScope/ringserver/tree/main/doc)
+in the 'doc' directory.
 
-## Download release versions
+## Download release versions of source code
 
 The [releases](https://github.com/EarthScope/ringserver/releases) area contains
 release versions for download.
 
-## Building and Installing 
+## Building and installing
 
 In most Unix/Linux environments a simple 'make' will build the program.
+A C99 compliant compiler and GNU make are required.
 
-The CC and CFLAGS environment variables can be used to configure
+The `CC` and `CFLAGS` environment variables can be used to configure
 the build parameters.
 
-SunOS/Solaris:
- 
-In order to compile under Solaris the 'src/Makefile' needs to be edited.
-See the Makefile for instructions.
-
-For further installation simply copy the resulting binary and man page
+To installation simply copy the resulting binary and man page
 (in the 'doc' directory) to appropriate directories.
 
-## Ringserver Container Image
+## Ringserver container image
 
-If you prefer to work with ringserver as a container, that is fully supported.
-Recent releases have containers available publicy as:
+Container images are published for recent versions.  For import information see
+[README-docker.md](README-docker.md)
 
-[public.ecr.aws/earthscope/ringserver](https://gallery.ecr.aws/earthscope/ringserver)
+## Quick start
 
-To pull this image with Docker and tag it locally as "ringserver" for convenience:
-
-```
-docker pull public.ecr.aws/earthscope/ringserver:latest
-docker tag public.ecr.aws/earthscope/ringserver:latest ringserver:latest
-```
-
-To run the default configuration of ringserver with Docker which listens locally on ports 16000 and 18000:
-
-```
-docker run -p 16000:16000 -p 18000:18000 ringserver
-```
-
-If you want the ring contents to persist container recreations, you will need to attach a [volume](https://docs.docker.com/storage/volumes/) to store the ring files. This can be done in several ways. Below illustrates using a subdirectory in the current working directory. Note that by default the container runs ringserver as user id 10000 so the directory on the local file system where the ring files are stored needs to be writable by that user id.
-
-```
-mkdir -p ring
-sudo chown -R 10000 ring
-docker run -p 16000:16000 -p 18000:18000 -v ${PWD}/ring:/data/ring ringserver
-```
-
-Note: Docker for Mac does not allow for volumes to be bound to containers by default. This default confirguation can be changed in the "File Sharing" section of the Docker settings, in which a user can specify directories that can be bound to docker containers. If you are recieving the error:
-```
-Error response from daemon: error while creating mount source path '/host_mnt/PATH/ringserver/ring': mkdir /host_mnt/PATH: operation not permitted
-```
-verify that the directories used for volumes can be bound to a docker container.
-
-### Container Image Versioning
-
-The container image version tag uses the same version as ring server with an additional ".n" suffix that indicates the build number of the container.
-For example: `2020.075.2` is the second build of the container for ringserver version 2020.075.
-The most recent build of the most recent version will be tagged `latest`.
-
-### Command Line Options
+The `ringserver` program can be configured in three ways, in order of
+precedence: command line options, environment variables, and a configuration
+file.
 
 To view all ringserver command line options:
 
 ```
-docker run ringserver -h
+ringserver -h
 ```
 
-All ringserver command line options are supported as either options passed to `docker run` as demonstrated with "-h" above, or environment variables that can be passed to the container when run.
-See the entrypoint.sh script for the currnet mapping of command line options to the names of the environmental variables.
-An example of running ringserver with 1 MB ring file instead of the default 1 GB using an environment variable:
+To print a reference configuration file, including descriptions for each parameter
+and their environment variable equivalents:
 
 ```
-mkdir -p ring
-sudo chown -R 10000 ring
-docker run -p 16000:16000 -p 18000:18000 -v ${PWD}/ring:/data/ring -e RING_SIZE=1048576 ringserver
+ringserver -C
 ```
 
-### Running with a Custom Configuration File
-
-Some configuration settings are not avalable via command line options and must be specified in a configuration file.
-The default configuration that is built into the container is located in doc/ring.conf in this repository.
-To specify a different configuration file stored on the local file system, you can combine volumes and environment variables described above:
+A minimal ringserver instance can be started with default options with
+the following commands:
 
 ```
-mkdir -p local_config
-cp -a doc/ring.conf local_config/
-mkdir -p ring
-sudo chown -R 10000 ring
-docker run -p 16000:16000 -p 18000:18000 -v ${PWD}/ring:/data/ring -v ${PWD}/local_config/ring.conf:/ring.conf ringserver
+mkdir ring
+ringserver -Rd ring -L 18000 -DL 16000
 ```
 
+which creates an empty `ring` directory and specifies that directory as the
+ring buffer location using the `-Rd` argument.  The `-L` argument configures
+a listener on port 18000 for all supported protocols (SeedLink, DataLink, HTTP).
+The `-DL` argument configures a listening on port 16000 for DataLink connections,
+commonly used for clients submitting data.
 
-### Building a Container Image Locally
+There are two mechanisms for submitting data packets to a server:
+1. Via the TCP-based DataLink protocol (by default port 16000)
+2. Via a built-in scanner for miniSEED data on the local file system
 
-A Dockerfile is included for building a container to run ringserver in.
-To build:
+### Submitting data via the network using DataLink
+
+For DataLink protocol submission, the server must be configured to allow
+write-permission for connections on specified IP addresses.  By default `localhost`
+is allowed to submit data.  The config file option `WriteIP` or environment
+variable `RS_WRITE_IP` can be used to specify alternate host(s) allowed to
+submit data.
+
+Some programs exist to submit data from different sources, the most common are:
+
+[slink2dali](https://github.com/EarthScope/slink2dali) for collecting packets from
+a SeedLink server and submitting them to a ringserver.
+
+[ew2ringserver](https://gitlab.com/seismic-software/earthworm/-/tree/master/src/data_exchange/ew2ringserver) for [Earthworm](http://www.earthwormcentral.org/)
+
+[orb2ringserver](https://github.com/EarthScope/orb2ringserver) for [BRTT's Antelope](https://brtt.com/software/)
+
+[miniseed2dmc](https://github.com/EarthScope/miniseed2dmc) for sending miniSEED in files.
+Useful for build transfer and not intended for real-time streaming.
+
+[libdali](https://github.com/EarthScope/libdali) is a C-language library implementing
+the DataLink protocol including submission.
+
+[simpledali](https://github.com/crotwell/simpledali) is a Python library implementing
+the DataLink protocol including submission.
+
+### Scanning for miniSEED from
+
+A built-in scanner can be configured to scan files on the local file system
+that contain miniSEED records.  This capability is configured with either:
+- `-MSSCAN` command line option
+- `RS_MSEED_SCAN` environment variable
+- `MSeedScan` config file parameter
+
+See the man page and reference config file for documentation.
+
+### Querying the server
+
+The [dalitool](https://github.com/earthscope/dalitool) program can be used
+for diagnostic testing and general queries to a ringserver using the DataLink protocol.
+
+The [slinktool](https://github.com/earthscope/slinktool) program can also be used
+for diagnostic testing and general queries to a ringserver using the SeedLink protocol.
+
+If HTTP protocol support is enabled on any ports, the server may also be queried
+using a web browser at the following URL paths:
 
 ```
-docker build -t ringserver:latest .
+  /id           - Server identification
+  /id/json      - Server identification in JSON
+  /streams      - List of available streams with time range
+  /streams/json - List of available streams with time range in JSON
+  /streamids    - List of available streams, variable levels
+  /status       - Server status, limited access*
+  /status/json  - Server status in JSON, limited access*
+  /connections  - List of connections, limited access*
+  /connections/json - List of connections in JSON, limited access*
+  /seedlink     - Initiate WebSocket connection for SeedLink
+  /datalink     - Initiate WebSocket connection for DataLink
 ```
 
-### Running Locally with Compose
-
-A `compose.yml` file is included for running ringserver locally using Docker Compose.
-This will create a compose service that listens on ports 16000 and 18000 and writes the ring file to the ./ring directory where the docker compose command is run.
-To start it:
-
-```
-mkdir -p ring
-sudo chown -R 10000 ring
-docker compose up -d
-```
-
-## Licensing 
+## Licensing
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -144,4 +149,4 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Copyright (C) 2020 Chad Trabant, IRIS Data Management Center
+Copyright (C) 2024 Chad Trabant, EarthScope Data Services
