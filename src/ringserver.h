@@ -100,7 +100,7 @@ struct cthread
 /* A structure for server listening parameters */
 typedef struct ListenPortParams
 {
-  char portstr[11];          /* Port number to listen on as string */
+  char portstr[NI_MAXSERV];  /* Port number to listen on as string */
   ListenProtocols protocols; /* Protocol flags for this connection */
   ListenOptions options;     /* Options for this connection */
   int socket;                /* Socket descriptor or -1 when not connected */

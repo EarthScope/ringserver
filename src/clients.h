@@ -68,10 +68,11 @@ typedef struct ClientInfo
   char       *packetdata;   /* Client specific packet buffer, size of RingParams.pktsize */
   struct sockaddr *addr;    /* client socket structure */
   socklen_t   addrlen;      /* Length of client socket structure */
-  char        ipstr[100];   /* Remote host IP address */
-  char        portstr[32];  /* Remote host port */
-  char        hostname[200];/* Remote hostname */
+  char        ipstr[100];   /* Client host IP address */
+  char        portstr[NI_MAXSERV]; /* Client port */
+  char        hostname[200];/* Client hostname, or IP is unresolvable */
   char        clientid[100];/* Client identifier string */
+  char        serverport[NI_MAXSERV]; /* Server port */
   ClientState state;        /* Client state flag */
   ClientType  type;         /* Client type flag */
   ListenProtocols protocols;/* Protocol flags for this client */

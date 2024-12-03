@@ -675,7 +675,8 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
 
     yyjson_mut_obj_add_strcpy (doc, client, "host", tcinfo->hostname);
     yyjson_mut_obj_add_strcpy (doc, client, "ip_address", tcinfo->ipstr);
-    yyjson_mut_obj_add_strcpy (doc, client, "port", tcinfo->portstr);
+    yyjson_mut_obj_add_strcpy (doc, client, "client_port", tcinfo->portstr);
+    yyjson_mut_obj_add_strcpy (doc, client, "server_port", tcinfo->serverport);
     yyjson_mut_obj_add_strcpy (doc, client, "type", conntype);
     yyjson_mut_obj_add_strcpy (doc, client, "client_id", tcinfo->clientid);
 

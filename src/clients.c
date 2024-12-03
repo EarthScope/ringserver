@@ -79,10 +79,6 @@ ClientThread (void *arg)
   ssize_t nrecv;
   int nread;
 
-  struct sockaddr_storage saddr = {0};
-  socklen_t saddrlen            = sizeof (saddr);
-  int serverport                = -1;
-
   /* Throttle related */
   uint32_t throttle_msec = 0; /* Throttle time in milliseconds */
   struct timespec timereq;   /* Throttle for nanosleep() */
@@ -130,17 +126,8 @@ ClientThread (void *arg)
     strncpy (cinfo->hostname, cinfo->ipstr, sizeof (cinfo->hostname) - 1);
   }
 
-  /* Find the server port used for this connection */
-  if (getsockname (cinfo->socket, (struct sockaddr *)&saddr, &saddrlen) == 0)
-  {
-    if (saddr.ss_family == AF_INET)
-      serverport = ntohs (((struct sockaddr_in *)&saddr)->sin_port);
-    else
-      serverport = ntohs (((struct sockaddr_in6 *)&saddr)->sin6_port);
-  }
-
-  lprintf (1, "Client connected [%d]: %s [%s] port %s",
-           serverport, cinfo->hostname, cinfo->ipstr, cinfo->portstr);
+  lprintf (1, "Client connected [%s]: %s [%s] port %s",
+           cinfo->serverport, cinfo->hostname, cinfo->ipstr, cinfo->portstr);
 
   /* Initialize stream tracking binary tree */
   pthread_mutex_lock (&(cinfo->streams_lock));

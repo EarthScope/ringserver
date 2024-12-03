@@ -890,7 +890,7 @@ ListenThread (void *arg)
       continue;
     }
 
-    lprintf (2, "Incoming connection: %s port %s", ipstr, portstr);
+    lprintf (2, "Incoming connection on port %s from %s:%s", lpp->portstr, ipstr, portstr);
 
     /* Reject clients not in matching list */
     if (config.matchips)
@@ -970,10 +970,9 @@ ListenThread (void *arg)
     cinfo->addrlen = addrlen;
 
     /* Store IP address and port number strings */
-    strncpy (cinfo->ipstr, ipstr, sizeof (cinfo->ipstr));
-    cinfo->ipstr[sizeof (cinfo->ipstr) - 1] = '\0';
-    strncpy (cinfo->portstr, portstr, sizeof (cinfo->portstr));
-    cinfo->portstr[sizeof (cinfo->portstr) - 1] = '\0';
+    snprintf (cinfo->ipstr, sizeof (cinfo->ipstr), "%s", ipstr);
+    snprintf (cinfo->portstr, sizeof (cinfo->portstr), "%s", portstr);
+    snprintf (cinfo->serverport, sizeof (cinfo->serverport), "%s", lpp->portstr);
 
     /* Set initial client ID string */
     strncpy (cinfo->clientid, "Client", sizeof (cinfo->clientid));
