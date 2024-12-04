@@ -1376,15 +1376,16 @@ GenerateConnections (ClientInfo *cinfo, const char *path, char **response, Media
       {
         written = snprintf (writeptr, responsesize - responsebytes,
                             "%s [%s:%s]\n"
-                            "  [%s] %s  %s\n"
+                            "  [%s:%s] %s  %s\n"
                             "  Packet %" PRIu64 " (%s)  Lag %d, %.1f\n"
                             "  TX %" PRIu64 " packets, %.1f packets/sec  %" PRIu64 " bytes, %.1f bytes/sec\n"
                             "  RX %" PRIu64 " packets, %.1f packets/sec  %" PRIu64 " bytes, %.1f bytes/sec\n"
                             "  Stream count: %d\n\n",
                             DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "host"))),
                             DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "ip_address"))),
-                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "port"))),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "client_port"))),
                             DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "type"))),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "server_port"))),
                             DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "client_id"))),
                             DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "connect_time"))),
                             yyjson_get_uint (yyjson_obj_get (client_iter, "current_packet")),

@@ -433,7 +433,7 @@ info_xml_slv3_connections (ClientInfo *cinfo, const char *software)
       mxmlElementSetAttr (connection, "host",
                           yyjson_get_str (yyjson_obj_get (client_iter, "ip_address")));
       mxmlElementSetAttr (connection, "port",
-                          yyjson_get_str (yyjson_obj_get (client_iter, "port")));
+                          yyjson_get_str (yyjson_obj_get (client_iter, "client_port")));
       mxmlElementSetAttr (connection, "ctime",
                           yyjson_get_str (yyjson_obj_get (client_iter, "connect_time")));
       mxmlElementSetAttr (connection, "begin_seq", "0");
@@ -746,7 +746,7 @@ info_xml_dlv1 (ClientInfo *cinfo, const char *software, const char *level,
       mxmlElementSetAttr (conn, "IP",
                           DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "ip_address"))));
       mxmlElementSetAttr (conn, "Port",
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "port"))));
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "client_port"))));
       mxmlElementSetAttr (conn, "ClientID",
                           DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "client_id"))));
       mxmlElementSetAttr (conn, "ConnectionTime",
