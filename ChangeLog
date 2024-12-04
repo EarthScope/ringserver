@@ -1,3 +1,7 @@
+2024.338:
+	- Include server_port key in INFO CONNECTIONS response.
+	- Fix parsing of HTTP requests.
+
 2024.320: v4.0.0
 	NOTE: the ring buffer format has changed in this release. Older versions
 	of the saved buffer format will be converted for a seamless upgrade. Once

@@ -155,9 +155,9 @@ urldecode (char *dst, const char *src)
 int
 HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 {
-  char method[10];
-  char path[100];
-  char version[100];
+  char method[10]   = {0};
+  char path[100]    = {0};
+  char version[100] = {0};
   int headlen;
   int fields;
   int nread;
@@ -174,15 +174,11 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
   char *value    = NULL;
   int responsebytes;
 
-  /* Decode percent-encoding in URL */
-  urldecode (recvbuffer, recvbuffer);
-
   /* Parse HTTP request */
-  memset (method, 0, sizeof (method));
-  memset (path, 0, sizeof (path));
-  memset (version, 0, sizeof (version));
-
   fields = sscanf (recvbuffer, "%9s %99s %99s", method, path, version);
+
+  /* Decode percent-encoding in path */
+  urldecode (path, path);
 
   if (fields < 2)
   {
