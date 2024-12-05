@@ -2399,8 +2399,8 @@ ListenPort 18000\n\
 # count sent to and/or received from each client during the log interval.\n\
 # If this parameter is specified and the directory exists, files will\n\
 # be written at a user defined interval with the format:\n\
-# \"<dir>/[prefix-]txlog-YYYYMMDDTHH:MM-YYYYMMDDTHH:MM\" and\n\
-# \"<dir>/[prefix-]rxlog-YYYYMMDDTHH:MM-YYYYMMDDTHH:MM\"\n\
+# \"<dir>/[prefix-]txlog-YYYYMMDDTHHMM-YYYYMMDDTHHMM\" and\n\
+# \"<dir>/[prefix-]rxlog-YYYYMMDDTHHMM-YYYYMMDDTHHMM\"\n\
 # This is a dynamic parameter.\n\
 # Equivalent environment variable: RS_TRANSFER_LOG_DIRECTORY\n\
 \n\

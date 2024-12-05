@@ -169,7 +169,7 @@ WriteTLog (ClientInfo *cinfo, int reset)
     localtime_r (&TLogParams.tlogstartint, &starttm);
     localtime_r (&TLogParams.tlogendint, &endtm);
     snprintf (txfilename, sizeof (txfilename),
-              "%s/%s%stxlog-%04d%02d%02dT%02d:%02d-%04d%02d%02dT%02d:%02d",
+              "%s/%s%stxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d",
               TLogParams.tlogbasedir,
               (TLogParams.tlogprefix) ? TLogParams.tlogprefix : "",
               (TLogParams.tlogprefix) ? "-" : "",
@@ -193,7 +193,7 @@ WriteTLog (ClientInfo *cinfo, int reset)
     localtime_r (&TLogParams.tlogstartint, &starttm);
     localtime_r (&TLogParams.tlogendint, &endtm);
     snprintf (rxfilename, sizeof (rxfilename),
-              "%s/%s%srxlog-%04d%02d%02dT%02d:%02d-%04d%02d%02dT%02d:%02d",
+              "%s/%s%srxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d",
               TLogParams.tlogbasedir,
               (TLogParams.tlogprefix) ? TLogParams.tlogprefix : "",
               (TLogParams.tlogprefix) ? "-" : "",
