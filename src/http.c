@@ -1374,22 +1374,30 @@ GenerateConnections (ClientInfo *cinfo, const char *path, char **response, Media
 
       yyjson_arr_foreach (client_array, idx, max, client_iter)
       {
+        yyjson_val *packet_id = yyjson_obj_get (client_iter, "packet_id");
+        char packet_id_str[32] = {0};
+
+        if (packet_id)
+          snprintf (packet_id_str, sizeof (packet_id_str), "%" PRIu64, yyjson_get_uint (packet_id));
+        else
+          packet_id_str[0] = '-';
+
         written = snprintf (writeptr, responsesize - responsebytes,
-                            "%s [%s:%s]\n"
-                            "  [%s:%s] %s  %s\n"
-                            "  Packet %" PRIu64 " (%s)  Lag %d, %.1f\n"
-                            "  TX %" PRIu64 " packets, %.1f packets/sec  %" PRIu64 " bytes, %.1f bytes/sec\n"
-                            "  RX %" PRIu64 " packets, %.1f packets/sec  %" PRIu64 " bytes, %.1f bytes/sec\n"
-                            "  Stream count: %d\n\n",
+                            "%s [%s:%s] using %s on port %s, connected at %s\n"
+                            "  %s\n"
+                            "  Packet %s (created %s)  Lag %d%%, %.1f seconds\n"
+                            "  TX %" PRIu64 " packets, %.1f packets/sec, %" PRIu64 " bytes, %.1f bytes/sec\n"
+                            "  RX %" PRIu64 " packets, %.1f packets/sec, %" PRIu64 " bytes, %.1f bytes/sec\n"
+                            "  Stream count: %d\n",
                             DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "host"))),
                             DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "ip_address"))),
                             DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "client_port"))),
                             DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "type"))),
                             DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "server_port"))),
-                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "client_id"))),
                             DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "connect_time"))),
-                            yyjson_get_uint (yyjson_obj_get (client_iter, "current_packet")),
-                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "packet_time"))),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "client_id"))),
+                            packet_id_str,
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "packet_creation_time"))),
                             yyjson_get_int (yyjson_obj_get (client_iter, "lag_percent")),
                             yyjson_get_real (yyjson_obj_get (client_iter, "lag_seconds")),
                             yyjson_get_uint (yyjson_obj_get (client_iter, "transmit_packets")),
@@ -1401,6 +1409,33 @@ GenerateConnections (ClientInfo *cinfo, const char *path, char **response, Media
                             yyjson_get_uint (yyjson_obj_get (client_iter, "receive_bytes")),
                             yyjson_get_real (yyjson_obj_get (client_iter, "receive_byte_rate")),
                             yyjson_get_int (yyjson_obj_get (client_iter, "stream_count")));
+
+        yyjson_val *match = yyjson_obj_get (client_iter, "match");
+        if (match && (responsebytes + written) < responsesize)
+        {
+          const char *matchstr = DASHNULL (yyjson_get_str (match));
+          size_t length = strlen (matchstr);
+
+          written += snprintf (writeptr + written, responsesize - responsebytes - written,
+                               "  Match: %.100s%s\n",
+                               matchstr, (length > 100) ? "..." : "");
+        }
+
+        yyjson_val *reject = yyjson_obj_get (client_iter, "reject");
+        if (reject && (responsebytes + written) < responsesize)
+        {
+          const char *rejectstr = DASHNULL (yyjson_get_str (reject));
+          size_t length = strlen (rejectstr);
+
+          written += snprintf (writeptr + written, responsesize - responsebytes - written,
+                               "  Reject: %.100s%s\n",
+                               rejectstr, (length > 100) ? "..." : "");
+        }
+
+        if ((responsebytes + written) < responsesize)
+        {
+          writeptr[written++] = '\n';
+        }
 
         if ((responsebytes + written) >= responsesize)
         {

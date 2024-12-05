@@ -416,7 +416,7 @@ info_xml_slv3_connections (ClientInfo *cinfo, const char *software)
       else if (strstr (network, "SeedLink"))
         mxmlElementSetAttr (station, "network", "SL");
       else if (strstr (network, "HTTP"))
-        mxmlElementSetAttr (station, "network", "SL");
+        mxmlElementSetAttr (station, "network", "HP");
       else
         mxmlElementSetAttr (station, "network", "??");
 

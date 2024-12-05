@@ -680,18 +680,12 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
     yyjson_mut_obj_add_strcpy (doc, client, "type", conntype);
     yyjson_mut_obj_add_strcpy (doc, client, "client_id", tcinfo->clientid);
 
-    ms_nstime2timestr (tcinfo->conntime, conntime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    ms_nstime2timestr (tcinfo->conntime, conntime, ISOMONTHDAY_Z, NONE);
     yyjson_mut_obj_add_strcpy (doc, client, "connect_time", conntime);
 
     if (tcinfo->reader->pktid <= RINGID_MAXIMUM)
     {
       yyjson_mut_obj_add_uint (doc, client, "packet_id", tcinfo->reader->pktid);
-    }
-
-    if (tcinfo->reader->datastart != NSTUNSET)
-    {
-      ms_nstime2timestr (tcinfo->reader->pkttime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-      yyjson_mut_obj_add_strcpy (doc, client, "packet_data_start_time", packettime);
     }
 
     if (tcinfo->reader->pkttime != NSTUNSET)
