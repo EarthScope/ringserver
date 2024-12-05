@@ -946,9 +946,6 @@ GenerateID (ClientInfo *cinfo, const char *path, char **response, MediaType *typ
  * Generate stream list and place into buffer, which will be allocated
  * to the length needed and should be free'd by the caller.
  *
- * If 'timeextents' is true the earliest and latest times will be
- * included in the output.  For now this only works when level > 0.
- *
  * Check for 'match' parameter in 'path' and use value as a regular
  * expression to match against stream identifiers.
  *
@@ -1028,8 +1025,8 @@ GenerateStreams (ClientInfo *cinfo, const char *path, char **response, MediaType
       streamcount = yyjson_arr_size (stream_array);
 
       /* Allocate stream list buffer with maximum expected:
-       * for level-specific output, maximum per entry is 60 characters + newline
-       * otherwise the maximum per entry is 60 + 2x32 (time strings) plus a few spaces and newline */
+       * for /streamids output, maximum per entry is 60 characters + newline
+       * for /streams output, maximum per entry is 60 + 2x32 (time strings) plus a few spaces and newline */
       streamlistsize = (just_ids) ? 64 : 124;
       streamlistsize *= streamcount;
 

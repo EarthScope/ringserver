@@ -244,6 +244,29 @@ during SeedLink negotiation using the '?' and '*' characters for
 single or multiple character matches respectively.  Not all SeedLink
 clients support wild-carded network and station codes.
 
+.SH "Stream IDs"
+
+Each unique data stream is identified by a stream ID.  The stream ID
+can be arbitrary but is commonly a combination of a data source
+identifier and a suffix (separated by a slash) that identifies the
+the payload type.  For example:
+
+"FDSN:IU_COLA_00_B_H_Z/MSEED"
+
+For SeedLink protocol support, data source IDs should be valid FDSN
+Source IDs (https://docs.fdsn.org/projects/source-identifiers).
+
+The stream ID suffix recommendations are as follows:
+
+.nf
+  \fBMSEED\fP   : miniSEED v2 data records
+  \fBMSEED3\fP  : miniSEED v3 data records
+  \fBJSON\fP    : JSON payloads
+  \fBTEXT\fP    : Text payloads, where UTF-8 is assumed
+.fi
+
+The maximum length of stream IDs supported by the server is 59 bytes.
+
 .SH "Multi-protocol Support"
 
 Network listening ports can respond to all supported protocols

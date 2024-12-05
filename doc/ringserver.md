@@ -8,6 +8,7 @@
 1. [Config File Parameters](#config-file-parameters)
 1. [Access Control](#access-control)
 1. [Seedlink Support](#seedlink-support)
+1. [Stream Ids](#stream-ids)
 1. [Multi-Protocol Support](#multi-protocol-support)
 1. [Http Support](#http-support)
 1. [Transfer Logging](#transfer-logging)
@@ -163,6 +164,25 @@ ringserver [options] [configfile]
 <p >The legacy SeedLink protocol (v3) only transmits 512-byte miniSEED data records.  This server is able to transmit miniSEED records of any length via SeedLink.  If you wish to ensure compatibility with legacy clients, only 512-byte miniSEED records should be submitted to the server.</p>
 
 <p >This server supports the wild-carding of network and station codes during SeedLink negotiation using the '?' and '*' characters for single or multiple character matches respectively.  Not all SeedLink clients support wild-carded network and station codes.</p>
+
+## <a id='stream-ids'>Stream Ids</a>
+
+<p >Each unique data stream is identified by a stream ID.  The stream ID can be arbitrary but is commonly a combination of a data source identifier and a suffix (separated by a slash) that identifies the the payload type.  For example:</p>
+
+<p >"FDSN:IU_COLA_00_B_H_Z/MSEED"</p>
+
+<p >For SeedLink protocol support, data source IDs should be valid FDSN Source IDs (https://docs.fdsn.org/projects/source-identifiers).</p>
+
+<p >The stream ID suffix recommendations are as follows:</p>
+
+<pre >
+  <b>MSEED</b>   : miniSEED v2 data records
+  <b>MSEED3</b>  : miniSEED v3 data records
+  <b>JSON</b>    : JSON payloads
+  <b>TEXT</b>    : Text payloads, where UTF-8 is assumed
+</pre>
+
+<p >The maximum length of stream IDs supported by the server is 59 bytes.</p>
 
 ## <a id='multi-protocol-support'>Multi-Protocol Support</a>
 
