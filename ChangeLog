@@ -1,6 +1,9 @@
 2024.338:
 	- Include server_port key in INFO CONNECTIONS response.
-	- Fix parsing of HTTP requests.
+	- Fix parsing of HTTP requests that required URL decoding.
+	- Fix and enhance HTTP /connections endpoint response.
+	- Document stream ID limitations and conventions in manual.
+	- Return error for WRITE command when stream ID exceeds limit.
 
 2024.320: v4.0.0
 	NOTE: the ring buffer format has changed in this release. Older versions

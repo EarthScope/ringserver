@@ -712,6 +712,16 @@ HandleWrite (ClientInfo *cinfo)
     return -1;
   }
 
+  if (strlen (streamid) > (MAXSTREAMID - 1))
+  {
+    lprintf (1, "[%s] Error, stream ID too long: %.100s",
+             cinfo->hostname, streamid);
+
+    SendPacket (cinfo, "ERROR", "Error, stream ID too long", 0, 1, 1);
+
+    return -1;
+  }
+
   /* Set packet ID to RINGID_NONE if not provided */
   if (rv == 5 || (rv == 6 && strchr (flags, 'I') == NULL))
   {
