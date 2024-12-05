@@ -168,7 +168,7 @@ ringserver [options] [configfile]
 
 <p >Network listening ports can respond to all supported protocols (SeedLink, DataLink and HTTP) for non-TLS ports.  The first command received by the server is used to determine which protocol is being used by the client, all subsequent communication is expected in this protocol.  Listening ports configured for TLS encryption can only support a single protocol that must be specified.</p>
 
-<p >Both IPv4 and IPv6 protocol familes are supported by default (if supported by the system).</p>
+<p >Both IPv4 and IPv6 protocol families are supported by default (if supported by the system).</p>
 
 <p >The network protocols and families allowed by any given listening port can be set by adding flags to the port specification.  See the available flags in the <b>Listen</b> description of the ringserver config file example, or by using the <b>-C</b> command line option to print a config file.</p>
 
@@ -192,7 +192,7 @@ ringserver [options] [configfile]
   <b>/id/json</b>      - Server identification in JSON
   <b>/streams</b>      - List of available streams with time range
   <b>/streams/json</b> - List of available streams with time range in JSON
-  <b>/streamids</b>    - List of available streams, variable levels
+  <b>/streamids</b>    - List of available streams
   <b>/status</b>       - Server status, limited access*
   <b>/status/json</b>  - Server status in JSON, limited access*
   <b>/connections</b>  - List of connections, limited access*
@@ -204,8 +204,6 @@ ringserver [options] [configfile]
 <p >Access to the <b>status</b> and <b>connections</b> information is limited to clients that have trusted permission.</p>
 
 <p >The <b>streams</b>, <b>streamids</b> and <b>connections</b> endpoints accept a <i>match</i> parameter that is a regular expression pattern used to limit the returned information.  For the <b>streams</b> and <b>streamids</b> endpoints the matching is applied to stream IDs.  For the <b>connections</b> endpoint the matching is applied to hostname, client IP address and client ID. For example: http://localhost/streams?match=IU_ANMO.</p>
-
-<p >The <b>streamids</b> endpoint accepts a <i>level</i> parameter that limits the returned information to a unique list of stream identifiers at the specified level.  Valid values are 1 through 6.  Identifier components should be delimited with underscore characters.  To illustrate, if a ringserver contains streams in the pattern of "NET_STA_LOC_CHAN/MSEED" a request for level 2 returns a unique list of "NET_STA" values.  For example: http://localhost/streamids?level=2.</p>
 
 <p >After a WebSocket connection has been initiated with either the <b>seedlink</b> or <b>datalink</b> end points, the requested protocol is supported exactly as it would be normally with the addition of WebSocket framing.  Each server command should be contained in a single WebSocket frame, independent of other commands.</p>
 

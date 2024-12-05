@@ -253,7 +253,7 @@ used by the client, all subsequent communication is expected in this
 protocol.  Listening ports configured for TLS encryption can only
 support a single protocol that must be specified.
 
-Both IPv4 and IPv6 protocol familes are supported by default (if
+Both IPv4 and IPv6 protocol families are supported by default (if
 supported by the system).
 
 The network protocols and families allowed by any given listening
@@ -287,7 +287,7 @@ The following fixed resources are supported:
   \fB/id/json\fP      - Server identification in JSON
   \fB/streams\fP      - List of available streams with time range
   \fB/streams/json\fP - List of available streams with time range in JSON
-  \fB/streamids\fP    - List of available streams, variable levels
+  \fB/streamids\fP    - List of available streams
   \fB/status\fP       - Server status, limited access*
   \fB/status/json\fP  - Server status in JSON, limited access*
   \fB/connections\fP  - List of connections, limited access*
@@ -306,14 +306,6 @@ used to limit the returned information.  For the \fBstreams\fP and
 the \fBconnections\fP endpoint the matching is applied to hostname,
 client IP address and client ID. For example:
 http://localhost/streams?match=IU_ANMO.
-
-The \fBstreamids\fP endpoint accepts a \fIlevel\fP parameter that limits
-the returned information to a unique list of stream identifiers at the
-specified level.  Valid values are 1 through 6.  Identifier components
-should be delimited with underscore characters.  To illustrate, if a
-ringserver contains streams in the pattern of
-"NET_STA_LOC_CHAN/MSEED" a request for level 2 returns a unique list
-of "NET_STA" values.  For example: http://localhost/streamids?level=2.
 
 After a WebSocket connection has been initiated with either the
 \fBseedlink\fP or \fBdatalink\fP end points, the requested protocol is
