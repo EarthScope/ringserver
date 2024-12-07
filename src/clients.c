@@ -516,9 +516,7 @@ ClientRecv (ClientInfo *cinfo)
   /* Recv a WebSocket frame if this connection is WebSocket */
   if (cinfo->websocket)
   {
-    cinfo->wsmaskidx = 0;
-
-    nread = RecvWSFrame (cinfo, &wslength, &cinfo->wsmask.one);
+    nread = RecvWSFrame (cinfo, &wslength);
 
     if (nread < 0)
     {
@@ -944,14 +942,6 @@ RecvDLCommand (ClientInfo *cinfo)
 
   nread += nrecv;
 
-  /* Unmask received data if a mask was supplied as WebSocket */
-  if (cinfo->wsmask.one != 0)
-  {
-    char *bptr = cinfo->recvbuf;
-    for (int64_t idx = 0; idx < nrecv; idx++, bptr++, cinfo->wsmaskidx++)
-      *bptr = *bptr ^ cinfo->wsmask.four[cinfo->wsmaskidx % 4];
-  }
-
   /* Sequence bytes of 'DL' identify DataLink */
   if (*(cinfo->recvbuf) == 'D' && *(cinfo->recvbuf + 1) == 'L')
   {
@@ -984,14 +974,6 @@ RecvDLCommand (ClientInfo *cinfo)
   }
 
   nread += nrecv;
-
-  /* Unmask received data if a mask was supplied as WebSocket */
-  if (cinfo->wsmask.one != 0)
-  {
-    char *bptr = cinfo->recvbuf;
-    for (int64_t idx = 0; idx < nrecv; idx++, bptr++, cinfo->wsmaskidx++)
-      *bptr = *bptr ^ cinfo->wsmask.four[cinfo->wsmaskidx % 4];
-  }
 
   /* Make sure buffer is NULL terminated. The header length is
    * allowed to be <= (cinfo->recvbuflen - 1), so this should be safe. */
@@ -1043,13 +1025,6 @@ RecvLine (ClientInfo *cinfo)
     if (nrecv != 1)
     {
       return nrecv;
-    }
-
-    /* Unmask received byte if a mask was supplied as WebSocket */
-    if (cinfo->wsmask.one != 0)
-    {
-      *bptr = *bptr ^ cinfo->wsmask.four[cinfo->wsmaskidx % 4];
-      cinfo->wsmaskidx++;
     }
 
     /* If '\r' or '\n' is received the line is complete */

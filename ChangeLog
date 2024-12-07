@@ -4,7 +4,7 @@
 	- Fix and enhance HTTP /connections endpoint response.
 	- Document stream ID limitations and conventions in manual.
 	- Return error for WRITE command when stream ID exceeds limit.
-	- Remove colons from date-time values in transfer log files, e.g.
+	- Remove colons from date-time values in transfer log file names, e.g.
 	`txlog-20241205T0000-20241206T0000` instead of `txlog-20241205T00:00-20241206T00:00`
 
 2024.320: v4.0.0

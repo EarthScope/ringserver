@@ -586,9 +586,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
  * Return -2 on orderly shutdown, ClientInfo.socketerr is set
  ***************************************************************************/
 int
-RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
+RecvWSFrame (ClientInfo *cinfo, uint64_t *length)
 {
   unsigned char payload[125];
+  uint32_t framemask;
   uint8_t onetwo[2];
   uint16_t length16;
   uint8_t length7;
@@ -596,8 +597,11 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
   int nrecv;
   int opcode;
 
-  if (!cinfo || !length || !mask)
+  if (!cinfo || !length)
     return -1;
+
+  /* Unset mask value to avoid use in RecvData() below */
+  cinfo->wsmask.one = 0;
 
   /* Recv first two bytes */
   nrecv = RecvData (cinfo, onetwo, 2, 0);
@@ -656,7 +660,7 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
   /* If mask flag, the masking key is the next 4 bytes */
   if (onetwo[1] & 0x80)
   {
-    nrecv = RecvData (cinfo, mask, 4, 1);
+    nrecv = RecvData (cinfo, &framemask, 4, 1);
 
     if (nrecv != 4)
       return nrecv;
@@ -734,6 +738,9 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length, uint32_t *mask)
 
     return -1;
   }
+
+  /* Set mask value, done later to avoid use in RecvData() above */
+  cinfo->wsmask.one = framemask;
 
   return totalrecv;
 } /* End of RecvWSFrame() */
