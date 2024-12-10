@@ -32,7 +32,7 @@
  *
  * The directory separator is assumed to be '/'.
  *
- * If the signal SIGUSR1 is recieved the program will print the
+ * If the signal SIGUSR1 is received the program will print the
  * current file list to standard error.
  *
  * This file is part of the ringserver.

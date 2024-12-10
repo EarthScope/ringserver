@@ -434,7 +434,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
   {
     if ((cinfo->protocols & PROTO_SEEDLINK) == 0)
     {
-      lprintf (1, "[%s] Received SeedLink WebSocket request on non-SeedLink port", cinfo->hostname);
+      lprintf (1, "[%s] Received SeedLink WebSocket upgrade request on non-SeedLink port", cinfo->hostname);
 
       /* Create header */
       headlen = GenerateHeader (cinfo, 400, UNSET, 0, "Cannot request SeedLink WebSocket on non-SeedLink port");
@@ -445,7 +445,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       }
       else
       {
-        lprintf (0, "Error creating response (SeedLink WebSocket request on non-SeedLink port)");
+        lprintf (0, "Error creating response (SeedLink WebSocket upgrade request on non-SeedLink port)");
       }
 
       return -1;
@@ -464,7 +464,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
         *secWebSocketProtocolHeader = '\0';
     }
 
-    lprintf (1, "[%s] Received WebSocket SeedLink request", cinfo->hostname);
+    lprintf (1, "[%s] Received SeedLink WebSocket upgrade request", cinfo->hostname);
 
     if (NegotiateWebSocket (cinfo, version, upgradeHeader, connectionHeader,
                             secWebSocketKeyHeader, secWebSocketVersionHeader,
@@ -481,7 +481,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
   {
     if ((cinfo->protocols & PROTO_DATALINK) == 0)
     {
-      lprintf (1, "[%s] Received DataLink WebSocket request on non-DataLink port", cinfo->hostname);
+      lprintf (1, "[%s] Received DataLink WebSocket upgrade request on non-DataLink port", cinfo->hostname);
 
       /* Create header */
       headlen = GenerateHeader (cinfo, 400, UNSET, 0, "Cannot request DataLink WebSocket on non-DataLink port");
@@ -492,7 +492,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       }
       else
       {
-        lprintf (0, "Error creating response (DataLink WebSocket request on non-DataLink port)");
+        lprintf (0, "Error creating response (DataLink WebSocket upgrade request on non-DataLink port)");
       }
 
       return -1;
@@ -508,7 +508,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
         *secWebSocketProtocolHeader = '\0';
     }
 
-    lprintf (1, "[%s] Received WebSocket DataLink request", cinfo->hostname);
+    lprintf (1, "[%s] Received DataLink WebSocket upgrade request", cinfo->hostname);
 
     if (NegotiateWebSocket (cinfo, version, upgradeHeader, connectionHeader,
                             secWebSocketKeyHeader, secWebSocketVersionHeader,
@@ -736,7 +736,8 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length)
     onetwo[1] = 0;
     SendData (cinfo, onetwo, 2, 1);
 
-    return -1;
+    cinfo->socketerr = -2; /* Indicate an orderly shutdown */
+    return -2;
   }
 
   /* Set mask value, done later to avoid use in RecvData() above */
@@ -813,7 +814,7 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
 
   if (status == 200)
   {
-    headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
+    headlen = snprintf (cinfo->sendbuf, cinfo->sendbufsize,
                         "HTTP/1.1 200 OK\r\n"
                         "Content-Length: %" PRIu64 "\r\n"
                         "Content-Type: %s\r\n"
@@ -825,7 +826,7 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
   }
   else if (status == 403)
   {
-    headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
+    headlen = snprintf (cinfo->sendbuf, cinfo->sendbufsize,
                         "HTTP/1.1 403 %s!\r\n"
                         "Connection: close\r\n"
                         "%s"
@@ -839,7 +840,7 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
                        "<html><head><title>404 Not Found</title></head>"
                        "<body><h1>Not Found</h1></body></html>";
 
-    headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
+    headlen = snprintf (cinfo->sendbuf, cinfo->sendbufsize,
                         "HTTP/1.1 404 Not Found\r\n"
                         "Content-Length: %zu\r\n"
                         "Content-Type: %s\r\n"
@@ -854,7 +855,7 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
   }
   else if (status == 501)
   {
-    headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
+    headlen = snprintf (cinfo->sendbuf, cinfo->sendbufsize,
                         "HTTP/1.1 501 Method %s Not Implemented\r\n"
                         "Content-Length: 0\r\n"
                         "Connection: close\r\n"
@@ -865,7 +866,7 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
   }
   else
   {
-    headlen = snprintf (cinfo->sendbuf, cinfo->sendbuflen,
+    headlen = snprintf (cinfo->sendbuf, cinfo->sendbufsize,
                         "HTTP/1.1 %d %s\r\n"
                         "Content-Length: %" PRIu64 "\r\n"
                         "Content-Type: %s\r\n"
@@ -878,7 +879,7 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
                         (cinfo->httpheaders) ? cinfo->httpheaders : "");
   }
 
-  return (headlen > cinfo->sendbuflen) ? cinfo->sendbuflen : headlen;
+  return (headlen > cinfo->sendbufsize) ? cinfo->sendbufsize : headlen;
 }
 
 /***************************************************************************

@@ -390,7 +390,7 @@ SLStreamPackets (ClientInfo *cinfo)
   slinfo = (SLInfo *)cinfo->extinfo;
 
   /* Read next packet from ring */
-  readid = RingReadNext (cinfo->reader, &cinfo->packet, cinfo->packetdata);
+  readid = RingReadNext (cinfo->reader, &cinfo->packet, cinfo->sendbuf);
 
   if (readid == RINGID_ERROR)
   {
@@ -410,8 +410,8 @@ SLStreamPackets (ClientInfo *cinfo)
       return 0;
     }
   }
-  else if ((MS2_ISVALIDHEADER (cinfo->packetdata) ||
-            MS3_ISVALIDHEADER (cinfo->packetdata)))
+  else if ((MS2_ISVALIDHEADER (cinfo->sendbuf) ||
+            MS3_ISVALIDHEADER (cinfo->sendbuf)))
   {
     lprintf (3, "[%s] Read %s (%u bytes) packet ID %" PRIu64 " from ring",
              cinfo->hostname, cinfo->packet.streamid, cinfo->packet.datasize, cinfo->packet.pktid);
@@ -466,7 +466,7 @@ SLStreamPackets (ClientInfo *cinfo)
     if (!skiprecord)
     {
       /* Send miniSEED record to client */
-      if (SendRecord (&cinfo->packet, cinfo->packetdata, cinfo->packet.datasize, cinfo))
+      if (SendRecord (&cinfo->packet, cinfo->sendbuf, cinfo->packet.datasize, cinfo))
       {
         if (cinfo->socketerr != -2)
           lprintf (0, "[%s] Error sending record to client", cinfo->hostname);

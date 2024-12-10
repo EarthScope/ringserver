@@ -1,7 +1,8 @@
-2024.338:
+2024.xxx:
 	- Include server_port key in INFO CONNECTIONS response.
 	- Fix parsing of HTTP requests that required URL decoding.
 	- Fix and enhance HTTP /connections endpoint response.
+	- Fix WebSocket connection handling and variable terminators.
 	- Document stream ID limitations and conventions in manual.
 	- Return error for WRITE command when stream ID exceeds limit.
 	- Remove colons from date-time values in transfer log file names, e.g.

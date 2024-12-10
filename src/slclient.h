@@ -70,7 +70,7 @@ typedef struct SLInfo
 {
   uint8_t proto_major;   /* Major protocol version */
   uint8_t proto_minor;   /* Minor protocol version */
-  int extreply;          /* Capability flag: client can recieve extended replies */
+  int extreply;          /* Capability flag: client can receive extended replies */
   int dialup;            /* Connection is in dialup/fetch mode */
   int batch;             /* Connection is in batch mode */
   int terminfo;          /* Terminating INFO packet flag */

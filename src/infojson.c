@@ -345,10 +345,10 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
 
   Stack *station_stack = NULL;
 
-  char net[16]  = {0};
-  char sta[16]  = {0};
-  char loc[16]  = {0};
-  char chan[16] = {0};
+  char net[MAXSTREAMID]  = {0};
+  char sta[MAXSTREAMID]  = {0};
+  char loc[MAXSTREAMID]  = {0};
+  char chan[MAXSTREAMID] = {0};
 
   char staid[MAXSTREAMID]    = {0};
   char streamid[MAXSTREAMID] = {0};

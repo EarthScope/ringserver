@@ -61,11 +61,12 @@ typedef struct ClientInfo
   void       *tlsctx;       /* TLS context */
   int         socketerr;    /* Socket error flag, -1: error, -2: orderly shutdown */
   char       *sendbuf;      /* Client specific send buffer */
-  size_t      sendbuflen;   /* Length of send buffer */
+  size_t      sendbufsize;  /* Length of send buffer in bytes */
   char       *recvbuf;      /* Client specific receive buffer */
-  size_t      recvbuflen;   /* Length of receive buffer */
+  size_t      recvbufsize;  /* Length of receive buffer in bytes */
+  size_t      recvlength;   /* Length of data in recvbuf */
+  size_t      recvconsumed; /* Bytes of recvbuf that have been consumed */
   RingPacket  packet;       /* Client specific ring packet header */
-  char       *packetdata;   /* Client specific packet buffer, size of RingParams.pktsize */
   struct sockaddr *addr;    /* client socket structure */
   socklen_t   addrlen;      /* Length of client socket structure */
   char        ipstr[100];   /* Client host IP address */
@@ -82,6 +83,7 @@ typedef struct ClientInfo
     uint8_t four[4];
   } wsmask;                 /* Masking key for WebSocket message */
   size_t      wsmaskidx;    /* Index for unmasking WebSocket message */
+  uint64_t    wspayload;    /* Length of WebSocket payload expected */
   uint8_t     writeperm;    /* Write permission flag */
   uint8_t     trusted;      /* Trusted client flag */
   float       timewinlimit; /* Time window ring search limit in percent */
@@ -131,7 +133,7 @@ extern int SendData (ClientInfo *cinfo, void *buffer, size_t buflen, int no_wsfr
 extern int SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
                        int bufcount, int no_wsframe);
 
-extern int RecvData (ClientInfo *cinfo, void *buffer, size_t recvlen, int fulfill);
+extern int RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill);
 
 extern int RecvDLCommand (ClientInfo *cinfo);
 

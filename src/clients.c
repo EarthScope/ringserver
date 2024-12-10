@@ -136,28 +136,20 @@ ClientThread (void *arg)
   pthread_mutex_unlock (&(cinfo->streams_lock));
 
   /* Allocate client specific send buffer */
-  cinfo->sendbuf = (char *)malloc (2 * cinfo->ringparams->pktsize);
+  cinfo->sendbufsize = 2 * cinfo->ringparams->pktsize;
+  cinfo->sendbuf = (char *)malloc (cinfo->sendbufsize);
   if (!cinfo->sendbuf)
   {
     lprintf (0, "[%s] Error allocating send buffer", cinfo->hostname);
     setuperr = 1;
   }
-  cinfo->sendbuflen = 2 * cinfo->ringparams->pktsize;
 
   /* Allocate client specific receive buffer */
-  cinfo->recvbuf = (char *)calloc (1, 2 * cinfo->ringparams->pktsize);
+  cinfo->recvbufsize = 10 * cinfo->ringparams->pktsize;
+  cinfo->recvbuf = (char *)calloc (1, cinfo->recvbufsize);
   if (!cinfo->recvbuf)
   {
     lprintf (0, "[%s] Error allocating receive buffer", cinfo->hostname);
-    setuperr = 1;
-  }
-  cinfo->recvbuflen = 2 * cinfo->ringparams->pktsize;
-
-  /* Allocate client specific packet data buffer */
-  cinfo->packetdata = (char *)malloc (cinfo->ringparams->pktsize);
-  if (!cinfo->packetdata)
-  {
-    lprintf (0, "[%s] Error allocating packet buffer", cinfo->hostname);
     setuperr = 1;
   }
 
@@ -222,7 +214,6 @@ ClientThread (void *arg)
 
     free (cinfo->sendbuf);
     free (cinfo->recvbuf);
-    free (cinfo->packetdata);
     free (cinfo->addr);
     cinfo->addr = NULL;
     free (cinfo->mswrite);
@@ -462,10 +453,9 @@ ClientThread (void *arg)
   cinfo->streamscount = 0;
   pthread_mutex_unlock (&(cinfo->streams_lock));
 
-  /* Release the client send, receive and packet buffers */
+  /* Release the client send and receive buffers */
   free (cinfo->sendbuf);
   free (cinfo->recvbuf);
-  free (cinfo->packetdata);
 
   /* Release client socket structure, allocated in ListenThread() */
   free (cinfo->addr);
@@ -514,8 +504,9 @@ ClientRecv (ClientInfo *cinfo)
   int nread = 0;
 
   /* Recv a WebSocket frame if this connection is WebSocket */
-  if (cinfo->websocket)
+  if (cinfo->websocket && cinfo->wspayload == 0)
   {
+    cinfo->wsmaskidx = 0;
     nread = RecvWSFrame (cinfo, &wslength);
 
     if (nread < 0)
@@ -524,11 +515,16 @@ ClientRecv (ClientInfo *cinfo)
         lprintf (0, "[%s] Error receiving WebSocket frame from client (%d)",
                  cinfo->hostname, nread);
 
+
       return nread;
     }
     else if (nread == 0)
     {
       return 0;
+    }
+    else
+    {
+      cinfo->wspayload = wslength;
     }
   }
 
@@ -779,9 +775,10 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
 /***********************************************************************
  * RecvData:
  *
- * Read recvlen bytes from a socket into the specified buffer.  The
- * buffer provided must already be allocated and have enough space
- * for recvlen bytes.
+ * Read recvlen bytes from a socket and place in the specified buffer.
+ * The CLentInfo.recvbuf buffer is used to store the received data.
+ * If the destination buffer is _not_ ClientInfo.recvbuf then the
+ * data is copied to the destination buffer after being received.
  *
  * This routine handles fragmented receives, meaning that it will
  * continue to receive data until recvlen bytes have been received
@@ -792,37 +789,75 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
  * read during the first read this routine will block until recvlen
  * bytes have been read.
  *
- * If fulfill is true (non-0) this routine will will block until
+ * If fulfill is true (non-0) this routine will block until
  * recvlen bytes have been read.
  *
  * For any blocking reads this routine will poll the socket for up to
  * 10 seconds before timing out and returning -2.
  *
- * Return >0 as number of bytes read on success
+ * The caller _must_ consume the data requested.  It will be discarded
+ * on the next call to RecvData().
+ *
+ * Return >0 as number of bytes for the caller to consume on success
  * Return  0 when fulfill == 0 and no data is available
- * Return -1 on error or timeout, ClientInfo.socketerr is set
+ * Return -1 on error or timeout, ClientInfo.socketerr may be set
  * Return -2 on orderly shutdown, ClientInfo.socketerr is set
  ***********************************************************************/
 int
-RecvData (ClientInfo *cinfo, void *buffer, size_t recvlen, int fulfill)
+RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
 {
   TLSCTX *tlsctx = cinfo->tlsctx;
   ssize_t nrecv;
   size_t nread = 0;
-  int pollret;
-  int idx;
-  char *bptr = buffer;
+  size_t receivable;
+  char *recvptr;
 
-  /* Recv until buflen bytes have been read */
-  while (nread < recvlen)
+  if (!cinfo || !buffer || requested == 0)
   {
-    if (cinfo->tlsctx)
+    cinfo->socketerr = -1;
+    return -1;
+  }
+
+  if (requested > cinfo->recvbufsize)
+  {
+    lprintf (0, "[%s] %s(): Requested receive length exceeds buffer size",
+             cinfo->hostname, __func__);
+    cinfo->socketerr = -1;
+    return -1;
+  }
+
+  /* Shift previously consumed bytes from receive buffer */
+  if (cinfo->recvconsumed > 0)
+  {
+    if (cinfo->recvconsumed < cinfo->recvlength)
     {
-      nrecv = mbedtls_ssl_read (&tlsctx->ssl, (unsigned char *)bptr, recvlen - nread);
+      memmove (cinfo->recvbuf,
+               cinfo->recvbuf + cinfo->recvconsumed,
+               cinfo->recvlength - cinfo->recvconsumed);
+
+      cinfo->recvlength -= cinfo->recvconsumed;
     }
     else
     {
-      nrecv = recv (cinfo->socket, bptr, recvlen - nread, 0);
+      cinfo->recvlength = 0;
+    }
+
+    cinfo->recvconsumed = 0;
+  }
+
+  recvptr = cinfo->recvbuf + cinfo->recvlength;
+  receivable = cinfo->recvbufsize - cinfo->recvlength;
+
+  /* Recv until requested bytes are available */
+  while ((cinfo->recvlength + nread) < requested)
+  {
+    if (cinfo->tlsctx)
+    {
+      nrecv = mbedtls_ssl_read (&tlsctx->ssl, (unsigned char *)recvptr, receivable - nread);
+    }
+    else
+    {
+      nrecv = recv (cinfo->socket, recvptr, receivable - nread, 0);
     }
 
     /* Poll/throttle efficiently when there is no data on a non-blocking connection
@@ -838,16 +873,18 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t recvlen, int fulfill)
         return 0;
 
       /* Poll up to 10 seconds == 10,000 milliseconds */
-      pollret = PollSocket (cinfo->socket, 1, 0, 10000);
+      int pollret = PollSocket (cinfo->socket, 1, 0, 10000);
 
       if (pollret == 0)
       {
         lprintf (0, "[%s] Timeout receiving data", cinfo->hostname);
+        cinfo->socketerr = -1;
         return -1;
       }
       else if (pollret == -1 && errno != EINTR)
       {
         lprintf (0, "[%s] Error polling socket", cinfo->hostname);
+        cinfo->socketerr = -1;
         return -1;
       }
     }
@@ -871,23 +908,44 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t recvlen, int fulfill)
       return -1;
     }
 
-    /* Update recv pointer and byte count */
+    /* Update recv pointer and received byte counts */
     else if (nrecv > 0)
     {
-      bptr += nrecv;
+      recvptr += nrecv;
       nread += (size_t)nrecv;
     }
   }
 
-  /* Unmask received data if a mask was supplied as WebSocket */
-  if (cinfo->wsmask.one != 0)
+  cinfo->recvlength += nread;
+
+  /* Unmask expected WebSocket payload */
+  if (cinfo->wspayload > 0)
   {
-    bptr = buffer;
-    for (idx = 0; idx < nread; idx++, bptr++, cinfo->wsmaskidx++)
-      *bptr = *bptr ^ cinfo->wsmask.four[cinfo->wsmaskidx % 4];
+    if (cinfo->recvlength >= cinfo->wspayload)
+    {
+      recvptr = cinfo->recvbuf;
+      for (int idx = 0; idx < cinfo->wspayload; idx++, recvptr++, cinfo->wsmaskidx++)
+        *recvptr = *recvptr ^ cinfo->wsmask.four[cinfo->wsmaskidx % 4];
+
+      cinfo->wspayload = 0;
+    }
+    else
+    {
+      /* The full WebSocket payload is not (yet) available */
+      return 0;
+    }
   }
 
-  return nread;
+  /* Copy data to supplied buffer if not the receive buffer */
+  if (buffer != cinfo->recvbuf)
+  {
+    memcpy (buffer, cinfo->recvbuf, requested);
+  }
+
+  /* The caller _must_ consume the data requested */
+  cinfo->recvconsumed = requested;
+
+  return requested;
 } /* End of RecvData() */
 
 /***********************************************************************
@@ -925,7 +983,7 @@ RecvDLCommand (ClientInfo *cinfo)
   }
 
   /* Sanity check the receive buffer length */
-  if (cinfo->recvbuflen < 10)
+  if (cinfo->recvbufsize < 10)
   {
     lprintf (0, "[%s] Client receiving buffer is too small", cinfo->hostname);
     cinfo->socketerr = -1;
@@ -957,7 +1015,7 @@ RecvDLCommand (ClientInfo *cinfo)
   }
 
   /* Sanity check the header size */
-  if (headerlen < 2 || headerlen > (cinfo->recvbuflen - 1))
+  if (headerlen < 2 || headerlen > (cinfo->recvbufsize - 1))
   {
     lprintf (0, "[%s] Pre-header indicates unmanageable header size: %u",
              cinfo->hostname, headerlen);
@@ -976,7 +1034,7 @@ RecvDLCommand (ClientInfo *cinfo)
   nread += nrecv;
 
   /* Make sure buffer is NULL terminated. The header length is
-   * allowed to be <= (cinfo->recvbuflen - 1), so this should be safe. */
+   * allowed to be <= (cinfo->recvbufsize - 1), so this should be safe. */
   *(cinfo->recvbuf + nrecv) = '\0';
 
   return nread;
@@ -985,27 +1043,25 @@ RecvDLCommand (ClientInfo *cinfo)
 /***********************************************************************
  * RecvLine:
  *
- * Read characters from a socket until '\r' (carriage return) followed by an
- * optional '\n' (newline) is found, or a lone '\n' is found, or the maximum
- * buffer length is reached and place them into the client's receive buffer. The
- * resulting string in buffer will always be NULL terminated.
+ * Check the receive buffer for lines terminated by '\r' (carriage return),
+ * '\n' (newline), or both adjacent are found.
  *
- * This routine can handle fragmented receives after some data has been read. If
- * no data has been read and no data is available from the socket this routine
- * will return immediately.
+ * The resulting line will be left in the receive buffer and will always
+ * be NULL terminated.
  *
- * Return >0 as number of bytes read on success
- * Return  0 when no data is available
+ * If no data has been read and no data is available from the socket
+ * this routine will return immediately.
+ *
+ * Return >0 as number of bytes in line on success
+ * Return  0 when no line is available
  * Return -1 on error or timeout, ClientInfo.socketerr is set
  * Return -2 on orderly shutdown, ClientInfo.socketerr is set
  ***********************************************************************/
 int
 RecvLine (ClientInfo *cinfo)
 {
-  char *bptr = NULL;
-  int nrecv;
-  int nread   = 0;
-  int skipped = 0;
+  size_t skipped = 0;
+  int nread      = 0;
 
   if (!cinfo || !cinfo->recvbuf)
   {
@@ -1013,61 +1069,85 @@ RecvLine (ClientInfo *cinfo)
     return -1;
   }
 
-  /* Buffer pointer tracks next input location */
-  bptr = cinfo->recvbuf;
+  /* This routine must search for a variable number of terminators in
+   * received data.  The strategy to do this is as follows:
+   *
+   * Request a single byte using RecvData() and then directly search
+   * for terminators in all available data in the receive buffer.
+   * The number of bytes consumed is manipulated to:
+   * 1) leave data in the receive buffer if no terminators are yet and
+   * 2) to consume one or two terminators as they are discovered. */
 
-  /* Recv a byte at a time until \r, \n, or buffer length is reached */
-  while (nread < cinfo->recvbuflen)
+  nread = RecvData (cinfo, cinfo->recvbuf, 1, 0);
+
+  if (nread <= 0)
   {
-    /* If no data has yet been received do not require fulfullment */
-    nrecv = RecvData (cinfo, bptr, 1, (nread == 0) ? 0 : 1);
+    return nread;
+  }
 
-    if (nrecv != 1)
+  /* Skip initial terminators, SeedLink v4 requires ignoring empty commands */
+  while (skipped <= nread)
+  {
+    if (cinfo->recvbuf[skipped] == '\n' || cinfo->recvbuf[skipped] == '\r')
     {
-      return nrecv;
+      skipped++;
     }
-
-    /* If '\r' or '\n' is received the line is complete */
-    if (*bptr == '\r' || *bptr == '\n')
+    else
     {
-      /* A terminator as the first byte is expected in these cases:
-       * 1) The \n terminator of a previous HTTP header line
-       * 2) The optional \n terminator of a previous SeedLink command
-       * 3) An empty command, which SeedLink v4 requires ignoring */
-      if (nread == 0)
-      {
-        /* Limit how many empty lines to avoid DoS with endless terminators */
-        if (skipped++ > 10)
-        {
-          lprintf (0, "[%s] Received too many empty lines", cinfo->hostname);
-          cinfo->socketerr = -1;
-          return -1;
-        }
-
-        /* Ignore the empty line */
-        continue;
-      }
-
       break;
     }
 
-    nread++;
-    bptr++;
-
-    /* Check for a full buffer */
-    if (nread >= cinfo->recvbuflen)
+    /* If too many initial terminators were received, abort to avoid DoS */
+    if (skipped >= 10)
     {
-      lprintf (0, "[%s] Received data too long for line, max %zu bytes",
-               cinfo->hostname, cinfo->recvbuflen);
+      lprintf (0, "[%s] Received too many empty lines", cinfo->hostname);
       cinfo->socketerr = -1;
       return -1;
     }
   }
 
-  /* Make sure buffer is NULL terminated */
-  *bptr = '\0';
+  /* Consume skipped terminators */
+  if (skipped > 0)
+  {
+    cinfo->recvconsumed = skipped;
 
-  return nread;
+    nread = RecvData (cinfo, cinfo->recvbuf, 1, 0);
+
+    if (nread <= 0)
+    {
+      return nread;
+    }
+  }
+
+  /* Search for line terminators */
+  char *cr = memchr (cinfo->recvbuf, '\r', cinfo->recvlength);
+  char *nl = memchr (cinfo->recvbuf, '\n', cinfo->recvlength);
+
+  /* If no terminators, do not consume data */
+  if (cr == NULL && nl == NULL)
+  {
+    cinfo->recvconsumed = 0;
+    return 0;
+  }
+
+  /* Determine first and last terminator */
+  char *firstterminator = (nl && cr) ? (nl < cr) ? nl : cr : (nl) ? nl : cr;
+  char *lastterminator = (nl && cr) ? (nl > cr) ? nl : cr : (nl) ? nl : cr;
+
+  /* Ensure the last terminator, if different, directly follows first */
+  if (firstterminator != lastterminator &&
+      (firstterminator + 1) != lastterminator)
+  {
+    lastterminator = firstterminator;
+  }
+
+  /* Set consumed to include all bytes through the last terminator */
+  cinfo->recvconsumed = (lastterminator - cinfo->recvbuf) + 1;
+
+  /* NULL-terminate line at first terminator */
+  *firstterminator = '\0';
+
+  return (int)(firstterminator - cinfo->recvbuf);
 } /* End of RecvLine() */
 
 /**********************************************************************/ /**

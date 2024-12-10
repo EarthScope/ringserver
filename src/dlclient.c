@@ -193,7 +193,7 @@ DLStreamPackets (ClientInfo *cinfo)
     return -1;
 
   /* Read next packet from ring */
-  readid = RingReadNext (cinfo->reader, &cinfo->packet, cinfo->packetdata);
+  readid = RingReadNext (cinfo->reader, &cinfo->packet, cinfo->sendbuf);
 
   if (readid == RINGID_ERROR)
   {
@@ -793,21 +793,21 @@ HandleWrite (ClientInfo *cinfo)
   }
 
   /* Recv packet data from socket */
-  nread = RecvData (cinfo, cinfo->packetdata, cinfo->packet.datasize, 1);
+  nread = RecvData (cinfo, cinfo->recvbuf, cinfo->packet.datasize, 1);
 
   if (nread < 0)
     return -1;
 
   /* Write received miniSEED to a disk archive if configured */
   if (cinfo->mswrite &&
-      (MS2_ISVALIDHEADER (cinfo->packetdata) ||
-       MS3_ISVALIDHEADER (cinfo->packetdata)))
+      (MS2_ISVALIDHEADER (cinfo->recvbuf) ||
+       MS3_ISVALIDHEADER (cinfo->recvbuf)))
   {
     char filename[100] = {0};
     char *fn;
 
     /* Parse the miniSEED record header */
-    if (msr3_parse (cinfo->packetdata, cinfo->packet.datasize, &msr, 0, 0) == MS_NOERROR)
+    if (msr3_parse (cinfo->recvbuf, cinfo->packet.datasize, &msr, 0, 0) == MS_NOERROR)
     {
       /* Check for file name in streamid: e.g. "filename::streamid/MSEED" */
       if ((fn = strstr (cinfo->packet.streamid, "::")))
@@ -832,7 +832,7 @@ HandleWrite (ClientInfo *cinfo)
   }
 
   /* Add the packet to the ring */
-  if ((rv = RingWrite (cinfo->ringparams, &cinfo->packet, cinfo->packetdata, cinfo->packet.datasize)))
+  if ((rv = RingWrite (cinfo->ringparams, &cinfo->packet, cinfo->recvbuf, cinfo->packet.datasize)))
   {
     if (rv == -2)
       lprintf (1, "[%s] Error with RingWrite, corrupt ring, shutdown signalled", cinfo->hostname);
@@ -913,7 +913,7 @@ HandleRead (ClientInfo *cinfo)
   }
 
   /* Read the packet from the ring */
-  readid = RingRead (cinfo->reader, reqid, &cinfo->packet, cinfo->packetdata);
+  readid = RingRead (cinfo->reader, reqid, &cinfo->packet, cinfo->sendbuf);
 
   if (readid == RINGID_ERROR)
   {
@@ -1102,7 +1102,7 @@ SendPacket (ClientInfo *cinfo, char *header, char *data,
   }
 
   /* Use the send buffer if large enough otherwise allocate memory for wire packet */
-  if (cinfo->sendbuflen >= (3 + headerlen + datalen))
+  if (cinfo->sendbufsize >= (3 + headerlen + datalen))
   {
     wirepacket = cinfo->sendbuf;
   }
@@ -1187,10 +1187,10 @@ SendRingPacket (ClientInfo *cinfo)
   }
 
   /* Make sure send buffer is large enough for wire packet */
-  if (cinfo->sendbuflen < (3 + headerlen + cinfo->packet.datasize))
+  if (cinfo->sendbufsize < (3 + headerlen + cinfo->packet.datasize))
   {
     lprintf (0, "[%s] SendRingPacket(): Send buffer not large enough (%zu bytes), need %zu bytes",
-             cinfo->hostname, cinfo->sendbuflen, 3 + headerlen + cinfo->packet.datasize);
+             cinfo->hostname, cinfo->sendbufsize, 3 + headerlen + cinfo->packet.datasize);
     return -1;
   }
 
@@ -1203,7 +1203,7 @@ SendRingPacket (ClientInfo *cinfo)
   /* Copy header and packet data into wire packet */
   memcpy (&cinfo->sendbuf[3], header, headerlen);
 
-  memcpy (&cinfo->sendbuf[3 + headerlen], cinfo->packetdata, cinfo->packet.datasize);
+  memcpy (&cinfo->sendbuf[3 + headerlen], cinfo->sendbuf, cinfo->packet.datasize);
 
   /* Send complete wire packet */
   if (SendData (cinfo, cinfo->sendbuf, (3 + headerlen + cinfo->packet.datasize), 0))
