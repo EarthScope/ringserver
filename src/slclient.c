@@ -16,7 +16,7 @@
  * 16,777,215 packets received.
  *
  * The SeedLink protocol is designed with the concept of a station ID
- * where sequenences may be specific to each station ID.  Ringserver
+ * where sequences may be specific to each station ID.  Ringserver
  * implements a single buffer with a shared set of sequences for all
  * streams in the buffer.  This detail is important because a client
  * can request data from multiple station IDs with each specifying a
@@ -87,7 +87,7 @@ static void SendInfoRecord (char *record, uint32_t reclen, void *vcinfo);
 static void FreeReqStationID (void *rbnode);
 static int StaKeyCompare (const void *a, const void *b);
 static ReqStationID *GetReqStationID (RBTree *tree, char *staid);
-static int StationToRegex (const char *staid, const char *selectors,
+static int StationToRegex (const char *staid, struct strnode *selector,
                            char **matchregex, char **rejectregex);
 static int SelectToRegex (const char *staid, const char *select,
                           char **regex);
@@ -512,6 +512,13 @@ SLFree (ClientInfo *cinfo)
 
   slinfo = (SLInfo *)cinfo->extinfo;
 
+  for (struct strnode *next, *node = slinfo->selectors; node; node = next)
+  {
+    next = node->next;
+    free (node->string);
+    free (node);
+  }
+
   RBTreeDestroy (slinfo->stations);
   slinfo->stations = NULL;
 
@@ -813,6 +820,20 @@ HandleNegotiation (ClientInfo *cinfo)
       OKGO = 0;
     }
 
+    /* Allocate and populate new selector list node */
+    struct strnode *newselector;
+    if ((newselector = (struct strnode *)malloc (sizeof (struct strnode))) == NULL)
+    {
+      lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
+
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error allocating memory()"))
+        return -1;
+
+      OKGO = 0;
+    }
+
+    newselector->string = strdup (selector);
+
     /* If modifying a STATION add selector to it's entry */
     if (OKGO && cinfo->state == STATE_STATION)
     {
@@ -826,41 +847,51 @@ HandleNegotiation (ClientInfo *cinfo)
       }
       else
       {
-        /* Add selector to the station ID selectors, maximum of SLMAXSELECTLEN bytes */
+        /* Add selector to the station ID selectors */
         /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
-        if (AddToString (&(stationid->selectors), selector, ",", (selector[0] == '!') ? 0 : 1, SLMAXSELECTLEN))
+        if (selector[0] == '!' && stationid->selectors != NULL)
         {
-          lprintf (0, "[%s] Error for command SELECT (cannot AddToString), too many selectors for %s",
-                   cinfo->hostname, slinfo->reqstaid);
+          struct strnode *last = stationid->selectors;
 
-          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Too many selectors for this station"))
-            return -1;
+          while (last->next != NULL)
+            last = last->next;
+
+          last->next        = newselector;
+          newselector->next = NULL;
         }
         else
         {
-          if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
-            return -1;
+          newselector->next    = stationid->selectors;
+          stationid->selectors = newselector;
         }
+
+        if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
+          return -1;
       }
     }
     /* Otherwise add selector to global list */
     else if (OKGO)
     {
-      /* Add selector to the  global selectors, maximum of SLMAXSELECTLEN bytes */
+      /* Add selector to the global selectors */
       /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
-      if (AddToString (&(slinfo->selectors), selector, ",", (selector[0] == '!') ? 0 : 1, SLMAXSELECTLEN))
+      if (selector[0] == '!' && slinfo->selectors != NULL)
       {
-        lprintf (0, "[%s] Error for command SELECT (cannot AddToString), too many global selectors",
-                 cinfo->hostname);
+        struct strnode *last = slinfo->selectors;
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Too many global selectors"))
-          return -1;
+        while (last->next != NULL)
+          last = last->next;
+
+        last->next        = newselector;
+        newselector->next = NULL;
       }
       else
       {
-        if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
-          return -1;
+        newselector->next = slinfo->selectors;
+        slinfo->selectors = newselector;
       }
+
+      if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
+        return -1;
     }
   } /* End of SELECT */
 
@@ -1398,6 +1429,8 @@ HandleInfo_v4 (ClientInfo *cinfo)
   int fields;
   int errflag = 0;
 
+  struct strnode selector = {.string = stream, .next = NULL};
+
   if (strncasecmp (cinfo->recvbuf, "INFO", 4) != 0)
   {
     lprintf (0, "[%s] %s() cannot detect INFO", __func__, cinfo->hostname);
@@ -1440,7 +1473,7 @@ HandleInfo_v4 (ClientInfo *cinfo)
     /* Configure regex for matching included station and stream patterns */
     if (station[0] != '\0')
     {
-      if (StationToRegex (station, (stream[0] != '\0') ? stream : NULL,
+      if (StationToRegex (station, (stream[0] != '\0') ? &selector : NULL,
                           &matchregex, &rejectregex))
       {
         lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
@@ -1458,7 +1491,7 @@ HandleInfo_v4 (ClientInfo *cinfo)
     /* Configure regex for matching included station and stream patterns */
     if (station[0] != '\0')
     {
-      if (StationToRegex (station, (stream[0] != '\0') ? stream : NULL,
+      if (StationToRegex (station, (stream[0] != '\0') ? &selector : NULL,
                           &matchregex, &rejectregex))
       {
         lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
@@ -1746,8 +1779,15 @@ FreeReqStationID (void *rbnode)
 {
   ReqStationID *stationid = (ReqStationID *)rbnode;
 
-  if (stationid->selectors)
-    free (stationid->selectors);
+  if (!rbnode)
+    return;
+
+  for (struct strnode *next, *node = stationid->selectors; node; node = next)
+  {
+    next = node->next;
+    free (node->string);
+    free (node);
+  }
 
   free (rbnode);
 
@@ -1832,12 +1872,10 @@ GetReqStationID (RBTree *tree, char *staid)
  * Return 0 on success and -1 on error.
  ***************************************************************************/
 static int
-StationToRegex (const char *staid, const char *selectors,
+StationToRegex (const char *staid, struct strnode *selector,
                 char **matchregex, char **rejectregex)
 {
-  char *selectorlist = NULL;
-  char *selector, *nextselector;
-  int matched;
+  int matched = 0;
 
   if (!matchregex || !rejectregex)
   {
@@ -1845,32 +1883,13 @@ StationToRegex (const char *staid, const char *selectors,
     return -1;
   }
 
-  /* If a selector list is specified traverse it and update regexes */
-  if (selectors)
+  /* If a selector list is specified update regexes */
+  if (selector)
   {
-    /* Copy selectors list so we can modify it while parsing */
-    if ((selectorlist = strdup (selectors)) == NULL)
+    for (; selector != NULL; selector = selector->next)
     {
-      lprintf (0, "Cannot allocate memory to duplicate selectors");
-      return -1;
-    }
-
-    /* Track count of matching selectors */
-    matched = 0;
-
-    /* Traverse list of comma separated selectors */
-    selector = selectorlist;
-    while (selector)
-    {
-      /* Find delimiting comma */
-      nextselector = strchr (selector, ',');
-
-      /* Terminate string at comma and set pointer for next selector */
-      if (nextselector)
-        *nextselector++ = '\0';
-
       /* Handle negated selector */
-      if (selector[0] == '!')
+      if (selector->string[0] == '!')
       {
         /* If no matching (non-negated) selectors are included a negation selector
            implies all data for the specified station with the execption of the
@@ -1881,40 +1900,30 @@ StationToRegex (const char *staid, const char *selectors,
           if (SelectToRegex (staid, NULL, matchregex))
           {
             lprintf (0, "Error with SelectToRegex");
-            if (selectorlist)
-              free (selectorlist);
             return -1;
           }
 
           matched++;
         }
 
-        if (SelectToRegex (staid, &selector[1], rejectregex))
+        if (SelectToRegex (staid, &(selector->string[1]), rejectregex))
         {
           lprintf (0, "Error with SelectToRegex");
-          if (selectorlist)
-            free (selectorlist);
           return -1;
         }
       }
       /* Handle regular selector */
       else
       {
-        if (SelectToRegex (staid, selector, matchregex))
+        if (SelectToRegex (staid, selector->string, matchregex))
         {
           lprintf (0, "Error with SelectToRegex");
-          if (selectorlist)
-            free (selectorlist);
           return -1;
         }
 
         matched++;
       }
-
-      selector = nextselector;
     }
-
-    free (selectorlist);
   }
   /* Otherwise update regex for station without selectors */
   else

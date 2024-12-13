@@ -97,6 +97,13 @@ struct cthread
   struct cthread *next;
 };
 
+/* Singly-linked list of string values for general use */
+struct strnode
+{
+  char *string;
+  struct strnode *next;
+};
+
 /* A structure for server listening parameters */
 typedef struct ListenPortParams
 {

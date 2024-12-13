@@ -581,7 +581,7 @@ static yyjson_mut_doc *
 info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matchexpr)
 {
   yyjson_mut_val *root = yyjson_mut_doc_get_root (doc);
-  yyjson_mut_val *connection;
+  yyjson_mut_val *connections;
   yyjson_mut_val *client_array;
   yyjson_mut_val *client;
 
@@ -590,7 +590,7 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
   nstime_t nsnow;
 
   char *conntype;
-  char conntime[50];
+  char timestring[50];
   char packettime[50];
 
   pcre2_code *match_code       = NULL;
@@ -602,20 +602,19 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
     return NULL;
   }
 
-  if ((connection = yyjson_mut_obj_add_obj (doc, root, "connections")) == NULL ||
-      (client_array = yyjson_mut_obj_add_arr (doc, connection, "client")) == NULL)
+  if ((connections = yyjson_mut_obj_add_obj (doc, root, "connections")) == NULL ||
+      (client_array = yyjson_mut_obj_add_arr (doc, connections, "client")) == NULL)
   {
     return NULL;
   }
 
-  yyjson_mut_obj_add_int (doc, connection, "client_count", param.clientcount);
+  yyjson_mut_obj_add_int (doc, connections, "client_count", param.clientcount);
 
   nsnow = NSnow ();
 
   /* List connections, lock client list while looping */
   pthread_mutex_lock (&param.cthreads_lock);
-  loopctp = param.cthreads;
-  while (loopctp)
+  for (loopctp = param.cthreads; loopctp != NULL; loopctp = loopctp->next)
   {
     tcinfo = (ClientInfo *)loopctp->td->td_prvtptr;
 
@@ -625,14 +624,12 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
           pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->ipstr, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0 &&
           pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->clientid, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0)
       {
-        loopctp = loopctp->next;
         continue;
       }
 
     /* Skip if client thread is not in ACTIVE state */
     if (loopctp->td->td_state != TDS_ACTIVE)
     {
-      loopctp = loopctp->next;
       continue;
     }
 
@@ -680,8 +677,8 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
     yyjson_mut_obj_add_strcpy (doc, client, "type", conntype);
     yyjson_mut_obj_add_strcpy (doc, client, "client_id", tcinfo->clientid);
 
-    ms_nstime2timestr (tcinfo->conntime, conntime, ISOMONTHDAY_Z, NONE);
-    yyjson_mut_obj_add_strcpy (doc, client, "connect_time", conntime);
+    ms_nstime2timestr (tcinfo->conntime, timestring, ISOMONTHDAY_Z, NONE);
+    yyjson_mut_obj_add_strcpy (doc, client, "connect_time", timestring);
 
     if (tcinfo->reader->pktid <= RINGID_MAXIMUM)
     {
@@ -714,7 +711,87 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
     if (tcinfo->rejectstr)
       yyjson_mut_obj_add_strcpy (doc, client, "reject", tcinfo->rejectstr);
 
-    loopctp = loopctp->next;
+    /* SeedLink-specific stations and selectors */
+    if (tcinfo->type == CLIENT_SEEDLINK && tcinfo->extinfo)
+    {
+      SLInfo *slinfo = (SLInfo *)tcinfo->extinfo;
+
+      char string32[32] = {0};
+
+      ReqStationID *stationid;
+      Stack *stack = StackCreate ();
+      RBNode *rbnode;
+
+      snprintf (string32, sizeof (string32), "%u.%u", slinfo->proto_major, slinfo->proto_minor);
+      yyjson_mut_obj_add_strcpy (doc, client, "protocol_version", string32);
+
+
+      yyjson_mut_obj_add_bool (doc, client, "dialup_mode", slinfo->dialup);
+
+      if (slinfo->proto_major == 3)
+      {
+        yyjson_mut_obj_add_bool (doc, client, "batch_mode", slinfo->batch);
+        yyjson_mut_obj_add_bool (doc, client, "extended_reply", slinfo->extreply);
+      }
+
+      if (slinfo->selectors)
+      {
+        yyjson_mut_val *selector_array = yyjson_mut_obj_add_arr (doc, client, "selector");
+
+        for (struct strnode *selector = slinfo->selectors; selector; selector = selector->next)
+        {
+          yyjson_mut_arr_add_str (doc, selector_array, selector->string);
+        }
+      }
+
+      yyjson_mut_val *station_array = yyjson_mut_obj_add_arr (doc, client, "station");
+
+      RBBuildStack (slinfo->stations, stack);
+
+      while ((rbnode = (RBNode *)StackPop (stack)))
+      {
+        stationid = (ReqStationID *)rbnode->data;
+
+        yyjson_mut_val *station = yyjson_mut_arr_add_obj (doc, station_array);
+
+        yyjson_mut_obj_add_strcpy (doc, station, "id", (const char *)rbnode->key);
+
+        if (stationid->starttime != NSTUNSET)
+        {
+          ms_nstime2timestr (stationid->starttime, timestring, ISOMONTHDAY_Z, NONE);
+          yyjson_mut_obj_add_strcpy (doc, station, "start_time", timestring);
+        }
+
+        if (stationid->endtime != NSTUNSET)
+        {
+          ms_nstime2timestr (stationid->endtime, timestring, ISOMONTHDAY_Z, NONE);
+          yyjson_mut_obj_add_strcpy (doc, station, "end_time", timestring);
+        }
+
+        if (stationid->packetid <= RINGID_MAXIMUM)
+        {
+          yyjson_mut_obj_add_uint (doc, station, "start_packet_id", stationid->packetid);
+        }
+
+        if (stationid->datastart != NSTUNSET)
+        {
+          ms_nstime2timestr (stationid->datastart, timestring, ISOMONTHDAY_Z, NONE);
+          yyjson_mut_obj_add_uint (doc, station, "start_packet_time", stationid->datastart);
+        }
+
+        if (stationid->selectors)
+        {
+          yyjson_mut_val *selector_array = yyjson_mut_obj_add_arr (doc, station, "selector");
+
+          for (struct strnode *selector = stationid->selectors; selector; selector = selector->next)
+          {
+            yyjson_mut_arr_add_str (doc, selector_array, selector->string);
+          }
+        }
+      }
+
+      StackDestroy (stack, 0);
+    }
   }
   pthread_mutex_unlock (&param.cthreads_lock);
 
@@ -791,8 +868,7 @@ info_add_status (ClientInfo *cinfo, yyjson_mut_doc *doc)
 
   /* List server threads, lock thread list while looping */
   pthread_mutex_lock (&param.sthreads_lock);
-  loopstp = param.sthreads;
-  while (loopstp)
+  for (loopstp = param.sthreads; loopstp != NULL; loopstp = loopstp->next)
   {
     thread = yyjson_mut_arr_add_obj (doc, thread_array);
 
@@ -843,8 +919,6 @@ info_add_status (ClientInfo *cinfo, yyjson_mut_doc *doc)
     {
       yyjson_mut_obj_add_strcpy (doc, thread, "type", "Unknown");
     }
-
-    loopstp = loopstp->next;
   }
   pthread_mutex_unlock (&param.sthreads_lock);
 

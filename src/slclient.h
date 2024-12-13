@@ -28,6 +28,8 @@ extern "C"
 #endif
 
 #include "rbtree.h"
+#include "ringserver.h"
+
 #include <pthread.h>
 
 /* The total length of SLSERVERVER should be <= 98 bytes for compatibility
@@ -75,7 +77,7 @@ typedef struct SLInfo
   int batch;             /* Connection is in batch mode */
   int terminfo;          /* Terminating INFO packet flag */
   uint64_t startid;      /* Starting packet ID */
-  char *selectors;       /* List of SeedLink selectors */
+  struct strnode *selectors; /* List of SeedLink selectors */
   int stationcount;      /* Number of stations requested with STATION */
   int timewinchannels;   /* Count of channels for time window completion check */
   RBTree *stations;      /* Binary tree of stations requested */
@@ -89,7 +91,7 @@ typedef struct ReqStationID
   nstime_t endtime;   /* Requested end time for StaID */
   uint64_t packetid;  /* Requested packet ID */
   nstime_t datastart; /* Data start time of requested packet */
-  char *selectors;    /* List of SeedLink stream ID selectors */
+  struct strnode *selectors; /* List of SeedLink stream ID selectors */
 } ReqStationID;
 
 /* Station ID listings, used for INFO requests */
