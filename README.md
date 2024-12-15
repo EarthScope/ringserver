@@ -135,6 +135,39 @@ using a web browser at the following URL paths:
   /datalink     - Initiate WebSocket connection for DataLink
 ```
 
+## Encrypted connections with TLS
+
+The ringserver program supports encrypted connections using TLS.  To configure TLS,
+certificate and key files must be specified that contain a certificate (with a public
+key) and a private key.  These are specified using the `TLSCertFile`
+(or `RS_TLS_CERT_FILE` envvar) and `TLSKeyFile` (or `RS_TLS_KEY_FILE` envvar) config file
+options.
+
+For public servers, the certificate should be signed by a trusted Certificate Authority
+or clients will not be likely to trust the certificate.
+
+For servers in closed environments, or for testing, a self signed certificate may be
+used for the server and the clients. Such a certificate (and matching key) can be
+generated with the [openssl](https://www.openssl.org/) program like this:
+
+```
+openssl req -x509 -nodes -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 \
+    -subj "/C=XX/ST=State/L=City/O=Organization/OU=OrgUnit/CN=localhost"
+```
+
+These can then be used with ringserver like this:
+
+```
+RS_TLS_CERT_FILE=cert.pem TLS_KEY_FILE=key.pem ringserver -SL '18500 TLS' -DL 16000 -v
+```
+
+The `cert.pem` file can be used as a Certificate Authority for clients, e.g. with
+[slinktool](https://github.com/earthscope/slinktool):
+
+```
+LIBSLINK_CA_CERT_FILE=cert.pem slinktool localhost:18500 -F ID
+```
+
 ## Licensing
 
 Licensed under the Apache License, Version 2.0 (the "License");
