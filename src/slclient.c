@@ -1150,6 +1150,15 @@ HandleNegotiation (ClientInfo *cinfo)
     }
   } /* End of TIME */
 
+  /* END (v4.0) - Stop negotiating, send data, dial-up mode */
+  else if (!strncasecmp (cinfo->recvbuf, "ENDFETCH", 9))
+  {
+    slinfo->dialup = 1;
+
+    /* Trigger ring configuration and data flow */
+    cinfo->state = STATE_RINGCONFIG;
+  }
+
   /* END (v3.x and v4.0) - Stop negotiating, send data */
   else if (!strncasecmp (cinfo->recvbuf, "END", 3))
   {
