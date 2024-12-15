@@ -811,11 +811,19 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
   size_t nread = 0;
   size_t receivable;
   char *recvptr;
+  char peekbyte[1];
 
   if (!cinfo || !buffer || requested == 0)
   {
     cinfo->socketerr = -1;
     return -1;
+  }
+
+  /* Check if socket has been disconnected */
+  if (recv (cinfo->socket, peekbyte, 1, MSG_PEEK) == 0)
+  {
+    cinfo->socketerr = -2;
+    return -2;
   }
 
   if (requested > cinfo->recvbufsize)
