@@ -96,7 +96,7 @@ DLHandleCmd (ClientInfo *cinfo)
   dlinfo = (DLInfo *)cinfo->extinfo;
 
   /* Determine if this is a data submission and handle */
-  if (!strncmp (cinfo->recvbuf, "WRITE", 5))
+  if (!strncmp (cinfo->dlcommand, "WRITE", 5))
   {
     /* Check for write permission */
     if (!cinfo->writeperm)
@@ -114,7 +114,7 @@ DLHandleCmd (ClientInfo *cinfo)
   }
 
   /* Determine if this is an INFO request and handle */
-  else if (!strncmp (cinfo->recvbuf, "INFO", 4))
+  else if (!strncmp (cinfo->dlcommand, "INFO", 4))
   {
     /* Any errors from HandleInfo are fatal */
     if (HandleInfo (cinfo, cinfo->socket))
@@ -124,7 +124,7 @@ DLHandleCmd (ClientInfo *cinfo)
   }
 
   /* Determine if this is a specific read request and handle */
-  else if (!strncmp (cinfo->recvbuf, "READ", 4))
+  else if (!strncmp (cinfo->dlcommand, "READ", 4))
   {
     cinfo->state = STATE_COMMAND;
 
@@ -136,7 +136,7 @@ DLHandleCmd (ClientInfo *cinfo)
   }
 
   /* Determine if this is a request to start STREAMing and set state */
-  else if (!strncmp (cinfo->recvbuf, "STREAM", 6))
+  else if (!strncmp (cinfo->dlcommand, "STREAM", 6))
   {
     /* Set read position to next packet if position not set */
     if (cinfo->reader->pktid == RINGID_NONE)
@@ -148,7 +148,7 @@ DLHandleCmd (ClientInfo *cinfo)
   }
 
   /* Determine if this is a request to end STREAMing and set state */
-  else if (!strncmp (cinfo->recvbuf, "ENDSTREAM", 9))
+  else if (!strncmp (cinfo->dlcommand, "ENDSTREAM", 9))
   {
     /* Send ENDSTREAM */
     if (SendPacket (cinfo, "ENDSTREAM", NULL, 0, 0, 0))
@@ -163,7 +163,7 @@ DLHandleCmd (ClientInfo *cinfo)
   else
   {
     /* If this is not an ID request, set to a non-streaming state */
-    if (strncmp (cinfo->recvbuf, "ID", 2))
+    if (strncmp (cinfo->dlcommand, "ID", 2))
       cinfo->state = STATE_COMMAND;
 
     /* Any errors from HandleNegotiation are fatal */
@@ -284,14 +284,17 @@ HandleNegotiation (ClientInfo *cinfo)
   char OKGO = 1;
   char junk;
 
+  if (!cinfo)
+    return -1;
+
   /* ID - Return server ID, version and capability flags */
-  if (!strncasecmp (cinfo->recvbuf, "ID", 2))
+  if (!strncasecmp (cinfo->dlcommand, "ID", 2))
   {
     /* Parse client ID from command if included
      * Everything after "ID " is the client ID */
-    if (strlen (cinfo->recvbuf) > 3)
+    if (strlen (cinfo->dlcommand) > 3)
     {
-      strncpy (cinfo->clientid, cinfo->recvbuf + 3, sizeof (cinfo->clientid) - 1);
+      strncpy (cinfo->clientid, cinfo->dlcommand + 3, sizeof (cinfo->clientid) - 1);
       *(cinfo->clientid + sizeof (cinfo->clientid) - 1) = '\0';
       lprintf (2, "[%s] Received ID (%s)", cinfo->hostname, cinfo->clientid);
     }
@@ -312,7 +315,7 @@ HandleNegotiation (ClientInfo *cinfo)
   }
 
   /* POSITION <SET|AFTER> value [time]\r\n - Set ring reading position */
-  else if (!strncasecmp (cinfo->recvbuf, "POSITION", 8))
+  else if (!strncasecmp (cinfo->dlcommand, "POSITION", 8))
   {
     char subcmd[11];
     char value[32];
@@ -323,7 +326,7 @@ HandleNegotiation (ClientInfo *cinfo)
     OKGO = 1;
 
     /* Parse sub-command and value from request */
-    fields = sscanf (cinfo->recvbuf, "%*s %10s %31s %31s %c",
+    fields = sscanf (cinfo->dlcommand, "%*s %10s %31s %31s %c",
                      subcmd, value, subvalue, &junk);
 
     /* Make sure the subcommand, value and subvalue fields are terminated */
@@ -473,12 +476,12 @@ HandleNegotiation (ClientInfo *cinfo)
   } /* End of POSITION */
 
   /* MATCH size\r\n[pattern] - Provide regex to match streamids */
-  else if (!strncasecmp (cinfo->recvbuf, "MATCH", 5))
+  else if (!strncasecmp (cinfo->dlcommand, "MATCH", 5))
   {
     OKGO = 1;
 
     /* Parse size from request */
-    fields = sscanf (cinfo->recvbuf, "%*s %zu %c", &size, &junk);
+    fields = sscanf (cinfo->dlcommand, "%*s %zu %c", &size, &junk);
 
     /* Make sure we got a single pattern or no pattern */
     if (fields > 1)
@@ -491,8 +494,7 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Remove current match if no pattern supplied */
     else if (fields <= 0)
     {
-      if (cinfo->matchstr)
-        free (cinfo->matchstr);
+      free (cinfo->matchstr);
       cinfo->matchstr = NULL;
       RingMatch (cinfo->reader, 0);
 
@@ -515,8 +517,7 @@ HandleNegotiation (ClientInfo *cinfo)
     }
     else
     {
-      if (cinfo->matchstr)
-        free (cinfo->matchstr);
+      free (cinfo->matchstr);
 
       /* Read regex of size bytes from socket */
       if (!(cinfo->matchstr = (char *)malloc (size + 1)))
@@ -554,12 +555,12 @@ HandleNegotiation (ClientInfo *cinfo)
   } /* End of MATCH */
 
   /* REJECT size\r\n[pattern] - Provide regex to reject streamids */
-  else if (OKGO && !strncasecmp (cinfo->recvbuf, "REJECT", 6))
+  else if (OKGO && !strncasecmp (cinfo->dlcommand, "REJECT", 6))
   {
     OKGO = 1;
 
     /* Parse size from request */
-    fields = sscanf (cinfo->recvbuf, "%*s %zu %c", &size, &junk);
+    fields = sscanf (cinfo->dlcommand, "%*s %zu %c", &size, &junk);
 
     /* Make sure we got a single pattern or no pattern */
     if (fields > 1)
@@ -572,8 +573,7 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Remove current reject if no pattern supplied */
     else if (fields <= 0)
     {
-      if (cinfo->rejectstr)
-        free (cinfo->rejectstr);
+      free (cinfo->rejectstr);
       cinfo->rejectstr = NULL;
       RingReject (cinfo->reader, 0);
 
@@ -596,8 +596,7 @@ HandleNegotiation (ClientInfo *cinfo)
     }
     else
     {
-      if (cinfo->rejectstr)
-        free (cinfo->rejectstr);
+      free (cinfo->rejectstr);
 
       /* Read regex of size bytes from socket */
       if (!(cinfo->rejectstr = (char *)malloc (size + 1)))
@@ -635,7 +634,7 @@ HandleNegotiation (ClientInfo *cinfo)
   } /* End of REJECT */
 
   /* BYE - End connection */
-  else if (!strncasecmp (cinfo->recvbuf, "BYE", 3))
+  else if (!strncasecmp (cinfo->dlcommand, "BYE", 3))
   {
     return -1;
   }
@@ -644,7 +643,7 @@ HandleNegotiation (ClientInfo *cinfo)
   else
   {
     lprintf (1, "[%s] Unrecognized command: %.10s",
-             cinfo->hostname, cinfo->recvbuf);
+             cinfo->hostname, cinfo->dlcommand);
 
     if (SendPacket (cinfo, "ERROR", "Unrecognized command", 0, 1, 1))
       return -1;
@@ -694,7 +693,7 @@ HandleWrite (ClientInfo *cinfo)
   dlinfo = (DLInfo *)cinfo->extinfo;
 
   /* Parse command parameters: WRITE <streamid> <datastart> <dataend> <flags> <datasize> [pktid] */
-  rv = sscanf (cinfo->recvbuf, "%*s %100s %" SCNd64 " %" SCNd64 " %100s %" SCNu32 " %" SCNu64,
+  rv = sscanf (cinfo->dlcommand, "%*s %100s %" SCNd64 " %" SCNd64 " %100s %" SCNu32 " %" SCNu64,
                streamid,
                &(cinfo->packet.datastart),
                &(cinfo->packet.dataend),
@@ -705,7 +704,7 @@ HandleWrite (ClientInfo *cinfo)
   if (rv < 5)
   {
     lprintf (1, "[%s] Error parsing WRITE parameters: %.100s",
-             cinfo->hostname, cinfo->recvbuf);
+             cinfo->hostname, cinfo->dlcommand);
 
     SendPacket (cinfo, "ERROR", "Error parsing WRITE command parameters", 0, 1, 1);
 
@@ -903,10 +902,10 @@ HandleRead (ClientInfo *cinfo)
     return -1;
 
   /* Parse command parameters: READ <pktid> */
-  if (sscanf (cinfo->recvbuf, "%*s %" PRIu64, &reqid) != 1)
+  if (sscanf (cinfo->dlcommand, "%*s %" PRIu64, &reqid) != 1)
   {
     lprintf (1, "[%s] Error parsing READ parameters: %.100s",
-             cinfo->hostname, cinfo->recvbuf);
+             cinfo->hostname, cinfo->dlcommand);
 
     if (SendPacket (cinfo, "ERROR", "Error parsing READ command parameters", 0, 1, 1))
       return -1;
@@ -962,10 +961,10 @@ HandleInfo (ClientInfo *cinfo, int socket)
   if (!cinfo)
     return -1;
 
-  if (!strncasecmp (cinfo->recvbuf, "INFO", 4))
+  if (!strncasecmp (cinfo->dlcommand, "INFO", 4))
   {
     /* Set level pointer to start of type identifier */
-    type = cinfo->recvbuf + 4;
+    type = cinfo->dlcommand + 4;
 
     /* Skip any spaces between INFO and type identifier */
     while (*type == ' ')
@@ -1138,7 +1137,7 @@ SendPacket (ClientInfo *cinfo, char *header, char *data,
   }
 
   /* Free the wire packet space if we allocated it */
-  if (wirepacket && wirepacket != cinfo->sendbuf)
+  if (wirepacket != cinfo->sendbuf)
     free (wirepacket);
 
   return 0;

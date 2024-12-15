@@ -66,6 +66,7 @@ typedef struct ClientInfo
   size_t      recvbufsize;  /* Length of receive buffer in bytes */
   size_t      recvlength;   /* Length of data in recvbuf */
   size_t      recvconsumed; /* Bytes of recvbuf that have been consumed */
+  char        dlcommand[UINT8_MAX + 1]; /* DataLink command buffer */
   RingPacket  packet;       /* Client specific ring packet header */
   struct sockaddr *addr;    /* client socket structure */
   socklen_t   addrlen;      /* Length of client socket structure */

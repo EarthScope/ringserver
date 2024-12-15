@@ -137,7 +137,7 @@ ClientThread (void *arg)
 
   /* Allocate client specific send buffer */
   cinfo->sendbufsize = 2 * cinfo->ringparams->pktsize;
-  cinfo->sendbuf = (char *)malloc (cinfo->sendbufsize);
+  cinfo->sendbuf     = (char *)malloc (cinfo->sendbufsize);
   if (!cinfo->sendbuf)
   {
     lprintf (0, "[%s] Error allocating send buffer", cinfo->hostname);
@@ -146,7 +146,7 @@ ClientThread (void *arg)
 
   /* Allocate client specific receive buffer */
   cinfo->recvbufsize = 10 * cinfo->ringparams->pktsize;
-  cinfo->recvbuf = (char *)calloc (1, cinfo->recvbufsize);
+  cinfo->recvbuf     = (char *)malloc (cinfo->recvbufsize);
   if (!cinfo->recvbuf)
   {
     lprintf (0, "[%s] Error allocating receive buffer", cinfo->hostname);
@@ -229,17 +229,11 @@ ClientThread (void *arg)
   }
 
   /* If only one protocol is enabled set the expected client type */
-  if ((cinfo->protocols & PROTO_DATALINK) &&
-      !(cinfo->protocols & PROTO_SEEDLINK) &&
-      !(cinfo->protocols & PROTO_HTTP))
+  if (cinfo->protocols == PROTO_DATALINK)
     cinfo->type = CLIENT_DATALINK;
-  else if ((cinfo->protocols & PROTO_SEEDLINK) &&
-           !(cinfo->protocols & PROTO_DATALINK) &&
-           !(cinfo->protocols & PROTO_HTTP))
+  else if (cinfo->protocols == PROTO_SEEDLINK)
     cinfo->type = CLIENT_SEEDLINK;
-  else if ((cinfo->protocols & PROTO_HTTP) &&
-           !(cinfo->protocols & PROTO_DATALINK) &&
-           !(cinfo->protocols & PROTO_SEEDLINK))
+  else if (cinfo->protocols == PROTO_HTTP)
     cinfo->type = CLIENT_HTTP;
 
   /* Set thread active status */
@@ -280,7 +274,7 @@ ClientThread (void *arg)
         }
         else
         {
-          lprintf (0, "[%s] Cannot determine allowed client from '%c%c%c'",
+          lprintf (0, "[%s] Cannot determine allowed client protocol from '%c%c%c'",
                    cinfo->hostname,
                    (cinfo->recvbuf[0] < 32 || cinfo->recvbuf[0] > 126) ? '?' : cinfo->recvbuf[0],
                    (cinfo->recvbuf[1] < 32 || cinfo->recvbuf[1] > 126) ? '?' : cinfo->recvbuf[1],
@@ -503,6 +497,9 @@ ClientRecv (ClientInfo *cinfo)
   uint64_t wslength;
   int nread = 0;
 
+  if (!cinfo)
+    return -1;
+
   /* Recv a WebSocket frame if this connection is WebSocket */
   if (cinfo->websocket && cinfo->wspayload == 0)
   {
@@ -529,20 +526,23 @@ ClientRecv (ClientInfo *cinfo)
   }
 
   /* Check for data from client */
-  if (cinfo->protocols & PROTO_DATALINK &&
-      cinfo->type == CLIENT_DATALINK)
+  if (cinfo->type == CLIENT_DATALINK)
   {
     nread = RecvDLCommand (cinfo);
   }
-  else if (cinfo->protocols & PROTO_SEEDLINK &&
-           cinfo->type == CLIENT_SEEDLINK)
+  else if (cinfo->type == CLIENT_SEEDLINK)
   {
     nread = RecvLine (cinfo);
   }
-  else if (cinfo->protocols & PROTO_HTTP &&
-           cinfo->type == CLIENT_HTTP)
+  else if (cinfo->type == CLIENT_HTTP)
   {
     nread = RecvLine (cinfo);
+  }
+  else
+  {
+    lprintf (0, "[%s] Unknown client type, cannot receive data",
+             cinfo->hostname);
+    return -1;
   }
 
   return nread;
@@ -982,14 +982,6 @@ RecvDLCommand (ClientInfo *cinfo)
     return -1;
   }
 
-  /* Sanity check the receive buffer length */
-  if (cinfo->recvbufsize < 10)
-  {
-    lprintf (0, "[%s] Client receiving buffer is too small", cinfo->hostname);
-    cinfo->socketerr = -1;
-    return -1;
-  }
-
   /* Receive and process the 3 byte DataLink pre-header */
   nrecv = RecvData (cinfo, cinfo->recvbuf, 3, 0);
 
@@ -1001,10 +993,10 @@ RecvDLCommand (ClientInfo *cinfo)
   nread += nrecv;
 
   /* Sequence bytes of 'DL' identify DataLink */
-  if (*(cinfo->recvbuf) == 'D' && *(cinfo->recvbuf + 1) == 'L')
+  if (cinfo->recvbuf[0] == 'D' && cinfo->recvbuf[1] == 'L')
   {
     /* Determine length of header body */
-    headerlen = (uint8_t)*(cinfo->recvbuf + 2);
+    headerlen = (uint8_t)(cinfo->recvbuf[2]);
   }
   else
   {
@@ -1015,16 +1007,16 @@ RecvDLCommand (ClientInfo *cinfo)
   }
 
   /* Sanity check the header size */
-  if (headerlen < 2 || headerlen > (cinfo->recvbufsize - 1))
+  if (headerlen < 2)
   {
-    lprintf (0, "[%s] Pre-header indicates unmanageable header size: %u",
+    lprintf (0, "[%s] Pre-header indicates a header size too small: %u",
              cinfo->hostname, headerlen);
     cinfo->socketerr = -1;
     return -1;
   }
 
-  /* Receive header, must be fulfilled */
-  nrecv = RecvData (cinfo, cinfo->recvbuf, headerlen, 1);
+  /* Receive command in header body, must be fulfilled */
+  nrecv = RecvData (cinfo, cinfo->dlcommand, headerlen, 1);
 
   if (nrecv != headerlen)
   {
@@ -1033,9 +1025,9 @@ RecvDLCommand (ClientInfo *cinfo)
 
   nread += nrecv;
 
-  /* Make sure buffer is NULL terminated. The header length is
-   * allowed to be <= (cinfo->recvbufsize - 1), so this should be safe. */
-  *(cinfo->recvbuf + nrecv) = '\0';
+  /* Make sure the command is NULL terminated. The command buffer size is the
+   * the maximum header length (UINT8_MAX) plus 1, so this should be safe. */
+  cinfo->dlcommand[nrecv] = '\0';
 
   return nread;
 } /* End of RecvDLCommand() */
