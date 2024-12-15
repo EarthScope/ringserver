@@ -1158,7 +1158,8 @@ static int
 SendRingPacket (ClientInfo *cinfo)
 {
   StreamNode *stream;
-  char header[255];
+  char preheader[3];
+  char header[UINT8_MAX];
   uint8_t headerlen_u8;
   size_t headerlen;
   int newstream = 0;
@@ -1185,27 +1186,17 @@ SendRingPacket (ClientInfo *cinfo)
     return -1;
   }
 
-  /* Make sure send buffer is large enough for wire packet */
-  if (cinfo->sendbufsize < (3 + headerlen + cinfo->packet.datasize))
-  {
-    lprintf (0, "[%s] SendRingPacket(): Send buffer not large enough (%zu bytes), need %zu bytes",
-             cinfo->hostname, cinfo->sendbufsize, 3 + headerlen + cinfo->packet.datasize);
-    return -1;
-  }
-
   /* Populate pre-header sequence of wire packet */
-  cinfo->sendbuf[0] = 'D';
-  cinfo->sendbuf[1] = 'L';
+  preheader[0] = 'D';
+  preheader[1] = 'L';
   headerlen_u8      = (uint8_t)headerlen;
-  memcpy (cinfo->sendbuf + 2, &headerlen_u8, 1);
-
-  /* Copy header and packet data into wire packet */
-  memcpy (&cinfo->sendbuf[3], header, headerlen);
-
-  memcpy (&cinfo->sendbuf[3 + headerlen], cinfo->sendbuf, cinfo->packet.datasize);
+  memcpy (preheader + 2, &headerlen_u8, 1);
 
   /* Send complete wire packet */
-  if (SendData (cinfo, cinfo->sendbuf, (3 + headerlen + cinfo->packet.datasize), 0))
+  if (SendDataMB (cinfo,
+                  (void *[]){preheader, header, cinfo->sendbuf},
+                  (size_t[]){3, headerlen, cinfo->packet.datasize},
+                  3, 0))
   {
     if (cinfo->socketerr != -2)
       lprintf (0, "[%s] SendRingPacket(): Error sending packet: %s",
