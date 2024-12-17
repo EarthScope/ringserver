@@ -1562,10 +1562,16 @@ void LogServerParameters ()
 
 /***************************************************************************
  * PrintHandler (USR1 signal):
+ *
+ * Use a high verbosity for an explicit request to print details.
  ***************************************************************************/
 static void
 PrintHandler ()
 {
+  /* Use a high verbosity for */
+  uint8_t verbose_save = verbose;
+  verbose = 3;
   LogRingParameters (ringparams);
   LogServerParameters ();
+  verbose = verbose_save;
 }
