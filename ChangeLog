@@ -8,7 +8,8 @@
 	- Remove colons from date-time values in transfer log file names, e.g.
 	`txlog-20241205T0000-20241206T0000` instead of `txlog-20241205T00:00-20241206T00:00`
 	- Add SeedLink-specific details to INFO CONNECTIONS response.
-	- Implemented handling of SeedLink v4 `ENDFETCH` command.
+	- Implement handling of SeedLink v4 `ENDFETCH` command.
+	- Strict matching of URL paths and improved 404 messages.
 
 2024.320: v4.0.0
 	NOTE: the ring buffer format has changed in this release. Older versions

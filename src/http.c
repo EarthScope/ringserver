@@ -69,9 +69,11 @@ static int ParseHeader (char *header, char **value);
 static int GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
                            uint64_t contentlength, const char *message);
 static int GenerateID (ClientInfo *cinfo, const char *path, char **response, MediaType *type);
-static int GenerateStreams (ClientInfo *cinfo, const char *path, char **response, MediaType *type);
+static int GenerateStreams (ClientInfo *cinfo, const char *path, const char *query,
+                            char **response, MediaType *type);
 static int GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType *type);
-static int GenerateConnections (ClientInfo *cinfo, const char *path, char **response, MediaType *type);
+static int GenerateConnections (ClientInfo *cinfo, const char *path, const char *query,
+                                char **response, MediaType *type);
 static int SendFileHTTP (ClientInfo *cinfo, char *path);
 static int NegotiateWebSocket (ClientInfo *cinfo, char *version,
                                char *upgradeHeader, char *connectionHeader,
@@ -157,6 +159,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 {
   char method[10]   = {0};
   char path[100]    = {0};
+  char *query       = NULL;
   char version[100] = {0};
   int headlen;
   int fields;
@@ -255,8 +258,15 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
   lprintf (2, "[%s] Received HTTP request %.20s", cinfo->hostname, path);
 
+  /* Separate query string (parameters) from path */
+  if ((query = strchr (path, '?')) != NULL)
+  {
+    *query = '\0';
+    query++;
+  }
+
   /* Handle specific end points */
-  if (!strncasecmp (path, "/id", 3))
+  if (!strcasecmp (path, "/id" ) || !strcasecmp (path, "/id/json"))
   {
     responsebytes = GenerateID (cinfo, path, &response, &type);
 
@@ -267,7 +277,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     }
     else if (responsebytes == 0)
     {
-      headlen = GenerateHeader (cinfo, 404, type, 0, NULL);
+      headlen = GenerateHeader (cinfo, 404, type, 0, "No server ID found");
     }
     else
     {
@@ -292,9 +302,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     return (rv) ? -1 : 0;
   } /* Done with /id request */
-  else if (!strncasecmp (path, "/stream", 7))
+  else if (!strcasecmp (path, "/streams") || !strcasecmp (path, "/streams/json") ||
+           !strcasecmp (path, "/streamids"))
   {
-    responsebytes = GenerateStreams (cinfo, path, &response, &type);
+    responsebytes = GenerateStreams (cinfo, path, query, &response, &type);
 
     /* Create header */
     if (responsebytes > 0)
@@ -303,7 +314,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     }
     else if (responsebytes == 0)
     {
-      headlen = GenerateHeader (cinfo, 404, type, 0, NULL);
+      headlen = GenerateHeader (cinfo, 404, type, 0, "No streams found");
     }
     else
     {
@@ -328,7 +339,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     return (rv) ? -1 : 0;
   } /* Done with /streams or /streamids request */
-  else if (!strncasecmp (path, "/status", 7))
+  else if (!strcasecmp (path, "/status") || !strcasecmp (path, "/status/json"))
   {
     /* Check for trusted flag, required to access this resource */
     if (!cinfo->trusted)
@@ -353,7 +364,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     }
     else if (responsebytes == 0)
     {
-      headlen = GenerateHeader (cinfo, 404, type, 0, NULL);
+      headlen = GenerateHeader (cinfo, 404, type, 0, "No status found");
     }
     else
     {
@@ -378,7 +389,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     return (rv) ? -1 : 0;
   } /* Done with /status request */
-  else if (!strncasecmp (path, "/connections", 12))
+  else if (!strcasecmp (path, "/connections") || !strcasecmp (path, "/connections/json"))
   {
     /* Check for trusted flag, required to access this resource */
     if (!cinfo->trusted)
@@ -396,7 +407,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     lprintf (1, "[%s] Received HTTP CONNECTIONS request", cinfo->hostname);
 
-    responsebytes = GenerateConnections (cinfo, path, &response, &type);
+    responsebytes = GenerateConnections (cinfo, path, query, &response, &type);
 
     /* Create header */
     if (responsebytes > 0)
@@ -405,7 +416,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     }
     else if (responsebytes == 0)
     {
-      headlen = GenerateHeader (cinfo, 404, type, 0, NULL);
+      headlen = GenerateHeader (cinfo, 404, type, 0, "No connections found");
     }
     else
     {
@@ -430,7 +441,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     return (rv) ? -1 : 0;
   } /* Done with /connections request */
-  else if (!strncasecmp (path, "/seedlink", 9))
+  else if (!strcasecmp (path, "/seedlink"))
   {
     if ((cinfo->protocols & PROTO_SEEDLINK) == 0)
     {
@@ -477,7 +488,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     /* This is now a SeedLink client */
     cinfo->type = CLIENT_SEEDLINK;
   } /* Done with /seedlink request */
-  else if (!strncasecmp (path, "/datalink", 9))
+  else if (!strcasecmp (path, "/datalink"))
   {
     if ((cinfo->protocols & PROTO_DATALINK) == 0)
     {
@@ -836,9 +847,13 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
   }
   else if (status == 404)
   {
-    const char *body = "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">"
-                       "<html><head><title>404 Not Found</title></head>"
-                       "<body><h1>Not Found</h1></body></html>";
+    char body[256];
+
+    snprintf (body, sizeof (body),
+              "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">"
+              "<html><head><title>404 Not Found</title></head>"
+              "<body><h1>%s</h1></body></html>",
+              (message) ? message : "Not Found");
 
     headlen = snprintf (cinfo->sendbuf, cinfo->sendbufsize,
                         "HTTP/1.1 404 Not Found\r\n"
@@ -962,11 +977,11 @@ GenerateID (ClientInfo *cinfo, const char *path, char **response, MediaType *typ
  * Return -1 on error
  ***************************************************************************/
 static int
-GenerateStreams (ClientInfo *cinfo, const char *path, char **response, MediaType *type)
+GenerateStreams (ClientInfo *cinfo, const char *path, const char *query,
+                 char **response, MediaType *type)
 {
   size_t streamcount;
   size_t streamlistsize;
-  char mypath[64]   = {0};
   char matchstr[64] = {0};
   int matchlen      = 0;
 
@@ -980,10 +995,8 @@ GenerateStreams (ClientInfo *cinfo, const char *path, char **response, MediaType
   if (!cinfo || !path || !response || !type)
     return -1;
 
-  strncpy (mypath, path, sizeof (mypath) - 1);
-
   /* If match parameter is supplied, extract value */
-  if ((cp = strstr (mypath, "match=")))
+  if (query != NULL  && (cp = strstr (query, "match=")))
   {
     cp += 6; /* Advance to character after '=' */
 
@@ -995,22 +1008,19 @@ GenerateStreams (ClientInfo *cinfo, const char *path, char **response, MediaType
     matchstr[matchlen] = '\0';
   }
 
-  if ((cp = strchr (mypath, '?')))
-    *cp = '\0';
-
   json_string = info_json (cinfo, PACKAGE "/" VERSION, INFO_STREAMS, (matchlen > 0) ? matchstr : NULL);
 
   if (!json_string)
     return -1;
 
-  if (!strcasecmp (mypath, "/streams/json"))
+  if (!strcasecmp (path, "/streams/json"))
   {
     *response     = json_string;
     responsebytes = (*response) ? strlen (*response) : 0;
     *type         = JSON;
   }
-  else if (!strcasecmp (mypath, "/streams") ||
-           !strcasecmp (mypath, "/streamids"))
+  else if (!strcasecmp (path, "/streams") ||
+           !strcasecmp (path, "/streamids"))
   {
     yyjson_doc *json;
     yyjson_val *root;
@@ -1018,7 +1028,7 @@ GenerateStreams (ClientInfo *cinfo, const char *path, char **response, MediaType
     yyjson_val *stream_iter = NULL;
     size_t idx, max;
 
-    int just_ids = (!strcasecmp (mypath, "/streamids")) ? 1 : 0;
+    int just_ids = (!strcasecmp (path, "/streamids")) ? 1 : 0;
 
     if ((json = yyjson_read (json_string, strlen (json_string), 0)) == NULL)
     {
@@ -1295,9 +1305,9 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
  * Return -1 on error
  ***************************************************************************/
 static int
-GenerateConnections (ClientInfo *cinfo, const char *path, char **response, MediaType *type)
+GenerateConnections (ClientInfo *cinfo, const char *path, const char *query,
+                     char **response, MediaType *type)
 {
-  char mypath[101]   = {0};
   size_t clientcount = 0;
   size_t responsesize;
   char matchstr[50];
@@ -1313,10 +1323,8 @@ GenerateConnections (ClientInfo *cinfo, const char *path, char **response, Media
   if (!cinfo || !path || !response || !type)
     return -1;
 
-  strncpy (mypath, path, sizeof (mypath) - 1);
-
   /* If match parameter is supplied, set reader match to limit streams */
-  if ((cp = strstr (mypath, "match=")))
+  if (query != NULL && (cp = strstr (query, "match=")))
   {
     cp += 6; /* Advance to character after '=' */
 
@@ -1328,21 +1336,18 @@ GenerateConnections (ClientInfo *cinfo, const char *path, char **response, Media
     matchstr[matchlen] = '\0';
   }
 
-  if ((cp = strchr (mypath, '?')))
-    *cp = '\0';
-
   json_string = info_json (cinfo, PACKAGE "/" VERSION, INFO_CONNECTIONS, (matchlen > 0) ? matchstr : NULL);
 
   if (!json_string)
     return -1;
 
-  if (!strcasecmp (mypath, "/connections/json"))
+  if (!strcasecmp (path, "/connections/json"))
   {
     *response     = json_string;
     responsebytes = (*response) ? strlen (*response) : 0;
     *type         = JSON;
   }
-  else if (!strcasecmp (mypath, "/connections"))
+  else if (!strcasecmp (path, "/connections"))
   {
     yyjson_doc *json;
     yyjson_val *root;
