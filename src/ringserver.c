@@ -1,8 +1,8 @@
 /**************************************************************************
  * ringserver.c
  *
- * Multi-threaded TCP generic ring buffer data server with support
- * for SeedLink, DataLink and HTTP protocols.
+ * A streaming data server with support for SeedLink, DataLink and HTTP
+ * protocols.
  *
  * This file is part of the ringserver.
  *
@@ -1568,7 +1568,6 @@ void LogServerParameters ()
 static void
 PrintHandler ()
 {
-  /* Use a high verbosity for */
   uint8_t verbose_save = verbose;
   verbose = 3;
   LogRingParameters (ringparams);

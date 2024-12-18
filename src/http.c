@@ -553,8 +553,6 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       headlen = GenerateHeader (cinfo, 200, XICON, favicon_ico_len, NULL,
                                 "Cache-Control: public, max-age=86400\r\n");
 
-      fprintf (stderr, "DEBUG headlen: %d\n%s", headlen, cinfo->sendbuf);
-
       if (headlen > 0)
       {
         rv = SendDataMB (cinfo,
