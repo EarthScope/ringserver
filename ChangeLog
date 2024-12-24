@@ -1,4 +1,4 @@
-2024.xxx:
+2024.359: v4.0.1
 	- Include server_port key in INFO CONNECTIONS response.
 	- Fix parsing of HTTP requests that required URL decoding.
 	- Fix and enhance HTTP /connections endpoint response.
@@ -9,7 +9,7 @@
 	`txlog-20241205T0000-20241206T0000` instead of `txlog-20241205T00:00-20241206T00:00`
 	- Add SeedLink-specific details to INFO CONNECTIONS response.
 	- Implement handling of SeedLink v4 `ENDFETCH` command.
-	- Strict matching of URL paths and improved 404 messages.
+	- Strict matching of HTTP URL paths and improved 404 messages.
 
 2024.320: v4.0.0
 	NOTE: the ring buffer format has changed in this release. Older versions
