@@ -501,9 +501,8 @@ ClientRecv (ClientInfo *cinfo)
     return -1;
 
   /* Recv a WebSocket frame if this connection is WebSocket */
-  if (cinfo->websocket && cinfo->wspayload == 0)
+  if (cinfo->websocket && cinfo->recvlength == 0)
   {
-    cinfo->wsmaskidx = 0;
     nread = RecvWSFrame (cinfo, &wslength);
 
     if (nread < 0)
@@ -511,7 +510,6 @@ ClientRecv (ClientInfo *cinfo)
       if (nread == -1)
         lprintf (0, "[%s] Error receiving WebSocket frame from client (%d)",
                  cinfo->hostname, nread);
-
 
       return nread;
     }
@@ -1086,7 +1084,7 @@ RecvLine (ClientInfo *cinfo)
   }
 
   /* Skip initial terminators, SeedLink v4 requires ignoring empty commands */
-  while (skipped <= nread)
+  while (skipped < cinfo->recvlength)
   {
     if (cinfo->recvbuf[skipped] == '\n' || cinfo->recvbuf[skipped] == '\r')
     {

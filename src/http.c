@@ -636,8 +636,9 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length)
   if (!cinfo || !length)
     return -1;
 
-  /* Unset mask value to avoid use in RecvData() below */
+  /* Reset mask value */
   cinfo->wsmask.one = 0;
+  cinfo->wsmaskidx  = 0;
 
   /* Recv first two bytes */
   nrecv = RecvData (cinfo, onetwo, 2, 0);
