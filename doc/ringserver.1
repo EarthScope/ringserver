@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2024/11/16
+.TH RINGSERVER 1 2024/12/24
 .SH NAME
 ringserver \- stream oriented packet ring buffer
 
@@ -8,15 +8,18 @@ ringserver [options] [configfile]
 .fi
 
 .SH DESCRIPTION
-\fBringserver\fP is a TCP-based ring buffer designed for packetized
-streaming data.  The buffer operates on a First-in-first-out basis
-with newly arriving packets pushing older packets out of the buffer.
-The ring packets are not format specific and may contain any type of
-data.  All communications are performed via TCP interfaces.  Data
-streams are available to clients using the SeedLink and DataLink
-protocols and submitted to the server using the DataLink protocol.
-WebSocket connections are supported for the SeedLink and DataLink
-protocols and general status is available via HTTP.
+\fBringserver\fP is a streaming data server with support for SeedLink,
+DataLink and HTTP protocols.
+
+The implementation is based on a ring buffer design that operates on
+a first-in-first-out basis with newly arriving packets pushing older
+packets out of the buffer. The packet payloads are not format specific
+and may contain any type of data.  All communications are performed
+via TCP interfaces.  Data streams are available to clients using the
+SeedLink and DataLink protocols and submitted to the server using the
+DataLink protocol.  WebSocket connections are supported for the
+SeedLink and DataLink protocols.  General server status is available
+via HTTP in JSON or formatted summaries.
 
 The server is configured either with options on the command line,
 through environment variables, and/or by using a \fBringserver\fP
@@ -27,11 +30,11 @@ Only the most common options are available on the command line, all
 options are controllable via environment variables and the config file.
 Detailed descriptions for each option are included in the example
 config file that accompanies the source code.  Many options are dynamic,
-meaning that they can be changed while the server is running.  In this
-case the server will recognize that the config file has changed and
-will re-read it's configuration.  This is especially useful for
-updating access controls, logging verbosity and other logging
-parameters.
+meaning that they can be changed while the server is running when
+using a config file.  The server will recognize that the config file
+has changed and re-read it's configuration.  This is especially useful
+for updating access controls, logging verbosity and other logging
+parameters without restarting the server.
 
 In normal operation packet buffer contents are saved in files when the
 server is shut down making the server stateful across restarts.  By
@@ -40,11 +43,8 @@ buffer can optionally be maintained completely in system memory, only
 reading and writing the buffer contents on startup and shutdown (useful
 in environments where memory-mapping is not possible).
 
-Client access is controlled using IP addresses.  A match list requires
-that client addresses match one of the entries.  A reject list requires
-that client addresses do _not_ match one of the entires.  A write list
-provides permission to submit packets to specific client addresses.
-A limit list specifies which streams a client is allowed to access.
+Client access is controlled using IP addresses.  Controls include
+match, reject, limit, write and trust permissions.
 See \fBAccess Control\fP for more details.
 
 Transfer logs can optionally be written to track the transmission and
@@ -52,11 +52,11 @@ reception of data packets to and from the server.  This tracking is
 stream-based and identifies the number of packet bytes of each unique
 stream transferred to or from each client connection.
 
-The server supports multiple protocols: SeedLink, DataLink, HTTP with
-WebSocket.  The server can listen on multiple network ports, and each
-port can be configured to support any combination of the protocols.
-For ports configured for TLS encryption, only a single protocol is
-supported and must be specified.
+The server supports streaming data with multiple protocols: SeedLink,
+DataLink, HTTP with WebSocket.  The server can listen on multiple
+network ports, and each port can be configured to support any combination
+of the protocols. Ports configured for TLS encryption must be
+configured for a single protocol.
 See \fBMulti-protocol support\fP for more information.
 
 The server also has limited support for simple HTTP requests.  When
@@ -64,8 +64,8 @@ support is enabled, server status, stream lists and other details can
 be accessed with simple HTTP requests.
 See \fBHTTP Support\fP for more details.
 
-The slinktool(1) and dalitool(1) programs can be used to query the
-ringserver for various information via the SeedLink and DataLink
+The dalitool(1) and slinktool(1)  programs can be used to query the
+ringserver for various information via the DataLink and SeedLink
 interfaces respectively.  The dalitool program was developed in
 parallel with ringserver and the DataLink protocol and is the
 recommended query tool for ringserver admins.
@@ -218,7 +218,7 @@ client(s) are allowed access to or to write.
 By default all clients are allowed to request the server ID, simple
 status and list of streams.  Specific clients can be allowed to access
 connection information and more detailed status using the
-\fBTrustedIP\fP config parameter.
+\fBTrustedIP\fP access control.
 
 If no client addresses are granted write permission via \fBWriteIP\fP
 or granted trusted status via \fBTrustedIP\fP then the 'localhost'
@@ -333,8 +333,8 @@ http://localhost/streams?match=IU_ANMO.
 After a WebSocket connection has been initiated with either the
 \fBseedlink\fP or \fBdatalink\fP end points, the requested protocol is
 supported exactly as it would be normally with the addition of
-WebSocket framing.  Each server command should be contained in a
-single WebSocket frame, independent of other commands.
+WebSocket framing.  Each server command, including terminator(s),
+should be contained in a WebSocket frame.
 
 Custom HTTP headers may be included in HTTP responses using the
 \fBHTTPHeader\fP config file parameter.  This can be used, for example,

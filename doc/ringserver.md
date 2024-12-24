@@ -25,23 +25,25 @@ ringserver [options] [configfile]
 
 ## <a id='description'>Description</a>
 
-<p ><b>ringserver</b> is a TCP-based ring buffer designed for packetized streaming data.  The buffer operates on a First-in-first-out basis with newly arriving packets pushing older packets out of the buffer. The ring packets are not format specific and may contain any type of data.  All communications are performed via TCP interfaces.  Data streams are available to clients using the SeedLink and DataLink protocols and submitted to the server using the DataLink protocol. WebSocket connections are supported for the SeedLink and DataLink protocols and general status is available via HTTP.</p>
+<p ><b>ringserver</b> is a streaming data server with support for SeedLink, DataLink and HTTP protocols.</p>
+
+<p >The implementation is based on a ring buffer design that operates on a first-in-first-out basis with newly arriving packets pushing older packets out of the buffer. The packet payloads are not format specific and may contain any type of data.  All communications are performed via TCP interfaces.  Data streams are available to clients using the SeedLink and DataLink protocols and submitted to the server using the DataLink protocol.  WebSocket connections are supported for the SeedLink and DataLink protocols.  General server status is available via HTTP in JSON or formatted summaries.</p>
 
 <p >The server is configured either with options on the command line, through environment variables, and/or by using a <b>ringserver</b> config file.  The order of precedence for configuration options is command line, environment variables, and then config file.</p>
 
-<p >Only the most common options are available on the command line, all options are controllable via environment variables and the config file. Detailed descriptions for each option are included in the example config file that accompanies the source code.  Many options are dynamic, meaning that they can be changed while the server is running.  In this case the server will recognize that the config file has changed and will re-read it's configuration.  This is especially useful for updating access controls, logging verbosity and other logging parameters.</p>
+<p >Only the most common options are available on the command line, all options are controllable via environment variables and the config file. Detailed descriptions for each option are included in the example config file that accompanies the source code.  Many options are dynamic, meaning that they can be changed while the server is running when using a config file.  The server will recognize that the config file has changed and re-read it's configuration.  This is especially useful for updating access controls, logging verbosity and other logging parameters without restarting the server.</p>
 
 <p >In normal operation packet buffer contents are saved in files when the server is shut down making the server stateful across restarts.  By default the packet buffer is managed as a memory-mapped file. The buffer can optionally be maintained completely in system memory, only reading and writing the buffer contents on startup and shutdown (useful in environments where memory-mapping is not possible).</p>
 
-<p >Client access is controlled using IP addresses.  A match list requires that client addresses match one of the entries.  A reject list requires that client addresses do _not_ match one of the entires.  A write list provides permission to submit packets to specific client addresses. A limit list specifies which streams a client is allowed to access. See <b>Access Control</b> for more details.</p>
+<p >Client access is controlled using IP addresses.  Controls include match, reject, limit, write and trust permissions. See <b>Access Control</b> for more details.</p>
 
 <p >Transfer logs can optionally be written to track the transmission and reception of data packets to and from the server.  This tracking is stream-based and identifies the number of packet bytes of each unique stream transferred to or from each client connection.</p>
 
-<p >The server supports multiple protocols: SeedLink, DataLink, HTTP with WebSocket.  The server can listen on multiple network ports, and each port can be configured to support any combination of the protocols. For ports configured for TLS encryption, only a single protocol is supported and must be specified. See <b>Multi-protocol support</b> for more information.</p>
+<p >The server supports streaming data with multiple protocols: SeedLink, DataLink, HTTP with WebSocket.  The server can listen on multiple network ports, and each port can be configured to support any combination of the protocols. Ports configured for TLS encryption must be configured for a single protocol. See <b>Multi-protocol support</b> for more information.</p>
 
 <p >The server also has limited support for simple HTTP requests.  When support is enabled, server status, stream lists and other details can be accessed with simple HTTP requests. See <b>HTTP Support</b> for more details.</p>
 
-<p >The slinktool(1) and dalitool(1) programs can be used to query the ringserver for various information via the SeedLink and DataLink interfaces respectively.  The dalitool program was developed in parallel with ringserver and the DataLink protocol and is the recommended query tool for ringserver admins.</p>
+<p >The dalitool(1) and slinktool(1)  programs can be used to query the ringserver for various information via the DataLink and SeedLink interfaces respectively.  The dalitool program was developed in parallel with ringserver and the DataLink protocol and is the recommended query tool for ringserver admins.</p>
 
 ## <a id='options'>Options</a>
 
@@ -153,7 +155,7 @@ ringserver [options] [configfile]
 
 <p >By default all clients are allowed access to all streams in the buffer, and clients with write permission are allowed to write any streams.  Specific clients can be limited to access or write subsets of streams using the <b>LimitIP</b> config parameter.  This parameter takes a regular expression that is used to match stream IDs that the client(s) are allowed access to or to write.</p>
 
-<p >By default all clients are allowed to request the server ID, simple status and list of streams.  Specific clients can be allowed to access connection information and more detailed status using the <b>TrustedIP</b> config parameter.</p>
+<p >By default all clients are allowed to request the server ID, simple status and list of streams.  Specific clients can be allowed to access connection information and more detailed status using the <b>TrustedIP</b> access control.</p>
 
 <p >If no client addresses are granted write permission via <b>WriteIP</b> or granted trusted status via <b>TrustedIP</b> then the 'localhost' address (local loopback) are granted those permissions.</p>
 
@@ -225,7 +227,7 @@ ringserver [options] [configfile]
 
 <p >The <b>streams</b>, <b>streamids</b> and <b>connections</b> endpoints accept a <i>match</i> parameter that is a regular expression pattern used to limit the returned information.  For the <b>streams</b> and <b>streamids</b> endpoints the matching is applied to stream IDs.  For the <b>connections</b> endpoint the matching is applied to hostname, client IP address and client ID. For example: http://localhost/streams?match=IU_ANMO.</p>
 
-<p >After a WebSocket connection has been initiated with either the <b>seedlink</b> or <b>datalink</b> end points, the requested protocol is supported exactly as it would be normally with the addition of WebSocket framing.  Each server command should be contained in a single WebSocket frame, independent of other commands.</p>
+<p >After a WebSocket connection has been initiated with either the <b>seedlink</b> or <b>datalink</b> end points, the requested protocol is supported exactly as it would be normally with the addition of WebSocket framing.  Each server command, including terminator(s), should be contained in a WebSocket frame.</p>
 
 <p >Custom HTTP headers may be included in HTTP responses using the <b>HTTPHeader</b> config file parameter.  This can be used, for example, to enable cross-site HTTP requests via Cross-Origin Resource Sharing (CORS).</p>
 
@@ -377,4 +379,4 @@ EarthScope Data Services
 </pre>
 
 
-(man page 2024/11/16)
+(man page 2024/12/24)
