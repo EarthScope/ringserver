@@ -587,9 +587,10 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
 
   uint8_t wsframe[10];
   size_t wsframelen;
-  uint8_t length8;
-  uint16_t length16;
-  uint64_t length64;
+
+#define MAX_REPLACEMENT_LIST_LENGTH 10
+  void *new_buffer[MAX_REPLACEMENT_LIST_LENGTH];
+  size_t new_buflen[MAX_REPLACEMENT_LIST_LENGTH];
 
   if (!cinfo)
     return -1;
@@ -623,26 +624,25 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
     if (totalbuflen < 126) /* If payload length < 126 store in bits 1-7 of byte 2 */
     {
       wsframelen = 2;
-      length8    = totalbuflen;
-      wsframe[1] |= length8;
+      wsframe[1] |= (uint8_t)totalbuflen;
     }
     else if (totalbuflen < UINT16_MAX) /* If payload length < 16-bit int store in next two bytes */
     {
       wsframelen = 4;
       wsframe[1] |= 126;
-      length16 = totalbuflen;
-      memcpy (&wsframe[2], &length16, 2);
+      uint16_t length16 = totalbuflen;
       if (!ms_bigendianhost ())
-        ms_gswap2 (&wsframe[2]);
+        ms_gswap2 (&length16);
+      memcpy (&wsframe[2], &length16, 2);
     }
     else if (totalbuflen < UINT64_MAX) /* If payload length < 64-bit int store in next 8 bytes */
     {
       wsframelen = 10;
       wsframe[1] |= 127;
-      length64 = totalbuflen;
-      memcpy (&wsframe[2], &length64, 8);
+      uint64_t length64 = totalbuflen;
       if (!ms_bigendianhost ())
-        ms_gswap8 (&wsframe[2]);
+        ms_gswap8 (&length64);
+      memcpy (&wsframe[2], &length64, 8);
     }
     else
     {
@@ -651,46 +651,24 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
       return -1;
     }
 
-    /* Send WebSocket frame */
-    if (wsframelen)
+    /* Protection in case future use case uses more buffers than our stack replacements */
+    if (bufcount >= MAX_REPLACEMENT_LIST_LENGTH)
     {
-      if (cinfo->tlsctx)
-      {
-        /* TLS writes can be fragmented, loop until everything has been sent */
-        for (int written = 0; written < wsframelen; written += nsent)
-        {
-          while ((nsent = mbedtls_ssl_write (&tlsctx->ssl, wsframe + written, wsframelen - written)) <= 0)
-          {
-            if (nsent != MBEDTLS_ERR_SSL_WANT_READ &&
-                nsent != MBEDTLS_ERR_SSL_WANT_WRITE &&
-                nsent != MBEDTLS_ERR_SSL_CRYPTO_IN_PROGRESS)
-              break;
-          }
-
-          if (nsent < 0)
-            break;
-        }
-      }
-      else
-      {
-        nsent = send (cinfo->socket, wsframe, wsframelen, 0);
-      }
-
-      /* Connection closed by peer */
-      if ((cinfo->tlsctx && nsent == MBEDTLS_ERR_NET_CONN_RESET) ||
-          (nsent == -1 && errno == EPIPE))
-      {
-        cinfo->socketerr = -2; /* Indicate an orderly shutdown */
-        return -2;
-      }
-      /* Connection error */
-      else if (nsent < 0)
-      {
-        lprintf (0, "[%s] Error sending WebSocket frame", cinfo->hostname);
-        cinfo->socketerr = -1; /* Indicate fatal socket error */
-        return -1;
-      }
+      lprintf (0, "[%s] %s() Too many buffers for WebSocket frame: %d",
+               cinfo->hostname, __func__, bufcount);
+      return -1;
     }
+
+    /* Add WebSocket frame header to buffer and buflen lists */
+    new_buffer[0] = wsframe;
+    new_buflen[0] = wsframelen;
+
+    memcpy (new_buffer + 1, buffer, bufcount * sizeof (void *));
+    memcpy (new_buflen + 1, buflen, bufcount * sizeof (size_t));
+
+    buffer = new_buffer;
+    buflen = new_buflen;
+    bufcount++;
   }
 
   /* Send each buffer in sequence */

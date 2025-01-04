@@ -34,7 +34,7 @@ extern "C" {
 #include "clients.h"
 
 #define PACKAGE   "ringserver"
-#define VERSION   "4.0.1"
+#define VERSION   "4.0.1-DEV"
 
 /* Thread states */
 typedef enum
