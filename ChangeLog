@@ -1,3 +1,6 @@
+2025.005:
+	- Optimize cpu usage of send logic to clients by avoiding blocking socket usage.
+
 2024.359: v4.0.1
 	- Include server_port key in INFO CONNECTIONS response.
 	- Fix parsing of HTTP requests that required URL decoding.

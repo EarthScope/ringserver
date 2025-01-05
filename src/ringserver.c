@@ -99,6 +99,7 @@ struct config_s config = {
     .tlscertfile         = NULL,
     .tlskeyfile          = NULL,
     .tlsverifyclientcert = 0,
+    .sockettimeout       = 10,
 };
 
 /* Local functions and variables */

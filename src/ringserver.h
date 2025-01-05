@@ -176,6 +176,7 @@ struct config_s
   char *tlscertfile;        /* TLS certificate file */
   char *tlskeyfile;         /* TLS key file */
   int tlsverifyclientcert;  /* Verify client certificate */
+  uint16_t sockettimeout;   /* Socket timeout in seconds */
 };
 
 extern struct config_s config;

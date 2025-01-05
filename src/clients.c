@@ -283,7 +283,7 @@ ClientThread (void *arg)
         }
       }
       /* Check for shutdown or errors except no data on non-blocking */
-      else if (nrecv == 0 || (nrecv == -1 && errno != EAGAIN  && errno != EWOULDBLOCK))
+      else if (nrecv == 0 || (nrecv == -1 && errno != EAGAIN && errno != EWOULDBLOCK))
       {
         break;
       }
@@ -580,9 +580,9 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
 {
   TLSCTX *tlsctx = cinfo->tlsctx;
   size_t totalbuflen = 0;
-  ssize_t nsent;
-  int sockflags;
-  int blockflags;
+  int written;
+  int pollret;
+  int nsent;
   int idx;
 
   uint8_t wsframe[10];
@@ -601,17 +601,6 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
   for (idx = 0; idx < bufcount; idx++)
   {
     totalbuflen += buflen[idx];
-  }
-
-  /* Clear non-blocking flag from socket flags */
-  sockflags = blockflags = fcntl (cinfo->socket, F_GETFL, 0);
-  blockflags &= ~O_NONBLOCK;
-  if (fcntl (cinfo->socket, F_SETFL, blockflags) == -1)
-  {
-    lprintf (0, "[%s] %s(): Error clearing non-blocking flag: %s",
-             cinfo->hostname, __func__, strerror (errno));
-    cinfo->socketerr = -1;
-    return -1;
   }
 
   /* If connection is WebSocket, generate and send an appropriate frame */
@@ -674,26 +663,61 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
   /* Send each buffer in sequence */
   for (idx = 0; idx < bufcount; idx++)
   {
-    if (cinfo->tlsctx)
+    /* Loop until entire buffer has been sent, polling socket as needed */
+    for (written = 0, nsent = 0;
+         written < buflen[idx] && nsent >= 0;
+         written += nsent)
     {
-      /* TLS writes can be fragmented, loop until everything has been sent */
-      for (int written = 0; written < buflen[idx]; written += nsent)
+      if (cinfo->tlsctx)
       {
         while ((nsent = mbedtls_ssl_write (&tlsctx->ssl, buffer[idx] + written, buflen[idx] - written)) <= 0)
         {
-          if (nsent != MBEDTLS_ERR_SSL_WANT_READ &&
-              nsent != MBEDTLS_ERR_SSL_WANT_WRITE &&
-              nsent != MBEDTLS_ERR_SSL_CRYPTO_IN_PROGRESS)
+          pollret = 1;
+          if (nsent == MBEDTLS_ERR_SSL_WANT_READ)
+            pollret = PollSocket (cinfo->socket, 1, 0, config.sockettimeout * 1000);
+          else if (nsent == MBEDTLS_ERR_SSL_WANT_WRITE)
+            pollret = PollSocket (cinfo->socket, 0, 1, config.sockettimeout * 1000);
+          else
             break;
-        }
 
-        if (nsent < 0)
-          break;
+          if (pollret == 0)
+          {
+            lprintf (0, "[%s] Timeout sending data", cinfo->hostname);
+            cinfo->socketerr = -1;
+            return -1;
+          }
+          else if (pollret == -1 && errno != EINTR)
+          {
+            lprintf (0, "[%s] Error polling socket", cinfo->hostname);
+            cinfo->socketerr = -1;
+            return -1;
+          }
+        }
       }
-    }
-    else
-    {
-      nsent = send (cinfo->socket, buffer[idx], buflen[idx], 0);
+      else
+      {
+        while ((nsent = send (cinfo->socket, buffer[idx] + written, buflen[idx] - written, 0)) <= 0)
+        {
+          pollret = 1;
+          if (nsent == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
+            pollret = PollSocket (cinfo->socket, 0, 1, config.sockettimeout * 1000);
+          else if (nsent < 0)
+            break;
+
+          if (pollret == 0)
+          {
+            lprintf (0, "[%s] Timeout sending data", cinfo->hostname);
+            cinfo->socketerr = -1;
+            return -1;
+          }
+          else if (pollret == -1 && errno != EINTR)
+          {
+            lprintf (0, "[%s] Error polling socket", cinfo->hostname);
+            cinfo->socketerr = -1;
+            return -1;
+          }
+        }
+      }
     }
 
     /* Connection closed by peer */
@@ -735,15 +759,6 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
 
   /* Update the time of the last packet exchange */
   cinfo->lastxchange = NSnow ();
-
-  /* Restore original socket flags */
-  if (fcntl (cinfo->socket, F_SETFL, sockflags) == -1)
-  {
-    lprintf (0, "[%s] %s(): Error setting non-blocking flag: %s",
-             cinfo->hostname, __func__, strerror (errno));
-    cinfo->socketerr = -1;
-    return -1;
-  }
 
   return 0;
 } /* End of SendDataMB() */
@@ -856,8 +871,8 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
       if (fulfill == 0 && nread == 0)
         return 0;
 
-      /* Poll up to 10 seconds == 10,000 milliseconds */
-      int pollret = PollSocket (cinfo->socket, 1, 0, 10000);
+      /* Poll up to socket timeout value (in seconds) */
+      int pollret = PollSocket (cinfo->socket, 1, 0, config.sockettimeout * 1000);
 
       if (pollret == 0)
       {
