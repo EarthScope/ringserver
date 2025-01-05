@@ -55,14 +55,14 @@ Configuration options may be specified in three ways, in order of precedence: co
 To view ringserver command line options:
 
 ```
-docker run earthscope/ringserver -h
+docker run --rm earthscope/ringserver -h
 ```
 
 To print a reference configuration file, including descriptions for each parameter
 and their environment variable equivalents:
 
 ```
-docker run earthscope/ringserver -C
+docker run --rm earthscope/ringserver -C
 ```
 
 The environment variables documented in the reference configuration file may be

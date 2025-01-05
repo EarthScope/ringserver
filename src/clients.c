@@ -1149,11 +1149,8 @@ RecvLine (ClientInfo *cinfo)
  *
  * The timeout is specified in milliseconds.
  *
- * Interrupted select() calls are retried until the timeout expires
- * unless the thread state is not TDS_SPAWNING or TDS_ACTIVE.
- *
- * return >=1 : success
- * return   0 : if time-out expires or socket not connected
+ * return >=1 : selected event occurred or disconnection
+ * return   0 : if time-out expires
  * return  <0 : errors, check errno
  ***************************************************************************/
 int

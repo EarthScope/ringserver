@@ -155,10 +155,10 @@ openssl req -x509 -nodes -newkey rsa:2048 -keyout key.pem -out cert.pem -days 36
     -subj "/C=XX/ST=State/L=City/O=Organization/OU=OrgUnit/CN=localhost"
 ```
 
-These can then be used with ringserver like this:
+These can then be used with ringserver via environment variables (or config file options):
 
 ```
-RS_TLS_CERT_FILE=cert.pem TLS_KEY_FILE=key.pem ringserver -SL '18500 TLS' -DL 16000 -v
+RS_TLS_CERT_FILE=cert.pem RS_TLS_KEY_FILE=key.pem ringserver -SL '18500 TLS' -DL 16000 -v
 ```
 
 The `cert.pem` file can be used as a Certificate Authority for clients, e.g. with
