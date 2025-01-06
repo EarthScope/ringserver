@@ -425,7 +425,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     }
     else
     {
-      lprintf (0, "Error creating response (CONNECTIONS request)", NULL);
+      lprintf (0, "Error creating response (CONNECTIONS request)");
       headlen = GenerateHeader (cinfo, 500, type, 0, NULL, NULL);
     }
 

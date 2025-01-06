@@ -50,7 +50,7 @@
 static int HandleNegotiation (ClientInfo *cinfo);
 static int HandleWrite (ClientInfo *cinfo);
 static int HandleRead (ClientInfo *cinfo);
-static int HandleInfo (ClientInfo *cinfo, int socket);
+static int HandleInfo (ClientInfo *cinfo);
 static int SendPacket (ClientInfo *cinfo, char *header, char *data,
                        uint64_t value, int addvalue, int addsize);
 static int SendRingPacket (ClientInfo *cinfo);
@@ -117,7 +117,7 @@ DLHandleCmd (ClientInfo *cinfo)
   else if (!strncmp (cinfo->dlcommand, "INFO", 4))
   {
     /* Any errors from HandleInfo are fatal */
-    if (HandleInfo (cinfo, cinfo->socket))
+    if (HandleInfo (cinfo))
     {
       return -1;
     }
@@ -950,7 +950,7 @@ HandleRead (ClientInfo *cinfo)
  * Returns 0 on success and -1 on error which should disconnect.
  ***************************************************************************/
 static int
-HandleInfo (ClientInfo *cinfo, int socket)
+HandleInfo (ClientInfo *cinfo)
 {
   char string[200];
   char *xmlstr = NULL;

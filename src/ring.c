@@ -1376,7 +1376,7 @@ RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit,
   nstime_t pkttime  = NSTUNSET;
   nstime_t datastart;
   nstime_t dataend;
-  uint64_t pktid;
+  uint64_t pktid = RINGID_NONE;
   int64_t offset;
   int64_t soffset;
   uint64_t count = 0;

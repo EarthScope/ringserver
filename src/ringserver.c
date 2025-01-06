@@ -1359,6 +1359,7 @@ GenProtocolString (ListenProtocols protocols, ListenOptions options,
 void *
 SignalThread (void *arg)
 {
+  (void)arg; /* Suppress compiler warning */
   int sig;
   int rc;
 

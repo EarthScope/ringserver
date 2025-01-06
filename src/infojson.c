@@ -580,6 +580,7 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
 static yyjson_mut_doc *
 info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matchexpr)
 {
+  (void)cinfo; /* Unused for now, suppress compiler warning */
   yyjson_mut_val *root = yyjson_mut_doc_get_root (doc);
   yyjson_mut_val *connections;
   yyjson_mut_val *client_array;

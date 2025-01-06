@@ -2007,7 +2007,7 @@ CalcSize (const char *sizestr)
   {
     size = (uint64_t)strtoull (sizestr, &endptr, 10);
 
-    if (size < 0 || *endptr != '\0')
+    if (size == 0 || *endptr != '\0')
     {
       lprintf (0, "%s(): Error converting %s to positive integer", __func__, sizestr);
       return 0;

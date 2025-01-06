@@ -754,10 +754,13 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
       {
       case GLOB_ABORTED:
         lprintf (1, "[%s] glob(): Unignored lower-level error", ident);
+        break;
       case GLOB_NOSPACE:
         lprintf (1, "[%s] glob(): Not enough memory", ident);
+        break;
       case GLOB_NOSYS:
         lprintf (1, "[%s] glob(): Function not supported", ident);
+        break;
       default:
         lprintf (1, "[%s] glob(): %d", ident, rval);
       }
