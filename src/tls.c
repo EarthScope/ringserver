@@ -29,7 +29,19 @@ tls_debug (void *ctx, int level, const char *file, int line, const char *str)
   ((void)level);
   ((void)ctx);
 
-  lprintf (0, "%s:%04d: %s", file, line, str);
+  if (file == NULL)
+    file = "NULL";
+
+  if (str == NULL)
+    str = "NULL";
+
+  size_t len = strlen (str);
+
+  /* Avoid printing newline if included, lprintf() will add one */
+  if (len > 0 && str[len - 1] == '\n')
+    len--;
+
+  lprintf (0, "%s:%04d: %.*s", file, line, (int)len, str);
 }
 
 /***********************************************************************
@@ -41,12 +53,12 @@ tls_debug (void *ctx, int level, const char *file, int line, const char *str)
 int
 tls_configure (ClientInfo *cinfo)
 {
-  TLSCTX *tlsctx         = NULL;
-  char *evalue           = NULL;
+  TLSCTX *tlsctx = NULL;
+  char *evalue   = NULL;
+  char seedbuffer[128];
   uint32_t flags;
   int debug_level = 0;
   int ret;
-  psa_status_t status;
 
   if (config.tlscertfile == NULL)
   {
@@ -92,19 +104,16 @@ tls_configure (ClientInfo *cinfo)
   mbedtls_pk_init (&tlsctx->pkey);
   mbedtls_ctr_drbg_init (&tlsctx->ctr_drbg);
 
-  if ((status = psa_crypto_init ()) != PSA_SUCCESS)
-  {
-    lprintf (0, "[%s] Failed to initialize PSA Crypto implementation: %d",
-             cinfo->hostname, (int)status);
-    return -1;
-  }
+  /* Seed the random number generator with hostname, thread ID, and remaining uninitialized memory */
+  snprintf (seedbuffer, sizeof (seedbuffer), "%s+%lu", cinfo->hostname, (unsigned long)pthread_self ());
 
   if ((ret = mbedtls_ctr_drbg_seed (&tlsctx->ctr_drbg, mbedtls_entropy_func,
                                     &tlsctx->entropy,
-                                    (const unsigned char *)cinfo->hostname,
-                                    strlen (cinfo->hostname))) != 0)
+                                    (const unsigned char *)seedbuffer,
+                                    sizeof (seedbuffer))) != 0)
   {
-    lprintf (0, "[%s] mbedtls_ctr_drbg_seed() returned %d", cinfo->hostname, ret);
+    lprintf (0, "[%s] mbedtls_ctr_drbg_seed() returned %d (-0x%x)", cinfo->hostname, ret, (unsigned int)-ret);
+    mbedtls_ctr_drbg_init (&tlsctx->ctr_drbg);
     return -1;
   }
 
@@ -112,8 +121,8 @@ tls_configure (ClientInfo *cinfo)
 
   if ((ret = mbedtls_x509_crt_parse_file (&tlsctx->srvcert, config.tlscertfile)) != 0)
   {
-    lprintf (0, "[%s] mbedtls_x509_crt_parse_file() returned -0x%x",
-             cinfo->hostname, (unsigned int)-ret);
+    lprintf (0, "[%s] mbedtls_x509_crt_parse_file() returned %d (-0x%x)", cinfo->hostname, ret, (unsigned int)-ret);
+    mbedtls_x509_crt_init (&tlsctx->srvcert);
     return -1;
   }
 
@@ -122,7 +131,8 @@ tls_configure (ClientInfo *cinfo)
   if ((ret = mbedtls_pk_parse_keyfile (&tlsctx->pkey, config.tlskeyfile, "",
                                        mbedtls_ctr_drbg_random, &tlsctx->ctr_drbg)) != 0)
   {
-    lprintf (0, "[%s] mbedtls_pk_parse_keyfile() returned -0x%x", cinfo->hostname, (unsigned int)-ret);
+    lprintf (0, "[%s] mbedtls_pk_parse_keyfile() returned %d (-0x%x)", cinfo->hostname, ret, (unsigned int)-ret);
+    mbedtls_pk_init (&tlsctx->pkey);
     return -1;
   }
 
@@ -219,7 +229,6 @@ tls_cleanup (ClientInfo *cinfo)
     mbedtls_x509_crt_free (&tlsctx->srvcert);
     mbedtls_pk_free (&tlsctx->pkey);
     mbedtls_ctr_drbg_free (&tlsctx->ctr_drbg);
-    mbedtls_psa_crypto_free ();
 
     free (cinfo->tlsctx);
     cinfo->tlsctx = NULL;
