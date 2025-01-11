@@ -1680,9 +1680,6 @@ SendPacket (uint64_t pktid, char *payload, uint32_t payloadlen,
   if (SendDataMB (cinfo, (void *[]){header, payload}, (size_t[]){headerlen, payloadlen}, 2, 0))
     return -1;
 
-  /* Update the time of the last packet exchange */
-  cinfo->lastxchange = NSnow ();
-
   return 0;
 } /* End of SendPacket() */
 
@@ -1770,9 +1767,6 @@ SendInfoRecord (char *record, uint32_t reclen, void *vcinfo)
     memcpy (header, "SLINFO *", SLHEADSIZE_V3);
 
   SendDataMB (cinfo, (void *[]){header, record}, (size_t[]){SLHEADSIZE_V3, reclen}, 2, 0);
-
-  /* Update the time of the last packet exchange */
-  cinfo->lastxchange = NSnow ();
 
   return;
 } /* End of SendInfoRecord() */
