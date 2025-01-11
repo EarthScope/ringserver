@@ -158,7 +158,8 @@ struct config_s
   uint32_t pktsize;         /* Ring packet size */
   uint32_t maxclients;      /* Enforce maximum number of clients */
   uint32_t maxclientsperip; /* Enforce maximum number of clients per IP */
-  uint32_t clienttimeout;   /* Drop clients if no communication within this limit */
+  uint32_t clienttimeout;   /* Idle client threshold in seconds, then disconnect */
+  uint32_t netiotimeout;    /* Network I/O timeout in seconds, then disconnect */
   float timewinlimit;       /* Time window search limit in percent */
   uint8_t resolvehosts;     /* Flag to control resolving of client hostnames */
   uint8_t memorymapring;    /* Flag to control mmap'ing of packet buffer */
@@ -176,7 +177,6 @@ struct config_s
   char *tlscertfile;        /* TLS certificate file */
   char *tlskeyfile;         /* TLS key file */
   int tlsverifyclientcert;  /* Verify client certificate */
-  uint16_t sockettimeout;   /* Socket timeout in seconds */
 };
 
 extern struct config_s config;

@@ -1,7 +1,8 @@
-2025.007:
-	- Optimize cpu usage of send logic to clients by avoiding blocking socket usage.
+2025.011:
+	- Reduce cpu usage of sending data to clients by avoiding blocking socket usage.
 	- Remove unused mbedtls PSA initialization and thread-unsafe free'ing causing crashes.
 	- Improve TLS entropy seeding and diagnostic printing.
+	- Add NetIOTimeout (envvar RS_NETIO_TIMEOUT) config option.
 
 2024.359: v4.0.1
 	- Include server_port key in INFO CONNECTIONS response.

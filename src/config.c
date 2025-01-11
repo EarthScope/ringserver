@@ -560,6 +560,14 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
+  if ((envvar = getenv ("RS_NETIO_TIMEOUT")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "NetIOTimeout %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
   if ((envvar = getenv ("RS_RESOLVE_HOSTNAMES")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "ResolveHostnames %s", envvar);
@@ -1230,6 +1238,14 @@ SetParameter (const char *paramstring, int dynamiconly)
   else if (!strcasecmp ("ClientTimeout", field[0]) && fieldcount == 2)
   {
     if (sscanf (field[1], "%" SCNu32, &config.clienttimeout) != 1)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+  }
+  else if (!strcasecmp ("NetIOTimeout", field[0]) && fieldcount == 2)
+  {
+    if (sscanf (field[1], "%" SCNu32, &config.netiotimeout) != 1)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
@@ -2336,12 +2352,23 @@ ListenPort 18000\n\
 #MaxClients 600\n\
 \n\
 \n\
-# Specify a timeout in seconds after which to drop client connections\n\
-# that have exchanged no packets with the server within the timeout\n\
-# window, set to 0 to disable.  This is a dynamic parameter.\n\
+# Specify an idle client timeout in seconds after which the client is\n\
+# disconnected.  Set to 0 to disable.\n\
+# This is a dynamic parameter.\n\
 # Equivalent environment variable: RS_CLIENT_TIMEOUT\n\
 \n\
 #ClientTimeout 3600\n\
+\n\
+\n\
+# Configure the network I/O timeout in seconds.  This controls the duration\n\
+# that a network read or write opertion will wait until failure, after\n\
+# which the client is disconnected.  The default value of 10 seconds is\n\
+# appropriate for most scenarios.\n\
+# \n\
+# This is a dynamic parameter.\n\
+# Equivalent environment variable: RS_NETIO_TIMEOUT\n\
+\n\
+#NetIOTimeout 10\n\
 \n\
 \n\
 # Control the usage of memory mapping of the ring packet buffer.  If\n\

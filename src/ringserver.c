@@ -82,6 +82,7 @@ struct config_s config = {
     .maxclients          = 600,
     .maxclientsperip     = 0,
     .clienttimeout       = 3600,
+    .netiotimeout        = 10,
     .timewinlimit        = 1.0,
     .resolvehosts        = 1,
     .memorymapring       = 1,
@@ -99,7 +100,6 @@ struct config_s config = {
     .tlscertfile         = NULL,
     .tlskeyfile          = NULL,
     .tlsverifyclientcert = 0,
-    .sockettimeout       = 10,
 };
 
 /* Local functions and variables */
@@ -1419,6 +1419,7 @@ void LogServerParameters ()
 
   lprintf (2, "   configuration file: %s", (config.configfile) ? config.configfile : "NONE");
   lprintf (2, "   client timeout: %u seconds", config.clienttimeout);
+  lprintf (2, "   network I/O timeout: %u seconds", config.netiotimeout);
   lprintf (2, "   time window limit: %.0f%%", config.timewinlimit * 100);
   lprintf (2, "   resolve hostnames: %s", (config.resolvehosts) ? "yes" : "no");
   lprintf (2, "   auto recovery: %u", config.autorecovery);

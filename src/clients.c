@@ -674,9 +674,9 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
         {
           pollret = 1;
           if (nsent == MBEDTLS_ERR_SSL_WANT_READ)
-            pollret = PollSocket (cinfo->socket, 1, 0, config.sockettimeout * 1000);
+            pollret = PollSocket (cinfo->socket, 1, 0, config.netiotimeout * 1000);
           else if (nsent == MBEDTLS_ERR_SSL_WANT_WRITE)
-            pollret = PollSocket (cinfo->socket, 0, 1, config.sockettimeout * 1000);
+            pollret = PollSocket (cinfo->socket, 0, 1, config.netiotimeout * 1000);
           else
             break;
 
@@ -700,7 +700,7 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
         {
           pollret = 1;
           if (nsent == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
-            pollret = PollSocket (cinfo->socket, 0, 1, config.sockettimeout * 1000);
+            pollret = PollSocket (cinfo->socket, 0, 1, config.netiotimeout * 1000);
           else if (nsent < 0)
             break;
 
@@ -872,7 +872,7 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
         return 0;
 
       /* Poll up to socket timeout value (in seconds) */
-      int pollret = PollSocket (cinfo->socket, 1, 0, config.sockettimeout * 1000);
+      int pollret = PollSocket (cinfo->socket, 1, 0, config.netiotimeout * 1000);
 
       if (pollret == 0)
       {
