@@ -236,15 +236,15 @@ main (int argc, char *argv[])
         {
           lprintf (0, "Auto recovery, moving packet buffer and stream index files to .corrupt");
 
-          snprintf (ringfile_backup, sizeof (ringfile_backup), "%s.corrupt", ringfilename);
-          snprintf (streamfile_backup, sizeof (streamfile_backup), "%s.corrupt", streamfilename);
+          snprintf (ringfile_backup, sizeof (ringfile_backup), "%.*s.corrupt", (int)sizeof (ringfile_backup) - 10, ringfilename);
+          snprintf (streamfile_backup, sizeof (streamfile_backup), "%.*s.corrupt", (int)sizeof (streamfile_backup) - 10, streamfilename);
         }
         else
         {
           lprintf (0, "Auto recovery, moving packet buffer and stream index files to .version%d", ringinit);
 
-          snprintf (ringfile_backup, sizeof (ringfile_backup), "%s.version%d", ringfilename, ringinit);
-          snprintf (streamfile_backup, sizeof (streamfile_backup), "%s.version%d", streamfilename, ringinit);
+          snprintf (ringfile_backup, sizeof (ringfile_backup), "%.*s.version%d", (int)sizeof (ringfile_backup) - 24, ringfilename, ringinit);
+          snprintf (streamfile_backup, sizeof (streamfile_backup), "%.*s.version%d", (int)sizeof (streamfile_backup) - 24, streamfilename, ringinit);
           convert_version = ringinit;
         }
 

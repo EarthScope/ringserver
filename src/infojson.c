@@ -407,14 +407,14 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
       }
 
       /* Create station ID as combination of network and station codes */
-      snprintf (staid, sizeof (staid), "%s_%s", net, sta);
+      snprintf (staid, sizeof (staid), "%.10s_%.10s", net, sta);
 
       /* Create stream ID as combination of location and channel codes,
        * expanding SEED channel if needed */
       if (strlen (chan) == 3)
-        snprintf (streamid, sizeof (streamid), "%s_%c_%c_%c", loc, chan[0], chan[1], chan[2]);
+        snprintf (streamid, sizeof (streamid), "%.10s_%c_%c_%c", loc, chan[0], chan[1], chan[2]);
       else
-        snprintf (streamid, sizeof (streamid), "%s_%s", loc, chan);
+        snprintf (streamid, sizeof (streamid), "%.10s_%.30s", loc, chan);
     }
     /* Otherwise use the stream ID as the station and stream IDs */
     else

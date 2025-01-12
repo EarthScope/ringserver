@@ -1362,7 +1362,7 @@ HandleInfo_v3 (ClientInfo *cinfo)
     /* Pack all XML into 512-byte records and send to client */
     if (!cinfo->socketerr)
     {
-      char seqnumstr[11];
+      char seqnumstr[12];
       int seqnum = 1;
       int offset = 0;
       int nsamps;

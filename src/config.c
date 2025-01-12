@@ -1755,7 +1755,7 @@ AddMSeedScanThread (const char *scanconfig)
     *vptr++ = '\0';
 
   /* Initial portion of the config string is the directory to scan */
-  snprintf (mssinfo.dirname, sizeof (mssinfo.dirname), "%s", configstr);
+  snprintf (mssinfo.dirname, sizeof (mssinfo.dirname), "%.*s", (int)sizeof (mssinfo.dirname) - 1, configstr);
 
   /* Search for optional parameters */
   while (*vptr && (vptr = strchr (vptr, '=')))

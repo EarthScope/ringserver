@@ -55,7 +55,7 @@ tls_configure (ClientInfo *cinfo)
 {
   TLSCTX *tlsctx = NULL;
   char *evalue   = NULL;
-  char seedbuffer[128];
+  char seedbuffer[256];
   uint32_t flags;
   int debug_level = 0;
   int ret;
