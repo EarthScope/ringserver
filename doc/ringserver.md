@@ -39,7 +39,7 @@ ringserver [options] [configfile]
 
 <p >Transfer logs can optionally be written to track the transmission and reception of data packets to and from the server.  This tracking is stream-based and identifies the number of packet bytes of each unique stream transferred to or from each client connection.</p>
 
-<p >The server supports streaming data with multiple protocols: SeedLink, DataLink, HTTP with WebSocket.  The server can listen on multiple network ports, and each port can be configured to support any combination of the protocols. Ports configured for TLS encryption must be configured for a single protocol. See <b>Multi-protocol support</b> for more information.</p>
+<p >The server supports streaming data with multiple protocols: SeedLink, DataLink, HTTP with WebSocket.  The server can listen on multiple network ports, and each port can be configured to support any combination of the protocols. See <b>Multi-protocol support</b> for more information.</p>
 
 <p >The server also has limited support for simple HTTP requests.  When support is enabled, server status, stream lists and other details can be accessed with simple HTTP requests. See <b>HTTP Support</b> for more details.</p>
 
@@ -188,17 +188,17 @@ ringserver [options] [configfile]
 
 ## <a id='multi-protocol-support'>Multi-Protocol Support</a>
 
-<p >Network listening ports can respond to all supported protocols (SeedLink, DataLink and HTTP) for non-TLS ports.  The first command received by the server is used to determine which protocol is being used by the client, all subsequent communication is expected in this protocol.  Listening ports configured for TLS encryption can only support a single protocol that must be specified.</p>
+<p >Network listening ports can respond to all supported protocols: SeedLink, DataLink and HTTP/WebSocket.  If more than one protocol is configured for a port, the first command received by the server is used to determine which protocol is being used by the client, all subsequent communication is expected in this protocol.</p>
 
 <p >Both IPv4 and IPv6 protocol families are supported by default (if supported by the system).</p>
 
-<p >The network protocols and families allowed by any given listening port can be set by adding flags to the port specification.  See the available flags in the <b>Listen</b> description of the ringserver config file example, or by using the <b>-C</b> command line option to print a config file.</p>
+<p >The network protocols and families allowed by any given listening port can be set by adding flags to the port specification.  See the available flags in the <b>ListenPort</b> description of the reference config file printed using the <b>-C</b> command line option.</p>
 
 <p >Examples of adding flags to a port specification:</p>
 
 <pre >
   <b>-L "18000 SeedLink HTTP"</b>        : CLI, SeedLink and HTTP on port 18000
-  <b>-SL "18000 IPv4 TLS"</b>            : CLI, SeedLink via TLS on port 18000, IPv4 only
+  <b>-SL "18500 TLS IPv4"</b>            : CLI, SeedLink via TLS on port 18500, IPv4 only
   <b>RS_LISTEN_PORT="8080 HTTP IPv6"</b> : EnvVar, HTTPS on port 8080, IPv6 only
   <b>ListenPort 16000 DataLink</b>       : Config file, DataLink on port 16000
 </pre>
@@ -379,4 +379,4 @@ EarthScope Data Services
 </pre>
 
 
-(man page 2024/12/24)
+(man page 2025/01/12)
