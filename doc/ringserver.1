@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2024/12/24
+.TH RINGSERVER 1 2025/01/12
 .SH NAME
 ringserver \- stream oriented packet ring buffer
 
@@ -55,8 +55,7 @@ stream transferred to or from each client connection.
 The server supports streaming data with multiple protocols: SeedLink,
 DataLink, HTTP with WebSocket.  The server can listen on multiple
 network ports, and each port can be configured to support any combination
-of the protocols. Ports configured for TLS encryption must be
-configured for a single protocol.
+of the protocols.
 See \fBMulti-protocol support\fP for more information.
 
 The server also has limited support for simple HTTP requests.  When
@@ -269,27 +268,25 @@ The maximum length of stream IDs supported by the server is 59 bytes.
 
 .SH "Multi-protocol Support"
 
-Network listening ports can respond to all supported protocols
-(SeedLink, DataLink and HTTP) for non-TLS ports.  The first command
-received by the server is used to determine which protocol is being
-used by the client, all subsequent communication is expected in this
-protocol.  Listening ports configured for TLS encryption can only
-support a single protocol that must be specified.
+Network listening ports can respond to all supported protocols:
+SeedLink, DataLink and HTTP/WebSocket.  If more than one protocol
+is configured for a port, the first command received by the server
+is used to determine which protocol is being used by the client,
+all subsequent communication is expected in this protocol.
 
 Both IPv4 and IPv6 protocol families are supported by default (if
 supported by the system).
 
 The network protocols and families allowed by any given listening
 port can be set by adding flags to the port specification.  See the
-available flags in the \fBListen\fP description of the ringserver
-config file example, or by using the \fB-C\fP command line option
-to print a config file.
+available flags in the \fBListenPort\fP description of the reference
+config file printed using the \fB-C\fP command line option.
 
 Examples of adding flags to a port specification:
 
 .nf
   \fB-L "18000 SeedLink HTTP"\fP        : CLI, SeedLink and HTTP on port 18000
-  \fB-SL "18000 IPv4 TLS"\fP            : CLI, SeedLink via TLS on port 18000, IPv4 only
+  \fB-SL "18500 TLS IPv4"\fP            : CLI, SeedLink via TLS on port 18500, IPv4 only
   \fBRS_LISTEN_PORT="8080 HTTP IPv6"\fP : EnvVar, HTTPS on port 8080, IPv6 only
   \fBListenPort 16000 DataLink\fP       : Config file, DataLink on port 16000
 .fi

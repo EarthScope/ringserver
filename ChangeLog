@@ -1,7 +1,9 @@
-2025.011:
+2025.012:
 	- Reduce cpu usage of sending data to clients by avoiding blocking socket usage.
 	- Remove unused mbedtls PSA initialization and thread-unsafe free'ing causing crashes.
 	- Improve TLS entropy seeding and diagnostic printing.
+	- Allow protocol detection on connections using TLS.  This enables secure
+	mixed-protocol use, e.g. secure WebSocket for SeedLink or DataLink.
 	- Add NetIOTimeout (envvar RS_NETIO_TIMEOUT) config option.
 
 2024.359: v4.0.1

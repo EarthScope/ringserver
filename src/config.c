@@ -147,7 +147,6 @@ Usage (int level)
 int
 ProcessParam (int argcount, char **argvec)
 {
-  struct sthread *loopstp;
   char paramstr[512] = {0};
   int optind;
   int rv;
@@ -367,30 +366,6 @@ ProcessParam (int argcount, char **argvec)
   {
     lprintf (0, "Error, ring directory must be specified");
     exit (1);
-  }
-
-  /* Check that TLS is not specified for a port with more than one protocol */
-  loopstp = param.sthreads;
-  while (loopstp)
-  {
-    /* Close listening server sockets, causing the listen thread to exit too */
-    if (loopstp->type == LISTEN_THREAD)
-    {
-      ListenPortParams *params = (ListenPortParams *)loopstp->params;
-
-      if (params->options & ENCRYPTION_TLS &&
-          params->protocols != PROTO_SEEDLINK &&
-          params->protocols != PROTO_DATALINK &&
-          params->protocols != PROTO_HTTP)
-      {
-        lprintf (0, "Error, TLS specified for port %s with multiple protocols",
-                 params->portstr);
-        lprintf (0, "  TLS is only supported for ports with a single protocol");
-        exit (1);
-      }
-    }
-
-    loopstp = loopstp->next;
   }
 
   return 0;
@@ -933,6 +908,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
  * [D] MaxClientsPerIP <max>
  * [D] MaxClients <max>
  * [D] ClientTimeout <timeout>
+ * [D] NetIOTimeout <timeout>
  * [D] ResolveHostnames <1|0>
  * [D] TimeWindowLimit <percent>
  * [D] TransferLogDirectory <dir>

@@ -76,7 +76,6 @@ ClientThread (void *arg)
   int sentbytes;
   int sockflags;
   int setuperr = 0;
-  ssize_t nrecv;
   int nread;
 
   /* Throttle related */
@@ -249,52 +248,6 @@ ClientThread (void *arg)
     if (throttle_msec < THROTTLE_MAXIMUM)
       throttle_msec += THROTTLE_STEPPING;
 
-    /* Determine client type from first 3 bytes of received data if not TLS */
-    if (cinfo->type == CLIENT_UNDETERMINED && cinfo->tlsctx == NULL)
-    {
-      if ((nrecv = recv (cinfo->socket, cinfo->recvbuf, 3, MSG_PEEK)) == 3)
-      {
-        /* DataLink commands start with 'DL' */
-        if (cinfo->protocols & PROTO_DATALINK &&
-            cinfo->recvbuf[0] == 'D' &&
-            cinfo->recvbuf[1] == 'L')
-        {
-          cinfo->type = CLIENT_DATALINK;
-        }
-        /* HTTP requests start with known method */
-        else if (cinfo->protocols & PROTO_HTTP &&
-                 HTTPMETHOD (cinfo->recvbuf))
-        {
-          cinfo->type = CLIENT_HTTP;
-        }
-        /* Everything else is SeedLink if it's allowed on this listener */
-        else if (cinfo->protocols & PROTO_SEEDLINK)
-        {
-          cinfo->type = CLIENT_SEEDLINK;
-        }
-        else
-        {
-          lprintf (0, "[%s] Cannot determine allowed client protocol from '%c%c%c'",
-                   cinfo->hostname,
-                   (cinfo->recvbuf[0] < 32 || cinfo->recvbuf[0] > 126) ? '?' : cinfo->recvbuf[0],
-                   (cinfo->recvbuf[1] < 32 || cinfo->recvbuf[1] > 126) ? '?' : cinfo->recvbuf[1],
-                   (cinfo->recvbuf[2] < 32 || cinfo->recvbuf[2] > 126) ? '?' : cinfo->recvbuf[2]);
-          break;
-        }
-      }
-      /* Check for shutdown or errors except no data on non-blocking */
-      else if (nrecv == 0 || (nrecv == -1 && errno != EAGAIN && errno != EWOULDBLOCK))
-      {
-        break;
-      }
-    }
-    else if (cinfo->type == CLIENT_UNDETERMINED && cinfo->tlsctx != NULL)
-    {
-      lprintf (1, "[%s] Client protocol cannot be detected on a TLS connection",
-               cinfo->hostname);
-      break;
-    }
-
     /* Recv data from client */
     nread = ClientRecv (cinfo);
 
@@ -305,13 +258,10 @@ ClientThread (void *arg)
     }
 
     /* Data received from client */
-    if (nread > 0)
+    if (cinfo->recvlength)
     {
       /* If data was received do not throttle */
       throttle_msec = 0;
-
-      /* Update the time of the last packet exchange */
-      cinfo->lastxchange = NSnow ();
 
       /* Handle data from client according to client type */
       if (cinfo->type == CLIENT_DATALINK)
@@ -488,7 +438,7 @@ ClientThread (void *arg)
  *
  * Return >0 as number of bytes read on success
  * Return  0 when no data is available
- * Return -1 on error or timeout, ClientInfo.socketerr is set
+ * Return -1 on error or timeout, ClientInfo.socketerr might be set
  * Return -2 on orderly shutdown, ClientInfo.socketerr is set
  ***********************************************************************/
 static int
@@ -520,6 +470,47 @@ ClientRecv (ClientInfo *cinfo)
     else
     {
       cinfo->wspayload = wslength;
+    }
+  }
+
+  /* Recv data from client, but do not consume */
+  nread = RecvData (cinfo, NULL, 1, 0);
+  cinfo->recvconsumed = 0;
+
+  if (nread <= 0)
+  {
+    return nread;
+  }
+
+  /* Determine client type from first 3 bytes of received data */
+  if (cinfo->type == CLIENT_UNDETERMINED && cinfo->recvlength >= 3)
+  {
+    /* DataLink commands start with 'DL' */
+    if (cinfo->protocols & PROTO_DATALINK &&
+        cinfo->recvbuf[0] == 'D' &&
+        cinfo->recvbuf[1] == 'L')
+    {
+      cinfo->type = CLIENT_DATALINK;
+    }
+    /* HTTP requests start with known method */
+    else if (cinfo->protocols & PROTO_HTTP &&
+             HTTPMETHOD (cinfo->recvbuf))
+    {
+      cinfo->type = CLIENT_HTTP;
+    }
+    /* Everything else is SeedLink if allowed on this listener */
+    else if (cinfo->protocols & PROTO_SEEDLINK)
+    {
+      cinfo->type = CLIENT_SEEDLINK;
+    }
+    else
+    {
+      lprintf (0, "[%s] Cannot determine allowed client protocol from '%c%c%c'",
+               cinfo->hostname,
+               (cinfo->recvbuf[0] < 32 || cinfo->recvbuf[0] > 126) ? '?' : cinfo->recvbuf[0],
+               (cinfo->recvbuf[1] < 32 || cinfo->recvbuf[1] > 126) ? '?' : cinfo->recvbuf[1],
+               (cinfo->recvbuf[2] < 32 || cinfo->recvbuf[2] > 126) ? '?' : cinfo->recvbuf[2]);
+      return -1;
     }
   }
 
@@ -568,7 +559,7 @@ SendData (ClientInfo *cinfo, void *buffer, size_t buflen, int no_wsframe)
  * If connection is a WebSocket, and no_wsframe is not set, create a single
  * frame header that represents the total of all buffers.
  *
- * Socket is set to blocking during the send operation.
+ * Sending will be attempted until the network I/O timeout is reached.
  *
  * Return  0 on success
  * Return -1 on error or timeout, ClientInfo.socketerr is set
@@ -784,7 +775,7 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
  * recvlen bytes have been read.
  *
  * For any blocking reads this routine will poll the socket for up to
- * 10 seconds before timing out and returning -2.
+ * the configured network I/O timeout (in seconds) returning -2.
  *
  * The caller _must_ consume the data requested.  It will be discarded
  * on the next call to RecvData().
@@ -804,7 +795,7 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
   char *recvptr;
   char peekbyte[1];
 
-  if (!cinfo || !buffer || requested == 0)
+  if (!cinfo)
   {
     cinfo->socketerr = -1;
     return -1;
@@ -847,7 +838,6 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
   recvptr = cinfo->recvbuf + cinfo->recvlength;
   receivable = cinfo->recvbufsize - cinfo->recvlength;
 
-  /* Recv until requested bytes are available */
   while ((cinfo->recvlength + nread) < requested)
   {
     if (cinfo->tlsctx)
@@ -915,7 +905,13 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
     }
   }
 
-  cinfo->recvlength += nread;
+  if (nread > 0)
+  {
+    cinfo->recvlength += nread;
+
+    /* Update the time of the last packet exchange */
+    cinfo->lastxchange = NSnow ();
+  }
 
   /* Unmask expected WebSocket payload */
   if (cinfo->wspayload > 0)
@@ -936,7 +932,7 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
   }
 
   /* Copy data to supplied buffer if not the receive buffer */
-  if (buffer != cinfo->recvbuf)
+  if (buffer && buffer != cinfo->recvbuf)
   {
     memcpy (buffer, cinfo->recvbuf, requested);
   }
