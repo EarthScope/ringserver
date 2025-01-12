@@ -911,28 +911,34 @@ HandleNegotiation (ClientInfo *cinfo)
       fields = sscanf (cinfo->recvbuf, "%*s %20s %50s %50s %c",
                        seqstr, starttimestr, endtimestr, &junk);
 
-      if (strcmp (seqstr, "ALL") == 0)
-        startpacket = RINGID_EARLIEST;
-      else
-        startpacket = (uint64_t)strtoull (seqstr, NULL, 10);
+      if (fields >= 1)
+      {
+        if (strcmp (seqstr, "ALL") == 0)
+          startpacket = RINGID_EARLIEST;
+        else
+          startpacket = (uint64_t)strtoull (seqstr, NULL, 10);
+      }
     }
     else /* Protocol 3.x */
     {
-      uint32_t seq;
+      uint32_t seq = 0;
 
       /* DATA|FETCH [seq_hex [start]] */
       fields = sscanf (cinfo->recvbuf, "%*s %" SCNx32 " %50s %c",
                        &seq, starttimestr, &junk);
 
-      if (cinfo->ringparams->latestid <= RINGID_MAXIMUM)
+      if (fields >= 1)
       {
-        /* To map the 24-bit SeedLink v3 sequence into the 64-bit packet ID range
-         * combine the highest 40-bits of latest ID with lowest 24-bits of requested sequence */
-        startpacket = (cinfo->ringparams->latestid & 0xFFFFFFFFFF000000) | (seq & 0xFFFFFF);
-      }
-      else
-      {
-        startpacket = (seq & 0xFFFFFF);
+        if (cinfo->ringparams->latestid <= RINGID_MAXIMUM)
+        {
+          /* To map the 24-bit SeedLink v3 sequence into the 64-bit packet ID range
+           * combine the highest 40-bits of latest ID with lowest 24-bits of requested sequence */
+          startpacket = (cinfo->ringparams->latestid & 0xFFFFFFFFFF000000) | (seq & 0xFFFFFF);
+        }
+        else
+        {
+          startpacket = (seq & 0xFFFFFF);
+        }
       }
     }
 
@@ -940,7 +946,7 @@ HandleNegotiation (ClientInfo *cinfo)
      * The ring needs to be positioned to the actual last packet ID for RingReadNext(),
      * so set the starting packet to the last actual packet received by the client.
      * An unfortunate side-effect: resuming from sequence 0 is not possible. */
-    if (startpacket < RINGID_MAXIMUM && startpacket > 0)
+    if (startpacket <= RINGID_MAXIMUM && startpacket > 0)
       startpacket = startpacket - 1;
 
     /* Make sure we got no extra arguments */
