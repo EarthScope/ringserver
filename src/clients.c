@@ -432,9 +432,11 @@ ClientThread (void *arg)
 /***********************************************************************
  * ClientRecv:
  *
- * Recv data in manner specific to the client.
+ * Recv command in manner specific to the protocol.  If the protocol
+ * is undetermined, autodetect from the initial bytes received.
  *
- * If WebSocket connection recv the framing and store the mask.
+ * If the connection is WebSocket, receive a WebSocket frame and unmask
+ * the payload.
  *
  * Return >0 as number of bytes read on success
  * Return  0 when no data is available
@@ -444,47 +446,32 @@ ClientThread (void *arg)
 static int
 ClientRecv (ClientInfo *cinfo)
 {
-  uint64_t wslength;
   int nread = 0;
 
   if (!cinfo)
     return -1;
 
-  /* Recv a WebSocket frame if this connection is WebSocket */
-  if (cinfo->websocket && cinfo->recvlength == 0)
+  /* Determine client type from initial 3 bytes of data */
+  if (cinfo->type == CLIENT_UNDETERMINED)
   {
-    nread = RecvWSFrame (cinfo, &wslength);
+    /* Recv data from client, but do not consume */
+    nread = RecvData (cinfo, NULL, 3, 0);
 
-    if (nread < 0)
+    if (nread <= 0)
     {
-      if (nread == -1)
-        lprintf (0, "[%s] Error receiving WebSocket frame from client (%d)",
-                 cinfo->hostname, nread);
-
       return nread;
-    }
-    else if (nread == 0)
-    {
-      return 0;
     }
     else
     {
-      cinfo->wspayload = wslength;
+      cinfo->recvconsumed -= nread;
     }
-  }
 
-  /* Recv data from client, but do not consume */
-  nread = RecvData (cinfo, NULL, 1, 0);
-  cinfo->recvconsumed = 0;
+    /* Ensure sufficient data is available for detection */
+    if (cinfo->recvlength < 3)
+    {
+      return 0;
+    }
 
-  if (nread <= 0)
-  {
-    return nread;
-  }
-
-  /* Determine client type from first 3 bytes of received data */
-  if (cinfo->type == CLIENT_UNDETERMINED && cinfo->recvlength >= 3)
-  {
     /* DataLink commands start with 'DL' */
     if (cinfo->protocols & PROTO_DATALINK &&
         cinfo->recvbuf[0] == 'D' &&
@@ -514,7 +501,55 @@ ClientRecv (ClientInfo *cinfo)
     }
   }
 
-  /* Check for data from client */
+  /* Recv a WebSocket frame if this connection is WebSocket */
+  if (cinfo->websocket)
+  {
+    uint64_t payload_length = 0;
+
+    /* Recv a frame header and determine payload length */
+    nread = RecvWSFrame (cinfo, &payload_length);
+
+    if (nread < 0)
+    {
+      return nread;
+    }
+    else if (nread == 0)
+    {
+      return 0;
+    }
+    else if (payload_length > 0)
+    {
+      if (payload_length > cinfo->recvbufsize)
+      {
+        lprintf (0, "[%s] WebSocket payload length %" PRIu64 " exceeds receive buffer size",
+                 cinfo->hostname, payload_length);
+        return -1;
+      }
+
+      /* Receive the frame payload */
+      nread = RecvData (cinfo, cinfo->recvbuf, (size_t)payload_length, 1);
+
+      /* Unmask WebSocket payload */
+      if (cinfo->recvlength >= payload_length)
+      {
+        char *recvptr = cinfo->recvbuf;
+
+        for (size_t idx = 0; idx < payload_length; idx++, recvptr++, cinfo->wsmaskidx++)
+          *recvptr = *recvptr ^ cinfo->wsmask.four[cinfo->wsmaskidx % 4];
+
+        /* Do not consume the unmasked payload */
+        cinfo->recvconsumed -= payload_length;
+      }
+      else
+      {
+        lprintf (0, "[%s] Error receiving WebSocket payload of %" PRIu64 " bytes\n",
+                 cinfo->hostname, payload_length);
+        return -1;
+      }
+    }
+  }
+
+  /* Recv command from client */
   if (cinfo->type == CLIENT_DATALINK)
   {
     nread = RecvDLCommand (cinfo);
@@ -777,8 +812,10 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
  * For any blocking reads this routine will poll the socket for up to
  * the configured network I/O timeout (in seconds) returning -2.
  *
- * The caller _must_ consume the data requested.  It will be discarded
- * on the next call to RecvData().
+ * The caller should consume the number of bytes requested and returned
+ * or it will be discarded on the next call.  Alternatively, the caller
+ * should set ClientInfo.recvconsumed to the number of bytes consumed,
+ * if any.
  *
  * Return >0 as number of bytes for the caller to consume on success
  * Return  0 when fulfill == 0 and no data is available
@@ -911,24 +948,6 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
 
     /* Update the time of the last packet exchange */
     cinfo->lastxchange = NSnow ();
-  }
-
-  /* Unmask expected WebSocket payload */
-  if (cinfo->wspayload > 0)
-  {
-    if (cinfo->recvlength >= cinfo->wspayload)
-    {
-      recvptr = cinfo->recvbuf;
-      for (int idx = 0; idx < cinfo->wspayload; idx++, recvptr++, cinfo->wsmaskidx++)
-        *recvptr = *recvptr ^ cinfo->wsmask.four[cinfo->wsmaskidx % 4];
-
-      cinfo->wspayload = 0;
-    }
-    else
-    {
-      /* The full WebSocket payload is not (yet) available */
-      return 0;
-    }
   }
 
   /* Copy data to supplied buffer if not the receive buffer */
