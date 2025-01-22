@@ -2162,7 +2162,7 @@ AddIPNet (IPNet **pplist, const char *network, const char *limitstr)
       }
 
       sockaddr6 = (struct sockaddr_in6 *)addr->ai_addr;
-      memcpy (&newipnet->network.in6_addr.s6_addr, &sockaddr6->sin6_addr.s6_addr, sizeof (struct sockaddr_in6));
+      memcpy (&newipnet->network.in6_addr, &sockaddr6->sin6_addr, sizeof (struct in6_addr));
 
       /* Calculate network: AND the address and netmask */
       for (idx = 0; idx < 16; idx++)

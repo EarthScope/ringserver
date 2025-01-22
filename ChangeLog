@@ -1,5 +1,5 @@
 2025.012:
-	- Fix assignment of starting packet when no such field is provided in SeedLink DATA/FETCH
+	- Fix assignment of starting packet when not provided in SeedLink DATA/FETCH
 	- Reduce cpu usage of sending data to clients by avoiding blocking socket usage.
 	- Remove unused mbedtls PSA initialization and thread-unsafe free'ing causing crashes.
 	- Improve TLS entropy seeding and diagnostic printing.
