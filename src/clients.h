@@ -84,7 +84,6 @@ typedef struct ClientInfo
     uint8_t four[4];
   } wsmask;                 /* Masking key for WebSocket message */
   size_t      wsmaskidx;    /* Index for unmasking WebSocket message */
-  uint64_t    wspayload;    /* Length of WebSocket payload */
   uint8_t     writeperm;    /* Write permission flag */
   uint8_t     trusted;      /* Trusted client flag */
   float       timewinlimit; /* Time window ring search limit in percent */
