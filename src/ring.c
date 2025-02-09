@@ -262,22 +262,22 @@ RingInitialize (char *ringfilename, char *streamfilename, int *ringfd)
   param.datastart = param.ringbuffer + headersize;
 
   /* Load parameters from stored header */
-  param.version        = *pRBV3_VERSION (param.ringbuffer);
-  param.ringsize       = *pRBV3_RINGSIZE (param.ringbuffer);
-  param.pktsize        = *pRBV3_PKTSIZE (param.ringbuffer);
-  param.maxpackets     = *pRBV3_MAXPACKETS (param.ringbuffer);
-  param.maxoffset      = *pRBV3_MAXOFFSET (param.ringbuffer);
-  param.headersize     = *pRBV3_HEADERSIZE (param.ringbuffer);
-  param.earliestid     = *pRBV3_EARLIESTID (param.ringbuffer);
-  param.earliestptime  = *pRBV3_EARLIESTPTIME (param.ringbuffer);
-  param.earliestdstime = *pRBV3_EARLIESTDSTIME (param.ringbuffer);
-  param.earliestdetime = *pRBV3_EARLIESTDETIME (param.ringbuffer);
-  param.earliestoffset = *pRBV3_EARLIESTOFFSET (param.ringbuffer);
-  param.latestid       = *pRBV3_LATESTID (param.ringbuffer);
-  param.latestptime    = *pRBV3_LATESTPTIME (param.ringbuffer);
-  param.latestdstime   = *pRBV3_LATESTDSTIME (param.ringbuffer);
-  param.latestdetime   = *pRBV3_LATESTDETIME (param.ringbuffer);
-  param.latestoffset   = *pRBV3_LATESTOFFSET (param.ringbuffer);
+  memcpy (&param.version, pRBV3_VERSION (param.ringbuffer), 2);
+  memcpy (&param.ringsize, pRBV3_RINGSIZE (param.ringbuffer), 8);
+  memcpy (&param.pktsize, pRBV3_PKTSIZE (param.ringbuffer), 4);
+  memcpy (&param.maxpackets, pRBV3_MAXPACKETS (param.ringbuffer), 8);
+  memcpy (&param.maxoffset, pRBV3_MAXOFFSET (param.ringbuffer), 8);
+  memcpy (&param.headersize, pRBV3_HEADERSIZE (param.ringbuffer), 4);
+  memcpy (&param.earliestid, pRBV3_EARLIESTID (param.ringbuffer), 8);
+  memcpy (&param.earliestptime, pRBV3_EARLIESTPTIME (param.ringbuffer), 8);
+  memcpy (&param.earliestdstime, pRBV3_EARLIESTDSTIME (param.ringbuffer), 8);
+  memcpy (&param.earliestdetime, pRBV3_EARLIESTDETIME (param.ringbuffer), 8);
+  memcpy (&param.earliestoffset, pRBV3_EARLIESTOFFSET (param.ringbuffer), 8);
+  memcpy (&param.latestid, pRBV3_LATESTID (param.ringbuffer), 8);
+  memcpy (&param.latestptime, pRBV3_LATESTPTIME (param.ringbuffer), 8);
+  memcpy (&param.latestdstime, pRBV3_LATESTDSTIME (param.ringbuffer), 8);
+  memcpy (&param.latestdetime, pRBV3_LATESTDETIME (param.ringbuffer), 8);
+  memcpy (&param.latestoffset, pRBV3_LATESTOFFSET (param.ringbuffer), 8);
 
   /* Validate existing ring packet buffer parameters, resetting if needed */
   if (ringinit ||
@@ -537,22 +537,22 @@ RingShutdown (int ringfd, char *streamfilename)
 
   /* Store the header values in the ring buffer */
   memcpy (pRBV3_SIGNATURE (param.ringbuffer), RING_SIGNATURE, RING_SIGNATURE_LENGTH);
-  *pRBV3_VERSION (param.ringbuffer)        = param.version;
-  *pRBV3_RINGSIZE (param.ringbuffer)       = param.ringsize;
-  *pRBV3_PKTSIZE (param.ringbuffer)        = param.pktsize;
-  *pRBV3_MAXPACKETS (param.ringbuffer)     = param.maxpackets;
-  *pRBV3_MAXOFFSET (param.ringbuffer)      = param.maxoffset;
-  *pRBV3_HEADERSIZE (param.ringbuffer)     = param.headersize;
-  *pRBV3_EARLIESTID (param.ringbuffer)     = param.earliestid;
-  *pRBV3_EARLIESTPTIME (param.ringbuffer)  = param.earliestptime;
-  *pRBV3_EARLIESTDSTIME (param.ringbuffer) = param.earliestdstime;
-  *pRBV3_EARLIESTDETIME (param.ringbuffer) = param.earliestdetime;
-  *pRBV3_EARLIESTOFFSET (param.ringbuffer) = param.earliestoffset;
-  *pRBV3_LATESTID (param.ringbuffer)       = param.latestid;
-  *pRBV3_LATESTPTIME (param.ringbuffer)    = param.latestptime;
-  *pRBV3_LATESTDSTIME (param.ringbuffer)   = param.latestdstime;
-  *pRBV3_LATESTDETIME (param.ringbuffer)   = param.latestdetime;
-  *pRBV3_LATESTOFFSET (param.ringbuffer)   = param.latestoffset;
+  memcpy (pRBV3_VERSION (param.ringbuffer), &param.version, 2);
+  memcpy (pRBV3_RINGSIZE (param.ringbuffer), &param.ringsize, 8);
+  memcpy (pRBV3_PKTSIZE (param.ringbuffer), &param.pktsize, 4);
+  memcpy (pRBV3_MAXPACKETS (param.ringbuffer), &param.maxpackets, 8);
+  memcpy (pRBV3_MAXOFFSET (param.ringbuffer), &param.maxoffset, 8);
+  memcpy (pRBV3_HEADERSIZE (param.ringbuffer), &param.headersize, 4);
+  memcpy (pRBV3_EARLIESTID (param.ringbuffer), &param.earliestid, 8);
+  memcpy (pRBV3_EARLIESTPTIME (param.ringbuffer), &param.earliestptime, 8);
+  memcpy (pRBV3_EARLIESTDSTIME (param.ringbuffer), &param.earliestdstime, 8);
+  memcpy (pRBV3_EARLIESTDETIME (param.ringbuffer), &param.earliestdetime, 8);
+  memcpy (pRBV3_EARLIESTOFFSET (param.ringbuffer), &param.earliestoffset, 8);
+  memcpy (pRBV3_LATESTID (param.ringbuffer), &param.latestid, 8);
+  memcpy (pRBV3_LATESTPTIME (param.ringbuffer), &param.latestptime, 8);
+  memcpy (pRBV3_LATESTDSTIME (param.ringbuffer), &param.latestdstime, 8);
+  memcpy (pRBV3_LATESTDETIME (param.ringbuffer), &param.latestdetime, 8);
+  memcpy (pRBV3_LATESTOFFSET (param.ringbuffer), &param.latestoffset, 8);
 
   if (config.memorymapring)
   {
