@@ -142,6 +142,9 @@ Usage (int level)
  *
  * Process the command line parameters.
  *
+ * The configuration parameter structure is not blocked when updating
+ * because this function is called before any other threads are started.
+ *
  * Returns 0 on success, and -1 on failure
  ***************************************************************************/
 int
@@ -174,7 +177,7 @@ ProcessParam (int argcount, char **argvec)
     }
     else if (strncmp (argvec[optind], "-v", 2) == 0)
     {
-      size_t vcount = verbose + strspn (&argvec[optind][1], "v");
+      size_t vcount = config.verbose + strspn (&argvec[optind][1], "v");
       snprintf (paramstr, sizeof (paramstr), "Verbosity %zu", vcount);
       if (SetParameter (paramstr, 0) <= 0)
         exit (1);
@@ -817,6 +820,13 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     config.httpheaders = NULL;
   }
 
+  /* Clear existing transfer log base directory */
+  if (config.tlog.basedir)
+  {
+    free (config.tlog.basedir);
+    config.tlog.basedir = NULL;
+  }
+
   /* Read and process all lines */
   while (fgets (line, sizeof (line), cfile))
   {
@@ -889,7 +899,8 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
  * appropriate config value.
  *
  * If the dynamiconly argument is true only "dynamic" parameters will be
- * updated.
+ * updated.  The configuration parameter structure is locked when updating
+ * dynamic parameters to avoid race conditions with readers.
  *
  * Recognized parameters ("D" labeled parameters are dynamic):
  *
@@ -940,17 +951,19 @@ SetParameter (const char *paramstring, int dynamiconly)
 #define MAX_FIELDS 10
   char resolved_path[PATH_MAX] = {0};
   char *field[MAX_FIELDS]      = {0};
-  char param[200]              = {0};
+  char parambuf[200]           = {0};
 
   int fieldcount = 0;
 
   ListenPortParams lpp = ListenPortParams_INITIALIZER;
+  uint32_t u32val;
+  uint8_t u8val;
   int yesno;
 
   if (!paramstring)
     return -1;
 
-  if (strlen (paramstring) > sizeof (param))
+  if (strlen (paramstring) > sizeof (parambuf))
   {
     lprintf (0, "%s() Error, parameter string too long (%zu characters): '%.20s ...'",
              __func__, strlen (paramstring), paramstring);
@@ -961,29 +974,29 @@ SetParameter (const char *paramstring, int dynamiconly)
 
   /* Set field pointers to space-delimited strings, while handling
    * quoted strings and trailing '#' comments. */
-  strncpy (param, paramstring, sizeof (param) - 1);
+  strncpy (parambuf, paramstring, sizeof (parambuf) - 1);
   for (int idx = 0, start = 1, inside_quotes = 0;
-       param[idx] && fieldcount < MAX_FIELDS;
+       parambuf[idx] && fieldcount < MAX_FIELDS;
        idx++)
   {
-    if (param[idx] == '"')
+    if (parambuf[idx] == '"')
     {
       inside_quotes = !inside_quotes;
-      param[idx]    = '\0';
+      parambuf[idx] = '\0';
     }
-    else if (!inside_quotes && isspace ((int)param[idx]))
+    else if (!inside_quotes && isspace ((int)parambuf[idx]))
     {
-      param[idx] = '\0';
-      start      = 1;
+      parambuf[idx] = '\0';
+      start         = 1;
     }
-    else if (!inside_quotes && param[idx] == '#')
+    else if (!inside_quotes && parambuf[idx] == '#')
     {
-      param[idx] = '\0';
+      parambuf[idx] = '\0';
       break;
     }
     else if (start)
     {
-      field[fieldcount] = param + idx;
+      field[fieldcount] = parambuf + idx;
       fieldcount++;
       start = 0;
     }
@@ -1189,43 +1202,52 @@ SetParameter (const char *paramstring, int dynamiconly)
   }
   else if (!strcasecmp ("Verbosity", field[0]) && fieldcount == 2)
   {
-    if (sscanf (field[1], "%" SCNu8, &verbose) != 1)
+    if (sscanf (field[1], "%" SCNu8, &u8val) != 1)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
+    config.verbose = u8val;
   }
   else if (!strcasecmp ("MaxClientsPerIP", field[0]) && fieldcount == 2)
   {
-    if (sscanf (field[1], "%" SCNu32, &config.maxclientsperip) != 1)
+    if (sscanf (field[1], "%" SCNu32, &u32val) != 1)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
+
+    config.maxclientsperip = u32val;
   }
   else if (!strcasecmp ("MaxClients", field[0]) && fieldcount == 2)
   {
-    if (sscanf (field[1], "%" SCNu32, &config.maxclients) != 1)
+    if (sscanf (field[1], "%" SCNu32, &u32val) != 1)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
+
+    config.maxclients = u32val;
   }
   else if (!strcasecmp ("ClientTimeout", field[0]) && fieldcount == 2)
   {
-    if (sscanf (field[1], "%" SCNu32, &config.clienttimeout) != 1)
+    if (sscanf (field[1], "%" SCNu32, &u32val) != 1)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
+
+    config.clienttimeout = u32val;
   }
   else if (!strcasecmp ("NetIOTimeout", field[0]) && fieldcount == 2)
   {
-    if (sscanf (field[1], "%" SCNu32, &config.netiotimeout) != 1)
+    if (sscanf (field[1], "%" SCNu32, &u32val) != 1)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
+
+    config.netiotimeout = u32val;
   }
   else if (!strcasecmp ("ResolveHostnames", field[0]) && fieldcount == 2)
   {
@@ -1239,15 +1261,13 @@ SetParameter (const char *paramstring, int dynamiconly)
   }
   else if (!strcasecmp ("TimeWindowLimit", field[0]) && fieldcount == 2)
   {
-    uint8_t scanvalue;
-
-    if (sscanf (field[1], "%" SCNu8, &scanvalue) != 1)
+    if (sscanf (field[1], "%" SCNu8, &u8val) != 1)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
 
-    config.timewinlimit = (scanvalue > 0) ? scanvalue / 100.0 : 0.0;
+    config.timewinlimit = (u8val > 0) ? u8val / 100.0 : 0.0;
   }
   else if (!strcasecmp ("TransferLogDirectory", field[0]) && fieldcount == 2)
   {
@@ -1265,8 +1285,9 @@ SetParameter (const char *paramstring, int dynamiconly)
       return -1;
     }
 
-    free (TLogParams.tlogbasedir);
-    TLogParams.tlogbasedir = strdup (resolved_path);
+    free (config.tlog.basedir);
+    char *basedir = strdup (resolved_path);
+    config.tlog.basedir = basedir;
   }
   else if (!strcasecmp ("TransferLogInterval", field[0]) && fieldcount == 2)
   {
@@ -1278,12 +1299,12 @@ SetParameter (const char *paramstring, int dynamiconly)
     }
 
     /* Parameter is specified in hours but value needs to be seconds */
-    TLogParams.tloginterval = fvalue * 3600.0;
+    config.tlog.interval = (int)(fvalue * 3600.0 + 0.5);
   }
   else if (!strcasecmp ("TransferLogPrefix", field[0]) && fieldcount == 2)
   {
-    free (TLogParams.tlogprefix);
-    TLogParams.tlogprefix = strdup (field[1]);
+    free (config.tlog.prefix);
+    config.tlog.prefix = strdup (field[1]);
   }
   else if (!strcasecmp ("TransferLogTX", field[0]) && fieldcount == 2)
   {
@@ -1293,7 +1314,7 @@ SetParameter (const char *paramstring, int dynamiconly)
       return -1;
     }
 
-    TLogParams.txlog = yesno;
+    config.tlog.txlog = yesno;
   }
   else if (!strcasecmp ("TransferLogRX", field[0]) && fieldcount == 2)
   {
@@ -1303,7 +1324,7 @@ SetParameter (const char *paramstring, int dynamiconly)
       return -1;
     }
 
-    TLogParams.rxlog = yesno;
+    config.tlog.rxlog = yesno;
   }
   else if (!strcasecmp ("WriteIP", field[0]) && fieldcount == 2)
   {
@@ -1606,9 +1627,9 @@ ConfigMSWrite (char *archive)
     }
   }
 
+  pthread_rwlock_wrlock (&config.config_rwlock);
   free (config.mseedarchive);
 
-  /* Set new data stream archive definition */
   if (path && layout)
   {
     char combined[PATH_MAX];
@@ -1619,6 +1640,7 @@ ConfigMSWrite (char *archive)
   {
     config.mseedarchive = strdup (archive);
   }
+  pthread_rwlock_unlock (&config.config_rwlock);
 
   return 0;
 } /* End of ConfigMSWrite() */

@@ -62,18 +62,48 @@
 
 /* Global parameter declaration and defaults */
 struct param_s param = {
-    .serverstarttime     = NSTUNSET,
-    .clientcount         = 0,
-    .shutdownsig         = 0,
-    .configfilemtime     = 0,
-    .sthreads_lock       = PTHREAD_MUTEX_INITIALIZER,
-    .sthreads            = NULL,
-    .cthreads_lock       = PTHREAD_MUTEX_INITIALIZER,
-    .cthreads            = NULL,
+    .ringlock        = PTHREAD_MUTEX_INITIALIZER,
+    .ringbuffer      = NULL,
+    .datastart       = NULL,
+    .version         = RING_VERSION,
+    .ringsize        = 0,
+    .pktsize         = 0,
+    .maxpackets      = 0,
+    .maxoffset       = 0,
+    .headersize      = 0,
+    .earliestid      = RINGID_NONE,
+    .earliestptime   = NSTUNSET,
+    .earliestdstime  = NSTUNSET,
+    .earliestdetime  = NSTUNSET,
+    .earliestoffset  = -1,
+    .latestid        = RINGID_NONE,
+    .latestptime     = NSTUNSET,
+    .latestdstime    = NSTUNSET,
+    .latestdetime    = NSTUNSET,
+    .latestoffset    = -1,
+
+    .streamlock      = PTHREAD_MUTEX_INITIALIZER,
+    .streamidx       = NULL,
+    .streamcount     = 0,
+
+    .clientcount     = 0,
+    .shutdownsig     = 0,
+    .serverstarttime = NSTUNSET,
+    .configfilemtime = 0,
+    .sthreads_lock   = PTHREAD_MUTEX_INITIALIZER,
+    .sthreads        = NULL,
+    .cthreads_lock   = PTHREAD_MUTEX_INITIALIZER,
+    .cthreads        = NULL,
+    .txpacketrate    = 0.0,
+    .txbyterate      = 0.0,
+    .rxpacketrate    = 0.0,
+    .rxbyterate      = 0.0,
 };
 
 /* Configuration parameter declaration and defaults */
 struct config_s config = {
+    .config_rwlock       = PTHREAD_RWLOCK_INITIALIZER,
+    .verbose             = 0,
     .configfile          = NULL,
     .serverid            = NULL,
     .ringdir             = NULL,
@@ -100,6 +130,14 @@ struct config_s config = {
     .tlscertfile         = NULL,
     .tlskeyfile          = NULL,
     .tlsverifyclientcert = 0,
+    .tlog.write_lock     = PTHREAD_MUTEX_INITIALIZER,
+    .tlog.basedir        = NULL,
+    .tlog.prefix         = NULL,
+    .tlog.interval       = 86400,
+    .tlog.txlog          = 1,
+    .tlog.rxlog          = 1,
+    .tlog.startint       = 0,
+    .tlog.endint         = 0,
 };
 
 /* Local functions and variables */
@@ -114,8 +152,6 @@ static void PrintHandler ();
 
 static sigset_t globalsigset;
 static int tcpprotonumber = -1;
-
-static RingParams *ringparams = NULL;
 
 int
 main (int argc, char *argv[])
@@ -209,10 +245,7 @@ main (int argc, char *argv[])
     }
 
     /* Initialize ring system */
-    if ((ringinit = RingInitialize (ringfilename, streamfilename,
-                                    config.ringsize, config.pktsize,
-                                    config.memorymapring, config.volatilering,
-                                    &ringfd, &ringparams)))
+    if ((ringinit = RingInitialize (ringfilename, streamfilename, &ringfd)))
     {
       /* Exit on unrecoverable errors or if no auto recovery */
       if (ringinit == -2 || !config.autorecovery)
@@ -287,10 +320,7 @@ main (int argc, char *argv[])
       }
 
       /* Re-initialize ring system */
-      if ((ringinit = RingInitialize (ringfilename, streamfilename,
-                                      config.ringsize, config.pktsize,
-                                      config.memorymapring, config.volatilering,
-                                      &ringfd, &ringparams)))
+      if ((ringinit = RingInitialize (ringfilename, streamfilename, &ringfd)))
       {
         lprintf (0, "Error re-initializing ring buffer on auto-recovery (%d)", ringinit);
         return 1;
@@ -302,11 +332,15 @@ main (int argc, char *argv[])
 
         if (convert_version == 1)
         {
-          loaded_packets = LoadBufferV1 (ringfile_backup, ringparams);
+          loaded_packets = LoadBufferV1 (ringfile_backup);
+        }
+        else if (convert_version == 2)
+        {
+          loaded_packets = LoadBufferV2 (ringfile_backup);
         }
         else
         {
-          lprintf (0, "Error: unsupported conversion version %d", convert_version);
+          lprintf (0, "Error: Cannot convert existing buffer version %d", convert_version);
           return 1;
         }
 
@@ -347,19 +381,15 @@ main (int argc, char *argv[])
   chktime = curtime;
 
   /* Initialize transfer log window timers */
-  if (TLogParams.tlogbasedir)
+  if (config.tlog.basedir)
   {
-    TLogParams.tlogstart = curtime;
-
-    if (CalcIntWin (curtime, TLogParams.tloginterval,
-                    &TLogParams.tlogstartint, &TLogParams.tlogendint))
+    if (CalcTLogInterval (curtime))
     {
       lprintf (0, "Error calculating interval time window");
       return 1;
     }
   }
 
-  LogRingParameters (ringparams);
   LogServerParameters ();
 
   /* Set loop interval check tick to 1/4 second */
@@ -404,9 +434,7 @@ main (int argc, char *argv[])
           lprintf (3, "Requesting shutdown of server thread %lu",
                    (unsigned long int)loopstp->td->td_id);
 
-          pthread_mutex_lock (&(loopstp->td->td_lock));
           loopstp->td->td_state = TDS_CLOSE;
-          pthread_mutex_unlock (&(loopstp->td->td_lock));
         }
 
         loopstp = loopstp->next;
@@ -423,9 +451,7 @@ main (int argc, char *argv[])
           lprintf (3, "Requesting shutdown of client thread %lu",
                    (unsigned long int)loopctp->td->td_id);
 
-          pthread_mutex_lock (&(loopctp->td->td_lock));
           loopctp->td->td_state = TDS_CLOSE;
-          pthread_mutex_unlock (&(loopctp->td->td_lock));
         }
         loopctp = loopctp->next;
       }
@@ -445,9 +471,9 @@ main (int argc, char *argv[])
     }
 
     /* Transmission log writing time window check */
-    if (TLogParams.tlogbasedir && !param.shutdownsig)
+    if (config.tlog.basedir && !param.shutdownsig)
     {
-      if (curtime >= TLogParams.tlogendint)
+      if (curtime >= config.tlog.endint)
         tlogwrite = 1;
       else
         tlogwrite = 0;
@@ -570,8 +596,6 @@ main (int argc, char *argv[])
         /* Start new thread if needed */
         if (stp->td == NULL && !param.shutdownsig)
         {
-          mssinfo->ringparams = ringparams;
-
           /* Initialize thread data and create thread */
           if (!(stp->td = InitThreadData (mssinfo)))
           {
@@ -687,7 +711,6 @@ main (int argc, char *argv[])
         if (config.clienttimeout &&
             (hpcurtime - ((ClientInfo *)ctp->td->td_prvtptr)->lastxchange) > (config.clienttimeout * (nstime_t)NSTMODULUS))
         {
-          pthread_mutex_lock (&(ctp->td->td_lock));
           if (ctp->td->td_state != TDS_CLOSE &&
               ctp->td->td_state != TDS_CLOSING &&
               ctp->td->td_state != TDS_CLOSED)
@@ -695,7 +718,6 @@ main (int argc, char *argv[])
             lprintf (1, "Closing idle client connection: %s", ((ClientInfo *)ctp->td->td_prvtptr)->hostname);
             ctp->td->td_state = TDS_CLOSE;
           }
-          pthread_mutex_unlock (&(ctp->td->td_lock));
         }
       }
     } /* Done looping through client threads */
@@ -704,10 +726,10 @@ main (int argc, char *argv[])
     lprintf (3, "Client connections: %d", param.clientcount);
 
     /* Update count and byte rate ring parameters */
-    ringparams->txpacketrate = txpacketrate;
-    ringparams->txbyterate   = txbyterate;
-    ringparams->rxpacketrate = rxpacketrate;
-    ringparams->rxbyterate   = rxbyterate;
+    param.txpacketrate = txpacketrate;
+    param.txbyterate   = txbyterate;
+    param.rxpacketrate = rxpacketrate;
+    param.rxbyterate   = rxbyterate;
 
     /* Check for config file updates */
     if (config.configfile && !lstat (config.configfile, &cfstat))
@@ -715,18 +737,21 @@ main (int argc, char *argv[])
       if (cfstat.st_mtime > param.configfilemtime)
       {
         lprintf (1, "Re-reading configuration parameters from %s", config.configfile);
+
+        pthread_rwlock_wrlock (&config.config_rwlock);
         ReadConfigFile (config.configfile, 1, cfstat.st_mtime);
+        pthread_rwlock_unlock (&config.config_rwlock);
+
         configreset = 1;
       }
     }
 
     /* Reset transfer log writing time windows using the current time as the reference */
-    if (TLogParams.tlogbasedir && !param.shutdownsig && (tlogwrite || configreset))
+    if (config.tlog.basedir && !param.shutdownsig && (tlogwrite || configreset))
     {
       tlogwrite = 0;
 
-      if (CalcIntWin (time (NULL), TLogParams.tloginterval,
-                      &TLogParams.tlogstartint, &TLogParams.tlogendint))
+      if (CalcTLogInterval (time (NULL)))
       {
         lprintf (0, "Error calculating interval time window");
         return 1;
@@ -756,7 +781,7 @@ main (int argc, char *argv[])
   /* Shutdown ring buffer */
   if (config.ringdir || config.volatilering)
   {
-    if (RingShutdown (ringfd, streamfilename, ringparams))
+    if (RingShutdown (ringfd, streamfilename))
     {
       lprintf (0, "Error shutting down ring buffer");
       return 1;
@@ -799,12 +824,6 @@ InitThreadData (void *prvtptr)
     return 0;
   }
 
-  if (pthread_mutex_init (&(rtdp->td_lock), NULL))
-  {
-    lprintf (0, "Error initializing thread_data mutex: %s", strerror (errno));
-    return 0;
-  }
-
   rtdp->td_id    = 0;
   rtdp->td_state = TDS_SPAWNING;
 
@@ -844,9 +863,7 @@ ListenThread (void *arg)
   lpp   = (ListenPortParams *)mytdp->td_prvtptr;
 
   /* Set thread active status */
-  pthread_mutex_lock (&(mytdp->td_lock));
   mytdp->td_state = TDS_ACTIVE;
-  pthread_mutex_unlock (&(mytdp->td_lock));
 
   /* Generate string of protocols and options supported by this listener */
   if (GenProtocolString (lpp->protocols, lpp->options, protocolstr, sizeof (protocolstr)) > 0)
@@ -958,7 +975,6 @@ ListenThread (void *arg)
     cinfo->protocols  = lpp->protocols;
     cinfo->tls        = (lpp->options & ENCRYPTION_TLS) ? 1 : 0;
     cinfo->type       = CLIENT_UNDETERMINED;
-    cinfo->ringparams = ringparams;
 
     /* Store client socket address structure */
     if ((cinfo->addr = (struct sockaddr *)malloc (addrlen)) == NULL)
@@ -1098,9 +1114,7 @@ ListenThread (void *arg)
   }
 
   /* Set thread closing status */
-  pthread_mutex_lock (&(mytdp->td_lock));
   mytdp->td_state = TDS_CLOSED;
-  pthread_mutex_unlock (&(mytdp->td_lock));
 
   lprintf (1, "Listening thread closing");
 
@@ -1137,18 +1151,18 @@ CalcStats (ClientInfo *cinfo)
   /* Determine percent lag if the current pktid is set */
   if (cinfo->reader && cinfo->reader->pktid <= RINGID_MAXIMUM)
   {
-    if (ringparams->latestoffset < ringparams->earliestoffset)
-      latestoffset_unwrapped = ringparams->latestoffset + ringparams->maxoffset;
+    if (param.latestoffset < param.earliestoffset)
+      latestoffset_unwrapped = param.latestoffset + param.maxoffset;
     else
-      latestoffset_unwrapped = ringparams->latestoffset;
+      latestoffset_unwrapped = param.latestoffset;
 
-    if (cinfo->reader->pktoffset < ringparams->earliestoffset)
-      readeroffset_unwrapped = cinfo->reader->pktoffset + ringparams->maxoffset;
+    if (cinfo->reader->pktoffset < param.earliestoffset)
+      readeroffset_unwrapped = cinfo->reader->pktoffset + param.maxoffset;
     else
       readeroffset_unwrapped = cinfo->reader->pktoffset;
 
     /* Calculate percentage lag as position in ring where 0% = latest offset and 100% = earliest offset */
-    cinfo->percentlag = (int)(((double)(latestoffset_unwrapped - readeroffset_unwrapped) / (latestoffset_unwrapped - ringparams->earliestoffset)) * 100);
+    cinfo->percentlag = (int)(((double)(latestoffset_unwrapped - readeroffset_unwrapped) / (latestoffset_unwrapped - param.earliestoffset)) * 100);
   }
   else
   {
@@ -1162,27 +1176,27 @@ CalcStats (ClientInfo *cinfo)
     deltasec = (double)(nsnow - cinfo->ratetime) / NSTMODULUS;
 
   /* Transmission */
-  if (cinfo->txpackets[0] > 0)
+  if (cinfo->txpackets0 > 0)
   {
     /* Calculate the transmission rates */
-    cinfo->txpacketrate = (double)(cinfo->txpackets[0] - cinfo->txpackets[1]) / deltasec;
-    cinfo->txbyterate   = (double)(cinfo->txbytes[0] - cinfo->txbytes[1]) / deltasec;
+    cinfo->txpacketrate = (double)(cinfo->txpackets0 - cinfo->txpackets1) / deltasec;
+    cinfo->txbyterate   = (double)(cinfo->txbytes0 - cinfo->txbytes1) / deltasec;
 
     /* Shift current values to history values */
-    cinfo->txpackets[1] = cinfo->txpackets[0];
-    cinfo->txbytes[1]   = cinfo->txbytes[0];
+    cinfo->txpackets1 = cinfo->txpackets0;
+    cinfo->txbytes1   = cinfo->txbytes0;
   }
 
   /* Reception */
-  if (cinfo->rxpackets[0] > 0)
+  if (cinfo->rxpackets0 > 0)
   {
     /* Calculate the reception rates */
-    cinfo->rxpacketrate = (double)(cinfo->rxpackets[0] - cinfo->rxpackets[1]) / deltasec;
-    cinfo->rxbyterate   = (double)(cinfo->rxbytes[0] - cinfo->rxbytes[1]) / deltasec;
+    cinfo->rxpacketrate = (double)(cinfo->rxpackets0 - cinfo->rxpackets1) / deltasec;
+    cinfo->rxbyterate   = (double)(cinfo->rxbytes0 - cinfo->rxbytes1) / deltasec;
 
     /* Shift current values to history values */
-    cinfo->rxpackets[1] = cinfo->rxpackets[0];
-    cinfo->rxbytes[1]   = cinfo->rxbytes[0];
+    cinfo->rxpackets1 = cinfo->rxpackets0;
+    cinfo->rxbytes1   = cinfo->rxbytes0;
   }
 
   /* Update time stamp of history values */
@@ -1409,13 +1423,60 @@ void LogServerParameters ()
 {
   char network[INET6_ADDRSTRLEN];
   char netmask[INET6_ADDRSTRLEN];
-  char timestring[32];
+  char timestr[50];
+  char pktidstr[50];
+  char sizestr[50];
 
-  lprintf (1, "Server parameters:");
+  HumanSizeString (param.ringsize, sizestr, sizeof (sizestr));
+
+  lprintf (1, "Ring parameters, buffer version: %u", param.version);
+  lprintf (1, "   ringsize: %" PRIu64 " (%s), pktsize: %u (%zu payload)",
+           param.ringsize, sizestr,
+           config.pktsize,
+           config.pktsize - sizeof (RingPacket));
+
+  lprintf (2, "   headersize: %u", param.headersize);
+
+  lprintf (2, "   maxpackets: %" PRId64 ", maxoffset: %" PRIu64,
+           param.maxpackets, param.maxoffset);
+
+  lprintf (2, "   streamcount: %u", param.streamcount);
+
+  lprintf (2, "   volatile: %s, mmap: %s",
+           (config.volatilering) ? "yes" : "no",
+           (config.memorymapring) ? "yes" : "no");
+
+  snprintf (pktidstr, sizeof (pktidstr), "%" PRIu64, param.earliestid);
+  lprintf (2, "   earliest packet ID: %s, offset: %" PRId64,
+           (param.earliestid == RINGID_NONE) ? "NONE" : pktidstr,
+           param.earliestoffset);
+  ms_nstime2timestr (param.earliestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+  lprintf (2, "   earliest packet creation time: %s",
+           (param.earliestptime == NSTUNSET) ? "NONE" : timestr);
+  ms_nstime2timestr (param.earliestdstime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+  lprintf (2, "   earliest packet data start time: %s",
+           (param.earliestdstime == NSTUNSET) ? "NONE" : timestr);
+
+  snprintf (pktidstr, sizeof (pktidstr), "%" PRIu64, param.latestid);
+  lprintf (2, "   latest packet ID: %s, offset: %" PRId64,
+           (param.latestid == RINGID_NONE) ? "NONE" : pktidstr,
+           param.latestoffset);
+  ms_nstime2timestr (param.latestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+  lprintf (2, "   latest packet creation time: %s",
+           (param.latestptime == NSTUNSET) ? "NONE" : timestr);
+  ms_nstime2timestr (param.latestdstime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+  lprintf (2, "   latest packet data start time: %s",
+           (param.latestdstime == NSTUNSET) ? "NONE" : timestr);
+
+  pthread_rwlock_rdlock (&config.config_rwlock);
+
+  lprintf (1, "Config parameters:");
   lprintf (1, "   server ID: %s", config.serverid);
   lprintf (1, "   ring directory: %s", (config.ringdir) ? config.ringdir : "NONE");
-  lprintf (1, "   max clients: %u", config.maxclients);
-  lprintf (1, "   max clients per IP: %u", config.maxclientsperip);
+  lprintf (1, "   max clients: %u%s", config.maxclients,
+           (config.maxclients > 0) ? " (no limit)" : "");
+  lprintf (1, "   max clients per IP: %u%s", config.maxclientsperip,
+           (config.maxclientsperip > 0) ? " (no limit)" : "");
 
   lprintf (2, "   configuration file: %s", (config.configfile) ? config.configfile : "NONE");
   lprintf (2, "   client timeout: %u seconds", config.clienttimeout);
@@ -1432,46 +1493,36 @@ void LogServerParameters ()
   lprintf (3, "   miniSEED archive: %s", (config.mseedarchive) ? config.mseedarchive : "NONE");
   lprintf (3, "   miniSEED idle file timeout: %u seconds", config.mseedidleto);
 
-  lprintf (3, "   transfer log: %s", (TLogParams.tlogbasedir) ? TLogParams.tlogbasedir : "NONE");
-  if (TLogParams.tlogbasedir && verbose >= 3)
+  lprintf (3, "   transfer log: %s", (config.tlog.basedir) ? config.tlog.basedir : "NONE");
+  if (config.tlog.basedir && config.verbose >= 3)
   {
-    lprintf (3, "     log prefix: %s", (TLogParams.tlogprefix) ? TLogParams.tlogprefix : "NONE");
-    lprintf (3, "     log interval: %d seconds", TLogParams.tloginterval);
-    lprintf (3, "     log transmission: %s", (TLogParams.txlog) ? "yes" : "no");
-    lprintf (3, "     log reception: %s", (TLogParams.rxlog) ? "yes" : "no");
+    lprintf (3, "     log prefix: %s", (config.tlog.prefix) ? config.tlog.prefix : "NONE");
+    lprintf (3, "     log interval: %d seconds", config.tlog.interval);
+    lprintf (3, "     log transmission: %s", (config.tlog.txlog) ? "yes" : "no");
+    lprintf (3, "     log reception: %s", (config.tlog.rxlog) ? "yes" : "no");
 
-    if (TLogParams.tlogstartint)
+    if (config.tlog.startint)
     {
-      ms_nstime2timestr (MS_EPOCH2NSTIME (TLogParams.tlogstartint), timestring, ISOMONTHDAY_Z, NONE);
-      lprintf (3, "     log interval start: %s", timestring);
+      ms_nstime2timestr (MS_EPOCH2NSTIME (config.tlog.startint), timestr, ISOMONTHDAY_Z, NONE);
+      lprintf (3, "     log interval start: %s", timestr);
     }
     else
     {
       lprintf (3, "     log interval start: NONE");
     }
 
-    if (TLogParams.tlogendint)
+    if (config.tlog.endint)
     {
-      ms_nstime2timestr (MS_EPOCH2NSTIME (TLogParams.tlogendint), timestring, ISOMONTHDAY_Z, NONE);
-      lprintf (3, "     log interval end: %s", timestring);
+      ms_nstime2timestr (MS_EPOCH2NSTIME (config.tlog.endint), timestr, ISOMONTHDAY_Z, NONE);
+      lprintf (3, "     log interval end: %s", timestr);
     }
     else
     {
       lprintf (3, "     log interval end: NONE");
     }
-
-    if (TLogParams.tlogstart)
-    {
-      ms_nstime2timestr (MS_EPOCH2NSTIME (TLogParams.tlogstart), timestring, ISOMONTHDAY_Z, NONE);
-      lprintf (3, "     log window start: %s", timestring);
-    }
-    else
-    {
-      lprintf (3, "     log window start: NONE");
-    }
   }
 
-  if (config.limitips && verbose >= 3)
+  if (config.limitips && config.verbose >= 3)
   {
     IPNet *ipn = config.limitips;
     while (ipn)
@@ -1490,7 +1541,7 @@ void LogServerParameters ()
     lprintf (3, "   limit IP: NONE");
   }
 
-  if (config.matchips && verbose >= 3)
+  if (config.matchips && config.verbose >= 3)
   {
     IPNet *ipn = config.matchips;
     while (ipn)
@@ -1508,7 +1559,7 @@ void LogServerParameters ()
     lprintf (3, "   match IP range: NONE");
   }
 
-  if (config.rejectips && verbose >= 3)
+  if (config.rejectips && config.verbose >= 3)
   {
     IPNet *ipn = config.rejectips;
     while (ipn)
@@ -1526,7 +1577,7 @@ void LogServerParameters ()
     lprintf (3, "   reject IP range: NONE");
   }
 
-  if (config.writeips && verbose >= 3)
+  if (config.writeips && config.verbose >= 3)
   {
     IPNet *ipn = config.writeips;
     while (ipn)
@@ -1544,7 +1595,7 @@ void LogServerParameters ()
     lprintf (3, "   write IP range: NONE");
   }
 
-  if (config.trustedips && verbose >= 3)
+  if (config.trustedips && config.verbose >= 3)
   {
     IPNet *ipn = config.trustedips;
     while (ipn)
@@ -1561,6 +1612,9 @@ void LogServerParameters ()
   {
     lprintf (3, "   trusted IP range: NONE");
   }
+
+  pthread_rwlock_unlock (&config.config_rwlock);
+
 } /* End of LogServerParameters() */
 
 /***************************************************************************
@@ -1571,9 +1625,8 @@ void LogServerParameters ()
 static void
 PrintHandler ()
 {
-  uint8_t verbose_save = verbose;
-  verbose = 3;
-  LogRingParameters (ringparams);
+  uint8_t verbose_save = config.verbose;
+  config.verbose = 3;
   LogServerParameters ();
-  verbose = verbose_save;
+  config.verbose = verbose_save;
 }

@@ -64,7 +64,6 @@ typedef struct MSScanInfo {
   /* Internal tracking parameters */
   uint32_t readbuffersize;/* Size of file read buffer */
   char    *readbuffer;    /* File read buffer */
-  RingParams *ringparams; /* Ring buffer parameters */
   MS3Record *msr;         /* Parsed miniSEED record */
   RBTree  *filetree;      /* Working list of scanned files in a tree */
   int      accesserr;     /* Flag to indicate directory access errors */

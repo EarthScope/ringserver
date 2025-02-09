@@ -167,9 +167,7 @@ MS_ScanThread (void *arg)
   /* Initialize scanning parameters */
   if (Initialize (mssinfo) < 0)
   {
-    pthread_mutex_lock (&(mytdp->td_lock));
     mytdp->td_state = TDS_CLOSED;
-    pthread_mutex_unlock (&(mytdp->td_lock));
 
     return 0;
   }
@@ -194,10 +192,8 @@ MS_ScanThread (void *arg)
   mssinfo->ratetime                         = NSnow ();
 
   /* Set thread active status */
-  pthread_mutex_lock (&(mytdp->td_lock));
   if (mytdp->td_state == TDS_SPAWNING)
     mytdp->td_state = TDS_ACTIVE;
-  pthread_mutex_unlock (&(mytdp->td_lock));
 
   /* Report start of scanning */
   lprintf (1, "miniSEED scanning started [%s]", mssinfo->dirname);
@@ -318,9 +314,7 @@ MS_ScanThread (void *arg)
   } /* End of main scan loop */
 
   /* Set thread closing status */
-  pthread_mutex_lock (&(mytdp->td_lock));
   mytdp->td_state = TDS_CLOSING;
-  pthread_mutex_unlock (&(mytdp->td_lock));
 
   /* Save the state file */
   if (*(mssinfo->statefile) != '\0')
@@ -349,9 +343,7 @@ MS_ScanThread (void *arg)
   lprintf (1, "miniSEED scanning stopped [%s]", mssinfo->dirname);
 
   /* Set thread CLOSED status */
-  pthread_mutex_lock (&(mytdp->td_lock));
   mytdp->td_state = TDS_CLOSED;
-  pthread_mutex_unlock (&(mytdp->td_lock));
 
   return 0;
 } /* End of MS_ScanThread() */
@@ -420,7 +412,7 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
       /* Skip this file if the BUD file name is more than budlatency days old */
       if (budfiletime && ((currentday - budfiletime) > (mssinfo->budlatency * 86400)))
       {
-        if (verbose > 1)
+        if (config.verbose > 1)
           lprintf (0, "[MSeedScan] Skipping due to BUD file name latency: %s", ede->d_name);
         continue;
       }
@@ -1042,7 +1034,7 @@ WriteRecord (MSScanInfo *mssinfo, char *record, uint64_t reclen)
   packet.pktid     = RINGID_NONE;
 
   /* Add the packet to the ring */
-  if ((rv = RingWrite (mssinfo->ringparams, &packet, record, packet.datasize)))
+  if ((rv = RingWrite (&packet, record, packet.datasize)))
   {
     if (rv == -2)
       lprintf (1, "[MSeedScan] Error with RingWrite, corrupt ring, shutdown signalled");
@@ -1090,7 +1082,7 @@ Initialize (MSScanInfo *mssinfo)
   }
 
   /* Calculate maximum allowed record length and allocate file read buffer */
-  mssinfo->readbuffersize = mssinfo->ringparams->pktsize - sizeof (RingPacket);
+  mssinfo->readbuffersize = param.pktsize - sizeof (RingPacket);
   if ((mssinfo->readbuffer = (char *)malloc (mssinfo->readbuffersize)) == NULL)
   {
     lprintf (0, "[MSeedScan] Cannot allocate file read buffer");

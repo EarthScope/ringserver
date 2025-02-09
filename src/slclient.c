@@ -317,7 +317,7 @@ SLHandleCmd (ClientInfo *cinfo)
       }
       else if (cinfo->timewinlimit < 1.0)
       {
-        uint64_t pktlimit = (uint64_t)(cinfo->timewinlimit * cinfo->ringparams->maxpackets);
+        uint64_t pktlimit = (uint64_t)(cinfo->timewinlimit * param.maxpackets);
 
         readid = RingAfterRev (cinfo->reader, cinfo->starttime, pktlimit, 0);
       }
@@ -481,8 +481,8 @@ SLStreamPackets (ClientInfo *cinfo)
       pthread_mutex_unlock (&(cinfo->streams_lock));
 
       /* Update client transmit and counts */
-      cinfo->txpackets[0]++;
-      cinfo->txbytes[0] += cinfo->packet.datasize;
+      cinfo->txpackets0++;
+      cinfo->txbytes0 += cinfo->packet.datasize;
 
       /* Update last sent packet ID */
       cinfo->lastid = cinfo->packet.pktid;
@@ -929,11 +929,11 @@ HandleNegotiation (ClientInfo *cinfo)
 
       if (fields >= 1)
       {
-        if (cinfo->ringparams->latestid <= RINGID_MAXIMUM)
+        if (param.latestid <= RINGID_MAXIMUM)
         {
           /* To map the 24-bit SeedLink v3 sequence into the 64-bit packet ID range
            * combine the highest 40-bits of latest ID with lowest 24-bits of requested sequence */
-          startpacket = (cinfo->ringparams->latestid & 0xFFFFFFFFFF000000) | (seq & 0xFFFFFF);
+          startpacket = (param.latestid & 0xFFFFFFFFFF000000) | (seq & 0xFFFFFF);
         }
         else
         {

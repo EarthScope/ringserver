@@ -230,6 +230,7 @@ info_add_streams (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matchexpr)
   RingStream *ringstream;
 
   char string32[32] = {0};
+  uint32_t streamcount = 0;
 
   pcre2_code *match_code       = NULL;
   pcre2_match_data *match_data = NULL;
@@ -241,13 +242,11 @@ info_add_streams (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matchexpr)
   }
 
   /* Get copy of streams as a Stack, sorted by stream ID */
-  if ((ringstreams = GetStreamsStack (cinfo->ringparams, cinfo->reader)) == NULL)
+  if ((ringstreams = GetStreamsStack (cinfo->reader)) == NULL)
   {
     lprintf (0, "[%s] Error getting streams stack", cinfo->hostname);
     return NULL;
   }
-
-  yyjson_mut_obj_add_uint (doc, root, "stream_count", cinfo->ringparams->streamcount);
 
   /* Create JSON */
   if ((stream_array = yyjson_mut_obj_add_arr (doc, root, "stream")) == NULL)
@@ -290,8 +289,11 @@ info_add_streams (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matchexpr)
     yyjson_mut_obj_add_real (doc, stream, "data_latency",
                              (double)MS_NSTIME2EPOCH ((NSnow () - ringstream->latestdetime)));
 
+    streamcount++;
     free (ringstream);
   }
+
+  yyjson_mut_obj_add_uint (doc, root, "stream_count", streamcount);
 
   StackDestroy (ringstreams, free);
 
@@ -367,7 +369,7 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
   }
 
   /* Get copy of streams as a Stack, sorted by stream ID */
-  if ((ringstreams = GetStreamsStack (cinfo->ringparams, cinfo->reader)) == NULL)
+  if ((ringstreams = GetStreamsStack (cinfo->reader)) == NULL)
   {
     lprintf (0, "[%s] Error getting streams stack", cinfo->hostname);
     return NULL;
@@ -695,14 +697,14 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
     yyjson_mut_obj_add_int (doc, client, "lag_percent", (tcinfo->reader->pktid > RINGID_MAXIMUM) ? 0 : tcinfo->percentlag);
     yyjson_mut_obj_add_real (doc, client, "lag_seconds", (double)MS_NSTIME2EPOCH ((nsnow - tcinfo->lastxchange)));
 
-    yyjson_mut_obj_add_uint (doc, client, "transmit_packets", tcinfo->txpackets[0]);
+    yyjson_mut_obj_add_uint (doc, client, "transmit_packets", tcinfo->txpackets0);
     yyjson_mut_obj_add_real (doc, client, "transmit_packet_rate", tcinfo->txpacketrate);
-    yyjson_mut_obj_add_uint (doc, client, "transmit_bytes", tcinfo->txbytes[0]);
+    yyjson_mut_obj_add_uint (doc, client, "transmit_bytes", tcinfo->txbytes0);
     yyjson_mut_obj_add_real (doc, client, "transmit_byte_rate", tcinfo->txbyterate);
 
-    yyjson_mut_obj_add_uint (doc, client, "receive_packets", tcinfo->rxpackets[0]);
+    yyjson_mut_obj_add_uint (doc, client, "receive_packets", tcinfo->rxpackets0);
     yyjson_mut_obj_add_real (doc, client, "receive_packet_rate", tcinfo->rxpacketrate);
-    yyjson_mut_obj_add_uint (doc, client, "receive_bytes", tcinfo->rxbytes[0]);
+    yyjson_mut_obj_add_uint (doc, client, "receive_bytes", tcinfo->rxbytes0);
     yyjson_mut_obj_add_real (doc, client, "receive_byte_rate", tcinfo->rxbyterate);
 
     yyjson_mut_obj_add_int (doc, client, "stream_count", tcinfo->streamscount);
@@ -812,7 +814,7 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
  * Returns pointer to JSON object added on success and NULL on error.
  ***************************************************************************/
 static yyjson_mut_doc *
-info_add_status (ClientInfo *cinfo, yyjson_mut_doc *doc)
+info_add_status (yyjson_mut_doc *doc)
 {
   yyjson_mut_val *root = yyjson_mut_doc_get_root (doc);
   yyjson_mut_val *server;
@@ -829,41 +831,41 @@ info_add_status (ClientInfo *cinfo, yyjson_mut_doc *doc)
     return NULL;
   }
 
-  yyjson_mut_obj_add_uint (doc, server, "ring_version", cinfo->ringparams->version);
-  yyjson_mut_obj_add_uint (doc, server, "ring_size", cinfo->ringparams->ringsize);
-  yyjson_mut_obj_add_uint (doc, server, "packet_size", cinfo->ringparams->pktsize);
-  yyjson_mut_obj_add_uint (doc, server, "maximum_packets", cinfo->ringparams->maxpackets);
-  yyjson_mut_obj_add_bool (doc, server, "memory_mapped", cinfo->ringparams->mmapflag);
-  yyjson_mut_obj_add_bool (doc, server, "volatile_ring", cinfo->ringparams->volatileflag);
+  yyjson_mut_obj_add_uint (doc, server, "ring_version", param.version);
+  yyjson_mut_obj_add_uint (doc, server, "ring_size", param.ringsize);
+  yyjson_mut_obj_add_uint (doc, server, "packet_size", param.pktsize);
+  yyjson_mut_obj_add_uint (doc, server, "maximum_packets", param.maxpackets);
+  yyjson_mut_obj_add_bool (doc, server, "memory_mapped", config.memorymapring);
+  yyjson_mut_obj_add_bool (doc, server, "volatile_ring", config.volatilering);
 
   yyjson_mut_obj_add_int (doc, server, "connection_count", param.clientcount);
-  yyjson_mut_obj_add_uint (doc, server, "stream_count", cinfo->ringparams->streamcount);
+  yyjson_mut_obj_add_uint (doc, server, "stream_count", param.streamcount);
 
-  yyjson_mut_obj_add_real (doc, server, "transmit_packet_rate", cinfo->ringparams->txpacketrate);
-  yyjson_mut_obj_add_real (doc, server, "transmit_byte_rate", cinfo->ringparams->txbyterate);
-  yyjson_mut_obj_add_real (doc, server, "receive_packet_rate", cinfo->ringparams->rxpacketrate);
-  yyjson_mut_obj_add_real (doc, server, "receive_byte_rate", cinfo->ringparams->rxbyterate);
+  yyjson_mut_obj_add_real (doc, server, "transmit_packet_rate", param.txpacketrate);
+  yyjson_mut_obj_add_real (doc, server, "transmit_byte_rate", param.txbyterate);
+  yyjson_mut_obj_add_real (doc, server, "receive_packet_rate", param.rxpacketrate);
+  yyjson_mut_obj_add_real (doc, server, "receive_byte_rate", param.rxbyterate);
 
-  if (cinfo->ringparams->earliestid <= RINGID_MAXIMUM)
+  if (param.earliestid <= RINGID_MAXIMUM)
   {
 
-    yyjson_mut_obj_add_uint (doc, server, "earliest_packet_id", cinfo->ringparams->earliestid);
-    ms_nstime2timestr (cinfo->ringparams->earliestptime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    yyjson_mut_obj_add_uint (doc, server, "earliest_packet_id", param.earliestid);
+    ms_nstime2timestr (param.earliestptime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     yyjson_mut_obj_add_strcpy (doc, server, "earliest_packet_time", packettime);
-    ms_nstime2timestr (cinfo->ringparams->earliestdstime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    ms_nstime2timestr (param.earliestdstime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     yyjson_mut_obj_add_strcpy (doc, server, "earliest_data_start", packettime);
-    ms_nstime2timestr (cinfo->ringparams->earliestdetime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    ms_nstime2timestr (param.earliestdetime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     yyjson_mut_obj_add_strcpy (doc, server, "earliest_data_end", packettime);
   }
 
-  if (cinfo->ringparams->latestid <= RINGID_MAXIMUM)
+  if (param.latestid <= RINGID_MAXIMUM)
   {
-    yyjson_mut_obj_add_uint (doc, server, "latest_packet_id", cinfo->ringparams->latestid);
-    ms_nstime2timestr (cinfo->ringparams->latestptime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    yyjson_mut_obj_add_uint (doc, server, "latest_packet_id", param.latestid);
+    ms_nstime2timestr (param.latestptime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     yyjson_mut_obj_add_strcpy (doc, server, "latest_packet_time", packettime);
-    ms_nstime2timestr (cinfo->ringparams->latestdstime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    ms_nstime2timestr (param.latestdstime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     yyjson_mut_obj_add_strcpy (doc, server, "latest_data_start", packettime);
-    ms_nstime2timestr (cinfo->ringparams->latestdetime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    ms_nstime2timestr (param.latestdetime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     yyjson_mut_obj_add_strcpy (doc, server, "latest_data_end", packettime);
   }
 
@@ -1010,7 +1012,7 @@ info_json (ClientInfo *cinfo, const char *software, InfoElements elements,
   }
 
   if (elements & INFO_STATUS &&
-      info_add_status (cinfo, doc) == NULL)
+      info_add_status (doc) == NULL)
   {
     yyjson_mut_doc_free (doc);
     return NULL;

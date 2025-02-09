@@ -30,7 +30,8 @@ extern "C" {
 
 #include "ring.h"
 
-extern int64_t LoadBufferV1 (char *ringfilename, RingParams *ringparams);
+extern int64_t LoadBufferV1 (char *ringfilename);
+extern int64_t LoadBufferV2 (char *ringfilename);
 
 #ifdef __cplusplus
 }

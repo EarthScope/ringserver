@@ -30,21 +30,6 @@ extern "C" {
 
 #include "clients.h"
 
-struct TLogParams_s {
-  char  *tlogbasedir;    /* Base directory for transfer log output */
-  char  *tlogprefix;     /* Prefix for log files */
-  int    txlog;          /* Flag to control transmission log */
-  int    rxlog;          /* Flag to control reception log */
-  int    tloginterval;   /* Log writing interval in seconds */
-  time_t tlogstart;      /* Track actual start time of log window */
-  time_t tlogstartint;   /* Normalized start time of log interval */
-  time_t tlogendint;     /* Normalized end time of log interval */
-};
-
-/* Global logging parameters declared in logging.c */
-extern uint8_t verbose;
-extern struct TLogParams_s TLogParams;
-
 #if defined(__GNUC__) || defined(__clang__)
 __attribute__((__format__ (__printf__, 2, 3)))
 #endif
@@ -53,8 +38,7 @@ extern void lprint (char *message);
 extern void lprint_wrapper (const char *message);
 
 extern int WriteTLog (ClientInfo *cinfo, int reset);
-extern int CalcIntWin (time_t reftime, int interval,
-		       time_t *startint, time_t *endint);
+extern int CalcTLogInterval (time_t reftime);
 
 
 #ifdef __cplusplus

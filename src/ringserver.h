@@ -27,6 +27,7 @@ extern "C" {
 #endif
 
 #include <pthread.h>
+#include <stdatomic.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -47,12 +48,11 @@ typedef enum
 } ThreadState;
 
 /* Thread data associated with most threads */
-struct thread_data {
-  pthread_mutex_t td_lock;
-  pthread_t       td_id;
-  ThreadState     td_state;
-  int             td_done;
-  void           *td_prvtptr;
+struct thread_data
+{
+  _Atomic (pthread_t) td_id;
+  _Atomic (ThreadState) td_state;
+  _Atomic (void *) td_prvtptr;
 };
 
 /* Server thread types */
@@ -110,7 +110,7 @@ typedef struct ListenPortParams
   char portstr[NI_MAXSERV];  /* Port number to listen on as string */
   ListenProtocols protocols; /* Protocol flags for this connection */
   ListenOptions options;     /* Options for this connection */
-  int socket;                /* Socket descriptor or -1 when not connected */
+  _Atomic (int) socket;      /* Socket descriptor or -1 when not connected */
 } ListenPortParams;
 
 #define ListenPortParams_INITIALIZER {.portstr = {0}, .protocols = 0, .options = 0, .socket = -1}
@@ -133,17 +133,45 @@ typedef struct IPNet_s
   struct IPNet_s *next;
 } IPNet;
 
-/* Global parameters */
+/* Global server parameters */
 struct param_s
 {
-  nstime_t serverstarttime; /* Server start time */
-  int clientcount;          /* Track number of connected clients */
-  int shutdownsig;          /* Shutdown signal */
-  time_t configfilemtime;   /* Modification time of configuration file */
-  pthread_mutex_t sthreads_lock;
-  struct sthread *sthreads; /* Server threads list */
-  pthread_mutex_t cthreads_lock;
-  struct cthread *cthreads; /* Client threads list */
+  pthread_mutex_t ringlock;          /* Mutex lock for ring write access */
+  uint8_t *ringbuffer;               /* Pointer to ring buffer */
+  uint8_t *datastart;                /* Pointer to start of ring buffer data packets */
+  uint16_t version;                  /* RING_VERSION */
+  uint64_t ringsize;                 /* Ring size in bytes */
+  uint32_t pktsize;                  /* Packet size in bytes */
+  uint64_t maxpackets;               /* Maximum number of packets */
+  int64_t maxoffset;                 /* Maximum packet offset */
+  uint32_t headersize;               /* Size of ring header */
+  _Atomic (uint64_t) earliestid;     /* Earliest packet ID */
+  _Atomic (nstime_t) earliestptime;  /* Earliest packet creation time */
+  _Atomic (nstime_t) earliestdstime; /* Earliest packet data start time */
+  _Atomic (nstime_t) earliestdetime; /* Earliest packet data end time */
+  _Atomic (int64_t) earliestoffset;  /* Earliest packet offset in bytes */
+  _Atomic (uint64_t) latestid;       /* Latest packet ID */
+  _Atomic (nstime_t) latestptime;    /* Latest packet creation time */
+  _Atomic (nstime_t) latestdstime;   /* Latest packet data start time */
+  _Atomic (nstime_t) latestdetime;   /* Latest packet data end time */
+  _Atomic (int64_t) latestoffset;    /* Latest packet offset in bytes */
+
+  pthread_mutex_t streamlock;     /* Mutex lock for stream index */
+  RBTree *streamidx;              /* Binary tree of streams */
+  _Atomic (uint32_t) streamcount; /* Count of streams in index (for convience)*/
+
+  _Atomic (int) clientcount;      /* Track number of connected clients */
+  _Atomic (int) shutdownsig;      /* Shutdown signal */
+  nstime_t serverstarttime;       /* Server start time */
+  time_t configfilemtime;         /* Modification time of configuration file */
+  pthread_mutex_t sthreads_lock;  /* Lock for server threads list */
+  struct sthread *sthreads;       /* Server threads list */
+  pthread_mutex_t cthreads_lock;  /* Lock for client threads list */
+  struct cthread *cthreads;       /* Client threads list */
+  _Atomic (double) txpacketrate;  /* Transmission packet rate in Hz */
+  _Atomic (double) txbyterate;    /* Transmission byte rate in Hz */
+  _Atomic (double) rxpacketrate;  /* Reception packet rate in Hz */
+  _Atomic (double) rxbyterate;    /* Reception byte rate in Hz */
 };
 
 extern struct param_s param;
@@ -151,32 +179,45 @@ extern struct param_s param;
 /* Configuration parameters */
 struct config_s
 {
-  char *configfile;         /* Configuration file */
-  char *serverid;           /* Server ID */
-  char *ringdir;            /* Directory for ring files */
-  uint64_t ringsize;        /* Size of ring buffer file */
-  uint32_t pktsize;         /* Ring packet size */
-  uint32_t maxclients;      /* Enforce maximum number of clients */
-  uint32_t maxclientsperip; /* Enforce maximum number of clients per IP */
-  uint32_t clienttimeout;   /* Idle client threshold in seconds, then disconnect */
-  uint32_t netiotimeout;    /* Network I/O timeout in seconds, then disconnect */
-  float timewinlimit;       /* Time window search limit in percent */
-  uint8_t resolvehosts;     /* Flag to control resolving of client hostnames */
-  uint8_t memorymapring;    /* Flag to control mmap'ing of packet buffer */
-  uint8_t volatilering;     /* Flag to control if ring is volatile or not */
-  uint8_t autorecovery;     /* Flag to control auto recovery from corruption */
-  char *webroot;            /* Web content root directory */
-  char *httpheaders;        /* HTTP headers to include in each HTTP response */
-  char *mseedarchive;       /* miniSEED archive definition */
-  int mseedidleto;          /* miniSEED idle file timeout */
-  IPNet *limitips;          /* List of limit-by-IP entries */
-  IPNet *matchips;          /* List of IPs allowed to connect */
-  IPNet *rejectips;         /* List of IPs not allowed to connect */
-  IPNet *writeips;          /* List of IPs allowed to submit data */
-  IPNet *trustedips;        /* List of IPs to trust */
-  char *tlscertfile;        /* TLS certificate file */
-  char *tlskeyfile;         /* TLS key file */
-  int tlsverifyclientcert;  /* Verify client certificate */
+  pthread_rwlock_t config_rwlock; /* Read-write lock for all parameters */
+  _Atomic (uint8_t) verbose;      /* Verbosity level */
+  char *configfile;               /* Configuration file */
+  char *serverid;                 /* Server ID */
+  char *ringdir;                  /* Directory for ring files */
+  uint64_t ringsize;              /* Size of ring buffer file */
+  uint32_t pktsize;               /* Ring packet size */
+  uint32_t maxclients;            /* Enforce maximum number of clients */
+  uint32_t maxclientsperip;       /* Enforce maximum number of clients per IP */
+  uint32_t clienttimeout;         /* Idle client threshold in seconds, then disconnect */
+  uint32_t netiotimeout;          /* Network I/O timeout in seconds, then disconnect */
+  float timewinlimit;             /* Time window search limit in percent */
+  uint8_t resolvehosts;           /* Flag to control resolving of client hostnames */
+  uint8_t memorymapring;          /* Flag to control mmap'ing of packet buffer */
+  uint8_t volatilering;           /* Flag to control if ring is volatile or not */
+  uint8_t autorecovery;           /* Flag to control auto recovery from corruption */
+  char *webroot;                  /* Web content root directory */
+  char *httpheaders;              /* HTTP headers to include in each HTTP response */
+  char *mseedarchive;             /* miniSEED archive definition */
+  int mseedidleto;                /* miniSEED idle file timeout */
+  IPNet *limitips;                /* List of limit-by-IP entries */
+  IPNet *matchips;                /* List of IPs allowed to connect */
+  IPNet *rejectips;               /* List of IPs not allowed to connect */
+  IPNet *writeips;                /* List of IPs allowed to submit data */
+  IPNet *trustedips;              /* List of IPs to trust */
+  char *tlscertfile;              /* TLS certificate file */
+  char *tlskeyfile;               /* TLS key file */
+  int tlsverifyclientcert;        /* Verify client certificate */
+  struct tlog
+  {
+    pthread_mutex_t write_lock; /* Lock for writing transfer log files */
+    _Atomic (char *) basedir;   /* Transfer log base directory */
+    char *prefix;               /* Transfer log file prefix */
+    int interval;               /* Transfer log writing interval in seconds */
+    int txlog;                  /* Flag to control transmission log */
+    int rxlog;                  /* Flag to control reception log */
+    time_t startint;            /* Normalized start time */
+    time_t endint;              /* Transfer log interval end time */
+  } tlog;
 };
 
 extern struct config_s config;

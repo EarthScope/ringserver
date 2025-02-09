@@ -524,7 +524,7 @@ info_xml_dlv1 (ClientInfo *cinfo, const char *software, const char *level,
   mxmlElementSetAttr (xmldoc, "ServerID",
                       yyjson_get_str (yyjson_obj_get (root, "organization")));
   mxmlElementSetAttrf (xmldoc, "Capabilities", "%s PACKETSIZE:%lu%s", DLCAPABILITIES_ID,
-                       (unsigned long int)(cinfo->ringparams->pktsize - sizeof (RingPacket)),
+                       (unsigned long int)(param.pktsize - sizeof (RingPacket)),
                        (cinfo->writeperm) ? " WRITE" : "");
 
   server = yyjson_obj_get (root, "server");

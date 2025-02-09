@@ -90,7 +90,6 @@ ClientThread (void *arg)
 
   /* Connect linked structures */
   cinfo->reader     = &reader;
-  reader.ringparams = cinfo->ringparams;
 
   /* Initialize RingReader parameters */
   reader.pktoffset   = -1;
@@ -135,7 +134,7 @@ ClientThread (void *arg)
   pthread_mutex_unlock (&(cinfo->streams_lock));
 
   /* Allocate client specific send buffer */
-  cinfo->sendbufsize = 2 * cinfo->ringparams->pktsize;
+  cinfo->sendbufsize = 2 * param.pktsize;
   cinfo->sendbuf     = (char *)malloc (cinfo->sendbufsize);
   if (!cinfo->sendbuf)
   {
@@ -144,7 +143,7 @@ ClientThread (void *arg)
   }
 
   /* Allocate client specific receive buffer */
-  cinfo->recvbufsize = 10 * cinfo->ringparams->pktsize;
+  cinfo->recvbufsize = 10 * param.pktsize;
   cinfo->recvbuf     = (char *)malloc (cinfo->recvbufsize);
   if (!cinfo->recvbuf)
   {
@@ -181,9 +180,7 @@ ClientThread (void *arg)
   if (setuperr)
   {
     /* Set thread closing status */
-    pthread_mutex_lock (&(mytdp->td_lock));
     mytdp->td_state = TDS_CLOSING;
-    pthread_mutex_unlock (&(mytdp->td_lock));
 
     /* Close client socket */
     if (cinfo->socket)
@@ -220,9 +217,7 @@ ClientThread (void *arg)
     lprintf (1, "Client setup error, disconnected: %s", cinfo->hostname);
 
     /* Set thread CLOSED status */
-    pthread_mutex_lock (&(mytdp->td_lock));
     mytdp->td_state = TDS_CLOSED;
-    pthread_mutex_unlock (&(mytdp->td_lock));
 
     return NULL;
   }
@@ -236,10 +231,8 @@ ClientThread (void *arg)
     cinfo->type = CLIENT_HTTP;
 
   /* Set thread active status */
-  pthread_mutex_lock (&(mytdp->td_lock));
   if (mytdp->td_state == TDS_SPAWNING)
     mytdp->td_state = TDS_ACTIVE;
-  pthread_mutex_unlock (&(mytdp->td_lock));
 
   /* Main client loop, delegating processing and data flow */
   while (mytdp->td_state != TDS_CLOSE)
@@ -363,7 +356,7 @@ ClientThread (void *arg)
   tls_cleanup (cinfo);
 
   /* Write out transmission log for this client if requested */
-  if (TLogParams.tlogbasedir)
+  if (config.tlog.basedir)
   {
     lprintf (2, "[%s] Writing transmission log", cinfo->hostname);
     WriteTLog (cinfo, 1);
@@ -422,9 +415,7 @@ ClientThread (void *arg)
   lprintf (1, "Client disconnected: %s", cinfo->hostname);
 
   /* Set thread CLOSED status */
-  pthread_mutex_lock (&(mytdp->td_lock));
   mytdp->td_state = TDS_CLOSED;
-  pthread_mutex_unlock (&(mytdp->td_lock));
 
   return NULL;
 } /* End of ClientThread() */

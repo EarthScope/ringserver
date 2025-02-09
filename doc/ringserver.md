@@ -184,7 +184,7 @@ ringserver [options] [configfile]
   <b>TEXT</b>    : Text payloads, where UTF-8 is assumed
 </pre>
 
-<p >The maximum length of stream IDs supported by the server is 59 bytes.</p>
+<p >The maximum length of stream IDs supported by the server is 63 bytes.</p>
 
 ## <a id='multi-protocol-support'>Multi-Protocol Support</a>
 
@@ -379,4 +379,4 @@ EarthScope Data Services
 </pre>
 
 
-(man page 2025/01/12)
+(man page 2025/02/08)

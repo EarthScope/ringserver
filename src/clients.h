@@ -87,8 +87,7 @@ typedef struct ClientInfo
   uint8_t     writeperm;    /* Write permission flag */
   uint8_t     trusted;      /* Trusted client flag */
   float       timewinlimit; /* Time window ring search limit in percent */
-  RingParams *ringparams;   /* Ring buffer parameters */
-  RingReader *reader;       /* Ring reader parameters */
+  _Atomic (RingReader *) reader; /* Ring reader parameters */
   nstime_t    conntime;     /* Client connect time */
   char       *limitstr;     /* Regular expression string to limit streams */
   char       *matchstr;     /* Regular expression string to match streams */
@@ -100,19 +99,23 @@ typedef struct ClientInfo
   DataStream *mswrite;      /* miniSEED data write parameters */
   RBTree     *streams;      /* Tracking of streams transferred */
   pthread_mutex_t streams_lock; /* Mutex lock for streams tree */
-  int         streamscount; /* Count of streams in tree */
-  int         percentlag;   /* Percent lag of client in ring buffer */
-  nstime_t    lastxchange;  /* Time of last data transmission or reception */
-  uint64_t    txpackets[2]; /* Track total number of packets transmitted to client */
-  double      txpacketrate; /* Track rate of packet transmission */
-  uint64_t    txbytes[2];   /* Track total number of data bytes transmitted */
-  double      txbyterate;   /* Track rate of data byte transmission */
-  uint64_t    rxpackets[2]; /* Track total number of packets received from client */
-  double      rxpacketrate; /* Track rate of packet reception */
-  uint64_t    rxbytes[2];   /* Track total number of data bytes received */
-  double      rxbyterate;   /* Track rate of data byte reception */
-  nstime_t    ratetime;     /* Time stamp for TX and RX rate calculations */
-  void       *extinfo;      /* Extended client info, protocol specific */
+  _Atomic (int) streamscount;   /* Count of streams in tree */
+  _Atomic (nstime_t) lastxchange; /* Time of last data transmission or reception */
+  _Atomic (int) percentlag;       /* Percent lag of client in ring buffer */
+  _Atomic (uint64_t) txpackets0;  /* Track total number of packets transmitted to client */
+  uint64_t txpackets1;  /* Track total number of packets transmitted to client */
+  _Atomic (double) txpacketrate;  /* Track rate of packet transmission */
+  _Atomic (uint64_t) txbytes0;    /* Track total number of data bytes transmitted */
+  uint64_t txbytes1;    /* Track total number of data bytes transmitted */
+  _Atomic (double) txbyterate;    /* Track rate of data byte transmission */
+  _Atomic (uint64_t) rxpackets0;  /* Track total number of packets received from client */
+  uint64_t rxpackets1;  /* Track total number of packets received from client */
+  _Atomic (double) rxpacketrate;  /* Track rate of packet reception */
+  _Atomic (uint64_t) rxbytes0;    /* Track total number of data bytes received */
+  uint64_t rxbytes1;    /* Track total number of data bytes received */
+  _Atomic (double) rxbyterate;    /* Track rate of data byte reception */
+  nstime_t ratetime;              /* Time stamp for TX and RX rate calculations */
+  void *extinfo;                  /* Extended client info, protocol specific */
 } ClientInfo;
 
 /* Structure used as the data for B-tree of stream tracking */

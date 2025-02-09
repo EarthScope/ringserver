@@ -43,7 +43,8 @@ extern "C" {
 
 /* Static ring parameters */
 #define RING_SIGNATURE "RING"
-#define RING_VERSION  2
+#define RING_SIGNATURE_LENGTH 4
+#define RING_VERSION  3
 
 /* Special ring packet ID values, the highest 10 values are reserved */
 #define RINGID_ERROR    (UINT64_MAX)
@@ -53,8 +54,8 @@ extern "C" {
 #define RINGID_NEXT     (UINT64_MAX - 4)
 #define RINGID_MAXIMUM  (UINT64_MAX - 10)
 
-/* Define a maximum stream ID string length */
-#define MAXSTREAMID 60
+/* Maximum stream ID buffer length */
+#define MAXSTREAMID 64
 
 /* A regex pattern to match legacy stream IDs for miniSEED using SEED codes
    of the form:  NN_SSSSS_LL_CCC/MSEED */
@@ -65,58 +66,45 @@ extern "C" {
 #define RingMatch(reader, pattern) UpdatePattern (&(reader)->match, &(reader)->match_data, pattern, "ring match")
 #define RingReject(reader, pattern) UpdatePattern (&(reader)->reject, &(reader)->reject_data, pattern, "ring reject")
 
-/* Ring parameters, stored at the beginning of the packet buffer file */
-typedef struct RingParams
-{
-  char      signature[4];     /* RING_SIGNATURE */
-  uint16_t  version;          /* RING_VERSION */
-  uint64_t  ringsize;         /* Ring size in bytes */
-  uint32_t  pktsize;          /* Packet size in bytes */
-  uint64_t  maxpackets;       /* Maximum number of packets */
-  int64_t   maxoffset;        /* Maximum packet offset */
-  uint32_t  headersize;       /* Size of ring header */
-  uint8_t   corruptflag;      /* Flag indicating the ring is corrupt */
-  uint8_t   fluxflag;         /* Flag indicating the ring is in flux */
-  uint8_t   mmapflag;         /* Memory mapped flag */
-  uint8_t   volatileflag;     /* Volatile ring flag */
-  pthread_mutex_t *writelock; /* Mutex lock for ring write access */
-  RBTree   *streamidx;        /* Binary tree of streams */
-  pthread_mutex_t *streamlock;/* Mutex lock for stream index */
-  uint32_t   streamcount;     /* Count of streams in index */
-  uint64_t  earliestid;       /* Earliest packet ID */
-  nstime_t  earliestptime;    /* Earliest packet creation time */
-  nstime_t  earliestdstime;   /* Earliest packet data start time */
-  nstime_t  earliestdetime;   /* Earliest packet data end time */
-  int64_t   earliestoffset;   /* Earliest packet offset in bytes */
-  uint64_t  latestid;         /* Latest packet ID */
-  nstime_t  latestptime;      /* Latest packet creation time */
-  nstime_t  latestdstime;     /* Latest packet data start time */
-  nstime_t  latestdetime;     /* Latest packet data end time */
-  int64_t   latestoffset;     /* Latest packet offset in bytes */
-  nstime_t  ringstart;        /* Ring initialization time */
-  double    txpacketrate;     /* Transmission packet rate in Hz */
-  double    txbyterate;       /* Transmission byte rate in Hz */
-  double    rxpacketrate;     /* Reception packet rate in Hz */
-  double    rxbyterate;       /* Reception byte rate in Hz */
-  uint8_t  *data;             /* Pointer to start of data buffer */
-} RingParams;
+/* Ring header fields, defining the binary layout in a saved buffer */
+#define pRBV3_SIGNATURE(ring)      ((char *)(ring))
+#define pRBV3_VERSION(ring)        ((uint16_t *)((uint8_t*)ring + 4))
+#define pRBV3_RINGSIZE(ring)       ((uint64_t *)((uint8_t*)ring + 6))
+#define pRBV3_PKTSIZE(ring)        ((uint32_t *)((uint8_t*)ring + 14))
+#define pRBV3_MAXPACKETS(ring)     ((uint64_t *)((uint8_t*)ring + 18))
+#define pRBV3_MAXOFFSET(ring)      ((int64_t *)((uint8_t*)ring + 26))
+#define pRBV3_HEADERSIZE(ring)     ((uint32_t *)((uint8_t*)ring + 34))
+#define pRBV3_EARLIESTID(ring)     ((uint64_t *)((uint8_t*)ring + 38))
+#define pRBV3_EARLIESTPTIME(ring)  ((nstime_t *)((uint8_t*)ring + 46))
+#define pRBV3_EARLIESTDSTIME(ring) ((nstime_t *)((uint8_t*)ring + 54))
+#define pRBV3_EARLIESTDETIME(ring) ((nstime_t *)((uint8_t*)ring + 62))
+#define pRBV3_EARLIESTOFFSET(ring) ((int64_t *)((uint8_t*)ring + 70))
+#define pRBV3_LATESTID(ring)       ((uint64_t *)((uint8_t*)ring + 78))
+#define pRBV3_LATESTPTIME(ring)    ((nstime_t *)((uint8_t*)ring + 86))
+#define pRBV3_LATESTDSTIME(ring)   ((nstime_t *)((uint8_t*)ring + 94))
+#define pRBV3_LATESTDETIME(ring)   ((nstime_t *)((uint8_t*)ring + 102))
+#define pRBV3_LATESTOFFSET(ring)   ((int64_t *)((uint8_t*)ring + 110))
+#define RBV3_HEADERSIZE            118
 
-/* Ring packet header structure, data follows header in the ring */
-/* RW tagged values are set when packets are added to the ring */
-typedef struct RingPacket
+/* Ring packet header structure, packet payload follows header in the ring.
+ * RW tagged values are set when packets are added to the ring.
+ * This structure is designed for 8-byte alignment of a sequence
+ * of these structures in the buffer. */
+typedef struct __attribute__ ((packed)) RingPacket
 {
-  int64_t   offset;          /* RW: Offset in ring */
-  uint64_t  pktid;           /* RW: Packet ID */
-  nstime_t  pkttime;         /* RW: Packet creation time */
-  int64_t   nextinstream;    /* RW: Offset of next packet in stream, -1 if none */
-  char      streamid[MAXSTREAMID]; /* Packet stream ID, NULL terminated */
-  nstime_t  datastart;       /* Packet data start time */
-  nstime_t  dataend;         /* Packet data end time */
-  uint32_t  datasize;        /* Packet data size in bytes */
+    int64_t   offset;          /* RW: Offset in ring */
+    uint64_t  pktid;           /* RW: Packet ID assigned if RINGID_NONE */
+    nstime_t  pkttime;         /* RW: Packet creation time */
+    nstime_t  datastart;       /* Packet data start time */
+    nstime_t  dataend;         /* Packet data end time */
+    int64_t   nextinstream;    /* RW: Offset of next packet in stream, -1 if none */
+    uint32_t  datasize;        /* Packet data size in bytes */
+    uint32_t  unused;          /* Unused, for alignment */
+    char      streamid[MAXSTREAMID]; /* Packet stream ID, NULL terminated */
 } RingPacket;
 
 /* Ring stream structure used for the stream index */
-typedef struct RingStream
+typedef struct __attribute__ ((packed)) RingStream
 {
   char        streamid[MAXSTREAMID]; /* Packet stream ID */
   nstime_t    earliestdstime;/* Earliest packet data start time */
@@ -134,38 +122,31 @@ typedef struct RingStream
 /* Ring reader parameters */
 typedef struct RingReader
 {
-  RingParams *ringparams;    /* Ring parameters for this reader */
-  int64_t     pktoffset;     /* Current packet offset in ring */
-  uint64_t    pktid;         /* Current packet ID */
-  nstime_t    pkttime;       /* Current packet creation time */
-  nstime_t    datastart;     /* Current packet data start time */
-  nstime_t    dataend;       /* Current packet data end time */
-  pcre2_code *limit;         /* Compiled limit expression */
+  _Atomic (int64_t) pktoffset;   /* Current packet offset in ring */
+  _Atomic (uint64_t) pktid;      /* Current packet ID */
+  _Atomic (nstime_t) pkttime;    /* Current packet creation time */
+  _Atomic (nstime_t) datastart;  /* Current packet data start time */
+  _Atomic (nstime_t) dataend;    /* Current packet data end time */
+  pcre2_code *limit;             /* Compiled limit expression */
   pcre2_match_data *limit_data;  /* Match data results */
-  pcre2_code *match;         /* Compiled match expression */
+  pcre2_code *match;             /* Compiled match expression */
   pcre2_match_data *match_data;  /* Match data results */
-  pcre2_code *reject;        /* Compiled reject expression */
+  pcre2_code *reject;            /* Compiled reject expression */
   pcre2_match_data *reject_data; /* Match data results */
 } RingReader;
 
-extern int RingInitialize (char *ringfilename, char *streamfilename,
-                           uint64_t ringsize, uint32_t pktsize,
-                           uint8_t mmapflag, uint8_t volatileflag,
-                           int *ringfd, RingParams **ringparams);
-extern int RingShutdown (int ringfd, char *streamfilename, RingParams *ringparams);
-extern int RingWrite (RingParams *ringparams, RingPacket *packet,
-                      char *packetdata, uint32_t datasize);
+extern int RingInitialize (char *ringfilename, char *streamfilename, int *ringfd);
+extern int RingShutdown (int ringfd, char *streamfilename);
+extern int RingWrite (RingPacket *packet, char *packetdata, uint32_t datasize);
 extern uint64_t RingRead (RingReader *reader, uint64_t reqid,
                           RingPacket *packet, char *packetdata);
 extern uint64_t RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata);
 extern uint64_t RingPosition (RingReader *reader, uint64_t pktid, nstime_t pkttime);
 extern uint64_t RingAfter (RingReader *reader, nstime_t reftime, int whence);
 extern uint64_t RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit, int whence);
-extern void LogRingParameters (RingParams *ringparams);
 extern int UpdatePattern (pcre2_code **code, pcre2_match_data **data,
                           const char *pattern, const char *description);
-extern Stack* GetStreamsStack (RingParams *ringparams, RingReader *reader);
-
+extern Stack *GetStreamsStack (RingReader *reader);
 
 #ifdef __cplusplus
 }

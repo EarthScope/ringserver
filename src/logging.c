@@ -35,15 +35,6 @@
 #include "generic.h"
 #include "logging.h"
 #include "rbtree.h"
-#include "ringserver.h"
-
-/* Global logging parameters */
-uint8_t verbose;
-
-struct TLogParams_s TLogParams = {0, 0, 1, 1, 86400, 0, 0, 0};
-
-/* Lock mutex for transmission log file writing */
-static pthread_mutex_t tlogfile_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /***************************************************************************
  * lprintf:
@@ -67,7 +58,7 @@ lprintf (int level, char *fmt, ...)
   char *month[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
                    "Aug", "Sep", "Oct", "Nov", "Dec"};
 
-  if (level <= verbose)
+  if (level <= config.verbose)
   {
 
     /* Build local time string and generate final output */
@@ -156,79 +147,77 @@ WriteTLog (ClientInfo *cinfo, int reset)
   FILE *rxfp           = NULL;
 
   /* If the base directory is not specified we are done */
-  if (!TLogParams.tlogbasedir)
+  if (!config.tlog.basedir)
     return 0;
 
-  /* If neither the TX or RX log is turned on we are done */
-  if (!TLogParams.txlog && !TLogParams.rxlog)
-    return 0;
+  /* Take a config reader lock */
+  pthread_rwlock_rdlock (&config.config_rwlock);
 
-  if (TLogParams.txlog)
+  if (config.tlog.txlog)
   {
     /* Generate file path & name for log time interval file */
-    localtime_r (&TLogParams.tlogstartint, &starttm);
-    localtime_r (&TLogParams.tlogendint, &endtm);
+    localtime_r (&config.tlog.startint, &starttm);
+    localtime_r (&config.tlog.endint, &endtm);
     snprintf (txfilename, sizeof (txfilename),
               "%s/%s%stxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d",
-              TLogParams.tlogbasedir,
-              (TLogParams.tlogprefix) ? TLogParams.tlogprefix : "",
-              (TLogParams.tlogprefix) ? "-" : "",
+              config.tlog.basedir,
+              (config.tlog.prefix) ? config.tlog.prefix : "",
+              (config.tlog.prefix) ? "-" : "",
               starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
               starttm.tm_hour, starttm.tm_min,
               endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
               endtm.tm_hour, endtm.tm_min);
-
-    /* Open TX log file */
-    if ((txfp = fopen (txfilename, "a")) == NULL)
-    {
-      lprintf (0, "Error opening TX transfer log file %s: %s",
-               txfilename, strerror (errno));
-      return -1;
-    }
   }
 
-  if (TLogParams.rxlog)
+  if (config.tlog.rxlog)
   {
     /* Generate file path & name for log time interval file */
-    localtime_r (&TLogParams.tlogstartint, &starttm);
-    localtime_r (&TLogParams.tlogendint, &endtm);
+    localtime_r (&config.tlog.startint, &starttm);
+    localtime_r (&config.tlog.endint, &endtm);
     snprintf (rxfilename, sizeof (rxfilename),
               "%s/%s%srxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d",
-              TLogParams.tlogbasedir,
-              (TLogParams.tlogprefix) ? TLogParams.tlogprefix : "",
-              (TLogParams.tlogprefix) ? "-" : "",
+              config.tlog.basedir,
+              (config.tlog.prefix) ? config.tlog.prefix : "",
+              (config.tlog.prefix) ? "-" : "",
               starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
               starttm.tm_hour, starttm.tm_min,
               endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
               endtm.tm_hour, endtm.tm_min);
-
-    /* Open RX log file */
-    if ((rxfp = fopen (rxfilename, "a")) == NULL)
-    {
-      lprintf (0, "Error opening RX transfer log file %s: %s",
-               rxfilename, strerror (errno));
-      return -1;
-    }
   }
+
+  /* Release config reader lock */
+  pthread_rwlock_unlock (&config.config_rwlock);
 
   /* Generate pretty strings for current & connection time */
   clock = NSnow ();
   ms_nstime2timestr (clock, currtime, ISOMONTHDAY_Z, NONE);
   ms_nstime2timestr (cinfo->conntime, conntime, ISOMONTHDAY_Z, NONE);
 
-  stack = StackCreate ();
+  /* Lock transfer log file writing mutex */
+  pthread_mutex_lock (&config.tlog.write_lock);
 
-  /* Lock transfer log mutex */
-  pthread_mutex_lock (&tlogfile_lock);
-
-  /* Seek to end of log files */
-  if (txfp && fseek (txfp, 0, SEEK_END))
+  /* Open TX log file and seek to end */
+  if (txfilename[0] && (txfp = fopen (txfilename, "a")) == NULL)
+  {
+    lprintf (0, "Error opening TX transfer log file %s: %s",
+             txfilename, strerror (errno));
+    rv = -1;
+  }
+  else if (fseek (txfp, 0, SEEK_END))
   {
     lprintf (0, "Error seeking to end of TX transfer log file %s: %s",
              txfilename, strerror (errno));
     rv = -1;
   }
-  if (rxfp && fseek (rxfp, 0, SEEK_END))
+
+  /* Open RX log file and seek to end */
+  if (rxfilename[0] && (rxfp = fopen (rxfilename, "a")) == NULL)
+  {
+    lprintf (0, "Error opening RX transfer log file %s: %s",
+             rxfilename, strerror (errno));
+    rv = -1;
+  }
+  else if (fseek (rxfp, 0, SEEK_END))
   {
     lprintf (0, "Error seeking to end of RX transfer log file %s: %s",
              rxfilename, strerror (errno));
@@ -257,6 +246,9 @@ WriteTLog (ClientInfo *cinfo, int reset)
 
     /* Lock stream tree and create list (Stack) of streams */
     pthread_mutex_lock (&(cinfo->streams_lock));
+
+    stack = StackCreate ();
+
     if (cinfo->streams)
       RBBuildStack (cinfo->streams, stack);
 
@@ -297,6 +289,9 @@ WriteTLog (ClientInfo *cinfo, int reset)
         }
       }
     }
+
+    StackDestroy (stack, free);
+
     /* Unlock stream tree */
     pthread_mutex_unlock (&(cinfo->streams_lock));
 
@@ -315,8 +310,8 @@ WriteTLog (ClientInfo *cinfo, int reset)
   if (rxfp)
     fflush (rxfp);
 
-  /* Unlock tranfser lock mutex */
-  pthread_mutex_unlock (&tlogfile_lock);
+  /* Unlock transfer file writing lock mutex */
+  pthread_mutex_unlock (&config.tlog.write_lock);
 
   /* Close log files */
   if (txfp && fclose (txfp))
@@ -332,24 +327,23 @@ WriteTLog (ClientInfo *cinfo, int reset)
     rv = -1;
   }
 
-  StackDestroy (stack, free);
-
   return rv;
 } /* End of WriteTLog() */
 
 /***************************************************************************
- * CalcIntWin:
+ * CalcTLogInterval:
  *
- * Calculate a normalized interval time window for a given reference
- * time (usually the current time) and interval in seconds.  The
- * window is always normalized relative to the current day, intervals
+ * Calculate a normalized interval transfer log file time window for a
+ * given reference time (usually the current time) and interval in seconds.
+ *
+ * The window is always normalized relative to the current day. Intervals
  * which evenly divide days will work cleanly, other intervals will
  * probably work but might result in unexpected window calculations.
  *
  * Returns 0 on success, and -1 on failure
  ***************************************************************************/
 int
-CalcIntWin (time_t reftime, int interval, time_t *startint, time_t *endint)
+CalcTLogInterval (time_t reftime)
 {
   struct tm reftm;
 
@@ -361,15 +355,20 @@ CalcIntWin (time_t reftime, int interval, time_t *startint, time_t *endint)
   reftm.tm_min  = 0;
   reftm.tm_hour = 0;
 
+  /* Take config writer lock */
+  pthread_rwlock_wrlock (&config.config_rwlock);
+
   /* Calculate the new, rounded epoch time */
-  *startint = mktime (&reftm);
+  config.tlog.startint = mktime (&reftm);
 
   /* Add intervals until within the current interval */
-  while ((*startint + interval) <= reftime)
-    *startint += interval;
+  while ((config.tlog.startint + config.tlog.interval) <= reftime)
+    config.tlog.startint += config.tlog.interval;
 
   /* Set end of interval window */
-  *endint = *startint + interval;
+  config.tlog.endint = config.tlog.startint + config.tlog.interval;
+
+  pthread_rwlock_unlock (&config.config_rwlock);
 
   return 0;
-} /* End of CalcIntWin() */
+} /* End of CalcTLogInterval() */

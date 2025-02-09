@@ -54,7 +54,7 @@ static int HandleInfo (ClientInfo *cinfo);
 static int SendPacket (ClientInfo *cinfo, char *header, char *data,
                        uint64_t value, int addvalue, int addsize);
 static int SendRingPacket (ClientInfo *cinfo);
-static int SelectedStreams (RingParams *ringparams, RingReader *reader);
+static int SelectedStreams (RingReader *reader);
 
 /***********************************************************************
  * DLHandleCmd:
@@ -306,7 +306,7 @@ HandleNegotiation (ClientInfo *cinfo)
     /* Create server version and capability flags string (DLSERVER_ID + PACKETSIZE + WRITE if permission) */
     snprintf (sendbuffer, sizeof (sendbuffer),
               "ID " DLSERVER_ID " PACKETSIZE:%lu%s",
-              (unsigned long int)(cinfo->ringparams->pktsize - sizeof (RingPacket)),
+              (unsigned long int)(param.pktsize - sizeof (RingPacket)),
               (cinfo->writeperm) ? " WRITE" : "");
 
     /* Send the server ID string */
@@ -430,7 +430,7 @@ HandleNegotiation (ClientInfo *cinfo)
           }
           else if (cinfo->timewinlimit < 1.0)
           {
-            uint64_t pktlimit = (uint64_t)(cinfo->timewinlimit * cinfo->ringparams->maxpackets);
+            uint64_t pktlimit = (uint64_t)(cinfo->timewinlimit * param.maxpackets);
 
             pktid = RingAfterRev (cinfo->reader, nstime, pktlimit, 1);
           }
@@ -498,7 +498,7 @@ HandleNegotiation (ClientInfo *cinfo)
       cinfo->matchstr = NULL;
       RingMatch (cinfo->reader, 0);
 
-      selected = SelectedStreams (cinfo->ringparams, cinfo->reader);
+      selected = SelectedStreams (cinfo->reader);
       snprintf (sendbuffer, sizeof (sendbuffer), "%d streams selected after match",
                 selected);
       if (SendPacket (cinfo, "OK", sendbuffer, (selected >= 0) ? (uint64_t)selected : 0, 1, 1))
@@ -545,7 +545,7 @@ HandleNegotiation (ClientInfo *cinfo)
       }
       else
       {
-        selected = SelectedStreams (cinfo->ringparams, cinfo->reader);
+        selected = SelectedStreams (cinfo->reader);
         snprintf (sendbuffer, sizeof (sendbuffer), "%d streams selected after match",
                   selected);
         if (SendPacket (cinfo, "OK", sendbuffer, (selected >= 0) ? (uint64_t)selected : 0, 1, 1))
@@ -577,7 +577,7 @@ HandleNegotiation (ClientInfo *cinfo)
       cinfo->rejectstr = NULL;
       RingReject (cinfo->reader, 0);
 
-      selected = SelectedStreams (cinfo->ringparams, cinfo->reader);
+      selected = SelectedStreams (cinfo->reader);
       snprintf (sendbuffer, sizeof (sendbuffer), "%d streams selected after reject",
                 selected);
       if (SendPacket (cinfo, "OK", sendbuffer, (selected >= 0) ? (uint64_t)selected : 0, 1, 1))
@@ -624,7 +624,7 @@ HandleNegotiation (ClientInfo *cinfo)
       }
       else
       {
-        selected = SelectedStreams (cinfo->ringparams, cinfo->reader);
+        selected = SelectedStreams (cinfo->reader);
         snprintf (sendbuffer, sizeof (sendbuffer), "%d streams selected after reject",
                   selected);
         if (SendPacket (cinfo, "OK", sendbuffer, (selected >= 0) ? (uint64_t)selected : 0, 1, 1))
@@ -779,13 +779,13 @@ HandleWrite (ClientInfo *cinfo)
   }
 
   /* Make sure this packet data would fit into the ring */
-  if (cinfo->packet.datasize > cinfo->ringparams->pktsize)
+  if (cinfo->packet.datasize > param.pktsize)
   {
     lprintf (1, "[%s] Submitted packet size (%d) is greater than ring packet size (%d)",
-             cinfo->hostname, cinfo->packet.datasize, cinfo->ringparams->pktsize);
+             cinfo->hostname, cinfo->packet.datasize, param.pktsize);
 
     snprintf (replystr, sizeof (replystr), "Packet size (%d) is too large for ring, maximum is %d bytes",
-              cinfo->packet.datasize, cinfo->ringparams->pktsize);
+              cinfo->packet.datasize, param.pktsize);
     SendPacket (cinfo, "ERROR", replystr, 0, 1, 1);
 
     return -1;
@@ -831,7 +831,7 @@ HandleWrite (ClientInfo *cinfo)
   }
 
   /* Add the packet to the ring */
-  if ((rv = RingWrite (cinfo->ringparams, &cinfo->packet, cinfo->recvbuf, cinfo->packet.datasize)))
+  if ((rv = RingWrite (&cinfo->packet, cinfo->recvbuf, cinfo->packet.datasize)))
   {
     if (rv == -2)
       lprintf (1, "[%s] Error with RingWrite, corrupt ring, shutdown signalled", cinfo->hostname);
@@ -869,8 +869,8 @@ HandleWrite (ClientInfo *cinfo)
   pthread_mutex_unlock (&(cinfo->streams_lock));
 
   /* Update client receive counts */
-  cinfo->rxpackets[0]++;
-  cinfo->rxbytes[0] += cinfo->packet.datasize;
+  cinfo->rxpackets0++;
+  cinfo->rxbytes0 += cinfo->packet.datasize;
 
   /* Send acknowledgement if requested (flags contain 'A') */
   if (strchr (flags, 'A'))
@@ -1226,8 +1226,8 @@ SendRingPacket (ClientInfo *cinfo)
   pthread_mutex_unlock (&(cinfo->streams_lock));
 
   /* Update client transmit and counts */
-  cinfo->txpackets[0]++;
-  cinfo->txbytes[0] += cinfo->packet.datasize;
+  cinfo->txpackets0++;
+  cinfo->txbytes0 += cinfo->packet.datasize;
 
   /* Update last sent packet ID */
   cinfo->lastid = cinfo->packet.pktid;
@@ -1246,17 +1246,17 @@ SendRingPacket (ClientInfo *cinfo)
  * Returns selected stream count on success and -1 on error.
  ***************************************************************************/
 static int
-SelectedStreams (RingParams *ringparams, RingReader *reader)
+SelectedStreams (RingReader *reader)
 {
   Stack *streams;
   RingStream *ringstream;
   int streamcnt = 0;
 
-  if (!ringparams || !reader)
+  if (!reader)
     return -1;
 
   /* Create a duplicate Stack of currently selected RingStreams */
-  streams = GetStreamsStack (ringparams, reader);
+  streams = GetStreamsStack (reader);
 
   /* Count the selected streams */
   while ((ringstream = StackPop (streams)))
