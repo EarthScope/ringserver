@@ -251,7 +251,7 @@ ClientThread (void *arg)
     }
 
     /* Data received from client */
-    if (cinfo->recvlength)
+    if (nread > 0)
     {
       /* If data was received do not throttle */
       throttle_msec = 0;
@@ -791,6 +791,9 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
  * This routine handles fragmented receives, meaning that it will
  * continue to receive data until recvlen bytes have been received
  * with the exceptions noted below.
+ *
+ * This routine will _not_ return partial requests, either they are
+ * fulfilled, unavailable (return of 0) or an error occurs.
  *
  * If fulfill is false (0) this routine will return immediately if
  * no data is available on the first read.  But, if some data are
