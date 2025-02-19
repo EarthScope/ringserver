@@ -53,9 +53,6 @@
  * @author Chad Trabant, EarthScope Data Services
  ***************************************************************************/
 
-/* _GNU_SOURCE needed to get pread() under Linux */
-#define _GNU_SOURCE
-
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>

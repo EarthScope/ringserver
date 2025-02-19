@@ -13,7 +13,7 @@ OBJS = $(SRCS:.c=.o)
 
 MBEDTLS_OBJS = $(wildcard ../mbedtls/library/*.o)
 
-CFLAGS += -std=c11 -D_REENTRANT -D_POSIX_PTHREAD_SEMANTICS -I../libmseed -I../mxml -I../pcre2/src -I../mbedtls/include
+CFLAGS += -std=c11 -D_REENTRANT -D_POSIX_PTHREAD_SEMANTICS -D_GNU_SOURCE -I../libmseed -I../mxml -I../pcre2/src -I../mbedtls/include
 
 LDLIBS  = ../pcre2/libpcre2.a ../libmseed/libmseed.a ../mxml/libmxml.a -lpthread
 
