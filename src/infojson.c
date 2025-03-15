@@ -848,9 +848,7 @@ info_add_status (yyjson_mut_doc *doc)
   yyjson_mut_obj_add_real (doc, server, "receive_packet_rate", param.rxpacketrate);
   yyjson_mut_obj_add_real (doc, server, "receive_byte_rate", param.rxbyterate);
 
-  int64_t earliestoffset  = atomic_load_explicit (&param.earliestoffset, memory_order_relaxed);
-
-  pktid = RingReadPacket (earliestoffset, &packet, NULL);
+  pktid = RingReadPacket (param.earliestoffset, &packet, NULL);
   if (pktid != RINGID_NONE && pktid != RINGID_ERROR)
   {
     yyjson_mut_obj_add_uint (doc, server, "earliest_packet_id", pktid);
@@ -862,9 +860,7 @@ info_add_status (yyjson_mut_doc *doc)
     yyjson_mut_obj_add_strcpy (doc, server, "earliest_data_end", timestr);
   }
 
-  int64_t latestoffset = atomic_load_explicit (&param.latestoffset, memory_order_acquire);
-
-  pktid = RingReadPacket (latestoffset, &packet, NULL);
+  pktid = RingReadPacket (param.latestoffset, &packet, NULL);
   if (pktid != RINGID_NONE && pktid != RINGID_ERROR)
   {
     yyjson_mut_obj_add_uint (doc, server, "latest_packet_id", pktid);

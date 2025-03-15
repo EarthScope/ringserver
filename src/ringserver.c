@@ -1139,8 +1139,8 @@ CalcStats (ClientInfo *cinfo)
   if (!cinfo)
     return -1;
 
-  earliestoffset = atomic_load_explicit (&param.earliestoffset, memory_order_relaxed);
-  latestoffset   = atomic_load_explicit (&param.latestoffset, memory_order_acquire);
+  earliestoffset = param.earliestoffset;
+  latestoffset   = param.latestoffset;
 
   /* Determine percent lag if the current pktid is set */
   if (cinfo->reader && cinfo->reader->pktid <= RINGID_MAXIMUM)
@@ -1442,12 +1442,10 @@ void LogServerParameters ()
            (config.volatilering) ? "yes" : "no",
            (config.memorymapring) ? "yes" : "no");
 
-  int64_t earliestoffset  = atomic_load_explicit (&param.earliestoffset, memory_order_relaxed);
-
-  pktid = RingReadPacket (earliestoffset, &packet, NULL);
+  pktid = RingReadPacket (param.earliestoffset, &packet, NULL);
   if (pktid != RINGID_NONE && pktid != RINGID_ERROR)
   {
-    lprintf (2, "   earliest packet ID: %"PRIu64", offset: %" PRId64, pktid, earliestoffset);
+    lprintf (2, "   earliest packet ID: %"PRIu64", offset: %" PRId64, pktid, packet.offset);
     ms_nstime2timestr (packet.pkttime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     lprintf (2, "   earliest packet creation time: %s", timestr);
     ms_nstime2timestr (packet.datastart, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
@@ -1458,11 +1456,10 @@ void LogServerParameters ()
     lprintf (2, "   earliest packet ID: NONE");
   }
 
-  int64_t latestoffset  = atomic_load_explicit (&param.latestoffset, memory_order_acquire);
-  pktid = RingReadPacket (latestoffset, &packet, NULL);
+  pktid = RingReadPacket (param.latestoffset, &packet, NULL);
   if (pktid != RINGID_NONE && pktid != RINGID_ERROR)
   {
-    lprintf (2, "   latest packet ID: %"PRIu64", offset: %" PRId64, pktid, latestoffset);
+    lprintf (2, "   latest packet ID: %"PRIu64", offset: %" PRId64, pktid, packet.offset);
     ms_nstime2timestr (packet.pkttime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
     lprintf (2, "   latest packet creation time: %s", timestr);
     ms_nstime2timestr (packet.datastart, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);

@@ -930,8 +930,7 @@ HandleNegotiation (ClientInfo *cinfo)
       if (fields >= 1)
       {
         RingPacket lookup;
-        int64_t latestoffset = atomic_load_explicit (&param.latestoffset, memory_order_acquire);
-        uint64_t latestid    = RingReadPacket (latestoffset, &lookup, NULL);
+        uint64_t latestid = RingReadPacket (param.latestoffset, &lookup, NULL);
 
         if (latestid <= RINGID_MAXIMUM)
         {
