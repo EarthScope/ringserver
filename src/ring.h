@@ -66,17 +66,18 @@ extern "C" {
 #define RingMatch(reader, pattern) UpdatePattern (&(reader)->match, &(reader)->match_data, pattern, "ring match")
 #define RingReject(reader, pattern) UpdatePattern (&(reader)->reject, &(reader)->reject_data, pattern, "ring reject")
 
-/* Ring header fields, defining the binary layout in a saved buffer */
+/* Ring header fields, defining the binary layout in a saved buffer. */
+/* Offsets ensure alignment for each value type. */
 #define pRBV3_SIGNATURE(ring)      ((char *)(ring))
 #define pRBV3_VERSION(ring)        ((uint16_t *)((uint8_t*)ring + 4))
-#define pRBV3_RINGSIZE(ring)       ((uint64_t *)((uint8_t*)ring + 6))
-#define pRBV3_PKTSIZE(ring)        ((uint32_t *)((uint8_t*)ring + 14))
-#define pRBV3_MAXPACKETS(ring)     ((uint64_t *)((uint8_t*)ring + 18))
-#define pRBV3_MAXOFFSET(ring)      ((int64_t *)((uint8_t*)ring + 26))
-#define pRBV3_HEADERSIZE(ring)     ((uint32_t *)((uint8_t*)ring + 34))
-#define pRBV3_EARLIESTOFFSET(ring) ((int64_t *)((uint8_t*)ring + 38))
-#define pRBV3_LATESTOFFSET(ring)   ((int64_t *)((uint8_t*)ring + 46))
-#define RBV3_HEADERSIZE            54
+#define pRBV3_RINGSIZE(ring)       ((uint64_t *)((uint8_t*)ring + 8))
+#define pRBV3_PKTSIZE(ring)        ((uint32_t *)((uint8_t*)ring + 16))
+#define pRBV3_MAXPACKETS(ring)     ((uint64_t *)((uint8_t*)ring + 24))
+#define pRBV3_MAXOFFSET(ring)      ((int64_t *)((uint8_t*)ring + 32))
+#define pRBV3_HEADERSIZE(ring)     ((uint32_t *)((uint8_t*)ring + 40))
+#define pRBV3_EARLIESTOFFSET(ring) ((int64_t *)((uint8_t*)ring + 48))
+#define pRBV3_LATESTOFFSET(ring)   ((int64_t *)((uint8_t*)ring + 56))
+#define RBV3_HEADERSIZE            64
 
 /* Ring packet header structure, packet payload follows header in the ring.
  * RW tagged values are set when packets are added to the ring.
@@ -98,7 +99,6 @@ typedef struct __attribute__ ((packed)) RingPacket
 /* Ring stream structure used for the stream index */
 typedef struct __attribute__ ((packed)) RingStream
 {
-  char        streamid[MAXSTREAMID]; /* Packet stream ID */
   nstime_t    earliestdstime;/* Earliest packet data start time */
   nstime_t    earliestdetime;/* Earliest packet data end time */
   nstime_t    earliestptime; /* Earliest packet creation time */
@@ -109,6 +109,7 @@ typedef struct __attribute__ ((packed)) RingStream
   nstime_t    latestptime;   /* Latest packet creation time */
   uint64_t    latestid;      /* ID of latest packet */
   int64_t     latestoffset;  /* Offset of latest packet */
+  char        streamid[MAXSTREAMID]; /* Packet stream ID */
 } RingStream;
 
 /* Ring reader parameters */
