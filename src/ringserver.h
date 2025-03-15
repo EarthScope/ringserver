@@ -172,7 +172,7 @@ extern struct param_s param;
 struct config_s
 {
   pthread_rwlock_t config_rwlock; /* Read-write lock for all parameters */
-  int verbose;                    /* Verbosity level */
+  _Atomic int verbose;            /* Verbosity level */
   char *configfile;               /* Configuration file */
   char *serverid;                 /* Server ID */
   char *ringdir;                  /* Directory for ring files */
