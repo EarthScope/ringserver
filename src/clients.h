@@ -99,21 +99,21 @@ typedef struct ClientInfo
   DataStream *mswrite;      /* miniSEED data write parameters */
   RBTree     *streams;      /* Tracking of streams transferred */
   pthread_mutex_t streams_lock; /* Mutex lock for streams tree */
-  _Atomic (int) streamscount;   /* Count of streams in tree */
-  _Atomic (nstime_t) lastxchange; /* Time of last data transmission or reception */
-  _Atomic (int) percentlag;       /* Percent lag of client in ring buffer */
-  _Atomic (uint64_t) txpackets0;  /* Track total number of packets transmitted to client */
-  uint64_t txpackets1;  /* Track total number of packets transmitted to client */
-  _Atomic (double) txpacketrate;  /* Track rate of packet transmission */
-  _Atomic (uint64_t) txbytes0;    /* Track total number of data bytes transmitted */
-  uint64_t txbytes1;    /* Track total number of data bytes transmitted */
-  _Atomic (double) txbyterate;    /* Track rate of data byte transmission */
-  _Atomic (uint64_t) rxpackets0;  /* Track total number of packets received from client */
-  uint64_t rxpackets1;  /* Track total number of packets received from client */
-  _Atomic (double) rxpacketrate;  /* Track rate of packet reception */
-  _Atomic (uint64_t) rxbytes0;    /* Track total number of data bytes received */
-  uint64_t rxbytes1;    /* Track total number of data bytes received */
-  _Atomic (double) rxbyterate;    /* Track rate of data byte reception */
+  _Atomic int streamscount;     /* Count of streams in tree */
+  _Atomic nstime_t lastxchange; /* Time of last data transmission or reception */
+  _Atomic int percentlag;       /* Percent lag of client in ring buffer */
+  _Atomic uint64_t txpackets0;  /* Track total number of packets transmitted to client */
+  uint64_t txpackets1;          /* Track total number of packets transmitted to client */
+  _Atomic double txpacketrate;  /* Track rate of packet transmission */
+  _Atomic uint64_t txbytes0;    /* Track total number of data bytes transmitted */
+  uint64_t txbytes1;            /* Track total number of data bytes transmitted */
+  _Atomic double txbyterate;    /* Track rate of data byte transmission */
+  _Atomic uint64_t rxpackets0;  /* Track total number of packets received from client */
+  uint64_t rxpackets1;          /* Track total number of packets received from client */
+  _Atomic double rxpacketrate;  /* Track rate of packet reception */
+  _Atomic uint64_t rxbytes0;    /* Track total number of data bytes received */
+  uint64_t rxbytes1;            /* Track total number of data bytes received */
+  _Atomic double rxbyterate;    /* Track rate of data byte reception */
   nstime_t ratetime;              /* Time stamp for TX and RX rate calculations */
   void *extinfo;                  /* Extended client info, protocol specific */
 } ClientInfo;
