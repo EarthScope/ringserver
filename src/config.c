@@ -954,8 +954,7 @@ SetParameter (const char *paramstring, int dynamiconly)
 
   ListenPortParams lpp = ListenPortParams_INITIALIZER;
   uint32_t u32val;
-  uint8_t u8val;
-  int yesno;
+  int intval;
 
   if (!paramstring)
     return -1;
@@ -1058,26 +1057,26 @@ SetParameter (const char *paramstring, int dynamiconly)
     if (dynamiconly)
       return fieldcount;
 
-    if ((yesno = YesNo (field[1])) < 0)
+    if ((intval = YesNo (field[1])) < 0)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
 
-    config.autorecovery = yesno;
+    config.autorecovery = intval;
   }
   else if (!strcasecmp ("MemoryMapRing", field[0]) && fieldcount == 2)
   {
     if (dynamiconly)
       return fieldcount;
 
-    if ((yesno = YesNo (field[1])) < 0)
+    if ((intval = YesNo (field[1])) < 0)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
 
-    config.memorymapring = yesno;
+    config.memorymapring = intval;
   }
   else if ((!strcasecmp ("ListenPort", field[0]) ||
             !strcasecmp ("DataLinkPort", field[0]) ||
@@ -1189,22 +1188,22 @@ SetParameter (const char *paramstring, int dynamiconly)
   }
   else if (!strcasecmp ("TLSVerifyClientCert", field[0]) && fieldcount == 2)
   {
-    if ((yesno = YesNo (field[1])) < 0)
+    if ((intval = YesNo (field[1])) < 0)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
 
-    config.tlsverifyclientcert = yesno;
+    config.tlsverifyclientcert = intval;
   }
   else if (!strcasecmp ("Verbosity", field[0]) && fieldcount == 2)
   {
-    if (sscanf (field[1], "%" SCNu8, &u8val) != 1)
+    if (sscanf (field[1], "%d", &intval) != 1)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
-    config.verbose = u8val;
+    config.verbose = intval;
   }
   else if (!strcasecmp ("MaxClientsPerIP", field[0]) && fieldcount == 2)
   {
@@ -1248,23 +1247,29 @@ SetParameter (const char *paramstring, int dynamiconly)
   }
   else if (!strcasecmp ("ResolveHostnames", field[0]) && fieldcount == 2)
   {
-    if ((yesno = YesNo (field[1])) < 0)
+    if ((intval = YesNo (field[1])) < 0)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
 
-    config.resolvehosts = yesno;
+    config.resolvehosts = intval;
   }
   else if (!strcasecmp ("TimeWindowLimit", field[0]) && fieldcount == 2)
   {
-    if (sscanf (field[1], "%" SCNu8, &u8val) != 1)
+    if (sscanf (field[1], "%d", &intval) != 1)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
 
-    config.timewinlimit = (u8val > 0) ? u8val / 100.0 : 0.0;
+    if (intval < 0 || intval > 100)
+    {
+      lprintf (0, "Error, config parameter %s must be between 0 and 100: %s", field[0], paramstring);
+      return -1;
+    }
+
+    config.timewinlimit = (intval > 0) ? intval / 100.0 : 0.0;
   }
   else if (!strcasecmp ("TransferLogDirectory", field[0]) && fieldcount == 2)
   {
@@ -1305,23 +1310,23 @@ SetParameter (const char *paramstring, int dynamiconly)
   }
   else if (!strcasecmp ("TransferLogTX", field[0]) && fieldcount == 2)
   {
-    if ((yesno = YesNo (field[1])) < 0)
+    if ((intval = YesNo (field[1])) < 0)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
 
-    config.tlog.txlog = yesno;
+    config.tlog.txlog = intval;
   }
   else if (!strcasecmp ("TransferLogRX", field[0]) && fieldcount == 2)
   {
-    if ((yesno = YesNo (field[1])) < 0)
+    if ((intval = YesNo (field[1])) < 0)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
 
-    config.tlog.rxlog = yesno;
+    config.tlog.rxlog = intval;
   }
   else if (!strcasecmp ("WriteIP", field[0]) && fieldcount == 2)
   {
@@ -1428,13 +1433,13 @@ SetParameter (const char *paramstring, int dynamiconly)
     if (dynamiconly)
       return fieldcount;
 
-    if ((yesno = YesNo (field[1])) < 0)
+    if ((intval = YesNo (field[1])) < 0)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
 
-    config.volatilering = yesno;
+    config.volatilering = intval;
   }
   else
   {

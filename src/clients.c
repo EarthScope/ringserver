@@ -95,8 +95,6 @@ ClientThread (void *arg)
   reader.pktoffset   = -1;
   reader.pktid       = RINGID_NONE;
   reader.pkttime     = NSTUNSET;
-  reader.datastart   = NSTUNSET;
-  reader.dataend     = NSTUNSET;
   reader.limit       = NULL;
   reader.limit_data  = NULL;
   reader.match       = NULL;

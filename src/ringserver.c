@@ -68,15 +68,7 @@ struct param_s param = {
     .maxpackets      = 0,
     .maxoffset       = 0,
     .headersize      = 0,
-    .earliestid      = RINGID_NONE,
-    .earliestptime   = NSTUNSET,
-    .earliestdstime  = NSTUNSET,
-    .earliestdetime  = NSTUNSET,
     .earliestoffset  = -1,
-    .latestid        = RINGID_NONE,
-    .latestptime     = NSTUNSET,
-    .latestdstime    = NSTUNSET,
-    .latestdetime    = NSTUNSET,
     .latestoffset    = -1,
 
     .streamlock      = PTHREAD_MUTEX_INITIALIZER,
@@ -1138,6 +1130,8 @@ static int
 CalcStats (ClientInfo *cinfo)
 {
   nstime_t nsnow = NSnow ();
+  int64_t earliestoffset;
+  int64_t latestoffset;
   int64_t latestoffset_unwrapped;
   int64_t readeroffset_unwrapped;
   double deltasec;
@@ -1145,13 +1139,16 @@ CalcStats (ClientInfo *cinfo)
   if (!cinfo)
     return -1;
 
+  earliestoffset = atomic_load_explicit (&param.earliestoffset, memory_order_relaxed);
+  latestoffset   = atomic_load_explicit (&param.latestoffset, memory_order_acquire);
+
   /* Determine percent lag if the current pktid is set */
   if (cinfo->reader && cinfo->reader->pktid <= RINGID_MAXIMUM)
   {
-    if (param.latestoffset < param.earliestoffset)
-      latestoffset_unwrapped = param.latestoffset + param.maxoffset;
+    if (latestoffset < earliestoffset)
+      latestoffset_unwrapped = latestoffset + param.maxoffset;
     else
-      latestoffset_unwrapped = param.latestoffset;
+      latestoffset_unwrapped = latestoffset;
 
     if (cinfo->reader->pktoffset < param.earliestoffset)
       readeroffset_unwrapped = cinfo->reader->pktoffset + param.maxoffset;
@@ -1159,7 +1156,7 @@ CalcStats (ClientInfo *cinfo)
       readeroffset_unwrapped = cinfo->reader->pktoffset;
 
     /* Calculate percentage lag as position in ring where 0% = latest offset and 100% = earliest offset */
-    cinfo->percentlag = (int)(((double)(latestoffset_unwrapped - readeroffset_unwrapped) / (latestoffset_unwrapped - param.earliestoffset)) * 100);
+    cinfo->percentlag = (int)(((double)(latestoffset_unwrapped - readeroffset_unwrapped) / (latestoffset_unwrapped - earliestoffset)) * 100);
   }
   else
   {
@@ -1418,12 +1415,14 @@ SignalThread (void *arg)
  ***************************************************************************/
 void LogServerParameters ()
 {
+  RingPacket packet;
+  uint64_t pktid;
   char network[INET6_ADDRSTRLEN];
   char netmask[INET6_ADDRSTRLEN];
   char timestr[50];
-  char pktidstr[50];
   char sizestr[50];
 
+  /* Ring buffer parameters */
   HumanSizeString (param.ringsize, sizestr, sizeof (sizestr));
 
   lprintf (1, "Ring parameters, buffer version: %u", param.version);
@@ -1443,28 +1442,38 @@ void LogServerParameters ()
            (config.volatilering) ? "yes" : "no",
            (config.memorymapring) ? "yes" : "no");
 
-  snprintf (pktidstr, sizeof (pktidstr), "%" PRIu64, param.earliestid);
-  lprintf (2, "   earliest packet ID: %s, offset: %" PRId64,
-           (param.earliestid == RINGID_NONE) ? "NONE" : pktidstr,
-           param.earliestoffset);
-  ms_nstime2timestr (param.earliestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-  lprintf (2, "   earliest packet creation time: %s",
-           (param.earliestptime == NSTUNSET) ? "NONE" : timestr);
-  ms_nstime2timestr (param.earliestdstime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-  lprintf (2, "   earliest packet data start time: %s",
-           (param.earliestdstime == NSTUNSET) ? "NONE" : timestr);
+  int64_t earliestoffset  = atomic_load_explicit (&param.earliestoffset, memory_order_relaxed);
 
-  snprintf (pktidstr, sizeof (pktidstr), "%" PRIu64, param.latestid);
-  lprintf (2, "   latest packet ID: %s, offset: %" PRId64,
-           (param.latestid == RINGID_NONE) ? "NONE" : pktidstr,
-           param.latestoffset);
-  ms_nstime2timestr (param.latestptime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-  lprintf (2, "   latest packet creation time: %s",
-           (param.latestptime == NSTUNSET) ? "NONE" : timestr);
-  ms_nstime2timestr (param.latestdstime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-  lprintf (2, "   latest packet data start time: %s",
-           (param.latestdstime == NSTUNSET) ? "NONE" : timestr);
+  pktid = RingReadPacket (earliestoffset, &packet, NULL);
+  if (pktid != RINGID_NONE && pktid != RINGID_ERROR)
+  {
+    lprintf (2, "   earliest packet ID: %"PRIu64", offset: %" PRId64, pktid, earliestoffset);
+    ms_nstime2timestr (packet.pkttime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    lprintf (2, "   earliest packet creation time: %s", timestr);
+    ms_nstime2timestr (packet.datastart, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    lprintf (2, "   earliest packet data start time: %s", timestr);
+  }
+  else
+  {
+    lprintf (2, "   earliest packet ID: NONE");
+  }
 
+  int64_t latestoffset  = atomic_load_explicit (&param.latestoffset, memory_order_acquire);
+  pktid = RingReadPacket (latestoffset, &packet, NULL);
+  if (pktid != RINGID_NONE && pktid != RINGID_ERROR)
+  {
+    lprintf (2, "   latest packet ID: %"PRIu64", offset: %" PRId64, pktid, latestoffset);
+    ms_nstime2timestr (packet.pkttime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    lprintf (2, "   latest packet creation time: %s", timestr);
+    ms_nstime2timestr (packet.datastart, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    lprintf (2, "   latest packet data start time: %s", timestr);
+  }
+  else
+  {
+    lprintf (2, "   latest packet ID: NONE");
+  }
+
+  /* Configuration parameters */
   pthread_rwlock_rdlock (&config.config_rwlock);
 
   lprintf (1, "Config parameters:");

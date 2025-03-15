@@ -74,17 +74,9 @@ extern "C" {
 #define pRBV3_MAXPACKETS(ring)     ((uint64_t *)((uint8_t*)ring + 18))
 #define pRBV3_MAXOFFSET(ring)      ((int64_t *)((uint8_t*)ring + 26))
 #define pRBV3_HEADERSIZE(ring)     ((uint32_t *)((uint8_t*)ring + 34))
-#define pRBV3_EARLIESTID(ring)     ((uint64_t *)((uint8_t*)ring + 38))
-#define pRBV3_EARLIESTPTIME(ring)  ((nstime_t *)((uint8_t*)ring + 46))
-#define pRBV3_EARLIESTDSTIME(ring) ((nstime_t *)((uint8_t*)ring + 54))
-#define pRBV3_EARLIESTDETIME(ring) ((nstime_t *)((uint8_t*)ring + 62))
-#define pRBV3_EARLIESTOFFSET(ring) ((int64_t *)((uint8_t*)ring + 70))
-#define pRBV3_LATESTID(ring)       ((uint64_t *)((uint8_t*)ring + 78))
-#define pRBV3_LATESTPTIME(ring)    ((nstime_t *)((uint8_t*)ring + 86))
-#define pRBV3_LATESTDSTIME(ring)   ((nstime_t *)((uint8_t*)ring + 94))
-#define pRBV3_LATESTDETIME(ring)   ((nstime_t *)((uint8_t*)ring + 102))
-#define pRBV3_LATESTOFFSET(ring)   ((int64_t *)((uint8_t*)ring + 110))
-#define RBV3_HEADERSIZE            118
+#define pRBV3_EARLIESTOFFSET(ring) ((int64_t *)((uint8_t*)ring + 38))
+#define pRBV3_LATESTOFFSET(ring)   ((int64_t *)((uint8_t*)ring + 46))
+#define RBV3_HEADERSIZE            54
 
 /* Ring packet header structure, packet payload follows header in the ring.
  * RW tagged values are set when packets are added to the ring.
@@ -92,15 +84,15 @@ extern "C" {
  * of these structures in the buffer. */
 typedef struct __attribute__ ((packed)) RingPacket
 {
-    int64_t   offset;          /* RW: Offset in ring */
-    uint64_t  pktid;           /* RW: Packet ID assigned if RINGID_NONE */
-    nstime_t  pkttime;         /* RW: Packet creation time */
-    nstime_t  datastart;       /* Packet data start time */
-    nstime_t  dataend;         /* Packet data end time */
-    int64_t   nextinstream;    /* RW: Offset of next packet in stream, -1 if none */
-    uint32_t  datasize;        /* Packet data size in bytes */
-    uint32_t  unused;          /* Unused, for alignment */
-    char      streamid[MAXSTREAMID]; /* Packet stream ID, NULL terminated */
+  int64_t offset;             /* RW: Offset in ring */
+  uint64_t pktid;             /* RW: Packet ID assigned if RINGID_NONE */
+  nstime_t pkttime;           /* RW: Packet creation time */
+  nstime_t datastart;         /* Packet data start time */
+  nstime_t dataend;           /* Packet data end time */
+  int64_t nextinstream;       /* RW: Offset of next packet in stream, -1 if none */
+  uint32_t datasize;          /* Packet data size in bytes */
+  uint32_t unused;            /* Unused, for alignment */
+  char streamid[MAXSTREAMID]; /* Packet stream ID, NULL terminated */
 } RingPacket;
 
 /* Ring stream structure used for the stream index */
@@ -122,11 +114,9 @@ typedef struct __attribute__ ((packed)) RingStream
 /* Ring reader parameters */
 typedef struct RingReader
 {
-  _Atomic (int64_t) pktoffset;   /* Current packet offset in ring */
-  _Atomic (uint64_t) pktid;      /* Current packet ID */
-  _Atomic (nstime_t) pkttime;    /* Current packet creation time */
-  _Atomic (nstime_t) datastart;  /* Current packet data start time */
-  _Atomic (nstime_t) dataend;    /* Current packet data end time */
+  _Atomic int64_t pktoffset;     /* Current packet offset in ring */
+  _Atomic uint64_t pktid;        /* Current packet ID */
+  _Atomic nstime_t pkttime;      /* Current packet creation time */
   pcre2_code *limit;             /* Compiled limit expression */
   pcre2_match_data *limit_data;  /* Match data results */
   pcre2_code *match;             /* Compiled match expression */
@@ -138,6 +128,7 @@ typedef struct RingReader
 extern int RingInitialize (char *ringfilename, char *streamfilename, int *ringfd);
 extern int RingShutdown (int ringfd, char *streamfilename);
 extern int RingWrite (RingPacket *packet, char *packetdata, uint32_t datasize);
+extern uint64_t RingReadPacket (int64_t offset, RingPacket *packet, char *packetdata);
 extern uint64_t RingRead (RingReader *reader, uint64_t reqid,
                           RingPacket *packet, char *packetdata);
 extern uint64_t RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata);

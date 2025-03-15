@@ -929,11 +929,15 @@ HandleNegotiation (ClientInfo *cinfo)
 
       if (fields >= 1)
       {
-        if (param.latestid <= RINGID_MAXIMUM)
+        RingPacket lookup;
+        int64_t latestoffset = atomic_load_explicit (&param.latestoffset, memory_order_acquire);
+        uint64_t latestid    = RingReadPacket (latestoffset, &lookup, NULL);
+
+        if (latestid <= RINGID_MAXIMUM)
         {
           /* To map the 24-bit SeedLink v3 sequence into the 64-bit packet ID range
            * combine the highest 40-bits of latest ID with lowest 24-bits of requested sequence */
-          startpacket = (param.latestid & 0xFFFFFFFFFF000000) | (seq & 0xFFFFFF);
+          startpacket = (latestid & 0xFFFFFFFFFF000000) | (seq & 0xFFFFFF);
         }
         else
         {

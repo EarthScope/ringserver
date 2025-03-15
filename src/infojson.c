@@ -4,7 +4,7 @@
  * SeedLink client thread specific routines.
  *
  * Create JSON formatted information about the server state, including
- * stream lists, connnections, etc.
+ * stream lists, connections, etc.
  *
  * This file is part of the ringserver.
  *
@@ -816,6 +816,8 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
 static yyjson_mut_doc *
 info_add_status (yyjson_mut_doc *doc)
 {
+  RingPacket packet;
+  uint64_t pktid;
   yyjson_mut_val *root = yyjson_mut_doc_get_root (doc);
   yyjson_mut_val *server;
   yyjson_mut_val *thread_array;
@@ -823,7 +825,7 @@ info_add_status (yyjson_mut_doc *doc)
 
   struct sthread *loopstp;
 
-  char packettime[50];
+  char timestr[50];
 
   if ((server = yyjson_mut_obj_add_obj (doc, root, "server")) == NULL ||
       (thread_array = yyjson_mut_obj_add_arr (doc, server, "thread")) == NULL)
@@ -846,27 +848,32 @@ info_add_status (yyjson_mut_doc *doc)
   yyjson_mut_obj_add_real (doc, server, "receive_packet_rate", param.rxpacketrate);
   yyjson_mut_obj_add_real (doc, server, "receive_byte_rate", param.rxbyterate);
 
-  if (param.earliestid <= RINGID_MAXIMUM)
-  {
+  int64_t earliestoffset  = atomic_load_explicit (&param.earliestoffset, memory_order_relaxed);
 
-    yyjson_mut_obj_add_uint (doc, server, "earliest_packet_id", param.earliestid);
-    ms_nstime2timestr (param.earliestptime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-    yyjson_mut_obj_add_strcpy (doc, server, "earliest_packet_time", packettime);
-    ms_nstime2timestr (param.earliestdstime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-    yyjson_mut_obj_add_strcpy (doc, server, "earliest_data_start", packettime);
-    ms_nstime2timestr (param.earliestdetime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-    yyjson_mut_obj_add_strcpy (doc, server, "earliest_data_end", packettime);
+  pktid = RingReadPacket (earliestoffset, &packet, NULL);
+  if (pktid != RINGID_NONE && pktid != RINGID_ERROR)
+  {
+    yyjson_mut_obj_add_uint (doc, server, "earliest_packet_id", pktid);
+    ms_nstime2timestr (packet.pkttime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    yyjson_mut_obj_add_strcpy (doc, server, "earliest_packet_time", timestr);
+    ms_nstime2timestr (packet.datastart, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    yyjson_mut_obj_add_strcpy (doc, server, "earliest_data_start", timestr);
+    ms_nstime2timestr (packet.dataend, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    yyjson_mut_obj_add_strcpy (doc, server, "earliest_data_end", timestr);
   }
 
-  if (param.latestid <= RINGID_MAXIMUM)
+  int64_t latestoffset = atomic_load_explicit (&param.latestoffset, memory_order_acquire);
+
+  pktid = RingReadPacket (latestoffset, &packet, NULL);
+  if (pktid != RINGID_NONE && pktid != RINGID_ERROR)
   {
-    yyjson_mut_obj_add_uint (doc, server, "latest_packet_id", param.latestid);
-    ms_nstime2timestr (param.latestptime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-    yyjson_mut_obj_add_strcpy (doc, server, "latest_packet_time", packettime);
-    ms_nstime2timestr (param.latestdstime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-    yyjson_mut_obj_add_strcpy (doc, server, "latest_data_start", packettime);
-    ms_nstime2timestr (param.latestdetime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
-    yyjson_mut_obj_add_strcpy (doc, server, "latest_data_end", packettime);
+    yyjson_mut_obj_add_uint (doc, server, "latest_packet_id", pktid);
+    ms_nstime2timestr (packet.pkttime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    yyjson_mut_obj_add_strcpy (doc, server, "latest_packet_time", timestr);
+    ms_nstime2timestr (packet.datastart, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    yyjson_mut_obj_add_strcpy (doc, server, "latest_data_start", timestr);
+    ms_nstime2timestr (packet.dataend, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    yyjson_mut_obj_add_strcpy (doc, server, "latest_data_end", timestr);
   }
 
   /* List server threads, lock thread list while looping */

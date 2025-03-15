@@ -36,6 +36,8 @@
 #include "logging.h"
 #include "rbtree.h"
 
+pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 /***************************************************************************
  * lprintf:
  *
@@ -51,30 +53,32 @@ lprintf (int level, char *fmt, ...)
   int rv = 0;
   char message[200];
   va_list argptr;
-  struct tm *tp;
+  struct tm tp;
   time_t curtime;
 
-  char *day[]   = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
-  char *month[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
-                   "Aug", "Sep", "Oct", "Nov", "Dec"};
+  const char *day[]   = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+  const char *month[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
+                         "Aug", "Sep", "Oct", "Nov", "Dec"};
 
   if (level <= config.verbose)
   {
 
     /* Build local time string and generate final output */
     curtime = time (NULL);
-    tp      = localtime (&curtime);
+    localtime_r (&curtime, &tp);
 
     va_start (argptr, fmt);
     rv = vsnprintf (message, sizeof (message), fmt, argptr);
     va_end (argptr);
 
+    pthread_mutex_lock(&log_mutex);
     printf ("%3.3s %3.3s %2.2d %2.2d:%2.2d:%2.2d %4.4d - %s%s\n",
-            day[tp->tm_wday], month[tp->tm_mon], tp->tm_mday,
-            tp->tm_hour, tp->tm_min, tp->tm_sec, tp->tm_year + 1900,
+            day[tp.tm_wday], month[tp.tm_mon], tp.tm_mday,
+            tp.tm_hour, tp.tm_min, tp.tm_sec, tp.tm_year + 1900,
             message, (rv > sizeof (message)) ? " ..." : "");
 
     fflush (stdout);
+    pthread_mutex_unlock(&log_mutex);
   }
 
   return rv;
