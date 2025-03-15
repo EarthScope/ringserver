@@ -2302,7 +2302,7 @@ ListenPort 18000\n\
 #HTTPPort 80\n\
 \n\
 \n\
-# Certficate file for TLS connections.  This is a dynamic parameter.\n\
+# Certificate file for TLS connections.  This is a dynamic parameter.\n\
 # Equivalent environment variable: RS_TLS_CERT_FILE\n\
 \n\
 #TLSCertFile /path/to/certificate.pem\n\
@@ -2345,7 +2345,7 @@ ListenPort 18000\n\
 \n\
 \n\
 # Specify the maximum number of clients, regardless of protocol,\n\
-# allowed to be connected simulataneously, set to 0 for unlimited.\n\
+# allowed to be connected simultaneously, set to 0 for unlimited.\n\
 # This is a dynamic parameter.\n\
 # Equivalent environment variable: RS_MAX_CLIENTS\n\
 \n\
@@ -2361,7 +2361,7 @@ ListenPort 18000\n\
 \n\
 \n\
 # Configure the network I/O timeout in seconds.  This controls the duration\n\
-# that a network read or write opertion will wait until failure, after\n\
+# that a network read or write operation will wait until failure, after\n\
 # which the client is disconnected.  The default value of 10 seconds is\n\
 # appropriate for most scenarios.\n\
 # \n\
@@ -2412,7 +2412,7 @@ ListenPort 18000\n\
 # searched starting from the earliest packet traversing forward.  If\n\
 # this option is set, only the specified percent of the ring will be\n\
 # searched starting from the latest packet traversing backward.  To\n\
-# turn off time window requsts set this parameter to 0.  This is a\n\
+# turn off time window requests set this parameter to 0.  This is a\n\
 # dynamic parameter, but updated values will only apply to new\n\
 # connections.\n\
 # Equivalent environment variable: RS_TIME_WINDOW_LIMIT\n\
