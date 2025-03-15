@@ -201,31 +201,37 @@ WriteTLog (ClientInfo *cinfo, int reset)
   pthread_mutex_lock (&config.tlog.write_lock);
 
   /* Open TX log file and seek to end */
-  if (txfilename[0] && (txfp = fopen (txfilename, "a")) == NULL)
+  if (txfilename[0])
   {
-    lprintf (0, "Error opening TX transfer log file %s: %s",
-             txfilename, strerror (errno));
-    rv = -1;
-  }
-  else if (fseek (txfp, 0, SEEK_END))
-  {
-    lprintf (0, "Error seeking to end of TX transfer log file %s: %s",
-             txfilename, strerror (errno));
-    rv = -1;
+    if ((txfp = fopen (txfilename, "a")) == NULL)
+    {
+      lprintf (0, "Error opening TX transfer log file %s: %s",
+               txfilename, strerror (errno));
+      rv = -1;
+    }
+    else if (fseek (txfp, 0, SEEK_END))
+    {
+      lprintf (0, "Error seeking to end of TX transfer log file %s: %s",
+               txfilename, strerror (errno));
+      rv = -1;
+    }
   }
 
   /* Open RX log file and seek to end */
-  if (rxfilename[0] && (rxfp = fopen (rxfilename, "a")) == NULL)
+  if (rxfilename[0])
   {
-    lprintf (0, "Error opening RX transfer log file %s: %s",
-             rxfilename, strerror (errno));
-    rv = -1;
-  }
-  else if (fseek (rxfp, 0, SEEK_END))
-  {
-    lprintf (0, "Error seeking to end of RX transfer log file %s: %s",
-             rxfilename, strerror (errno));
-    rv = -1;
+    if ((rxfp = fopen (rxfilename, "a")) == NULL)
+    {
+      lprintf (0, "Error opening RX transfer log file %s: %s",
+               rxfilename, strerror (errno));
+      rv = -1;
+    }
+    else if (fseek (rxfp, 0, SEEK_END))
+    {
+      lprintf (0, "Error seeking to end of RX transfer log file %s: %s",
+               rxfilename, strerror (errno));
+      rv = -1;
+    }
   }
 
   /* Write transfer log(s) */
