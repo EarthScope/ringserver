@@ -1081,7 +1081,7 @@ ConfigClient (struct sockaddr *paddr, int clientsocket,
 
     if ((ipnet = MatchIP (config.limitips, paddr)))
     {
-      cinfo->limitstr = ipnet->limitstr;
+      cinfo->limitstr = (ipnet->limitstr) ? strdup (ipnet->limitstr) : NULL;
     }
   }
 

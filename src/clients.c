@@ -360,14 +360,14 @@ ClientThread (void *arg)
     WriteTLog (cinfo, 1);
   }
 
-  /* Release limit related PCRE2 data
-   * The limitstr is not owned by the client so not free'd */
+  /* Release limit pattern string and related PCRE2 data */
+  free (cinfo->limitstr);
   if (cinfo->reader->limit)
     pcre2_code_free (cinfo->reader->limit);
   if (cinfo->reader->limit_data)
     pcre2_match_data_free (cinfo->reader->limit_data);
 
-  /* Release match and reject selectors strings and related PCRE2 data */
+  /* Release match and reject pattern strings and related PCRE2 data */
   free (cinfo->matchstr);
   if (cinfo->reader->match)
     pcre2_code_free (cinfo->reader->match);
