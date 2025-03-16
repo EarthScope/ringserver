@@ -810,6 +810,13 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
   }
   config.rejectips = NULL;
 
+  /* Clear webroot specification */
+  if (config.webroot)
+  {
+    free (config.webroot);
+    config.webroot = NULL;
+  }
+
   /* Clear existing HTTP headers */
   if (config.httpheaders)
   {
