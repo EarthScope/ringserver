@@ -815,9 +815,14 @@ RingReadPacket (int64_t offset, RingPacket *packet, char *packetdata)
   if (!packet)
     return RINGID_ERROR;
 
-  if (offset < 0 || offset > param.maxoffset)
+  if (offset < 0)
   {
-    lprintf (0, "%s(): unsupported offset value: %" PRId64, __func__, offset);
+    return RINGID_NONE;
+  }
+
+  if (offset > param.maxoffset)
+  {
+    lprintf (0, "%s(): offset value beyond maximum: %" PRId64, __func__, offset);
     return RINGID_ERROR;
   }
 
