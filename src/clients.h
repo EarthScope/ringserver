@@ -86,7 +86,6 @@ typedef struct ClientInfo
   size_t      wsmaskidx;    /* Index for unmasking WebSocket message */
   uint8_t     writeperm;    /* Write permission flag */
   uint8_t     trusted;      /* Trusted client flag */
-  float       timewinlimit; /* Time window ring search limit in percent */
   _Atomic (RingReader *) reader; /* Ring reader parameters */
   nstime_t    conntime;     /* Client connect time */
   char       *limitstr;     /* Regular expression string to limit streams */

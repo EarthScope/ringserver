@@ -1103,13 +1103,10 @@ ConfigClient (struct sockaddr *paddr, int clientsocket,
     }
   }
 
-  /* Set time window search limit */
-  cinfo->timewinlimit = config.timewinlimit;
-
   /* Set client connect time */
   cinfo->conntime = NSnow ();
 
-  /* Set last data exchange time to the connect time */
+  /* Initialize last data exchange time to the connect time */
   cinfo->lastxchange = cinfo->conntime;
 
   /* Initialize the miniSEED write parameters */

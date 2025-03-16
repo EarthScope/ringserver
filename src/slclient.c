@@ -311,19 +311,19 @@ SLHandleCmd (ClientInfo *cinfo)
       ms_nstime2timestr (cinfo->starttime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
 
       /* Position ring according to start time, use reverse search if limited */
-      if (cinfo->timewinlimit == 1.0)
+      if (config.timewinlimit == 1.0)
       {
         readid = RingAfter (cinfo->reader, cinfo->starttime, 0);
       }
-      else if (cinfo->timewinlimit < 1.0)
+      else if (config.timewinlimit < 1.0)
       {
-        uint64_t pktlimit = (uint64_t)(cinfo->timewinlimit * param.maxpackets);
+        uint64_t pktlimit = (uint64_t)(config.timewinlimit * param.maxpackets);
 
         readid = RingAfterRev (cinfo->reader, cinfo->starttime, pktlimit, 0);
       }
       else
       {
-        lprintf (0, "Time window search limit is invalid: %f", cinfo->timewinlimit);
+        lprintf (0, "Time window search limit is invalid: %f", config.timewinlimit);
         SendReply (cinfo, "ERROR", ERROR_INTERNAL, "time window search limit is invalid");
         return -1;
       }

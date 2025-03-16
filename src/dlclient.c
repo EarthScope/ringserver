@@ -424,19 +424,19 @@ HandleNegotiation (ClientInfo *cinfo)
           ms_nstime2timestr (nstime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
 
           /* Position ring according to start time, use reverse search if limited */
-          if (cinfo->timewinlimit == 1.0)
+          if (config.timewinlimit == 1.0)
           {
             pktid = RingAfter (cinfo->reader, nstime, 1);
           }
-          else if (cinfo->timewinlimit < 1.0)
+          else if (config.timewinlimit < 1.0)
           {
-            uint64_t pktlimit = (uint64_t)(cinfo->timewinlimit * param.maxpackets);
+            uint64_t pktlimit = (uint64_t)(config.timewinlimit * param.maxpackets);
 
             pktid = RingAfterRev (cinfo->reader, nstime, pktlimit, 1);
           }
           else
           {
-            lprintf (0, "Time window search limit is invalid: %f", cinfo->timewinlimit);
+            lprintf (0, "Time window search limit is invalid: %f", config.timewinlimit);
             SendPacket (cinfo, "ERROR", "time window search limit is invalid", 0, 1, 1);
             return -1;
           }
