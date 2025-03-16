@@ -150,18 +150,22 @@ WriteTLog (ClientInfo *cinfo, int reset)
   FILE *txfp           = NULL;
   FILE *rxfp           = NULL;
 
-  /* If the base directory is not specified we are done */
-  if (!config.tlog.basedir)
-    return 0;
-
   /* Take a config reader lock */
   pthread_rwlock_rdlock (&config.config_rwlock);
 
-  if (config.tlog.txlog)
+  /* Transfer logging not enabled */
+  if (config.tlog.mode == TLOG_NONE || config.tlog.basedir == NULL)
+  {
+    pthread_rwlock_unlock (&config.config_rwlock);
+    return 0;
+  }
+
+  if (config.tlog.mode & TLOG_TX)
   {
     /* Generate file path & name for log time interval file */
     localtime_r (&config.tlog.startint, &starttm);
-    localtime_r (&config.tlog.endint, &endtm);
+    time_t endint = config.tlog.endint;
+    localtime_r (&endint, &endtm);
     snprintf (txfilename, sizeof (txfilename),
               "%s/%s%stxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d",
               config.tlog.basedir,
@@ -173,11 +177,12 @@ WriteTLog (ClientInfo *cinfo, int reset)
               endtm.tm_hour, endtm.tm_min);
   }
 
-  if (config.tlog.rxlog)
+  if (config.tlog.mode & TLOG_RX)
   {
     /* Generate file path & name for log time interval file */
     localtime_r (&config.tlog.startint, &starttm);
-    localtime_r (&config.tlog.endint, &endtm);
+    time_t endint = config.tlog.endint;
+    localtime_r (&endint, &endtm);
     snprintf (rxfilename, sizeof (rxfilename),
               "%s/%s%srxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d",
               config.tlog.basedir,

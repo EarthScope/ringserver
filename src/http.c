@@ -538,8 +538,8 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
   {
     lprintf (1, "[%s] Received HTTP request for %s", cinfo->hostname, path);
 
-    /* If WebRoot is configured send file */
-    if (config.webroot && (rv = SendFileHTTP (cinfo, path)) >= 0)
+    /* Send file if webroot is configured */
+    if ((rv = SendFileHTTP (cinfo, path)) >= 0)
     {
       lprintf (2, "[%s] Sent %s (%d bytes)", cinfo->hostname, path, rv);
     }
@@ -846,6 +846,8 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
 {
   int headlen;
 
+  pthread_rwlock_rdlock (&config.config_rwlock);
+
   if (status == 200)
   {
     headlen = snprintf (cinfo->sendbuf, cinfo->sendbufsize,
@@ -857,7 +859,7 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
                         "\r\n",
                         contentlength,
                         MediaTypes[type],
-                        (cinfo->httpheaders) ? cinfo->httpheaders : "",
+                        (config.httpheaders) ? config.httpheaders : "",
                         (header) ? header : "");
   }
   else if (status == 403)
@@ -869,7 +871,7 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
                         "%s"
                         "\r\n",
                         (message) ? message : "Forbidden",
-                        (cinfo->httpheaders) ? cinfo->httpheaders : "",
+                        (config.httpheaders) ? config.httpheaders : "",
                         (header) ? header : "");
   }
   else if (status == 404)
@@ -893,7 +895,7 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
                         "%s",
                         strlen (body),
                         MediaTypes[HTML],
-                        (cinfo->httpheaders) ? cinfo->httpheaders : "",
+                        (config.httpheaders) ? config.httpheaders : "",
                         (header) ? header : "",
                         body);
   }
@@ -907,10 +909,11 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
                         "%s"
                         "\r\n",
                         (message) ? message : "UNKNOWN",
-                        (cinfo->httpheaders) ? cinfo->httpheaders : "",
+                        (config.httpheaders) ? config.httpheaders : "",
                         (header) ? header : "");
   }
-  else
+  /* All other statuses with content */
+  else if (contentlength > 0)
   {
     headlen = snprintf (cinfo->sendbuf, cinfo->sendbufsize,
                         "HTTP/1.1 %d %s\r\n"
@@ -923,9 +926,24 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
                         (message) ? message : "Undefined message",
                         contentlength,
                         MediaTypes[type],
-                        (cinfo->httpheaders) ? cinfo->httpheaders : "",
+                        (config.httpheaders) ? config.httpheaders : "",
                         (header) ? header : "");
   }
+  /* All other statues without content */
+  else
+  {
+    headlen = snprintf (cinfo->sendbuf, cinfo->sendbufsize,
+                        "HTTP/1.1 %d %s\r\n"
+                        "%s"
+                        "%s"
+                        "\r\n",
+                        status,
+                        (message) ? message : "Undefined message",
+                        (config.httpheaders) ? config.httpheaders : "",
+                        (header) ? header : "");
+  }
+
+  pthread_rwlock_unlock (&config.config_rwlock);
 
   return (headlen > cinfo->sendbufsize) ? cinfo->sendbufsize : headlen;
 }
@@ -1528,13 +1546,25 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   char *indexfile   = NULL;
   char *cp          = NULL;
   char filebuffer[65535];
+  char webroot[PATH_MAX] = {0};
   size_t length;
 
   if (!path || !cinfo)
     return -1;
 
+  pthread_rwlock_rdlock (&config.config_rwlock);
+  if (config.webroot)
+    strncpy (webroot, config.webroot, sizeof (webroot) - 1);
+  pthread_rwlock_unlock (&config.config_rwlock);
+
+  /* No webroot, return immediately */
+  if (webroot[0] == '\0')
+  {
+    return -1;
+  }
+
   /* Build path using web root and resolve absolute */
-  if (asprintf (&webpath, "%s/%s", config.webroot, path) < 0)
+  if (asprintf (&webpath, "%s/%s", webroot, path) < 0)
     return -1;
 
   filename = realpath (webpath, NULL);
@@ -1549,7 +1579,7 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   free (webpath);
 
   /* Sanity check that file is within web root */
-  if (strncmp (config.webroot, filename, strlen (config.webroot)))
+  if (strncmp (webroot, filename, strlen (webroot)))
   {
     lprintf (0, "Refusing to send file outside of WebRoot: %s", filename);
     return -1;
@@ -1656,6 +1686,8 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
   size_t keybufsize;
   size_t keylength;
+  int headlen;
+  int responsebytes;
 
   if (!cinfo || !version)
     return -1;
@@ -1670,114 +1702,154 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
   if (!version || strcasecmp (version, "HTTP/1.1"))
   {
-    if (asprintf (&response,
-                  "HTTP/1.1 400 Protocol Version Must Be 1.1 For WebSocket\r\n"
-                  "%s"
-                  "\r\n"
-                  "HTTP Version Must Be 1.1 For WebSocket\n"
-                  "Received: '%s'\n",
-                  (cinfo->httpheaders) ? cinfo->httpheaders : "",
-                  (version) ? version : "") < 0)
+    responsebytes = asprintf (&response,
+                              "HTTP Version Must Be 1.1 For WebSocket\n"
+                              "Received: '%s'\n",
+                              (version) ? version : "");
+
+    if (responsebytes < 0)
     {
       lprintf (0, "Cannot allocate memory for response (wrong protocol)");
     }
 
-    if (response)
+    headlen = GenerateHeader (cinfo, 400, TEXT, responsebytes,
+                              "Protocol Version Must Be 1.1 For WebSocket", NULL);
+
+    if (headlen > 0)
     {
-      SendData (cinfo, response, strlen (response), 0);
-      free (response);
+      SendDataMB (cinfo,
+                  (void *[]){cinfo->sendbuf, response},
+                  (size_t[]){(size_t)headlen, (response) ? (size_t)responsebytes : 0},
+                  2, 0);
+    }
+    else
+    {
+      lprintf (0, "Error creating response header (wrong protocol)");
     }
 
+    free (response);
     return -1;
   }
 
   if (!upgradeHeader || strcasecmp (upgradeHeader, "websocket"))
   {
-    if (asprintf (&response,
-                  "HTTP/1.1 400 Upgrade Header Not Recognized\r\n"
-                  "%s"
-                  "\r\n"
-                  "The Upgrade header value must be 'websocket'\n"
-                  "Received: '%s'\n",
-                  (cinfo->httpheaders) ? cinfo->httpheaders : "",
-                  (upgradeHeader) ? upgradeHeader : "") < 0)
+    responsebytes = asprintf (&response,
+                              "Upgrade header must be 'websocket' For WebSocket\n"
+                              "Received: '%s'\n",
+                              (upgradeHeader) ? upgradeHeader : "");
+
+    if (responsebytes < 0)
     {
-      lprintf (0, "Cannot allocate memory for response (wrong Upgrade)");
+      lprintf (0, "Cannot allocate memory for response (wrong Update)");
     }
 
-    if (response)
+    headlen = GenerateHeader (cinfo, 400, TEXT, responsebytes,
+                              "Upgrade Header Not Recognized", NULL);
+
+    if (headlen > 0)
     {
-      SendData (cinfo, response, strlen (response), 0);
-      free (response);
+      SendDataMB (cinfo,
+                  (void *[]){cinfo->sendbuf, response},
+                  (size_t[]){(size_t)headlen, (response) ? (size_t)responsebytes : 0},
+                  2, 0);
+    }
+    else
+    {
+      lprintf (0, "Error creating response header (wrong Update)");
     }
 
+    free (response);
     return -1;
   }
 
   if (!connectionHeader || !strcasestr (connectionHeader, "Upgrade"))
   {
-    if (asprintf (&response,
-                  "HTTP/1.1 400 Connection Header Not Recognized\r\n"
-                  "%s"
-                  "\r\n"
-                  "The Connection header value must be 'Upgrade'\n"
-                  "Received: '%s'\n",
-                  (cinfo->httpheaders) ? cinfo->httpheaders : "",
-                  (connectionHeader) ? connectionHeader : "") < 0)
+    responsebytes = asprintf (&response,
+                              "The Connection header value must be 'Upgrade'\n"
+                              "Received: '%s'\n",
+                              (connectionHeader) ? connectionHeader : "");
+
+    if (responsebytes < 0)
     {
       lprintf (0, "Cannot allocate memory for response (wrong Connection)");
     }
 
-    if (response)
+    headlen = GenerateHeader (cinfo, 400, TEXT, responsebytes,
+                              "Connection Header Not Recognized", NULL);
+
+    if (headlen > 0)
     {
-      SendData (cinfo, response, strlen (response), 0);
-      free (response);
+      SendDataMB (cinfo,
+                  (void *[]){cinfo->sendbuf, response},
+                  (size_t[]){(size_t)headlen, (response) ? (size_t)responsebytes : 0},
+                  2, 0);
+    }
+    else
+    {
+      lprintf (0, "Error creating response header (wrong Connection)");
     }
 
+    free (response);
     return -1;
   }
 
   if (!secWebSocketVersionHeader || strcasecmp (secWebSocketVersionHeader, "13"))
   {
-    if (asprintf (&response,
-                  "HTTP/1.1 400 Sec-WebSocket-Version Must Be 13\r\n"
-                  "%s"
-                  "\r\n"
-                  "The Sec-WebSocket-Key header is required\n"
-                  "Received: '%s'\n",
-                  (cinfo->httpheaders) ? cinfo->httpheaders : "",
-                  (secWebSocketVersionHeader) ? secWebSocketVersionHeader : "") < 0)
+    responsebytes = asprintf (&response,
+                              "The Sec-WebSocket-Version header must be '13'\n"
+                              "Received: '%s'\n",
+                              (secWebSocketVersionHeader) ? secWebSocketVersionHeader : "");
+
+    if (responsebytes < 0)
     {
       lprintf (0, "Cannot allocate memory for response (wrong Sec-WebSocket-Version)");
     }
 
-    if (response)
+    headlen = GenerateHeader (cinfo, 400, TEXT, responsebytes,
+                              "Sec-WebSocket-Version Must Be 13", NULL);
+
+    if (headlen > 0)
     {
-      SendData (cinfo, response, strlen (response), 0);
-      free (response);
+      SendDataMB (cinfo,
+                  (void *[]){cinfo->sendbuf, response},
+                  (size_t[]){(size_t)headlen, (response) ? (size_t)responsebytes : 0},
+                  2, 0);
+    }
+    else
+    {
+      lprintf (0, "Error creating response header (wrong Sec-WebSocket-Version)");
     }
 
+    free (response);
     return -1;
   }
 
   if (!secWebSocketKeyHeader)
   {
-    if (asprintf (&response,
-                  "HTTP/1.1 400 Sec-WebSocket-Key Header Must Be Present\r\n"
-                  "%s"
-                  "\r\n"
-                  "The Sec-WebSocket-Key header is required\n",
-                  (cinfo->httpheaders) ? cinfo->httpheaders : "") < 0)
+    responsebytes = asprintf (&response,
+                              "The Sec-WebSocket-Key header is required\n");
+
+    if (responsebytes < 0)
     {
-      lprintf (0, "Cannot allocate memory for response (wrong Sec-WebSocket-Key) ");
+      lprintf (0, "Cannot allocate memory for response (missing Sec-WebSocket-Key)");
     }
 
-    if (response)
+    headlen = GenerateHeader (cinfo, 400, TEXT, responsebytes,
+                              "Sec-WebSocket-Key Header Must Be Present", NULL);
+
+    if (headlen > 0)
     {
-      SendData (cinfo, response, strlen (response), 0);
-      free (response);
+      SendDataMB (cinfo,
+                  (void *[]){cinfo->sendbuf, response},
+                  (size_t[]){(size_t)headlen, (response) ? (size_t)responsebytes : 0},
+                  2, 0);
+    }
+    else
+    {
+      lprintf (0, "Error creating response header (missing Sec-WebSocket-Key)");
     }
 
+    free (response);
     return -1;
   }
 
@@ -1806,37 +1878,34 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   }
 
   /* Generate response completing the upgrade to WebSocket connection */
-  if (asprintf (&response,
-                "HTTP/1.1 101 Switching Protocols\r\n"
-                "Upgrade: websocket\r\n"
-                "Connection: Upgrade\r\n"
-                "%s"
-                "%s"
-                "Sec-WebSocket-Accept: %s\r\n"
-                "\r\n",
-                (cinfo->httpheaders) ? cinfo->httpheaders : "",
-                subprotocolheader,
-                keybuf) < 0)
+  responsebytes = asprintf (&response,
+                            "Upgrade: websocket\r\n"
+                            "Connection: Upgrade\r\n"
+                            "%s"
+                            "Sec-WebSocket-Accept: %s\r\n",
+                            subprotocolheader, keybuf);
+
+  if (responsebytes < 0)
   {
-    lprintf (0, "Cannot allocate memory for response");
-    return -1;
+    lprintf (0, "Cannot allocate memory for response (WebSocket upgrade)");
   }
 
-  if (response)
+  headlen = GenerateHeader (cinfo, 101, TEXT, responsebytes,
+                            "Switching Protocols", response);
+
+  if (headlen > 0)
   {
-    SendData (cinfo, response, strlen (response), 0);
-    free (response);
+    SendData (cinfo, cinfo->sendbuf, headlen, 0);
   }
   else
   {
-    lprintf (0, "Cannot allocate memory for response (WebSocket upgrade)");
-    free (keybuf);
-    return -1;
+    lprintf (0, "Error creating response header (WebSocket upgrade)");
   }
 
-  cinfo->websocket = 1;
-
+  free (response);
   free (keybuf);
+
+  cinfo->websocket = 1;
 
   return 0;
 } /* End of NegotiateWebSocket() */

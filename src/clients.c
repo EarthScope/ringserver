@@ -354,7 +354,7 @@ ClientThread (void *arg)
   tls_cleanup (cinfo);
 
   /* Write out transmission log for this client if requested */
-  if (config.tlog.basedir)
+  if (config.tlog.mode != TLOG_NONE)
   {
     lprintf (2, "[%s] Writing transmission log", cinfo->hostname);
     WriteTLog (cinfo, 1);

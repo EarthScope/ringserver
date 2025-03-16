@@ -567,8 +567,10 @@ HandleNegotiation (ClientInfo *cinfo)
     int bytes;
 
     /* Create and send server version information */
+    pthread_rwlock_rdlock (&config.config_rwlock);
     bytes = snprintf (sendbuffer, sizeof (sendbuffer),
                       SLSERVER_ID "\r\n%s\r\n", config.serverid);
+    pthread_rwlock_unlock (&config.config_rwlock);
 
     if (bytes >= sizeof (sendbuffer))
     {

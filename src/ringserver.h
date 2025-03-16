@@ -133,6 +133,14 @@ typedef struct IPNet_s
   struct IPNet_s *next;
 } IPNet;
 
+/* Transmission log modes */
+typedef enum
+{
+  TLOG_NONE = 0,
+  TLOG_RX   = 1 << 0,
+  TLOG_TX   = 1 << 1
+} TLogMode;
+
 /* Global server parameters */
 struct param_s
 {
@@ -178,12 +186,12 @@ struct config_s
   char *ringdir;                  /* Directory for ring files */
   uint64_t ringsize;              /* Size of ring buffer file */
   uint32_t pktsize;               /* Ring packet size */
-  uint32_t maxclients;            /* Enforce maximum number of clients */
-  uint32_t maxclientsperip;       /* Enforce maximum number of clients per IP */
-  uint32_t clienttimeout;         /* Idle client threshold in seconds, then disconnect */
-  uint32_t netiotimeout;          /* Network I/O timeout in seconds, then disconnect */
-  float timewinlimit;             /* Time window search limit in percent */
-  uint8_t resolvehosts;           /* Flag to control resolving of client hostnames */
+  _Atomic uint32_t maxclients;    /* Enforce maximum number of clients */
+  _Atomic uint32_t maxclientsperip; /* Enforce maximum number of clients per IP */
+  _Atomic uint32_t clienttimeout;   /* Idle client threshold in seconds, then disconnect */
+  _Atomic uint32_t netiotimeout;  /* Network I/O timeout in seconds, then disconnect */
+  _Atomic float timewinlimit;     /* Time window search limit in percent */
+  _Atomic uint8_t resolvehosts;   /* Flag to control resolving of client hostnames */
   uint8_t memorymapring;          /* Flag to control mmap'ing of packet buffer */
   uint8_t volatilering;           /* Flag to control if ring is volatile or not */
   uint8_t autorecovery;           /* Flag to control auto recovery from corruption */
@@ -198,17 +206,16 @@ struct config_s
   IPNet *trustedips;              /* List of IPs to trust */
   char *tlscertfile;              /* TLS certificate file */
   char *tlskeyfile;               /* TLS key file */
-  int tlsverifyclientcert;        /* Verify client certificate */
+  _Atomic int tlsverifyclientcert; /* Verify client certificate */
   struct tlog
   {
     pthread_mutex_t write_lock; /* Lock for writing transfer log files */
+    _Atomic TLogMode mode;      /* Transfer log mode, disabled, TX and/or RX */
     char *basedir;              /* Transfer log base directory */
     char *prefix;               /* Transfer log file prefix */
     int interval;               /* Transfer log writing interval in seconds */
-    int txlog;                  /* Flag to control transmission log */
-    int rxlog;                  /* Flag to control reception log */
     time_t startint;            /* Normalized start time */
-    time_t endint;              /* Transfer log interval end time */
+    _Atomic time_t endint;      /* Transfer log interval end time */
   } tlog;
 };
 

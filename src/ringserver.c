@@ -120,11 +120,10 @@ struct config_s config = {
     .tlskeyfile          = NULL,
     .tlsverifyclientcert = 0,
     .tlog.write_lock     = PTHREAD_MUTEX_INITIALIZER,
+    .tlog.mode           = TLOG_NONE,
     .tlog.basedir        = NULL,
     .tlog.prefix         = NULL,
     .tlog.interval       = 86400,
-    .tlog.txlog          = 1,
-    .tlog.rxlog          = 1,
     .tlog.startint       = 0,
     .tlog.endint         = 0,
 };
@@ -133,6 +132,9 @@ struct config_s config = {
 static void LogServerParameters ();
 static struct thread_data *InitThreadData (void *prvtptr);
 static void *ListenThread (void *arg);
+static ClientInfo *ConfigClient (struct sockaddr *paddr, int clientsocket,
+                                 const ListenPortParams *lpp,
+                                 const char *ipstr, const char *portstr);
 static int CalcStats (ClientInfo *cinfo);
 static IPNet *MatchIP (IPNet *list, struct sockaddr *addr);
 static int ClientIPCount (struct sockaddr *addr);
@@ -370,7 +372,7 @@ main (int argc, char *argv[])
   chktime = curtime;
 
   /* Initialize transfer log window timers */
-  if (config.tlog.basedir)
+  if (config.tlog.mode)
   {
     if (CalcTLogInterval (curtime))
     {
@@ -460,7 +462,7 @@ main (int argc, char *argv[])
     }
 
     /* Transmission log writing time window check */
-    if (config.tlog.basedir && !param.shutdownsig)
+    if (config.tlog.mode && !param.shutdownsig)
     {
       if (curtime >= config.tlog.endint)
         tlogwrite = 1;
@@ -736,7 +738,7 @@ main (int argc, char *argv[])
     }
 
     /* Reset transfer log writing time windows using the current time as the reference */
-    if (config.tlog.basedir && !param.shutdownsig && (tlogwrite || configreset))
+    if (config.tlog.mode && !param.shutdownsig && (tlogwrite || configreset))
     {
       tlogwrite = 0;
 
@@ -899,71 +901,16 @@ ListenThread (void *arg)
 
     lprintf (2, "Incoming connection on port %s from %s:%s", lpp->portstr, ipstr, portstr);
 
-    /* Reject clients not in matching list */
-    if (config.matchips)
-    {
-      if (!MatchIP (config.matchips, paddr))
-      {
-        lprintf (1, "Rejecting non-matching connection from: %s:%s", ipstr, portstr);
-        close (clientsocket);
-        continue;
-      }
-    }
+    /* Configure client connection */
+    pthread_rwlock_rdlock (&config.config_rwlock);
+    cinfo = ConfigClient (paddr, clientsocket, lpp, ipstr, portstr);
+    pthread_rwlock_unlock (&config.config_rwlock);
 
-    /* Reject clients in the rejection list */
-    if (config.rejectips)
+    if (cinfo == NULL)
     {
-      if (MatchIP (config.rejectips, paddr))
-      {
-        lprintf (1, "Rejecting connection from: %s:%s", ipstr, portstr);
-        close (clientsocket);
-        continue;
-      }
-    }
-
-    /* Enforce per-address connection limit for non write permission addresses */
-    if (config.maxclientsperip)
-    {
-      if (!(config.writeips && MatchIP (config.writeips, paddr)))
-      {
-        if (ClientIPCount (paddr) >= config.maxclientsperip)
-        {
-          lprintf (1, "Too many connections from: %s:%s", ipstr, portstr);
-          close (clientsocket);
-          continue;
-        }
-      }
-    }
-
-    /* Enforce maximum number of clients if specified */
-    if (config.maxclients && param.clientcount >= config.maxclients)
-    {
-      if ((config.writeips && MatchIP (config.writeips, paddr)) &&
-          param.clientcount <= (config.maxclients + RESERVECONNECTIONS))
-      {
-        lprintf (1, "Allowing connection in reserve space from %s:%s", ipstr, portstr);
-      }
-      else
-      {
-        lprintf (1, "Maximum number of clients exceeded: %u", config.maxclients);
-        lprintf (1, "  Rejecting connection from: %s:%s", ipstr, portstr);
-        close (clientsocket);
-        continue;
-      }
-    }
-
-    /* Allocate and initialize connection info struct */
-    if ((cinfo = (ClientInfo *)calloc (1, sizeof (ClientInfo))) == NULL)
-    {
-      lprintf (0, "Error allocating memory for connection info");
       close (clientsocket);
-      break;
+      continue;
     }
-
-    cinfo->socket     = clientsocket;
-    cinfo->protocols  = lpp->protocols;
-    cinfo->tls        = (lpp->options & ENCRYPTION_TLS) ? 1 : 0;
-    cinfo->type       = CLIENT_UNDETERMINED;
 
     /* Store client socket address structure */
     if ((cinfo->addr = (struct sockaddr *)malloc (addrlen)) == NULL)
@@ -972,78 +919,9 @@ ListenThread (void *arg)
       close (clientsocket);
       break;
     }
+
     memcpy (cinfo->addr, &addr_storage, addrlen);
     cinfo->addrlen = addrlen;
-
-    /* Store IP address and port number strings */
-    snprintf (cinfo->ipstr, sizeof (cinfo->ipstr), "%s", ipstr);
-    snprintf (cinfo->portstr, sizeof (cinfo->portstr), "%s", portstr);
-    snprintf (cinfo->serverport, sizeof (cinfo->serverport), "%s", lpp->portstr);
-
-    /* Set initial client ID string */
-    strncpy (cinfo->clientid, "Client", sizeof (cinfo->clientid));
-
-    /* Set stream limit if specified for address */
-    if (config.limitips)
-    {
-      IPNet *ipnet;
-
-      if ((ipnet = MatchIP (config.limitips, paddr)))
-      {
-        cinfo->limitstr = ipnet->limitstr;
-      }
-    }
-
-    /* Grant write permission if address is in the write list */
-    if (config.writeips)
-    {
-      if (MatchIP (config.writeips, paddr))
-      {
-        cinfo->writeperm = 1;
-      }
-    }
-
-    /* Set trusted flag if address is in the trusted list */
-    if (config.trustedips)
-    {
-      if (MatchIP (config.trustedips, paddr))
-      {
-        cinfo->trusted = 1;
-      }
-    }
-
-    /* Set configured fixed HTTP headers */
-    cinfo->httpheaders = config.httpheaders;
-
-    /* Set time window search limit */
-    cinfo->timewinlimit = config.timewinlimit;
-
-    /* Set client connect time */
-    cinfo->conntime = NSnow ();
-
-    /* Set last data exchange time to the connect time */
-    cinfo->lastxchange = cinfo->conntime;
-
-    /* Initialize streams lock */
-    pthread_mutex_init (&cinfo->streams_lock, NULL);
-
-    /* Initialize the miniSEED write parameters */
-    if (config.mseedarchive)
-    {
-      if (!(cinfo->mswrite = (DataStream *)malloc (sizeof (DataStream))))
-      {
-        lprintf (0, "Error allocating memory for miniSEED write parameters");
-        if (clientsocket)
-          close (clientsocket);
-        break;
-      }
-
-      cinfo->mswrite->path          = config.mseedarchive;
-      cinfo->mswrite->idletimeout   = config.mseedidleto;
-      cinfo->mswrite->maxopenfiles  = 50;
-      cinfo->mswrite->openfilecount = 0;
-      cinfo->mswrite->grouproot     = NULL;
-    }
 
     /* Create new client thread */
     if (!(tdp = InitThreadData (cinfo)))
@@ -1109,6 +987,149 @@ ListenThread (void *arg)
 
   return NULL;
 } /* End of ListenThread() */
+
+/***********************************************************************
+ * ConfigClient:
+ *
+ * Configure a client connection.
+ *
+ * Return an allocated ClientInfo structure on success and NULL on error.
+ ***********************************************************************/
+ClientInfo *
+ConfigClient (struct sockaddr *paddr, int clientsocket,
+              const ListenPortParams *lpp,
+              const char *ipstr, const char *portstr)
+{
+  ClientInfo *cinfo;
+
+  /* Reject clients not in matching list */
+  if (config.matchips)
+  {
+    if (!MatchIP (config.matchips, paddr))
+    {
+      lprintf (1, "Rejecting non-matching connection from: %s:%s", ipstr, portstr);
+      return NULL;
+    }
+  }
+
+  /* Reject clients in the rejection list */
+  if (config.rejectips)
+  {
+    if (MatchIP (config.rejectips, paddr))
+    {
+      lprintf (1, "Rejecting connection from: %s:%s", ipstr, portstr);
+      return NULL;
+    }
+  }
+
+  /* Enforce per-address connection limit for non write permission addresses */
+  if (config.maxclientsperip)
+  {
+    if (!(config.writeips && MatchIP (config.writeips, paddr)))
+    {
+      if (ClientIPCount (paddr) >= config.maxclientsperip)
+      {
+        lprintf (1, "Too many connections from: %s:%s", ipstr, portstr);
+        return NULL;
+      }
+    }
+  }
+
+  /* Enforce maximum number of clients if specified */
+  if (config.maxclients && param.clientcount >= config.maxclients)
+  {
+    if ((config.writeips && MatchIP (config.writeips, paddr)) &&
+        param.clientcount <= (config.maxclients + RESERVECONNECTIONS))
+    {
+      lprintf (1, "Allowing connection in reserve space from %s:%s", ipstr, portstr);
+    }
+    else
+    {
+      lprintf (1, "Maximum number of clients exceeded: %u", config.maxclients);
+      lprintf (1, "  Rejecting connection from: %s:%s", ipstr, portstr);
+      return NULL;
+    }
+  }
+
+  /* Allocate and initialize connection info struct */
+  if ((cinfo = (ClientInfo *)calloc (1, sizeof (ClientInfo))) == NULL)
+  {
+    lprintf (0, "Error allocating memory for connection info");
+    return NULL;
+  }
+
+  cinfo->socket    = clientsocket;
+  cinfo->protocols = lpp->protocols;
+  cinfo->tls       = (lpp->options & ENCRYPTION_TLS) ? 1 : 0;
+  cinfo->type      = CLIENT_UNDETERMINED;
+
+  /* Initialize streams lock */
+  pthread_mutex_init (&cinfo->streams_lock, NULL);
+
+  /* Store IP address and port number strings */
+  snprintf (cinfo->ipstr, sizeof (cinfo->ipstr), "%s", ipstr);
+  snprintf (cinfo->portstr, sizeof (cinfo->portstr), "%s", portstr);
+  snprintf (cinfo->serverport, sizeof (cinfo->serverport), "%s", lpp->portstr);
+
+  /* Set initial client ID string */
+  strncpy (cinfo->clientid, "Client", sizeof (cinfo->clientid));
+
+  /* Set stream limit if specified for address */
+  if (config.limitips)
+  {
+    IPNet *ipnet;
+
+    if ((ipnet = MatchIP (config.limitips, paddr)))
+    {
+      cinfo->limitstr = ipnet->limitstr;
+    }
+  }
+
+  /* Grant write permission if address is in the write list */
+  if (config.writeips)
+  {
+    if (MatchIP (config.writeips, paddr))
+    {
+      cinfo->writeperm = 1;
+    }
+  }
+
+  /* Set trusted flag if address is in the trusted list */
+  if (config.trustedips)
+  {
+    if (MatchIP (config.trustedips, paddr))
+    {
+      cinfo->trusted = 1;
+    }
+  }
+
+  /* Set time window search limit */
+  cinfo->timewinlimit = config.timewinlimit;
+
+  /* Set client connect time */
+  cinfo->conntime = NSnow ();
+
+  /* Set last data exchange time to the connect time */
+  cinfo->lastxchange = cinfo->conntime;
+
+  /* Initialize the miniSEED write parameters */
+  if (config.mseedarchive)
+  {
+    if (!(cinfo->mswrite = (DataStream *)malloc (sizeof (DataStream))))
+    {
+      lprintf (0, "Error allocating memory for miniSEED write parameters");
+      return NULL;
+    }
+
+    cinfo->mswrite->path          = config.mseedarchive;
+    cinfo->mswrite->idletimeout   = config.mseedidleto;
+    cinfo->mswrite->maxopenfiles  = 50;
+    cinfo->mswrite->openfilecount = 0;
+    cinfo->mswrite->grouproot     = NULL;
+  }
+
+  return cinfo;
+} /* End of ConfigClient() */
 
 /***************************************************************************
  * CalcStats:
@@ -1501,8 +1522,8 @@ void LogServerParameters ()
   {
     lprintf (3, "     log prefix: %s", (config.tlog.prefix) ? config.tlog.prefix : "NONE");
     lprintf (3, "     log interval: %d seconds", config.tlog.interval);
-    lprintf (3, "     log transmission: %s", (config.tlog.txlog) ? "yes" : "no");
-    lprintf (3, "     log reception: %s", (config.tlog.rxlog) ? "yes" : "no");
+    lprintf (3, "     log transmission: %s", (config.tlog.mode & TLOG_TX) ? "yes" : "no");
+    lprintf (3, "     log reception: %s", (config.tlog.mode & TLOG_RX) ? "yes" : "no");
 
     if (config.tlog.startint)
     {

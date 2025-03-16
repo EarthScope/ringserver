@@ -817,9 +817,10 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     config.httpheaders = NULL;
   }
 
-  /* Clear existing transfer log base directory */
+  /* Clear existing transfer log mode and base directory */
   if (config.tlog.basedir)
   {
+    config.tlog.mode = TLOG_NONE;
     free (config.tlog.basedir);
     config.tlog.basedir = NULL;
   }
@@ -1290,6 +1291,9 @@ SetParameter (const char *paramstring, int dynamiconly)
     free (config.tlog.basedir);
     char *basedir = strdup (resolved_path);
     config.tlog.basedir = basedir;
+
+    /* Enable both TX and RX logging as defaults */
+    config.tlog.mode = TLOG_TX | TLOG_RX;
   }
   else if (!strcasecmp ("TransferLogInterval", field[0]) && fieldcount == 2)
   {
@@ -1316,7 +1320,10 @@ SetParameter (const char *paramstring, int dynamiconly)
       return -1;
     }
 
-    config.tlog.txlog = intval;
+    if (intval)
+      config.tlog.mode |= TLOG_TX;
+    else
+      config.tlog.mode &= ~TLOG_TX;
   }
   else if (!strcasecmp ("TransferLogRX", field[0]) && fieldcount == 2)
   {
@@ -1326,7 +1333,10 @@ SetParameter (const char *paramstring, int dynamiconly)
       return -1;
     }
 
-    config.tlog.rxlog = intval;
+    if (intval)
+      config.tlog.mode |= TLOG_RX;
+    else
+      config.tlog.mode &= ~TLOG_RX;
   }
   else if (!strcasecmp ("WriteIP", field[0]) && fieldcount == 2)
   {

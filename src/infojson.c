@@ -49,6 +49,7 @@ info_create_root (const char *software)
 {
   yyjson_mut_doc *doc;
   yyjson_mut_val *root;
+  bool success;
 
   doc  = yyjson_mut_doc_new (NULL);
   root = yyjson_mut_obj (doc);
@@ -66,7 +67,11 @@ info_create_root (const char *software)
     return NULL;
   }
 
-  if (yyjson_mut_obj_add_strcpy (doc, root, "organization", config.serverid) == false)
+  pthread_rwlock_rdlock (&config.config_rwlock);
+  success = yyjson_mut_obj_add_strcpy (doc, root, "organization", config.serverid);
+  pthread_rwlock_unlock (&config.config_rwlock);
+
+  if (success == false)
   {
     yyjson_mut_doc_free (doc);
     return NULL;

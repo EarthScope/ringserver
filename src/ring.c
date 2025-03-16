@@ -521,6 +521,8 @@ RingShutdown (int ringfd, char *streamfilename)
     rv = -1;
   }
 
+  memset (param.ringbuffer, 0, RBV3_HEADERSIZE);
+
   /* Store the header values in the ring buffer */
   memcpy (pRBV3_SIGNATURE (param.ringbuffer), RING_SIGNATURE, RING_SIGNATURE_LENGTH);
   memcpy (pRBV3_VERSION (param.ringbuffer), &param.version, 2);

@@ -60,13 +60,23 @@ tls_configure (ClientInfo *cinfo)
   int debug_level = 0;
   int ret;
 
-  if (config.tlscertfile == NULL)
+  char tlscertfile[PATH_MAX] = {0};
+  char tlskeyfile[PATH_MAX]  = {0};
+
+  pthread_rwlock_rdlock (&config.config_rwlock);
+  if (config.tlscertfile)
+    strncpy (tlscertfile, config.tlscertfile, sizeof (tlscertfile) - 1);
+  if (config.tlskeyfile)
+    strncpy (tlskeyfile, config.tlskeyfile, sizeof (tlskeyfile) - 1);
+  pthread_rwlock_unlock (&config.config_rwlock);
+
+  if (tlscertfile[0] == '\0')
   {
     lprintf (0, "[%s] No TLS certificate provided, cannot configure TLS", cinfo->hostname);
     return -1;
   }
 
-  if (config.tlskeyfile == NULL)
+  if (tlskeyfile[0] == '\0')
   {
     lprintf (0, "[%s] No TLS key provided, cannot configure TLS", cinfo->hostname);
     return -1;
@@ -117,18 +127,18 @@ tls_configure (ClientInfo *cinfo)
     return -1;
   }
 
-  lprintf (2, "[%s] Reading TLS cert from '%s'", cinfo->hostname, config.tlscertfile);
+  lprintf (2, "[%s] Reading TLS cert from '%s'", cinfo->hostname, tlscertfile);
 
-  if ((ret = mbedtls_x509_crt_parse_file (&tlsctx->srvcert, config.tlscertfile)) != 0)
+  if ((ret = mbedtls_x509_crt_parse_file (&tlsctx->srvcert, tlscertfile)) != 0)
   {
     lprintf (0, "[%s] mbedtls_x509_crt_parse_file() returned %d (-0x%x)", cinfo->hostname, ret, (unsigned int)-ret);
     mbedtls_x509_crt_init (&tlsctx->srvcert);
     return -1;
   }
 
-  lprintf (2, "[%s] Reading TLS key from '%s'", cinfo->hostname, config.tlskeyfile);
+  lprintf (2, "[%s] Reading TLS key from '%s'", cinfo->hostname, tlskeyfile);
 
-  if ((ret = mbedtls_pk_parse_keyfile (&tlsctx->pkey, config.tlskeyfile, "",
+  if ((ret = mbedtls_pk_parse_keyfile (&tlsctx->pkey, tlskeyfile, "",
                                        mbedtls_ctr_drbg_random, &tlsctx->ctr_drbg)) != 0)
   {
     lprintf (0, "[%s] mbedtls_pk_parse_keyfile() returned %d (-0x%x)", cinfo->hostname, ret, (unsigned int)-ret);

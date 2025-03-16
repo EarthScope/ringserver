@@ -92,7 +92,6 @@ typedef struct ClientInfo
   char       *limitstr;     /* Regular expression string to limit streams */
   char       *matchstr;     /* Regular expression string to match streams */
   char       *rejectstr;    /* Regular expression string to reject streams */
-  char       *httpheaders;  /* Fixed headers to add to HTTP responses */
   uint64_t    lastid;       /* Last packet ID sent to client */
   nstime_t    starttime;    /* Requested start time */
   nstime_t    endtime;      /* Requested end time */
