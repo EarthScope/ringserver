@@ -817,12 +817,14 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     config.httpheaders = NULL;
   }
 
-  /* Clear existing transfer log mode and base directory */
+  /* Clear existing transfer log parameters */
   if (config.tlog.basedir)
   {
     config.tlog.mode = TLOG_NONE;
     free (config.tlog.basedir);
     config.tlog.basedir = NULL;
+    free (config.tlog.prefix);
+    config.tlog.prefix = NULL;
   }
 
   /* Read and process all lines */
