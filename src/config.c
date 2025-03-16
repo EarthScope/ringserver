@@ -931,10 +931,10 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
  * [D] RejectIP <IP[/netmask]
  * [D] WebRoot <web content root>
  * [D] HTTPHeader <HTTP header>
- * [D] MSeedWrite <format>
  * [D[ TLSCertFile <file>
  * [D] TLSKeyFile <file>
  * [D] TLSVerifyClientCert 0|1
+ * MSeedWrite <format>
  * MSeedScan <directory>
  * VolatileRing 0|1
  *
@@ -1403,6 +1403,9 @@ SetParameter (const char *paramstring, int dynamiconly)
   }
   else if (!strcasecmp ("MSeedWrite", field[0]) && fieldcount == 2)
   {
+    if (dynamiconly)
+      return fieldcount;
+
     if (ConfigMSWrite (field[1]))
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
