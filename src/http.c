@@ -731,13 +731,23 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length)
         return -2;
       }
 
-      totalrecv += nrecv;
+      /* Unmask received payload */
+      if (framemask.one)
+      {
+        uint8_t *recvptr = payload;
+
+        for (int idx = 0, maskidx = 0; idx < nrecv; idx++, recvptr++, maskidx++)
+          *recvptr = *recvptr ^ framemask.four[maskidx % 4];
+      }
     }
 
     /* Send pong with same payload data */
-    onetwo[0] = 0x8a; /* Change opcode to pong */
+    onetwo[0] = 0x8a;  /* Change opcode to pong */
+    onetwo[1] &= 0x7f; /* Clear mask bit, retain length */
     SendData (cinfo, onetwo, 2, 1);
-    SendData (cinfo, payload, *length, 1);
+
+    if (*length > 0)
+      SendData (cinfo, payload, *length, 1);
 
     return 0;
   }
@@ -802,9 +812,11 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length)
     onetwo[0] = 0x88; /* Opcode 0x8 plus the FIN bit */
     onetwo[1] = *length;
     SendData (cinfo, onetwo, 2, 1);
-    SendData (cinfo, payload, *length, 1);
 
-    cinfo->websocket = 2; /* Indicate a close frame has been sent */
+    if (*length > 0)
+      SendData (cinfo, payload, *length, 1);
+
+    cinfo->websocket = 2;  /* Indicate a close frame has been sent */
     cinfo->socketerr = -2; /* Indicate an orderly shutdown */
     return -2;
   }
