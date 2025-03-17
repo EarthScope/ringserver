@@ -622,13 +622,18 @@ int
 RecvWSFrame (ClientInfo *cinfo, uint64_t *length)
 {
   unsigned char payload[125];
-  uint32_t framemask;
   uint8_t onetwo[2];
   uint16_t length16;
   uint8_t length7;
   int totalrecv = 0;
   int nrecv;
   int opcode;
+
+  union
+  {
+    uint32_t one;
+    uint8_t four[4];
+  } framemask = {0};
 
   if (!cinfo || !length)
     return -1;
@@ -694,7 +699,7 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length)
   /* If mask flag, the masking key is the next 4 bytes */
   if (onetwo[1] & 0x80)
   {
-    nrecv = RecvData (cinfo, &framemask, 4, 1);
+    nrecv = RecvData (cinfo, &framemask.one, 4, 1);
 
     if (nrecv != 4)
       return nrecv;
@@ -765,17 +770,46 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length)
   /* Check for Close frame, connection shutdown */
   if (opcode == 0x8)
   {
-    /* Send Close frame in response */
-    onetwo[0] = 0x88;
-    onetwo[1] = 0;
+    if (*length > 125)
+    {
+      lprintf (0, "[%s] Error, WebSocket payload length of %" PRIu64 " > 125, which is not allowed for a close frame",
+               cinfo->hostname, *length);
+      return -2;
+    }
+
+    if (*length > 0)
+    {
+      nrecv = RecvData (cinfo, payload, *length, 1);
+
+      if (nrecv != (int)*length)
+      {
+        lprintf (0, "[%s] Error receiving payload for WebSocket close, nrecv: %d, expected length: %" PRIu64 "\n",
+                 cinfo->hostname, nrecv, *length);
+        return -2;
+      }
+
+      /* Unmask received payload */
+      if (framemask.one)
+      {
+        uint8_t *recvptr = payload;
+
+        for (int idx = 0, maskidx = 0; idx < nrecv; idx++, recvptr++, maskidx++)
+          *recvptr = *recvptr ^ framemask.four[maskidx % 4];
+      }
+    }
+
+    /* Send Close frame in response, return the same payload */
+    onetwo[0] = 0x88; /* Opcode 0x8 plus the FIN bit */
+    onetwo[1] = *length;
     SendData (cinfo, onetwo, 2, 1);
+    SendData (cinfo, payload, *length, 1);
 
     cinfo->socketerr = -2; /* Indicate an orderly shutdown */
     return -2;
   }
 
   /* Set mask value, done later to avoid use in RecvData() above */
-  cinfo->wsmask.one = framemask;
+  cinfo->wsmask.one = framemask.one;
 
   return totalrecv;
 } /* End of RecvWSFrame() */
