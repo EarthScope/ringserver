@@ -373,8 +373,7 @@ HandleNegotiation (ClientInfo *cinfo)
         }
         else
         {
-          lprintf (0, "[%s] Error with POSITION SET value: %s",
-                   cinfo->hostname, value);
+          lprintf (0, "[%s] Error with POSITION SET value: %s", cinfo->hostname, value);
           if (SendPacket (cinfo, "ERROR", "Error with POSITION SET value", 0, 1, 1))
             return -1;
           OKGO = 0;
@@ -383,24 +382,30 @@ HandleNegotiation (ClientInfo *cinfo)
         /* If no errors with the set value do the positioning */
         if (OKGO)
         {
-          pktid = RingPosition (cinfo->reader, pktid, nstime);
+          uint64_t position = RingPosition (cinfo->reader, pktid, nstime);
 
-          if (pktid == RINGID_ERROR)
+          if (position == RINGID_ERROR)
           {
             lprintf (0, "[%s] Error with RingPosition (pktid: %" PRIu64 ", nstime: %" PRId64 ")",
                      cinfo->hostname, pktid, nstime);
             if (SendPacket (cinfo, "ERROR", "Error positioning reader", 0, 1, 1))
               return -1;
           }
-          else if (pktid == RINGID_NONE)
+          else if (position == RINGID_NONE && pktid != RINGID_EARLIEST && pktid != RINGID_LATEST)
           {
             if (SendPacket (cinfo, "ERROR", "Packet not found", 0, 1, 1))
               return -1;
           }
           else
           {
-            snprintf (sendbuffer, sizeof (sendbuffer), "Positioned to packet ID %" PRIu64, pktid);
-            if (SendPacket (cinfo, "OK", sendbuffer, pktid, 1, 1))
+            if (position == RINGID_NONE && pktid == RINGID_EARLIEST)
+              snprintf (sendbuffer, sizeof (sendbuffer), "Positioned to EARLIEST packet");
+            else if (position == RINGID_NONE && pktid == RINGID_LATEST)
+              snprintf (sendbuffer, sizeof (sendbuffer), "Positioned to LATEST packet");
+            else
+              snprintf (sendbuffer, sizeof (sendbuffer), "Positioned to packet ID %" PRIu64, position);
+
+            if (SendPacket (cinfo, "OK", sendbuffer, (position <= RINGID_MAXIMUM) ? position : 0, 1, 1))
               return -1;
           }
         }

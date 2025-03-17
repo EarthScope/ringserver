@@ -258,7 +258,7 @@ SLHandleCmd (ClientInfo *cinfo)
              (cinfo->matchstr) ? cinfo->matchstr : "", (cinfo->rejectstr) ? cinfo->rejectstr : "");
 
     /* Position ring to starting packet ID if specified */
-    if (slinfo->startid > 0)
+    if (slinfo->startid != RINGID_NONE)
     {
       retval = RingPosition (cinfo->reader, slinfo->startid, NSTUNSET);
 
@@ -268,15 +268,18 @@ SLHandleCmd (ClientInfo *cinfo)
                  cinfo->hostname, slinfo->startid);
         return -1;
       }
-      else if (retval == RINGID_NONE)
+      else if (retval == RINGID_NONE && slinfo->startid != RINGID_EARLIEST)
       {
         lprintf (0, "[%s] Could not find and position to packet ID: %" PRIu64,
                  cinfo->hostname, slinfo->startid);
       }
       else
       {
-        lprintf (2, "[%s] Positioned ring to packet ID: %" PRIu64,
-                 cinfo->hostname, slinfo->startid);
+        if (retval == RINGID_NONE && slinfo->startid == RINGID_EARLIEST)
+          lprintf (2, "[%s] Positioned ring to EARLIEST packet", cinfo->hostname);
+        else
+          lprintf (2, "[%s] Positioned ring to packet ID: %" PRIu64,
+                   cinfo->hostname, slinfo->startid);
       }
     }
 
