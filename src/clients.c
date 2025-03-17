@@ -346,6 +346,23 @@ ClientThread (void *arg)
   /* Close client socket */
   if (cinfo->socket)
   {
+    /* Send websocket Close frame if not already sent */
+    if (cinfo->websocket == 1)
+    {
+      /* 0: Opcode 0x8 plus the FIN bit (0x88), 1: length 2, 2-3: value 1000 (Normal Closure) */
+      uint8_t closeframe[4] = {0x88, 0x02, 0x03, 0xE8};
+      SendData (cinfo, closeframe, 4, 1);
+
+      /* Wait up to 1 second for a response and and consume */
+      if (PollSocket (cinfo->socket, 1, 0, 1000) > 0)
+      {
+        uint64_t length;
+        RecvWSFrame (cinfo, &length);
+      }
+
+      cinfo->websocket = 2; /* Indicate a close frame has been sent */
+    }
+
     shutdown (cinfo->socket, SHUT_RDWR);
     close (cinfo->socket);
     cinfo->socket = -1;

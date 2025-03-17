@@ -804,6 +804,7 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length)
     SendData (cinfo, onetwo, 2, 1);
     SendData (cinfo, payload, *length, 1);
 
+    cinfo->websocket = 2; /* Indicate a close frame has been sent */
     cinfo->socketerr = -2; /* Indicate an orderly shutdown */
     return -2;
   }
