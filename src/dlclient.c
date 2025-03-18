@@ -379,7 +379,7 @@ HandleNegotiation (ClientInfo *cinfo)
           OKGO = 0;
         }
 
-        /* If no errors with the set value do the positioning */
+        /* If no errors with the set value, position the reader */
         if (OKGO)
         {
           uint64_t position = RingPosition (cinfo->reader, pktid, nstime);
@@ -413,7 +413,7 @@ HandleNegotiation (ClientInfo *cinfo)
       /* Process AFTER <time> positioning */
       else if (!strncmp (subcmd, "AFTER", 5))
       {
-        /* Wire protocol uses time in microseconds (hptime), convert to nanoseconds (nstime) */
+        /* Wire protocol uses time in microseconds ("hptime"), convert to nanoseconds ("nstime") */
         nstime = strtoll (value, NULL, 10);
         nstime = MS_HPTIME2NSTIME (nstime);
 
@@ -1233,9 +1233,6 @@ SendRingPacket (ClientInfo *cinfo)
   /* Update client transmit and counts */
   cinfo->txpackets0++;
   cinfo->txbytes0 += cinfo->packet.datasize;
-
-  /* Update last sent packet ID */
-  cinfo->lastid = cinfo->packet.pktid;
 
   return 0;
 } /* End of SendRingPacket() */

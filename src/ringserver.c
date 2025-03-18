@@ -1061,7 +1061,10 @@ ConfigClient (struct sockaddr *paddr, int clientsocket,
   cinfo->socket    = clientsocket;
   cinfo->protocols = lpp->protocols;
   cinfo->tls       = (lpp->options & ENCRYPTION_TLS) ? 1 : 0;
+  cinfo->state     = STATE_COMMAND;
   cinfo->type      = CLIENT_UNDETERMINED;
+  cinfo->starttime = NSTUNSET;
+  cinfo->endtime   = NSTUNSET;
 
   /* Initialize streams lock */
   pthread_mutex_init (&cinfo->streams_lock, NULL);

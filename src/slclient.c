@@ -127,6 +127,8 @@ SLHandleCmd (ClientInfo *cinfo)
     slinfo->proto_major = 3;
     slinfo->proto_minor = 0;
 
+    slinfo->startid = RINGID_NONE;
+
     slinfo->stations = RBTreeCreate (StaKeyCompare, free, FreeReqStationID);
   }
 
@@ -231,7 +233,7 @@ SLHandleCmd (ClientInfo *cinfo)
         }
 
         /* Track the newest packet ID while validating their existence */
-        if (stationid->packetid != RINGID_NONE)
+        if (stationid->packetid <= RINGID_MAXIMUM)
           retval = RingRead (cinfo->reader, stationid->packetid, &cinfo->packet, 0);
         else
           retval = 0;
@@ -257,32 +259,6 @@ SLHandleCmd (ClientInfo *cinfo)
     lprintf (2, "[%s] Requesting match: '%s', reject: '%s'", cinfo->hostname,
              (cinfo->matchstr) ? cinfo->matchstr : "", (cinfo->rejectstr) ? cinfo->rejectstr : "");
 
-    /* Position ring to starting packet ID if specified */
-    if (slinfo->startid != RINGID_NONE)
-    {
-      retval = RingPosition (cinfo->reader, slinfo->startid, NSTUNSET);
-
-      if (retval == RINGID_ERROR)
-      {
-        lprintf (0, "[%s] Error with RingPosition for %" PRIu64,
-                 cinfo->hostname, slinfo->startid);
-        return -1;
-      }
-      else if (retval == RINGID_NONE && slinfo->startid != RINGID_EARLIEST)
-      {
-        lprintf (0, "[%s] Could not find and position to packet ID: %" PRIu64,
-                 cinfo->hostname, slinfo->startid);
-      }
-      else
-      {
-        if (retval == RINGID_NONE && slinfo->startid == RINGID_EARLIEST)
-          lprintf (2, "[%s] Positioned ring to EARLIEST packet", cinfo->hostname);
-        else
-          lprintf (2, "[%s] Positioned ring to packet ID: %" PRIu64,
-                   cinfo->hostname, slinfo->startid);
-      }
-    }
-
     /* Select sources if any specified */
     if (cinfo->matchstr)
     {
@@ -307,8 +283,31 @@ SLHandleCmd (ClientInfo *cinfo)
       }
     }
 
-    /* Set ring position based on time if start time specified and not a packet ID */
-    if (cinfo->starttime && cinfo->starttime != NSTUNSET && !slinfo->startid)
+    /* Position ring to starting packet ID if one was identified */
+    if (slinfo->startid <= RINGID_MAXIMUM)
+    {
+      retval = RingPosition (cinfo->reader, slinfo->startid, NSTUNSET);
+
+      if (retval == RINGID_ERROR)
+      {
+        lprintf (0, "[%s] Error with RingPosition for %" PRIu64,
+                 cinfo->hostname, slinfo->startid);
+        return -1;
+      }
+      else if (retval == RINGID_NONE)
+      {
+        lprintf (0, "[%s] Could not find and position to packet ID: %" PRIu64,
+                 cinfo->hostname, slinfo->startid);
+      }
+      else
+      {
+        lprintf (2, "[%s] Positioned ring to packet ID: %" PRIu64,
+                 cinfo->hostname, slinfo->startid);
+      }
+    }
+
+    /* Set ring position based on time if start time specified and no packet ID */
+    if (cinfo->starttime != NSTUNSET && slinfo->startid == RINGID_NONE)
     {
       char timestr[32];
       ms_nstime2timestr (cinfo->starttime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
@@ -486,9 +485,6 @@ SLStreamPackets (ClientInfo *cinfo)
       /* Update client transmit and counts */
       cinfo->txpackets0++;
       cinfo->txbytes0 += cinfo->packet.datasize;
-
-      /* Update last sent packet ID */
-      cinfo->lastid = cinfo->packet.pktid;
     }
     else
     {
@@ -546,14 +542,14 @@ HandleNegotiation (ClientInfo *cinfo)
   SLInfo *slinfo;
   char sendbuffer[400];
   ReqStationID *stationid;
-  int fields;
+  int fields = 0;
 
   nstime_t starttime    = NSTUNSET;
   nstime_t endtime      = NSTUNSET;
   char starttimestr[51] = {0};
   char endtimestr[51]   = {0};
   char selector[64]     = {0};
-  uint64_t startpacket  = RINGID_NEXT;
+  uint64_t startpacket  = RINGID_NONE;
 
   char *ptr;
   char OKGO = 1;
@@ -923,6 +919,10 @@ HandleNegotiation (ClientInfo *cinfo)
         else
           startpacket = (uint64_t)strtoull (seqstr, NULL, 10);
       }
+      else
+      {
+        startpacket = RINGID_NEXT;
+      }
     }
     else /* Protocol 3.x */
     {
@@ -947,6 +947,10 @@ HandleNegotiation (ClientInfo *cinfo)
         {
           startpacket = (seq & 0xFFFFFF);
         }
+      }
+      else
+      {
+        startpacket = RINGID_NEXT;
       }
     }
 
@@ -1038,7 +1042,7 @@ HandleNegotiation (ClientInfo *cinfo)
     else if (OKGO)
     {
       /* If no stations yet we are in all-station mode */
-      if (slinfo->stationcount == 0 && fields >= 1)
+      if (slinfo->stationcount == 0)
       {
         slinfo->startid  = startpacket;
         cinfo->starttime = starttime;

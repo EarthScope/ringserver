@@ -47,10 +47,10 @@ typedef enum
 /* Client states */
 typedef enum
 {
-  STATE_COMMAND,    /* Initial command state */
-  STATE_STATION,    /* SeedLink STATION negotiation */
-  STATE_RINGCONFIG, /* SeedLink ring configuration */
-  STATE_STREAM      /* Data streaming */
+  STATE_COMMAND    = 0, /* Initial command state */
+  STATE_STATION    = 1, /* SeedLink STATION negotiation */
+  STATE_RINGCONFIG = 2, /* SeedLink ring configuration */
+  STATE_STREAM     = 3  /* Data streaming */
 } ClientState;
 
 /* Connection information for client threads */
@@ -91,7 +91,6 @@ typedef struct ClientInfo
   char       *limitstr;     /* Regular expression string to limit streams */
   char       *matchstr;     /* Regular expression string to match streams */
   char       *rejectstr;    /* Regular expression string to reject streams */
-  uint64_t    lastid;       /* Last packet ID sent to client */
   nstime_t    starttime;    /* Requested start time */
   nstime_t    endtime;      /* Requested end time */
   DataStream *mswrite;      /* miniSEED data write parameters */
@@ -112,8 +111,8 @@ typedef struct ClientInfo
   _Atomic uint64_t rxbytes0;    /* Track total number of data bytes received */
   uint64_t rxbytes1;            /* Track total number of data bytes received */
   _Atomic double rxbyterate;    /* Track rate of data byte reception */
-  nstime_t ratetime;              /* Time stamp for TX and RX rate calculations */
-  void *extinfo;                  /* Extended client info, protocol specific */
+  nstime_t ratetime;            /* Time stamp for TX and RX rate calculations */
+  void *extinfo;                /* Extended client info, protocol specific */
 } ClientInfo;
 
 /* Structure used as the data for B-tree of stream tracking */

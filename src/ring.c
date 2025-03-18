@@ -939,7 +939,7 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
   if (latestoffset < 0)
   {
     /* For readers already streaming data, position them to the eventual earliest */
-    if (reader->pktoffset < 0 && reader->pktid == RINGID_NEXT)
+    if (reader->pktoffset < 0 && (reader->pktid == RINGID_NEXT || reader->pktid == RINGID_NONE))
     {
       reader->pktid = RINGID_EARLIEST;
     }
@@ -952,7 +952,7 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
   /* Determine offset for initial read or relative positions */
   if (reader->pktoffset < 0)
   {
-    if (reader->pktid == RINGID_NEXT)
+    if (reader->pktid == RINGID_NEXT || reader->pktid == RINGID_NONE)
     {
       /* Position reader at the latest packet */
       reader->pktoffset = latestpkt.offset;
