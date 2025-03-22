@@ -67,6 +67,13 @@ typedef enum
   ERROR_AUTH         = 1u << 7,
 } ErrorCode;
 
+typedef struct Selector
+{
+  char string[MAXSTREAMID]; /* Full stream ID glob match */
+  Conversion convert;       /* Filter type */
+  struct Selector *next;    /* Next selection */
+} Selector;
+
 /* Structure to hold SeedLink specific parameters */
 typedef struct SLInfo
 {
@@ -77,21 +84,21 @@ typedef struct SLInfo
   int batch;             /* Connection is in batch mode */
   int terminfo;          /* Terminating INFO packet flag */
   uint64_t startid;      /* Starting packet ID */
-  struct strnode *selectors; /* List of SeedLink selectors */
+  Selector *selectors;   /* List of SeedLink selectors */
   int stationcount;      /* Number of stations requested with STATION */
   int timewinchannels;   /* Count of channels for time window completion check */
   RBTree *stations;      /* Binary tree of stations requested */
   char reqstaid[51];     /* Requested station ID, used during negotiation */
 } SLInfo;
 
-/* Requested station IDs, used as the data for B-tree at SL.stations */
+/* Requested station IDs, used as the data for B-tree at SLInfo.stations */
 typedef struct ReqStationID
 {
   nstime_t starttime; /* Requested start time for StaID */
   nstime_t endtime;   /* Requested end time for StaID */
   uint64_t packetid;  /* Requested packet ID */
   nstime_t datastart; /* Data start time of requested packet */
-  struct strnode *selectors; /* List of SeedLink stream ID selectors */
+  Selector *selectors; /* List of selected streams */
 } ReqStationID;
 
 /* Station ID listings, used for INFO requests */

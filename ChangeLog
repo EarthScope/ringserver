@@ -1,15 +1,16 @@
-2025.039:
+2025.081:
 	- Now requires a C11 compiler and uses --std=c11 when building.
 	- Allow protocol detection on connections using TLS.  This enables secure
 	mixed-protocol use, e.g. secure WebSocket for SeedLink or DataLink.
-	- Use the C11 _Atomic feature and reorganize for robust thread safety.
+	- Support for SeedLink selector filters to convert data to miniSEED v3.
+	- Use the C11 _Atomic feature and reorganize for increased thread safety.
 	- Fix assignment of starting packet when not provided in SeedLink DATA/FETCH
 	- Reduce cpu usage of sending data to clients by avoiding blocking socket usage.
 	- Remove unused mbedtls PSA initialization and thread-unsafe free'ing causing crashes.
 	- Improve TLS entropy seeding and diagnostic printing.
+	- Improve WebSocket handling regarding closing and ping/pong.
 	- Add NetIOTimeout (envvar RS_NETIO_TIMEOUT) config option.
-	- New version of ring buffer (v3) with consistent binary layout, independent
-	of padded structures.
+	- New version of ring buffer (v3) with consistent binary layout.
 	- Increase MAXSTREAMID from 60 to 64 for improved alignment and allowing
 	maximum stream IDs of 63 bytes.
 

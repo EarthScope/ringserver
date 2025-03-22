@@ -39,6 +39,7 @@ extern uint64_t FNVhash64 (const char *str);
 extern int KeyCompare (const void *a, const void *b);
 extern int IsAllDigits (const char *string);
 extern int HumanSizeString (uint64_t bytes, char *sizestring, size_t sizestringlen);
+extern int GlobMatch (const char *string, const char *pattern);
 
 #ifdef __cplusplus
 }

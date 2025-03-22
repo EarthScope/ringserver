@@ -208,6 +208,7 @@ ClientThread (void *arg)
 
     free (cinfo->sendbuf);
     free (cinfo->recvbuf);
+    free (cinfo->convertbuf);
     free (cinfo->addr);
     cinfo->addr = NULL;
     free (cinfo->mswrite);
@@ -405,9 +406,10 @@ ClientThread (void *arg)
   cinfo->streamscount = 0;
   pthread_mutex_unlock (&(cinfo->streams_lock));
 
-  /* Release the client send and receive buffers */
+  /* Release the client send, receive and conversion buffers */
   free (cinfo->sendbuf);
   free (cinfo->recvbuf);
+  free (cinfo->convertbuf);
 
   /* Release client socket structure, allocated in ListenThread() */
   free (cinfo->addr);
@@ -1235,20 +1237,14 @@ GetStreamNode (RBTree *tree, pthread_mutex_t *plock, char *streamid, int *new)
 
     *newkey = key;
 
-    if ((stream = (StreamNode *)malloc (sizeof (StreamNode))) == NULL)
+    if ((stream = (StreamNode *)calloc (1, sizeof (StreamNode))) == NULL)
     {
       lprintf (0, "GetStreamNode: Error allocating new node");
       return 0;
     }
 
-    /* Initialize the new StreamNode */
+    /* Initialize the new StreamNode, values that are not 0 */
     strncpy (stream->streamid, streamid, sizeof (stream->streamid) - 1);
-    *(stream->streamid + sizeof (stream->streamid) - 1) = '\0';
-    stream->txpackets                                   = 0;
-    stream->txbytes                                     = 0;
-    stream->rxpackets                                   = 0;
-    stream->rxbytes                                     = 0;
-    stream->endtimereached                              = 0;
 
     /* Add the new entry while locking the tree */
     pthread_mutex_lock (plock);

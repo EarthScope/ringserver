@@ -53,6 +53,13 @@ typedef enum
   STATE_STREAM     = 3  /* Data streaming */
 } ClientState;
 
+/* Conversion values */
+typedef enum
+{
+  CONVERT_NONE   = 0, /* No conversion */
+  CONVERT_MSEED3 = 1, /* Convert to miniSEED v3 if possible */
+} Conversion;
+
 /* Connection information for client threads */
 typedef struct ClientInfo
 {
@@ -67,6 +74,8 @@ typedef struct ClientInfo
   size_t      recvlength;   /* Length of data in recvbuf */
   size_t      recvconsumed; /* Bytes of recvbuf that have been consumed */
   char        dlcommand[UINT8_MAX + 1]; /* DataLink command buffer */
+  char       *convertbuf;   /* Conversion buffer */
+  size_t      convertbuflen;/* Length of conversion buffer */
   RingPacket  packet;       /* Client specific ring packet header */
   struct sockaddr *addr;    /* client socket structure */
   socklen_t   addrlen;      /* Length of client socket structure */
@@ -118,12 +127,13 @@ typedef struct ClientInfo
 /* Structure used as the data for B-tree of stream tracking */
 typedef struct StreamNode
 {
-  char      streamid[MAXSTREAMID]; /* Stream ID */
-  uint64_t  txpackets;      /* Total packets transmitted */
-  uint64_t  txbytes;        /* Total bytes transmitted */
-  uint64_t  rxpackets;      /* Total packets received */
-  uint64_t  rxbytes;        /* Total bytes received */
-  uint8_t   endtimereached; /* End time reached, for window requests */
+  char       streamid[MAXSTREAMID]; /* Stream ID */
+  uint64_t   txpackets;      /* Total packets transmitted */
+  uint64_t   txbytes;        /* Total bytes transmitted */
+  uint64_t   rxpackets;      /* Total packets received */
+  uint64_t   rxbytes;        /* Total bytes received */
+  uint8_t    endtimereached; /* End time reached, for window requests */
+  Conversion convert;        /* Conversion type */
 } StreamNode;
 
 extern void *ClientThread (void *arg);

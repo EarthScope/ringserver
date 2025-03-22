@@ -87,7 +87,7 @@ static void SendInfoRecord (char *record, uint32_t reclen, void *vcinfo);
 static void FreeReqStationID (void *rbnode);
 static int StaKeyCompare (const void *a, const void *b);
 static ReqStationID *GetReqStationID (RBTree *tree, char *staid);
-static int StationToRegex (const char *staid, struct strnode *selector,
+static int StationToRegex (const char *staid, Selector *selector,
                            char **matchregex, char **rejectregex);
 static int SelectToRegex (const char *staid, const char *select,
                           char **regex);
@@ -365,6 +365,98 @@ SLHandleCmd (ClientInfo *cinfo)
 } /* End of SLHandleCmd() */
 
 /***********************************************************************
+ * SLFindFilter:
+ *
+ * Search the station and selector requests that match a stream ID
+ * and determine the conversion, if any, for this stream.
+ *
+ * Return conversion value for this stream, or CONVERT_NONE if none.
+ ***********************************************************************/
+static Conversion
+SLFindFilter (const SLInfo *slinfo, const char *streamid)
+{
+  char privateid[MAXSTREAMID] = {0};
+  ReqStationID *reqstaid;
+  RBNode *rbnode;
+  Stack *stack;
+  char *stationid = NULL;
+  char *selectid  = NULL;
+  char *ptr       = NULL;
+
+  if (!slinfo || !streamid)
+    return CONVERT_NONE;
+
+  /* No stations, there are no "filter" designations */
+  if (slinfo->stationcount <= 0)
+    return CONVERT_NONE;
+
+  memcpy (privateid, streamid, sizeof (privateid));
+
+  /* Decompose FDSN Source ID into SeedLink station and select IDs by
+   * extracting "NET_STA" and "LOC_B_S_SS" from "FDSN:NET_STA_LOC_B_S_SS/MSEED" */
+  if ((ptr = strchr (privateid, ':')))
+  {
+    stationid = ptr + 1;
+
+    if ((ptr = strchr (stationid, '_')))
+    {
+      if ((ptr = strchr (ptr + 1, '_')))
+      {
+        selectid = ptr + 1;
+        *ptr     = '\0';
+
+        if ((ptr = strchr (selectid, '/')))
+          *ptr = '\0';
+      }
+    }
+  }
+
+  if (stationid == NULL || selectid == NULL)
+    return CONVERT_NONE;
+
+  /* Search for matching selections in station requests */
+  stack = StackCreate ();
+  RBBuildStack (slinfo->stations, stack);
+
+  while ((rbnode = (RBNode *)StackPop (stack)))
+  {
+    if (GlobMatch (stationid, (const char *)rbnode->key))
+    {
+      reqstaid = (ReqStationID *)rbnode->data;
+
+      /* Search for matching selections in station selectors */
+      if (reqstaid->selectors)
+      {
+        Selector *selector = reqstaid->selectors;
+
+        while (selector)
+        {
+          if (selector->string[0] != '\0')
+          {
+            if (GlobMatch (selectid, selector->string))
+            {
+              StackDestroy (stack, 0);
+              return selector->convert;
+            }
+          }
+          else
+          {
+            StackDestroy (stack, 0);
+            return selector->convert;
+          }
+
+          selector = selector->next;
+        }
+      }
+    }
+  }
+
+  StackDestroy (stack, 0);
+
+  return CONVERT_NONE;
+} /* End of SLFindFilter() */
+
+/***********************************************************************
  * SLStreamPackets:
  *
  * Send selected ring packets to SeedLink client.
@@ -431,6 +523,9 @@ SLStreamPackets (ClientInfo *cinfo)
     {
       lprintf (3, "[%s] New stream for client: %s", cinfo->hostname, cinfo->packet.streamid);
       cinfo->streamscount++;
+
+      /* Set conversion value for stream */
+      stream->convert = SLFindFilter (slinfo, cinfo->packet.streamid);
     }
 
     /* Perform time-windowing end time checks */
@@ -467,8 +562,46 @@ SLStreamPackets (ClientInfo *cinfo)
     /* If not skipping this record send to the client and update byte count */
     if (!skiprecord)
     {
+      char *sendrecord    = cinfo->sendbuf;
+      uint32_t sendreclen = cinfo->packet.datasize;
+
+      /* Convert miniSEED 2 to miniSEED 3 if requested */
+      if (stream->convert == CONVERT_MSEED3 && MS2_ISVALIDHEADER (cinfo->sendbuf))
+      {
+        /* Allocate buffer for conversion if */
+        if (cinfo->convertbuf == NULL)
+        {
+          cinfo->convertbuflen = cinfo->sendbufsize;
+
+          if ((cinfo->convertbuf = (char *)malloc (cinfo->convertbuflen)) == NULL)
+          {
+            lprintf (0, "[%s] Error allocating convert buffer", cinfo->hostname);
+            return -1;
+          }
+        }
+
+        /* Convert miniSEED 2 to miniSEED 3 */
+        MS3Record *msr = NULL;
+        if (msr3_parse (cinfo->sendbuf, cinfo->packet.datasize, &msr, 0, 0) == MS_NOERROR)
+        {
+          int convertedlen = msr3_repack_mseed3 (msr, cinfo->convertbuf, (uint32_t)cinfo->convertbuflen, 0);
+
+          if (convertedlen > 0)
+          {
+            sendrecord = cinfo->convertbuf;
+            sendreclen = convertedlen;
+          }
+          else
+          {
+            lprintf (3, "[%s] Error converting miniSEED 2 to miniSEED 3", cinfo->hostname);
+          }
+        }
+
+        msr3_free (&msr);
+      }
+
       /* Send miniSEED record to client */
-      if (SendRecord (&cinfo->packet, cinfo->sendbuf, cinfo->packet.datasize, cinfo))
+      if (SendRecord (&cinfo->packet, sendrecord, sendreclen, cinfo))
       {
         if (cinfo->socketerr != -2)
           lprintf (0, "[%s] Error sending record to client", cinfo->hostname);
@@ -511,10 +644,9 @@ SLFree (ClientInfo *cinfo)
 
   slinfo = (SLInfo *)cinfo->extinfo;
 
-  for (struct strnode *next, *node = slinfo->selectors; node; node = next)
+  for (Selector *next, *node = slinfo->selectors; node; node = next)
   {
     next = node->next;
-    free (node->string);
     free (node);
   }
 
@@ -550,6 +682,7 @@ HandleNegotiation (ClientInfo *cinfo)
   char endtimestr[51]   = {0};
   char selector[64]     = {0};
   uint64_t startpacket  = RINGID_NONE;
+  Conversion convert;
 
   char *ptr;
   char OKGO = 1;
@@ -742,6 +875,7 @@ HandleNegotiation (ClientInfo *cinfo)
   else if (!strncasecmp (cinfo->recvbuf, "SELECT", 6))
   {
     OKGO = 1;
+    convert = CONVERT_NONE;
 
     /* Parse pattern from request */
     fields = sscanf (cinfo->recvbuf, "%*s %63s %c", selector, &junk);
@@ -755,11 +889,20 @@ HandleNegotiation (ClientInfo *cinfo)
       OKGO = 0;
     }
 
-    /* For SeedLink v4, check for unsupported filter (conversion) requests */
+    /* For SeedLink v4, parse filter (conversion) */
     if (OKGO && slinfo->proto_major == 4 && (ptr = strrchr (selector, ':')))
     {
-      /* Any filter except "native" is not supported */
-      if (strcmp (ptr + 1, "native") != 0)
+      /* Check for recognized filters */
+      if (strcmp (ptr + 1, "native") == 0)
+      {
+        convert = CONVERT_NONE;
+      }
+      else if (strcmp (ptr + 1, "3") == 0)
+      {
+        convert = CONVERT_MSEED3;
+      }
+      /* No other filters are supported */
+      else
       {
         lprintf (0, "[%s] Error, SELECT filter '%s' not supported", cinfo->hostname, ptr + 1);
 
@@ -821,9 +964,9 @@ HandleNegotiation (ClientInfo *cinfo)
       OKGO = 0;
     }
 
-    /* Allocate and populate new selector list node */
-    struct strnode *newselector;
-    if ((newselector = (struct strnode *)malloc (sizeof (struct strnode))) == NULL)
+    /* Allocate and populate new stream selection list node */
+    Selector *newselector;
+    if ((newselector = (Selector *)calloc (1, sizeof (Selector))) == NULL)
     {
       lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
 
@@ -833,7 +976,8 @@ HandleNegotiation (ClientInfo *cinfo)
       OKGO = 0;
     }
 
-    newselector->string = strdup (selector);
+    strncpy (newselector->string, selector, sizeof (newselector->string) - 1);
+    newselector->convert = convert;
 
     /* If modifying a STATION add selector to it's entry */
     if (OKGO && cinfo->state == STATE_STATION)
@@ -852,7 +996,7 @@ HandleNegotiation (ClientInfo *cinfo)
         /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
         if (selector[0] == '!' && stationid->selectors != NULL)
         {
-          struct strnode *last = stationid->selectors;
+          Selector *last = stationid->selectors;
 
           while (last->next != NULL)
             last = last->next;
@@ -877,7 +1021,7 @@ HandleNegotiation (ClientInfo *cinfo)
       /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
       if (selector[0] == '!' && slinfo->selectors != NULL)
       {
-        struct strnode *last = slinfo->selectors;
+        Selector *last = slinfo->selectors;
 
         while (last->next != NULL)
           last = last->next;
@@ -1449,14 +1593,13 @@ HandleInfo_v4 (ClientInfo *cinfo)
   char *json_string = NULL;
   char item[64]     = {0};
   char station[64]  = {0};
-  char stream[64]   = {0};
   char *matchregex  = NULL;
   char *rejectregex = NULL;
   char junk;
   int fields;
   int errflag = 0;
 
-  struct strnode selector = {.string = stream, .next = NULL};
+  Selector selector = {.string = {0}, .convert = CONVERT_NONE, .next = NULL};
 
   if (strncasecmp (cinfo->recvbuf, "INFO", 4) != 0)
   {
@@ -1465,7 +1608,7 @@ HandleInfo_v4 (ClientInfo *cinfo)
   }
 
   /* Parse INFO item and optional station and stream patterns */
-  fields = sscanf (cinfo->recvbuf, "%*s %63s %63s %63s %c", item, station, stream, &junk);
+  fields = sscanf (cinfo->recvbuf, "%*s %63s %63s %63s %c", item, station, selector.string, &junk);
 
   if (fields == 0)
   {
@@ -1500,7 +1643,7 @@ HandleInfo_v4 (ClientInfo *cinfo)
     /* Configure regex for matching included station and stream patterns */
     if (station[0] != '\0')
     {
-      if (StationToRegex (station, (stream[0] != '\0') ? &selector : NULL,
+      if (StationToRegex (station, (selector.string[0] != '\0') ? &selector : NULL,
                           &matchregex, &rejectregex))
       {
         lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
@@ -1518,7 +1661,7 @@ HandleInfo_v4 (ClientInfo *cinfo)
     /* Configure regex for matching included station and stream patterns */
     if (station[0] != '\0')
     {
-      if (StationToRegex (station, (stream[0] != '\0') ? &selector : NULL,
+      if (StationToRegex (station, (selector.string[0] != '\0') ? &selector : NULL,
                           &matchregex, &rejectregex))
       {
         lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
@@ -1803,10 +1946,9 @@ FreeReqStationID (void *rbnode)
   if (!rbnode)
     return;
 
-  for (struct strnode *next, *node = stationid->selectors; node; node = next)
+  for (Selector *next, *node = stationid->selectors; node; node = next)
   {
     next = node->next;
-    free (node->string);
     free (node);
   }
 
@@ -1893,7 +2035,7 @@ GetReqStationID (RBTree *tree, char *staid)
  * Return 0 on success and -1 on error.
  ***************************************************************************/
 static int
-StationToRegex (const char *staid, struct strnode *selector,
+StationToRegex (const char *staid, Selector *selector,
                 char **matchregex, char **rejectregex)
 {
   int matched = 0;
@@ -2032,7 +2174,7 @@ SelectToRegex (const char *staid, const char *select, char **regex)
   *build++ = '_';
 
   /* Copy stream pattern if provided, translating globbing wildcards to regex */
-  if (select)
+  if (select && select[0] != '\0')
   {
     /* Skip '-' at the beginning of the selector representing empty location codes */
     while (*select == '-')

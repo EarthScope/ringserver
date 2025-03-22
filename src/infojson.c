@@ -746,9 +746,20 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
       {
         yyjson_mut_val *selector_array = yyjson_mut_obj_add_arr (doc, client, "selector");
 
-        for (struct strnode *selector = slinfo->selectors; selector; selector = selector->next)
+        for (Selector *selector = slinfo->selectors; selector; selector = selector->next)
         {
-          yyjson_mut_arr_add_str (doc, selector_array, selector->string);
+          char value[MAXSTREAMID];
+
+          if (selector->convert == CONVERT_MSEED3)
+          {
+            snprintf (value, sizeof (value), "%s:3", selector->string);
+          }
+          else
+          {
+            snprintf (value, sizeof (value), "%s", selector->string);
+          }
+
+          yyjson_mut_arr_add_str (doc, selector_array, value);
         }
       }
 
@@ -791,9 +802,20 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
         {
           yyjson_mut_val *selector_array = yyjson_mut_obj_add_arr (doc, station, "selector");
 
-          for (struct strnode *selector = stationid->selectors; selector; selector = selector->next)
+          for (Selector *selector = stationid->selectors; selector; selector = selector->next)
           {
-            yyjson_mut_arr_add_str (doc, selector_array, selector->string);
+            char value[MAXSTREAMID];
+
+            if (selector->convert == CONVERT_MSEED3)
+            {
+              snprintf (value, sizeof (value), "%s:3", selector->string);
+            }
+            else
+            {
+              snprintf (value, sizeof (value), "%s", selector->string);
+            }
+
+            yyjson_mut_arr_add_str (doc, selector_array, value);
           }
         }
       }
