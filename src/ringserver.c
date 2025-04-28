@@ -1088,12 +1088,15 @@ ConfigClient (struct sockaddr *paddr, int clientsocket,
     }
   }
 
+  /* Default to connect permission only */
+  cinfo->permissions = CONNECT_PERMISSION;
+
   /* Grant write permission if address is in the write list */
   if (config.writeips)
   {
     if (MatchIP (config.writeips, paddr))
     {
-      cinfo->writeperm = 1;
+      cinfo->permissions |= WRITE_PERMISSION;
     }
   }
 
@@ -1102,7 +1105,7 @@ ConfigClient (struct sockaddr *paddr, int clientsocket,
   {
     if (MatchIP (config.trustedips, paddr))
     {
-      cinfo->trusted = 1;
+      cinfo->permissions |= TRUST_PERMISSION;
     }
   }
 

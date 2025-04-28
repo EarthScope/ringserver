@@ -99,7 +99,7 @@ DLHandleCmd (ClientInfo *cinfo)
   if (!strncmp (cinfo->dlcommand, "WRITE", 5))
   {
     /* Check for write permission */
-    if (!cinfo->writeperm)
+    if (!(cinfo->permissions & WRITE_PERMISSION))
     {
       lprintf (1, "[%s] Data packet received from client without write permission",
                cinfo->hostname);
@@ -307,7 +307,7 @@ HandleNegotiation (ClientInfo *cinfo)
     snprintf (sendbuffer, sizeof (sendbuffer),
               "ID " DLSERVER_ID " PACKETSIZE:%lu%s",
               (unsigned long int)(param.pktsize - sizeof (RingPacket)),
-              (cinfo->writeperm) ? " WRITE" : "");
+              (cinfo->permissions & WRITE_PERMISSION) ? " WRITE" : "");
 
     /* Send the server ID string */
     if (SendPacket (cinfo, sendbuffer, NULL, 0, 0, 0))
@@ -994,19 +994,19 @@ HandleInfo (ClientInfo *cinfo)
     lprintf (1, "[%s] Received INFO STATUS request", cinfo->hostname);
     type = "INFO STATUS";
 
-    xmlstr = info_xml_dlv1 (cinfo, DLSERVER_ID, "STATUS", matchexpr, cinfo->trusted);
+    xmlstr = info_xml_dlv1 (cinfo, DLSERVER_ID, "STATUS", matchexpr, cinfo->permissions & TRUST_PERMISSION);
   } /* End of STATUS */
   else if (!strncasecmp (type, "STREAMS", 7))
   {
     lprintf (1, "[%s] Received INFO STREAMS request", cinfo->hostname);
     type = "INFO STREAMS";
 
-    xmlstr = info_xml_dlv1 (cinfo, DLSERVER_ID, "STREAMS", matchexpr, cinfo->trusted);
+    xmlstr = info_xml_dlv1 (cinfo, DLSERVER_ID, "STREAMS", matchexpr, cinfo->permissions & TRUST_PERMISSION);
   } /* End of STREAMS */
   else if (!strncasecmp (type, "CONNECTIONS", 11))
   {
     /* Check for trusted flag, required to access this resource */
-    if (!cinfo->trusted)
+    if (!(cinfo->permissions & TRUST_PERMISSION))
     {
       lprintf (1, "[%s] INFO CONNECTIONS request from un-trusted client",
                cinfo->hostname);
@@ -1018,7 +1018,7 @@ HandleInfo (ClientInfo *cinfo)
     lprintf (1, "[%s] Received INFO CONNECTIONS request", cinfo->hostname);
     type = "INFO CONNECTIONS";
 
-    xmlstr = info_xml_dlv1 (cinfo, DLSERVER_ID, "CONNECTIONS", matchexpr, cinfo->trusted);
+    xmlstr = info_xml_dlv1 (cinfo, DLSERVER_ID, "CONNECTIONS", matchexpr, cinfo->permissions & TRUST_PERMISSION);
   } /* End of CONNECTIONS */
   /* Unrecognized INFO request */
   else

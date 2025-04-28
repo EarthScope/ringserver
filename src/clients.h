@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2024:
+ * Copyright (C) 2025:
  * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
@@ -60,6 +60,15 @@ typedef enum
   CONVERT_MSEED3 = 1, /* Convert to miniSEED v3 if possible */
 } Conversion;
 
+/* Client permission values */
+typedef enum
+{
+  NO_PERMISSION      = 0,
+  CONNECT_PERMISSION = 1u << 1,
+  WRITE_PERMISSION   = 1u << 2,
+  TRUST_PERMISSION   = 1u << 3,
+} Permissions;
+
 /* Connection information for client threads */
 typedef struct ClientInfo
 {
@@ -93,8 +102,7 @@ typedef struct ClientInfo
     uint8_t four[4];
   } wsmask;                 /* Masking key for WebSocket message */
   size_t      wsmaskidx;    /* Index for unmasking WebSocket message */
-  uint8_t     writeperm;    /* Write permission flag */
-  uint8_t     trusted;      /* Trusted client flag */
+  Permissions permissions;  /* Client permissions */
   _Atomic (RingReader *) reader; /* Ring reader parameters */
   nstime_t    conntime;     /* Client connect time */
   char       *limitstr;     /* Regular expression string to limit streams */

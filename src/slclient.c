@@ -1449,7 +1449,7 @@ HandleInfo_v3 (ClientInfo *cinfo)
   }
   else if (!strncasecmp (level, "CONNECTIONS", 11))
   {
-    if (!cinfo->trusted)
+    if (!(cinfo->permissions & TRUST_PERMISSION))
     {
       lprintf (1, "[%s] Refusing INFO CONNECTIONS request from un-trusted client", cinfo->hostname);
       errflag = 1;
@@ -1674,7 +1674,7 @@ HandleInfo_v4 (ClientInfo *cinfo)
   }
   else if (!strncasecmp (item, "CONNECTIONS", 11))
   {
-    if (!cinfo->trusted)
+    if (!(cinfo->permissions & TRUST_PERMISSION))
     {
       lprintf (1, "[%s] Refusing INFO CONNECTIONS request from un-trusted client", cinfo->hostname);
       json_string = error_json (cinfo, SLSERVER_ID, "UNAUTHORIZED", "Client is not authorized to request connections");

@@ -344,7 +344,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
   else if (!strcasecmp (path, "/status") || !strcasecmp (path, "/status/json"))
   {
     /* Check for trusted flag, required to access this resource */
-    if (!cinfo->trusted)
+    if (!(cinfo->permissions & TRUST_PERMISSION))
     {
       lprintf (1, "[%s] HTTP STATUS request from un-trusted client",
                cinfo->hostname);
@@ -394,7 +394,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
   else if (!strcasecmp (path, "/connections") || !strcasecmp (path, "/connections/json"))
   {
     /* Check for trusted flag, required to access this resource */
-    if (!cinfo->trusted)
+    if (!(cinfo->permissions & TRUST_PERMISSION))
     {
       lprintf (1, "[%s] HTTP CONNECTIONS request from un-trusted client",
                cinfo->hostname);
