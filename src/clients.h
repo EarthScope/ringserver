@@ -105,7 +105,8 @@ typedef struct ClientInfo
   Permissions permissions;  /* Client permissions */
   _Atomic (RingReader *) reader; /* Ring reader parameters */
   nstime_t    conntime;     /* Client connect time */
-  char       *limitstr;     /* Regular expression string to limit streams */
+  char       *allowedstr;   /* Regular expression string for allowed streams */
+  char       *forbiddenstr; /* Regular expression string for forbidden streams */
   char       *matchstr;     /* Regular expression string to match streams */
   char       *rejectstr;    /* Regular expression string to reject streams */
   nstime_t    starttime;    /* Requested start time */

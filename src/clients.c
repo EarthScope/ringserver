@@ -92,15 +92,17 @@ ClientThread (void *arg)
   cinfo->reader     = &reader;
 
   /* Initialize RingReader parameters */
-  reader.pktoffset   = -1;
-  reader.pktid       = RINGID_NONE;
-  reader.pkttime     = NSTUNSET;
-  reader.limit       = NULL;
-  reader.limit_data  = NULL;
-  reader.match       = NULL;
-  reader.match_data  = NULL;
-  reader.reject      = NULL;
-  reader.reject_data = NULL;
+  reader.pktoffset      = -1;
+  reader.pktid          = RINGID_NONE;
+  reader.pkttime        = NSTUNSET;
+  reader.allowed        = NULL;
+  reader.allowed_data   = NULL;
+  reader.forbidden      = NULL;
+  reader.forbidden_data = NULL;
+  reader.match          = NULL;
+  reader.match_data     = NULL;
+  reader.reject         = NULL;
+  reader.reject_data    = NULL;
 
   /* Set initial state */
   cinfo->state = STATE_COMMAND;
@@ -158,12 +160,22 @@ ClientThread (void *arg)
     setuperr = 1;
   }
 
-  /* Limit sources if specified */
-  if (cinfo->limitstr)
+  /* Apply allowed sources if specified */
+  if (cinfo->allowedstr)
   {
-    if (RingLimit (&reader, cinfo->limitstr) < 0)
+    if (RingAllowed (&reader, cinfo->allowedstr) < 0)
     {
-      lprintf (0, "[%s] Error with RingLimit for '%s'", cinfo->hostname, cinfo->limitstr);
+      lprintf (0, "[%s] Error with RingAllowed for '%s'", cinfo->hostname, cinfo->allowedstr);
+      setuperr = 1;
+    }
+  }
+
+  /* Apply forbidden sources if specified */
+  if (cinfo->forbiddenstr)
+  {
+    if (RingForbidden (&reader, cinfo->forbiddenstr) < 0)
+    {
+      lprintf (0, "[%s] Error with RingForbidden for '%s'", cinfo->hostname, cinfo->forbiddenstr);
       setuperr = 1;
     }
   }
@@ -190,12 +202,17 @@ ClientThread (void *arg)
 
     tls_cleanup (cinfo);
 
-    /* Release limit related PCRE2 data
-     * The limitstr is not owned by the client so not free'd */
-    if (cinfo->reader->limit)
-      pcre2_code_free (cinfo->reader->limit);
-    if (cinfo->reader->limit_data)
-      pcre2_match_data_free (cinfo->reader->limit_data);
+    /* Release allowed and forbidden related PCRE2 data */
+    free (cinfo->allowedstr);
+    if (cinfo->reader->allowed)
+      pcre2_code_free (cinfo->reader->allowed);
+    if (cinfo->reader->allowed_data)
+      pcre2_match_data_free (cinfo->reader->allowed_data);
+    free (cinfo->forbiddenstr);
+    if (cinfo->reader->forbidden)
+      pcre2_code_free (cinfo->reader->forbidden);
+    if (cinfo->reader->forbidden_data)
+      pcre2_match_data_free (cinfo->reader->forbidden_data);
 
     cinfo->reader = NULL;
 
@@ -378,12 +395,17 @@ ClientThread (void *arg)
     WriteTLog (cinfo, 1);
   }
 
-  /* Release limit pattern string and related PCRE2 data */
-  free (cinfo->limitstr);
-  if (cinfo->reader->limit)
-    pcre2_code_free (cinfo->reader->limit);
-  if (cinfo->reader->limit_data)
-    pcre2_match_data_free (cinfo->reader->limit_data);
+  /* Release allowed and forbidden pattern strings and related PCRE2 data */
+  free (cinfo->allowedstr);
+  if (cinfo->reader->allowed)
+    pcre2_code_free (cinfo->reader->allowed);
+  if (cinfo->reader->allowed_data)
+    pcre2_match_data_free (cinfo->reader->allowed_data);
+  free (cinfo->forbiddenstr);
+  if (cinfo->reader->forbidden)
+    pcre2_code_free (cinfo->reader->forbidden);
+  if (cinfo->reader->forbidden_data)
+    pcre2_match_data_free (cinfo->reader->forbidden_data);
 
   /* Release match and reject pattern strings and related PCRE2 data */
   free (cinfo->matchstr);

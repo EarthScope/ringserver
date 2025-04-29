@@ -111,9 +111,10 @@ struct config_s config = {
     .httpheaders         = NULL,
     .mseedarchive        = NULL,
     .mseedidleto         = 300,
-    .limitips            = NULL,
-    .matchips            = NULL,
-    .rejectips           = NULL,
+    .allowedips          = NULL,
+    .forbiddenips        = NULL,
+    .acceptips           = NULL,
+    .denyips             = NULL,
     .writeips            = NULL,
     .trustedips          = NULL,
     .tlscertfile         = NULL,
@@ -1002,22 +1003,22 @@ ConfigClient (struct sockaddr *paddr, int clientsocket,
 {
   ClientInfo *cinfo;
 
-  /* Reject clients not in matching list */
-  if (config.matchips)
+  /* Deny clients not in accept IP list */
+  if (config.acceptips)
   {
-    if (!MatchIP (config.matchips, paddr))
+    if (!MatchIP (config.acceptips, paddr))
     {
-      lprintf (1, "Rejecting non-matching connection from: %s:%s", ipstr, portstr);
+      lprintf (1, "Denying connection not in accept list from: %s:%s", ipstr, portstr);
       return NULL;
     }
   }
 
-  /* Reject clients in the rejection list */
-  if (config.rejectips)
+  /* Deny clients in the deny IP list */
+  if (config.denyips)
   {
-    if (MatchIP (config.rejectips, paddr))
+    if (MatchIP (config.denyips, paddr))
     {
-      lprintf (1, "Rejecting connection from: %s:%s", ipstr, portstr);
+      lprintf (1, "Denying connection in deny list from: %s:%s", ipstr, portstr);
       return NULL;
     }
   }
@@ -1041,12 +1042,12 @@ ConfigClient (struct sockaddr *paddr, int clientsocket,
     if ((config.writeips && MatchIP (config.writeips, paddr)) &&
         param.clientcount <= (config.maxclients + RESERVECONNECTIONS))
     {
-      lprintf (1, "Allowing connection in reserve space from %s:%s", ipstr, portstr);
+      lprintf (1, "Accepting connection in reserve space from %s:%s", ipstr, portstr);
     }
     else
     {
       lprintf (1, "Maximum number of clients exceeded: %u", config.maxclients);
-      lprintf (1, "  Rejecting connection from: %s:%s", ipstr, portstr);
+      lprintf (1, "  Denying connection from: %s:%s", ipstr, portstr);
       return NULL;
     }
   }
@@ -1077,14 +1078,25 @@ ConfigClient (struct sockaddr *paddr, int clientsocket,
   /* Set initial client ID string */
   strncpy (cinfo->clientid, "Client", sizeof (cinfo->clientid));
 
-  /* Set stream limit if specified for address */
-  if (config.limitips)
+  /* Set allowed stream limit if specified for address */
+  if (config.allowedips)
   {
     IPNet *ipnet;
 
-    if ((ipnet = MatchIP (config.limitips, paddr)))
+    if ((ipnet = MatchIP (config.allowedips, paddr)))
     {
-      cinfo->limitstr = (ipnet->limitstr) ? strdup (ipnet->limitstr) : NULL;
+      cinfo->allowedstr = (ipnet->limitstr) ? strdup (ipnet->limitstr) : NULL;
+    }
+  }
+
+  /* Set forbidden stream limit if specified for address */
+  if (config.forbiddenips)
+  {
+    IPNet *ipnet;
+
+    if ((ipnet = MatchIP (config.forbiddenips, paddr)))
+    {
+      cinfo->forbiddenstr = (ipnet->limitstr) ? strdup (ipnet->limitstr) : NULL;
     }
   }
 
@@ -1501,9 +1513,9 @@ void LogServerParameters ()
   lprintf (1, "   server ID: %s", config.serverid);
   lprintf (1, "   ring directory: %s", (config.ringdir) ? config.ringdir : "NONE");
   lprintf (1, "   max clients: %u%s", config.maxclients,
-           (config.maxclients > 0) ? " (no limit)" : "");
+           (config.maxclients == 0) ? " (no limit)" : "");
   lprintf (1, "   max clients per IP: %u%s", config.maxclientsperip,
-           (config.maxclientsperip > 0) ? " (no limit)" : "");
+           (config.maxclientsperip == 0) ? " (no limit)" : "");
 
   lprintf (2, "   configuration file: %s", (config.configfile) ? config.configfile : "NONE");
   lprintf (2, "   client timeout: %u seconds", config.clienttimeout);
@@ -1549,59 +1561,78 @@ void LogServerParameters ()
     }
   }
 
-  if (config.limitips && config.verbose >= 3)
+  if (config.allowedips && config.verbose >= 3)
   {
-    IPNet *ipn = config.limitips;
+    IPNet *ipn = config.allowedips;
     while (ipn)
     {
       inet_ntop (ipn->family, &ipn->network, network, sizeof (network));
       inet_ntop (ipn->family, &ipn->netmask, netmask, sizeof (netmask));
 
-      lprintf (3, "   limit IP range: %s/%s", network, netmask);
-      lprintf (3, "     limit pattern: %s", (ipn->limitstr) ? ipn->limitstr : "NONE");
+      lprintf (3, "   allowed streams IP range: %s/%s", network, netmask);
+      lprintf (3, "     allowed stream pattern: %s", (ipn->limitstr) ? ipn->limitstr : "NONE");
 
       ipn = ipn->next;
     }
   }
   else
   {
-    lprintf (3, "   limit IP: NONE");
+    lprintf (3, "   allowed IP: NONE");
   }
 
-  if (config.matchips && config.verbose >= 3)
+  if (config.forbiddenips && config.verbose >= 3)
   {
-    IPNet *ipn = config.matchips;
+    IPNet *ipn = config.forbiddenips;
     while (ipn)
     {
       inet_ntop (ipn->family, &ipn->network, network, sizeof (network));
       inet_ntop (ipn->family, &ipn->netmask, netmask, sizeof (netmask));
 
-      lprintf (3, "   match IP range: %s/%s", network, netmask);
+      lprintf (3, "   forbidden streams IP range: %s/%s", network, netmask);
+      lprintf (3, "     forbidden streams pattern: %s", (ipn->limitstr) ? ipn->limitstr : "NONE");
 
       ipn = ipn->next;
     }
   }
   else
   {
-    lprintf (3, "   match IP range: NONE");
+    lprintf (3, "   forbidden IP: NONE");
   }
 
-  if (config.rejectips && config.verbose >= 3)
+  if (config.acceptips && config.verbose >= 3)
   {
-    IPNet *ipn = config.rejectips;
+    IPNet *ipn = config.acceptips;
     while (ipn)
     {
       inet_ntop (ipn->family, &ipn->network, network, sizeof (network));
       inet_ntop (ipn->family, &ipn->netmask, netmask, sizeof (netmask));
 
-      lprintf (3, "   reject IP range: %s/%s", network, netmask);
+      lprintf (3, "   accept IP range: %s/%s", network, netmask);
 
       ipn = ipn->next;
     }
   }
   else
   {
-    lprintf (3, "   reject IP range: NONE");
+    lprintf (3, "   accept IP range: NONE");
+  }
+
+  if (config.denyips && config.verbose >= 3)
+  {
+    IPNet *ipn = config.denyips;
+    while (ipn)
+    {
+      inet_ntop (ipn->family, &ipn->network, network, sizeof (network));
+      inet_ntop (ipn->family, &ipn->netmask, netmask, sizeof (netmask));
+
+      lprintf (3, "   deny IP range: %s/%s", network, netmask);
+
+      ipn = ipn->next;
+    }
+  }
+  else
+  {
+    lprintf (3, "   deny IP range: NONE");
   }
 
   if (config.writeips && config.verbose >= 3)

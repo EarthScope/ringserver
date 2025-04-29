@@ -765,12 +765,12 @@ HandleWrite (ClientInfo *cinfo)
   cinfo->packet.datastart = MS_HPTIME2NSTIME (cinfo->packet.datastart);
   cinfo->packet.dataend   = MS_HPTIME2NSTIME (cinfo->packet.dataend);
 
-  /* Check that client is allowed to write this stream ID if limit is present */
-  if (cinfo->reader->limit)
+  /* Check that client is allowed to write this stream ID */
+  if (cinfo->reader->allowed)
   {
-    if (pcre2_match (cinfo->reader->limit, (PCRE2_SPTR8)cinfo->packet.streamid,
+    if (pcre2_match (cinfo->reader->allowed, (PCRE2_SPTR8)cinfo->packet.streamid,
                      PCRE2_ZERO_TERMINATED, 0, 0,
-                     cinfo->reader->limit_data, NULL) < 0)
+                     cinfo->reader->allowed_data, NULL) < 0)
     {
       lprintf (1, "[%s] Error, permission denied for WRITE of stream ID: %s",
                cinfo->hostname, cinfo->packet.streamid);

@@ -1023,19 +1023,25 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
     reader->pktid     = pkt->pktid;
     reader->pkttime   = pkt->pkttime;
 
-    /* Test limit expression if available */
-    if (reader->limit)
-      if (pcre2_match (reader->limit, (PCRE2_SPTR8)pkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                       reader->limit_data, NULL) < 0)
+    /* Test allowed expression if available, skip if NOT matched */
+    if (reader->allowed)
+      if (pcre2_match (reader->allowed, (PCRE2_SPTR8)pkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                       reader->allowed_data, NULL) < 0)
         skip = 1;
 
-    /* Test match expression if available and not already skipping */
+    /* Test forbidden expression if available, skip if matched */
+    if (reader->forbidden && skip == 0)
+      if (pcre2_match (reader->forbidden, (PCRE2_SPTR8)pkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                       reader->forbidden_data, NULL) >= 0)
+        skip = 1;
+
+    /* Test match expression if available, skip if NOT matched */
     if (reader->match && skip == 0)
       if (pcre2_match (reader->match, (PCRE2_SPTR8)pkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
                        reader->match_data, NULL) < 0)
         skip = 1;
 
-    /* Test reject expression if available and not already skipping */
+    /* Test reject expression if available, skip if matched */
     if (reader->reject && skip == 0)
       if (pcre2_match (reader->reject, (PCRE2_SPTR8)pkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
                        reader->reject_data, NULL) >= 0)
@@ -1203,19 +1209,25 @@ RingAfter (RingReader *reader, nstime_t reftime, int whence)
     if (pkt1->dataend < reftime)
       skip = 1;
 
-    /* Test limit expression if available */
-    if (reader->limit && !skip)
-      if (pcre2_match (reader->limit, (PCRE2_SPTR8)pkt1->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                       reader->limit_data, NULL) < 0)
+    /* Test allowed expression if available, skip if NOT matched */
+    if (reader->allowed && !skip)
+      if (pcre2_match (reader->allowed, (PCRE2_SPTR8)pkt1->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                       reader->allowed_data, NULL) < 0)
         skip = 1;
 
-    /* Test match expression if available and not already skipping */
+    /* Test forbidden expression if available, skip if matched */
+    if (reader->forbidden && !skip)
+      if (pcre2_match (reader->forbidden, (PCRE2_SPTR8)pkt1->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                       reader->forbidden_data, NULL) >= 0)
+        skip = 1;
+
+    /* Test match expression if available, skip if NOT matched */
     if (reader->match && !skip)
       if (pcre2_match (reader->match, (PCRE2_SPTR8)pkt1->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
                        reader->match_data, NULL) < 0)
         skip = 1;
 
-    /* Test reject expression if available and not already skipping */
+    /* Test reject expression if available, skip if matched */
     if (reader->reject && !skip)
       if (pcre2_match (reader->reject, (PCRE2_SPTR8)pkt1->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
                        reader->reject_data, NULL) >= 0)
@@ -1326,19 +1338,25 @@ RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit,
     /* Get pointer to RingPacket */
     spkt = PACKETPTR (soffset);
 
-    /* Test limit expression if available */
-    if (reader->limit)
-      if (pcre2_match (reader->limit, (PCRE2_SPTR8)spkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                       reader->limit_data, NULL) < 0)
+    /* Test allowed expression if available, skip if NOT matched */
+    if (reader->allowed)
+      if (pcre2_match (reader->allowed, (PCRE2_SPTR8)spkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                       reader->allowed_data, NULL) < 0)
         skip = 1;
 
-    /* Test match expression if available and not already skipping */
+    /* Test forbidden expression if available, skip if matched */
+    if (reader->forbidden && !skip)
+      if (pcre2_match (reader->forbidden, (PCRE2_SPTR8)spkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                       reader->forbidden_data, NULL) >= 0)
+        skip = 1;
+
+    /* Test match expression if available, skip if NOT matched */
     if (reader->match && !skip)
       if (pcre2_match (reader->match, (PCRE2_SPTR8)spkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
                        reader->match_data, NULL) < 0)
         skip = 1;
 
-    /* Test reject expression if available and not already skipping */
+    /* Test reject expression if available, skip if matched */
     if (reader->reject && !skip)
       if (pcre2_match (reader->reject, (PCRE2_SPTR8)spkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
                        reader->reject_data, NULL) >= 0)
@@ -1521,19 +1539,25 @@ GetStreamsStack (RingReader *reader)
     /* If a RingReader is specified apply the match & reject expressions */
     if (reader)
     {
-      /* Test limit expression if available */
-      if (reader->limit)
-        if (pcre2_match (reader->limit, (PCRE2_SPTR8)stream->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                         reader->limit_data, NULL) < 0)
+      /* Test allowed expression if available, skip if NOT matched */
+      if (reader->allowed)
+        if (pcre2_match (reader->allowed, (PCRE2_SPTR8)stream->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                         reader->allowed_data, NULL) < 0)
           continue;
 
-      /* Test match expression if available */
+      /* Test forbidden expression if available, skip if matched */
+      if (reader->forbidden)
+        if (pcre2_match (reader->forbidden, (PCRE2_SPTR8)stream->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+                         reader->forbidden_data, NULL) >= 0)
+          continue;
+
+      /* Test match expression if available, skip if NOT matched */
       if (reader->match)
         if (pcre2_match (reader->match, (PCRE2_SPTR8)stream->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
                          reader->match_data, NULL) < 0)
           continue;
 
-      /* Test reject expression if available */
+      /* Test reject expression if available, skip if matched */
       if (reader->reject)
         if (pcre2_match (reader->reject, (PCRE2_SPTR8)stream->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
                          reader->reject_data, NULL) >= 0)

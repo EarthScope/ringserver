@@ -615,25 +615,66 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
+  /* Deprecated LimitIP parameter, replaced by AllowedStreamsIP */
   if ((envvar = getenv ("RS_LIMIT_IP")) && strcasecmp (envvar, "DISABLE"))
   {
-    snprintf (paramstr, sizeof (paramstr), "LimitIP %s", envvar);
+    snprintf (paramstr, sizeof (paramstr), "AllowedStreamsIP %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+
+    lprintf (1, "RS_LIMIT_IP environment variable is deprecated, use RS_ALLOWED_STREAMS_IP instead");
+  }
+
+  if ((envvar = getenv ("RS_ALLOWED_STREAMS_IP")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "AllowedStreamsIP %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
       return -1;
     count++;
   }
 
+  if ((envvar = getenv ("RS_FORBIDDEN_STREAMS_IP")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "ForbiddenStreamsIP %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  /* Deprecated LimitIP parameter, replaced by AcceptIP */
   if ((envvar = getenv ("RS_MATCH_IP")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "MatchIP %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
       return -1;
     count++;
+
+    lprintf (1, "RS_MATCH_IP environment variable is deprecated, use RS_ACCEPT_IP instead");
   }
 
+  if ((envvar = getenv ("RS_ACCEPT_IP")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "AcceptIP %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  /* Deprecated RS_REJECT_IP parameter, replaced by DenyIP */
   if ((envvar = getenv ("RS_REJECT_IP")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "RejectIP %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+
+    lprintf (1, "RS_REJECT_IP environment variable is deprecated, use RS_DENY_IP instead");
+  }
+
+  if ((envvar = getenv ("RS_DENY_IP")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "DenyIP %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
       return -1;
     count++;
@@ -762,7 +803,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
   /* Reset the configuration file mtime */
   param.configfilemtime = mtime;
 
-  /* Clear the write, trusted, limit, match and reject IPs lists */
+  /* Clear the write, trusted, allowed, forbidden, match and reject IPs lists */
   ipnet = nextipnet = config.writeips;
   while (ipnet)
   {
@@ -781,7 +822,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
   }
   config.trustedips = NULL;
 
-  ipnet = nextipnet = config.limitips;
+  ipnet = nextipnet = config.allowedips;
   while (ipnet)
   {
     nextipnet = ipnet->next;
@@ -790,25 +831,36 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     free (ipnet);
     ipnet = nextipnet;
   }
-  config.limitips = NULL;
+  config.allowedips = NULL;
 
-  ipnet = nextipnet = config.matchips;
+  ipnet = nextipnet = config.forbiddenips;
+  while (ipnet)
+  {
+    nextipnet = ipnet->next;
+    if (ipnet->limitstr)
+      free (ipnet->limitstr);
+    free (ipnet);
+    ipnet = nextipnet;
+  }
+  config.forbiddenips = NULL;
+
+  ipnet = nextipnet = config.acceptips;
   while (ipnet)
   {
     nextipnet = ipnet->next;
     free (ipnet);
     ipnet = nextipnet;
   }
-  config.matchips = NULL;
+  config.acceptips = NULL;
 
-  ipnet = nextipnet = config.rejectips;
+  ipnet = nextipnet = config.denyips;
   while (ipnet)
   {
     nextipnet = ipnet->next;
     free (ipnet);
     ipnet = nextipnet;
   }
-  config.rejectips = NULL;
+  config.denyips = NULL;
 
   /* Clear webroot specification */
   if (config.webroot)
@@ -936,9 +988,10 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
  * [D] TransferLogRX <1|0>
  * [D] WriteIP <IP>[/netmask]
  * [D] TrustedIP <IP>[/netmask]
- * [D] LimitIP <IP>[/netmask] <streamlimit>
- * [D] MatchIP <IP[/netmask]
- * [D] RejectIP <IP[/netmask]
+ * [D] AllowedStreamsIP <IP>[/netmask] <streamlimit>
+ * [D] ForbiddenStreamsIP <IP>[/netmask] <streamlimit>
+ * [D] AcceptIP <IP>[/netmask]
+ * [D] DenyIP <IP>[/netmask]
  * [D] WebRoot <web content root>
  * [D] HTTPHeader <HTTP header>
  * [D[ TLSCertFile <file>
@@ -1363,29 +1416,46 @@ SetParameter (const char *paramstring, int dynamiconly)
       return -1;
     }
   }
-  else if (!strcasecmp ("LimitIP", field[0]) && fieldcount == 3)
+  else if ((!strcasecmp ("AllowedStreamsIP", field[0]) || !strcasecmp ("LimitIP", field[0])) && fieldcount == 3)
   {
-    if (AddIPNet (&config.limitips, field[1], field[2]))
+    if (AddIPNet (&config.allowedips, field[1], field[2]))
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    if (!strcasecmp ("LimitIP", field[0]))
+      lprintf (1, "LimitIP config parameter is deprecated, use AllowedStreamsIP instead");
+  }
+  else if (!strcasecmp ("ForbiddenStreamsIP", field[0]) && fieldcount == 3)
+  {
+    if (AddIPNet (&config.forbiddenips, field[1], field[2]))
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
   }
-  else if (!strcasecmp ("MatchIP", field[0]) && fieldcount == 2)
+  else if ((!strcasecmp ("AcceptIP", field[0]) || !strcasecmp ("MatchIP", field[0])) && fieldcount == 2)
   {
-    if (AddIPNet (&config.matchips, field[1], NULL))
+    if (AddIPNet (&config.acceptips, field[1], NULL))
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
+
+    if (!strcasecmp ("MatchIP", field[0]))
+      lprintf (1, "MatchIP config parameter is deprecated, use AcceptIP instead");
   }
-  else if (!strcasecmp ("RejectIP", field[0]) && fieldcount == 2)
+  else if ((!strcasecmp ("DenyIP", field[0]) || !strcasecmp ("RejectIP", field[0])) && fieldcount == 2)
   {
-    if (AddIPNet (&config.rejectips, field[1], NULL))
+    if (AddIPNet (&config.denyips, field[1], NULL))
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
+
+    if (!strcasecmp ("RejectIP", field[0]))
+      lprintf (1, "RejectIP config parameter is deprecated, use DenyIP instead");
   }
   else if (!strcasecmp ("WebRoot", field[0]) && fieldcount == 2)
   {
@@ -2506,20 +2576,36 @@ ListenPort 18000\n\
 #TrustedIP <address>[/prefix]\n\
 \n\
 \n\
-# Limit IP addresses or ranges to only specified stream IDs in the\n\
+# Allow IP addresses or ranges to access only specified stream IDs in the\n\
 # ringserver.  A regular expression is used to specify which Stream\n\
 # IDs the address range is allowed to access (and write), the\n\
 # expression may be compound and must not contain spaces.  By default\n\
 # clients can access any streams in the buffer, or write any streams\n\
 # if write permission is granted.  This parameter can be specified\n\
 # multiple times and should be specified in address/prefix (CIDR)\n\
-# notation, e.g.: \"LimitIP 192.168.0.1/24\".  The prefix may be omitted\n\
+# notation, e.g.: \"AllowedIP 192.168.0.1/24\".  The prefix may be omitted\n\
 # in which case only the specific host is limited. This is a dynamic\n\
 # parameter.\n\
-# Equivalent environment variable: RS_LIMIT_IP\n\
+# Equivalent environment variable: RS_ALLOWED_STREAMS_IP\n\
 \n\
-#LimitIP <address>[/prefix] <StreamID Pattern>\n\
-#LimitIP <address>[/prefix] <StreamID Pattern>\n\
+#AllowedStreamsIP <address>[/prefix] <StreamID Pattern>\n\
+#AllowedStreamsIP <address>[/prefix] <StreamID Pattern>\n\
+\n\
+\n\
+# Forbid IP addresses or ranges from accessing specified stream IDs in the\n\
+# ringserver.  A regular expression is used to specify which Stream\n\
+# IDs the address range is allowed to access (and write), the\n\
+# expression may be compound and must not contain spaces.  By default\n\
+# clients can access any streams in the buffer, or write any streams\n\
+# if write permission is granted.  This parameter can be specified\n\
+# multiple times and should be specified in address/prefix (CIDR)\n\
+# notation, e.g.: \"ForbiddenIP 192.168.0.1/24\".  The prefix may be omitted\n\
+# in which case only the specific host is limited. This is a dynamic\n\
+# parameter.\n\
+# Equivalent environment variable: RS_FORBIDDEN_STREAMS_IP\n\
+\n\
+#ForbiddenStreamsIP <address>[/prefix] <StreamID Pattern>\n\
+#ForbiddenStreamsIP <address>[/prefix] <StreamID Pattern>\n\
 \n\
 \n\
 # Specify IP addresses or ranges which should be specifically allowed\n\
@@ -2528,10 +2614,10 @@ ListenPort 18000\n\
 # times and should be specified in address/prefix (CIDR) notation,\n\
 # e.g.: \"MatchIP 192.168.0.1/24\".  The prefix may be omitted in which\n\
 # case only the specific host is matched. This is a dynamic parameter.\n\
-# Equivalent environment variable: RS_MATCH_IP\n\
+# Equivalent environment variable: RS_ACCEPT_IP\n\
 \n\
-#MatchIP <address>[/prefix]\n\
-#MatchIP <address>[/prefix]\n\
+#AcceptIP <address>[/prefix]\n\
+#AcceptIP <address>[/prefix]\n\
 \n\
 \n\
 # Specify IP addresses or ranges which should be rejected immediately\n\
@@ -2539,10 +2625,10 @@ ListenPort 18000\n\
 # and should be specified in address/prefix (CIDR) notation, e.g.:\n\
 # \"RejectIP 192.168.0.1/24\".  The prefix may be omitted in which case\n\
 # only the specific host is rejected.  This is a dynamic parameter.\n\
-# Equivalent environment variable: RS_REJECT_IP\n\
+# Equivalent environment variable: RS_DENY_IP\n\
 \n\
-#RejectIP <address>[/prefix]\n\
-#RejectIP <address>[/prefix]\n\
+#DenyIP <address>[/prefix]\n\
+#DenyIP <address>[/prefix]\n\
 \n\
 \n\
 # Serve content via HTTP from the specified directory. The HTTP server\n\

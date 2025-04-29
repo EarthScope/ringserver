@@ -62,7 +62,8 @@ extern "C" {
 #define LEGACY_MSEED_STREAMID_PATTERN "^[0-9A-Z]{1,2}_[0-9A-Z]{1,5}_[0-9A-Z]{0,2}_[0-9A-Z]{3}/MSEED$"
 
 /* Macros for updating different patterns */
-#define RingLimit(reader, pattern) UpdatePattern (&(reader)->limit, &(reader)->limit_data, pattern, "ring limit")
+#define RingAllowed(reader, pattern) UpdatePattern (&(reader)->allowed, &(reader)->allowed_data, pattern, "ring allowed")
+#define RingForbidden(reader, pattern) UpdatePattern (&(reader)->forbidden, &(reader)->forbidden_data, pattern, "ring forbidden")
 #define RingMatch(reader, pattern) UpdatePattern (&(reader)->match, &(reader)->match_data, pattern, "ring match")
 #define RingReject(reader, pattern) UpdatePattern (&(reader)->reject, &(reader)->reject_data, pattern, "ring reject")
 
@@ -115,15 +116,17 @@ typedef struct __attribute__ ((packed)) RingStream
 /* Ring reader parameters */
 typedef struct RingReader
 {
-  _Atomic int64_t pktoffset;     /* Current packet offset in ring */
-  _Atomic uint64_t pktid;        /* Current packet ID */
-  _Atomic nstime_t pkttime;      /* Current packet creation time */
-  pcre2_code *limit;             /* Compiled limit expression */
-  pcre2_match_data *limit_data;  /* Match data results */
-  pcre2_code *match;             /* Compiled match expression */
-  pcre2_match_data *match_data;  /* Match data results */
-  pcre2_code *reject;            /* Compiled reject expression */
-  pcre2_match_data *reject_data; /* Match data results */
+  _Atomic int64_t pktoffset;        /* Current packet offset in ring */
+  _Atomic uint64_t pktid;           /* Current packet ID */
+  _Atomic nstime_t pkttime;         /* Current packet creation time */
+  pcre2_code *allowed;              /* Compiled allowed expression */
+  pcre2_match_data *allowed_data;   /* Match data results */
+  pcre2_code *forbidden;            /* Compiled forbidden expression */
+  pcre2_match_data *forbidden_data; /* Match data results */
+  pcre2_code *match;                /* Compiled match expression */
+  pcre2_match_data *match_data;     /* Match data results */
+  pcre2_code *reject;               /* Compiled reject expression */
+  pcre2_match_data *reject_data;    /* Match data results */
 } RingReader;
 
 extern int RingInitialize (char *ringfilename, char *streamfilename, int *ringfd);

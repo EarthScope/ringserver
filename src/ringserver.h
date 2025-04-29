@@ -199,9 +199,10 @@ struct config_s
   char *httpheaders;              /* HTTP headers to include in each HTTP response */
   char *mseedarchive;             /* miniSEED archive definition */
   int mseedidleto;                /* miniSEED idle file timeout */
-  IPNet *limitips;                /* List of limit-by-IP entries */
-  IPNet *matchips;                /* List of IPs allowed to connect */
-  IPNet *rejectips;               /* List of IPs not allowed to connect */
+  IPNet *allowedips;              /* List of allow-streams-by-IP entries */
+  IPNet *forbiddenips;            /* List of forbid-streams-by-IP entries */
+  IPNet *acceptips;               /* List of IPs allowed to connect */
+  IPNet *denyips;                 /* List of IPs not allowed to connect */
   IPNet *writeips;                /* List of IPs allowed to submit data */
   IPNet *trustedips;              /* List of IPs to trust */
   char *tlscertfile;              /* TLS certificate file */
