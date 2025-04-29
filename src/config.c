@@ -18,7 +18,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2024:
+ * Copyright (C) 2025:
  * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
@@ -48,6 +48,7 @@ static uint64_t CalcSize (const char *sizestr);
 static int AddMSeedScanThread (const char *configstr);
 static int AddServerThread (ServerThreadType type, void *params);
 static int AddIPNet (IPNet **pplist, const char *network, const char *limitstr);
+static int SetAuthCommand (const char *program, char **argv, int argc);
 
 /***************************************************************************
  * Usage:
@@ -599,6 +600,22 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
+  if ((envvar = getenv ("RS_AUTH_COMMAND")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "AuthCommand %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_AUTH_TIMEOUT")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "AuthTimeout %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
   if ((envvar = getenv ("RS_WRITE_IP")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "WriteIP %s", envvar);
@@ -986,6 +1003,8 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
  * [D] TransferLogPrefix <prefix>
  * [D] TransferLogTX <1|0>
  * [D] TransferLogRX <1|0>
+ * [D] AuthCommand <command>
+ * [D] AuthTimeout <timeout>
  * [D] WriteIP <IP>[/netmask]
  * [D] TrustedIP <IP>[/netmask]
  * [D] AllowedStreamsIP <IP>[/netmask] <streamlimit>
@@ -1399,6 +1418,24 @@ SetParameter (const char *paramstring, int dynamiconly)
       config.tlog.mode |= TLOG_RX;
     else
       config.tlog.mode &= ~TLOG_RX;
+  }
+  else if (!strcasecmp ("AuthCommand", field[0]) && fieldcount >= 2)
+  {
+    if (SetAuthCommand (field[1], &field[2], fieldcount - 2))
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+  }
+  else if (!strcasecmp ("AuthTimeout", field[0]) && fieldcount == 2)
+  {
+    if (sscanf (field[1], "%" SCNu32, &u32val) != 1)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    config.auth.timeout_sec = u32val;
   }
   else if (!strcasecmp ("WriteIP", field[0]) && fieldcount == 2)
   {
@@ -2308,6 +2345,84 @@ AddIPNet (IPNet **pplist, const char *network, const char *limitstr)
   return 0;
 } /* End of AddIPNet() */
 
+/***************************************************************************
+ * SetAuthCommand:
+ *
+ * Set the auth command string, parse the program and it's arguments into
+ * an argument array.
+ *
+ * Returns 0 on success and non zero on error.
+ ***************************************************************************/
+static int
+SetAuthCommand (const char *program, char **argv, int argc)
+{
+  if (!program)
+  {
+    lprintf (2, "%s() Required arguments missing", __func__);
+    return -1;
+  }
+
+  for (int count = 0; count < argc; count++)
+  {
+    fprintf (stderr, "%s ", argv[count]);
+  }
+
+  /* Free any existing auth command parameters */
+  free (config.auth.program);
+  if (config.auth.argv != NULL)
+  {
+    for (char **arg = config.auth.argv; *arg != NULL; arg++)
+    {
+      free (*arg);
+    }
+    free (config.auth.argv);
+  }
+  free (config.auth.argv);
+  config.auth.program = NULL;
+  config.auth.argv    = NULL;
+
+  /* Set new parameters */
+  if ((config.auth.program = strdup (program)) == NULL)
+  {
+    lprintf (0, "Error allocating memory for auth program");
+    return -1;
+  }
+
+  /* Create argument vector */
+  if (argv && argc > 0)
+  {
+    config.auth.argv = malloc (sizeof (char *) * (argc + 1));
+
+    if (config.auth.argv == NULL)
+    {
+      lprintf (0, "Error allocating memory for auth command arguments");
+      return -1;
+    }
+
+    for (int count = 0; count < argc; count++)
+    {
+      config.auth.argv[count] = strdup (argv[count]);
+
+      if (config.auth.argv[count] == NULL)
+      {
+        lprintf (0, "Error allocating memory for auth command arguments");
+        return -1;
+      }
+    }
+
+    /* NULL terminate the argument vector */
+    config.auth.argv[argc] = NULL;
+  }
+
+  /* Check if the program exists and is executable */
+  if (access (config.auth.program, X_OK) < 0)
+  {
+    lprintf (1, "Warning: auth program %s not found or not executable", config.auth.program);
+  }
+
+  return 0;
+} /* End of SetAuthCommand() */
+
 static const char *reference_config_file = \
 "# Example ringserver configuration file.\n\
 #\n\
@@ -2546,6 +2661,22 @@ ListenPort 18000\n\
 \n\
 #TransferLogTX 1\n\
 #TransferLogRX 1\n\
+\n\
+\n\
+# Specify a program and arguments to execute to perform authentication and\n\
+# return permissions (authorizations) if successful.  Credentials, either\n\
+# as username and password or a JSON Web Token (JWT) are provided to the\n\
+# program via environment variables: AUTH_USERNAME, AUTH_PASSWORD, AUTH_JWTOKEN.\n\
+# See the manual for details on the authentication process.\n\
+# This is a dynamic parameter.\n\
+\n\
+#AuthCommand </path/to/program> [arguments]\n\
+\n\
+\n\
+# Specify the timeout in seconds for the authentication command to complete.\n\
+# The default is 5 seconds.\n\
+# This is a dynamic parameter.\n\
+#AuthTimeout 5\n\
 \n\
 \n\
 # Specify IP addresses or ranges which are allowed to submit (write)\n\

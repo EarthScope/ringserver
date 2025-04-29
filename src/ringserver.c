@@ -120,6 +120,9 @@ struct config_s config = {
     .tlscertfile         = NULL,
     .tlskeyfile          = NULL,
     .tlsverifyclientcert = 0,
+    .auth.program        = NULL,
+    .auth.argv           = NULL,
+    .auth.timeout_sec    = 5,
     .tlog.write_lock     = PTHREAD_MUTEX_INITIALIZER,
     .tlog.mode           = TLOG_NONE,
     .tlog.basedir        = NULL,
@@ -1531,6 +1534,16 @@ void LogServerParameters ()
   lprintf (3, "   HTTP headers: %s", (config.httpheaders) ? config.httpheaders : "NONE");
   lprintf (3, "   miniSEED archive: %s", (config.mseedarchive) ? config.mseedarchive : "NONE");
   lprintf (3, "   miniSEED idle file timeout: %u seconds", config.mseedidleto);
+
+  lprintf (3, "   auth program: %s", (config.auth.program) ? config.auth.program : "NONE");
+  if (config.auth.argv != NULL)
+  {
+    for (char **arg = config.auth.argv; *arg != NULL; arg++)
+    {
+      lprintf (3, "     auth program argument %s", *arg);
+    }
+  }
+  lprintf (3, "   auth timeout: %u seconds", config.auth.timeout_sec);
 
   lprintf (3, "   transfer log: %s", (config.tlog.basedir) ? config.tlog.basedir : "NONE");
   if (config.tlog.basedir && config.verbose >= 3)
