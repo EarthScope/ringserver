@@ -144,16 +144,17 @@ ringserver [options] [configfile]
 <p >Access control is based on IP addresses and configured using the following config file parameters and environment variables:</p>
 
 <pre >
-  <b>MatchIP</b> or <b>RS_MATCH_IP</b>
-  <b>RejectIP</b> or <b>RS_REJECT_IP</b>
-  <b>LimitIP</b> or <b>RS_LIMIT_IP</b>
+  <b>AcceptIP</b> or <b>RS_ACCEPT_IP</b>
+  <b>DenyIP</b> or <b>RS_DENY_IP</b>
+  <b>AllowedStreamsIP</b> or <b>RS_ALLOWED_STREAMS_IP</b>
+  <b>ForbiddenStreamsIP</b> or <b>RS_FORBIDDEN_STREAMS_IP</b>
   <b>WriteIP</b> or <b>RS_WRITE_IP</b>
   <b>TrustedIP</b> or <b>RS_TRUSTED_IP</b>
 </pre>
 
-<p >By default all clients are allowed to connect.  Specific clients can be rejected using the <b>RejectIP</b> config parameter.  If any <b>MatchIP</b> config parameters are specified only addresses that match one of the entries, and are not rejected, are allowed to connect.</p>
+<p >By default all clients are allowed to connect.  Specific clients can be rejected using the <b>DenyIP</b> config parameter.  If any <b>AcceptIP</b> config parameters are specified only addresses that match one of the entries, and are not rejected, are allowed to connect.</p>
 
-<p >By default all clients are allowed access to all streams in the buffer, and clients with write permission are allowed to write any streams.  Specific clients can be limited to access or write subsets of streams using the <b>LimitIP</b> config parameter.  This parameter takes a regular expression that is used to match stream IDs that the client(s) are allowed access to or to write.</p>
+<p >By default all clients are allowed access to all streams in the buffer, and clients with write permission are allowed to write any streams.  Specific clients can be limited to access or write subsets of streams using the <b>AllowedStreamsIP</b> config parameter.  Specific clients can be forbidden from accessing subsets streams using the <b>ForbiddenStreamsIP</b> config parameter. These parameters accept a regular expression that is used to match stream IDs that the client(s) are allowed or forbidden.</p>
 
 <p >By default all clients are allowed to request the server ID, simple status and list of streams.  Specific clients can be allowed to access connection information and more detailed status using the <b>TrustedIP</b> access control.</p>
 
@@ -379,4 +380,4 @@ EarthScope Data Services
 </pre>
 
 
-(man page 2025/02/08)
+(man page 2025/04/29)

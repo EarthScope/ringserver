@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2025/02/08
+.TH RINGSERVER 1 2025/04/29
 .SH NAME
 ringserver \- stream oriented packet ring buffer
 
@@ -195,24 +195,27 @@ Access control is based on IP addresses and configured using the
 following config file parameters and environment variables:
 
 .nf
-  \fBMatchIP\fP or \fBRS_MATCH_IP\fP
-  \fBRejectIP\fP or \fBRS_REJECT_IP\fP
-  \fBLimitIP\fP or \fBRS_LIMIT_IP\fP
+  \fBAcceptIP\fP or \fBRS_ACCEPT_IP\fP
+  \fBDenyIP\fP or \fBRS_DENY_IP\fP
+  \fBAllowedStreamsIP\fP or \fBRS_ALLOWED_STREAMS_IP\fP
+  \fBForbiddenStreamsIP\fP or \fBRS_FORBIDDEN_STREAMS_IP\fP
   \fBWriteIP\fP or \fBRS_WRITE_IP\fP
   \fBTrustedIP\fP or \fBRS_TRUSTED_IP\fP
 .fi
 
 By default all clients are allowed to connect.  Specific clients can
-be rejected using the \fBRejectIP\fP config parameter.  If any
-\fBMatchIP\fP config parameters are specified only addresses that
+be rejected using the \fBDenyIP\fP config parameter.  If any
+\fBAcceptIP\fP config parameters are specified only addresses that
 match one of the entries, and are not rejected, are allowed to connect.
 
 By default all clients are allowed access to all streams in the
 buffer, and clients with write permission are allowed to write any
 streams.  Specific clients can be limited to access or write subsets
-of streams using the \fBLimitIP\fP config parameter.  This parameter
-takes a regular expression that is used to match stream IDs that the
-client(s) are allowed access to or to write.
+of streams using the \fBAllowedStreamsIP\fP config parameter.  Specific
+clients can be forbidden from accessing subsets streams using the
+\fBForbiddenStreamsIP\fP config parameter. These parameters
+accept a regular expression that is used to match stream IDs that the
+client(s) are allowed or forbidden.
 
 By default all clients are allowed to request the server ID, simple
 status and list of streams.  Specific clients can be allowed to access
