@@ -1572,7 +1572,7 @@ SetParameter (const char *paramstring, int dynamiconly)
   }
   else
   {
-    lprintf (0, "Unrecognized or misformatted config parameter: %s", paramstring);
+    lprintf (0, "Unrecognized config parameter: %s", paramstring);
     return -1;
   }
 
@@ -2362,11 +2362,6 @@ SetAuthCommand (const char *program, char **argv, int argc)
     return -1;
   }
 
-  for (int count = 0; count < argc; count++)
-  {
-    fprintf (stderr, "%s ", argv[count]);
-  }
-
   /* Free any existing auth command parameters */
   free (config.auth.program);
   if (config.auth.argv != NULL)
@@ -2377,7 +2372,6 @@ SetAuthCommand (const char *program, char **argv, int argc)
     }
     free (config.auth.argv);
   }
-  free (config.auth.argv);
   config.auth.program = NULL;
   config.auth.argv    = NULL;
 
@@ -2391,7 +2385,7 @@ SetAuthCommand (const char *program, char **argv, int argc)
   /* Create argument vector */
   if (argv && argc > 0)
   {
-    config.auth.argv = malloc (sizeof (char *) * (argc + 1));
+    config.auth.argv = malloc (sizeof (char *) * (argc + 2));
 
     if (config.auth.argv == NULL)
     {
@@ -2399,11 +2393,20 @@ SetAuthCommand (const char *program, char **argv, int argc)
       return -1;
     }
 
+    /* Add program path as first element in argument vector */
+    config.auth.argv[0] = strdup (program);
+    if (config.auth.argv[0] == NULL)
+    {
+      lprintf (0, "Error allocating memory for auth command arguments");
+      return -1;
+    }
+
+    /* Copy arguments to the argument vector */
     for (int count = 0; count < argc; count++)
     {
-      config.auth.argv[count] = strdup (argv[count]);
+      config.auth.argv[count + 1] = strdup (argv[count]);
 
-      if (config.auth.argv[count] == NULL)
+      if (config.auth.argv[count + 1] == NULL)
       {
         lprintf (0, "Error allocating memory for auth command arguments");
         return -1;
@@ -2411,7 +2414,7 @@ SetAuthCommand (const char *program, char **argv, int argc)
     }
 
     /* NULL terminate the argument vector */
-    config.auth.argv[argc] = NULL;
+    config.auth.argv[argc + 1] = NULL;
   }
 
   /* Check if the program exists and is executable */
@@ -2669,6 +2672,7 @@ ListenPort 18000\n\
 # program via environment variables: AUTH_USERNAME, AUTH_PASSWORD, AUTH_JWTOKEN.\n\
 # See the manual for details on the authentication process.\n\
 # This is a dynamic parameter.\n\
+# Equivalent environment variable: RS_AUTH_COMMAND\n\
 \n\
 #AuthCommand </path/to/program> [arguments]\n\
 \n\
@@ -2676,6 +2680,8 @@ ListenPort 18000\n\
 # Specify the timeout in seconds for the authentication command to complete.\n\
 # The default is 5 seconds.\n\
 # This is a dynamic parameter.\n\
+# Equivalent environment variable: RS_AUTH_TIMEOUT\n\
+\n\
 #AuthTimeout 5\n\
 \n\
 \n\
@@ -2709,12 +2715,12 @@ ListenPort 18000\n\
 \n\
 # Allow IP addresses or ranges to access only specified stream IDs in the\n\
 # ringserver.  A regular expression is used to specify which Stream\n\
-# IDs the address range is allowed to access (and write), the\n\
-# expression may be compound and must not contain spaces.  By default\n\
-# clients can access any streams in the buffer, or write any streams\n\
-# if write permission is granted.  This parameter can be specified\n\
-# multiple times and should be specified in address/prefix (CIDR)\n\
-# notation, e.g.: \"AllowedIP 192.168.0.1/24\".  The prefix may be omitted\n\
+# IDs the address range is allowed to read and write, the expression\n\
+# may be compound and must not contain spaces.  By default clients\n\
+# can access any streams in the buffer, or write any streams if write\n\
+# permission is granted.  This parameter can be specified multiple times\n\
+# and should be specified in address/prefix (CIDR) notation,\n\
+# for example: \"AllowedIP 192.168.0.1/24\".  The prefix may be omitted\n\
 # in which case only the specific host is limited. This is a dynamic\n\
 # parameter.\n\
 # Equivalent environment variable: RS_ALLOWED_STREAMS_IP\n\

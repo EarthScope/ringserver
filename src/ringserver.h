@@ -210,7 +210,6 @@ struct config_s
   _Atomic int tlsverifyclientcert; /* Verify client certificate */
   struct auth
   {
-    char *command;        /* Program and args to perform authentication and authorization */
     char *program;        /* Parsed program name for authentication and authorization */
     char **argv;          /* Parsed argument array for authentication and authorization */
     uint32_t timeout_sec; /* Auth program timeout in seconds */

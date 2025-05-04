@@ -191,8 +191,10 @@ config file.
 
 .SH "Access Control"
 
-Access control is based on IP addresses and configured using the
-following config file parameters and environment variables:
+Access control is based on IP addresses and user authentication.
+
+The IP-based access control is specified in the config file using
+the following parameters:
 
 .nf
   \fBAcceptIP\fP or \fBRS_ACCEPT_IP\fP
@@ -232,6 +234,31 @@ address followed by an optional prefix in CIDR notation.  For example:
 192.168.0.254.  The address may be a hostname, which will be resolved
 on startup.  The prefix is optional and, if omitted, defaults to
 specifying only the single address.
+
+The authentication-based access control is specified in the config file
+using the following parameters:
+.nf
+  \fBAuthCommand\fP or \fBRS_AUTH_COMMAND\fP
+  \fBAuthTimeout\fP or \fBRS_AUTH_TIMEOUT\fP
+.fi
+
+The \fBAuthCommand\fP config parameter specifies a command to be executed
+when a client connects to the server and requests authentication.  The
+command is executed with the USERNAME and PASSWORD environment variables
+set to the values provided by the client.  The command should return a JSON
+formatted object on stdout with the following optional keys:
+.nf
+{
+  "authenticated": <boolean>,
+  "write_permission": <boolean>,
+  "trust_permission": <boolean>,
+  "allowed_streams": ["streamregex1", "streamregex2"],
+  "forbidden_streams": ["streamregex3", "streamregex4"]
+}
+.fi
+
+The \fBauthenticated\fP key must be present and set to true for the client
+to be allowed to connect.  Missing keys are treated as false or empty.
 
 .SH "SeedLink Support"
 

@@ -1,4 +1,7 @@
-2025.119:
+2025.124:
+	- Add authentication and authorization support.
+    * Support AUTH command of SeedLink v4.0
+    * Add example authorization code and description
   - Rename following parameters (and environment variables):
   	* MatchIP/RS_MATCH_IP renamed to AcceptIP/RS_ACCEPT_IP
   	* RejectIP/RS_REJECT_IP renamed to DenyIP/RS_DENY_IP

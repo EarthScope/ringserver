@@ -141,7 +141,9 @@ ringserver [options] [configfile]
 
 ## <a id='access-control'>Access Control</a>
 
-<p >Access control is based on IP addresses and configured using the following config file parameters and environment variables:</p>
+<p >Access control is based on IP addresses and user authentication.</p>
+
+<p >The IP-based access control is specified in the config file using the following parameters:</p>
 
 <pre >
   <b>AcceptIP</b> or <b>RS_ACCEPT_IP</b>
@@ -161,6 +163,25 @@ ringserver [options] [configfile]
 <p >If no client addresses are granted write permission via <b>WriteIP</b> or granted trusted status via <b>TrustedIP</b> then the 'localhost' address (local loopback) are granted those permissions.</p>
 
 <p >Access control is host range (network) based, and specified as an address followed by an optional prefix in CIDR notation.  For example: "192.168.0.1/24" specifies the range of addresses from 192.168.0.1 to 192.168.0.254.  The address may be a hostname, which will be resolved on startup.  The prefix is optional and, if omitted, defaults to specifying only the single address.</p>
+
+<p >The authentication-based access control is specified in the config file using the following parameters:</p>
+<pre >
+  <b>AuthCommand</b> or <b>RS_AUTH_COMMAND</b>
+  <b>AuthTimeout</b> or <b>RS_AUTH_TIMEOUT</b>
+</pre>
+
+<p >The <b>AuthCommand</b> config parameter specifies a command to be executed when a client connects to the server and requests authentication.  The command is executed with the USERNAME and PASSWORD environment variables set to the values provided by the client.  The command should return a JSON formatted object on stdout with the following optional keys:</p>
+<pre >
+{
+  "authenticated": <boolean>,
+  "write_permission": <boolean>,
+  "trust_permission": <boolean>,
+  "allowed_streams": ["streamregex1", "streamregex2"],
+  "forbidden_streams": ["streamregex3", "streamregex4"]
+}
+</pre>
+
+<p >The <b>authenticated</b> key must be present and set to true for the client to be allowed to connect.  Missing keys are treated as false or empty.</p>
 
 ## <a id='seedlink-support'>Seedlink Support</a>
 

@@ -1530,20 +1530,20 @@ void LogServerParameters ()
   lprintf (2, "   TLS key file: %s", (config.tlskeyfile) ? config.tlskeyfile : "NONE");
   lprintf (2, "   TLS verify client certificate: %s", (config.tlsverifyclientcert) ? "yes" : "no");
 
-  lprintf (3, "   web root: %s", (config.webroot) ? config.webroot : "NONE");
-  lprintf (3, "   HTTP headers: %s", (config.httpheaders) ? config.httpheaders : "NONE");
-  lprintf (3, "   miniSEED archive: %s", (config.mseedarchive) ? config.mseedarchive : "NONE");
-  lprintf (3, "   miniSEED idle file timeout: %u seconds", config.mseedidleto);
-
-  lprintf (3, "   auth program: %s", (config.auth.program) ? config.auth.program : "NONE");
+  lprintf (2, "   auth program: %s", (config.auth.program) ? config.auth.program : "NONE");
   if (config.auth.argv != NULL)
   {
     for (char **arg = config.auth.argv; *arg != NULL; arg++)
     {
-      lprintf (3, "     auth program argument %s", *arg);
+      lprintf (2, "     auth program argument: %s", *arg);
     }
   }
-  lprintf (3, "   auth timeout: %u seconds", config.auth.timeout_sec);
+  lprintf (2, "   auth timeout: %u seconds", config.auth.timeout_sec);
+
+  lprintf (3, "   web root: %s", (config.webroot) ? config.webroot : "NONE");
+  lprintf (3, "   HTTP headers: %s", (config.httpheaders) ? config.httpheaders : "NONE");
+  lprintf (3, "   miniSEED archive: %s", (config.mseedarchive) ? config.mseedarchive : "NONE");
+  lprintf (3, "   miniSEED idle file timeout: %u seconds", config.mseedidleto);
 
   lprintf (3, "   transfer log: %s", (config.tlog.basedir) ? config.tlog.basedir : "NONE");
   if (config.tlog.basedir && config.verbose >= 3)

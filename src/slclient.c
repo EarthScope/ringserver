@@ -67,6 +67,7 @@
 #include "slclient.h"
 #include "infojson.h"
 #include "infoxml.h"
+#include "auth.h"
 
 /* Define list of valid characters for selectors and station & network codes */
 #define VALIDSELECTCHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_-!"
@@ -787,6 +788,96 @@ HandleNegotiation (ClientInfo *cinfo)
 
     if (SendReply (cinfo, "OK", ERROR_NONE, NULL))
       return -1;
+  }
+
+  /* AUTH (v4.0) - Parse auth command */
+  else if (!strncasecmp (cinfo->recvbuf, "AUTH", 4))
+  {
+    char username[128] = {0};
+    char password[128] = {0};
+    char *jwtoken      = NULL;
+
+    ptr = cinfo->recvbuf + 4;
+    while (isspace ((int)*ptr))
+      ptr++;
+
+    OKGO = 1;
+    if (!strncasecmp (ptr, "USERPASS", 8))
+    {
+      lprintf (2, "[%s] Received AUTH USERPASS", cinfo->hostname);
+
+      ptr += 8;
+      while (isspace ((int)*ptr))
+        ptr++;
+
+      /* Parse user and password */
+      fields = sscanf (ptr, "%127s %127s %c", username, password, &junk);
+
+      if (fields != 2)
+      {
+        lprintf (0, "[%s] Error parsing AUTH USERPASS", cinfo->hostname);
+
+        if (SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "AUTH USERPASS requires 2 arguments"))
+          return -1;
+
+        OKGO = 0;
+      }
+    }
+    else if (!strncasecmp (ptr, "JWT", 3))
+    {
+      lprintf (2, "[%s] Received AUTH JWT", cinfo->hostname);
+
+      jwtoken = ptr + 3;
+      while (isspace ((int)*jwtoken))
+        jwtoken++;
+
+      if (jwtoken[0] == '\0')
+      {
+        lprintf (0, "[%s] Error parsing AUTH JWT", cinfo->hostname);
+
+        if (SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "AUTH JWT requires 1 argument"))
+          return -1;
+
+        OKGO = 0;
+      }
+    }
+
+    if (OKGO && perform_auth (cinfo, username, password, jwtoken))
+    {
+      lprintf (0, "[%s] Error performing authentication", cinfo->hostname);
+
+      if (SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error performing authentication"))
+        return -1;
+
+      OKGO = 0;
+    }
+
+    if (OKGO && !(cinfo->permissions & CONNECT_PERMISSION))
+    {
+      lprintf (0, "[%s] Authentication failed, not allowed to connect", cinfo->hostname);
+
+      if (SendReply (cinfo, "ERROR", ERROR_AUTH, "Authentication failed, not allowed to connect"))
+        return -1;
+
+      OKGO = 0;
+    }
+    else
+    {
+      lprintf (2, "[%s] Authentication successful", cinfo->hostname);
+
+      /* Update allowed and forbidden source patterns */
+      if (cinfo->allowedstr)
+      {
+
+      }
+      if (cinfo->forbiddenstr)
+      {
+
+      }
+
+      if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
+        return -1;
+    }
   }
 
   /* STATION (v3.x and v4.0) - Select specified station */
