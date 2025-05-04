@@ -1,0 +1,25 @@
+
+# Default permissions: Used when a user does not have specific permissions defined
+[default_permissions]
+write_permission = false
+trust_permission = false
+
+# Example user "read"
+[users.read]
+password = "pass"
+
+# Example user "limited"
+[users.limited]
+password = "pass"
+allowed_streams = ["^FDSN:IU_.*", "^FDSN:II_.*"]  # List of allowed streams
+forbidden_streams = ["^FDSN:XX_.*"]              # List of forbidden streams
+
+# Example user "trusted"
+[users.trusted]
+password = "trustpass"
+trust_permission = true
+
+# Example user "write"
+[users.write]
+password = "writepass"
+write_permission = true
