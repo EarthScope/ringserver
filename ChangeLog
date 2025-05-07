@@ -1,6 +1,7 @@
 2025.124:
 	- Add authentication and authorization support.
     * Support AUTH command of SeedLink v4.0
+    * Support AUTH command of DataLink v1.1
     * Add example authorization code and description
   - Rename following parameters (and environment variables):
   	* MatchIP/RS_MATCH_IP renamed to AcceptIP/RS_ACCEPT_IP

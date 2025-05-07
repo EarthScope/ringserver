@@ -865,20 +865,10 @@ HandleNegotiation (ClientInfo *cinfo)
     {
       lprintf (2, "[%s] Authentication successful", cinfo->hostname);
 
-      /* Update allowed and forbidden source patterns */
-      if (cinfo->allowedstr)
-      {
-
-      }
-      if (cinfo->forbiddenstr)
-      {
-
-      }
-
       if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
         return -1;
     }
-  }
+  }  /* End of AUTH */
 
   /* STATION (v3.x and v4.0) - Select specified station */
   else if (!strncasecmp (cinfo->recvbuf, "STATION", 7))

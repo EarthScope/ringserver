@@ -43,6 +43,7 @@
 #include "ring.h"
 #include "ringserver.h"
 #include "infoxml.h"
+#include "auth.h"
 
 /* Define the number of no-action loops that trigger the throttle */
 #define THROTTLE_TRIGGER 10
@@ -263,6 +264,8 @@ DLFree (ClientInfo *cinfo)
  *
  * DataLink commands handled:
  * ID
+ * AUTH USERPASS size|USER\rPASS
+ * AUTH JWT size|JWT
  * POSITION SET pktid [pkttime]
  * POSITION AFTER datatime
  * MATCH size|<match pattern of length size>
@@ -313,6 +316,101 @@ HandleNegotiation (ClientInfo *cinfo)
     if (SendPacket (cinfo, sendbuffer, NULL, 0, 0, 0))
       return -1;
   }
+
+  /* AUTH <USERPASS|JWT> size|value */
+  else if (!strncasecmp (cinfo->dlcommand, "AUTH", 4))
+  {
+    char credential[4096] = {0};
+
+    char *username = NULL;
+    char *password = NULL;
+    char *jwtoken  = NULL;
+    char type[11]  = {0};
+
+    /* Parse size from request */
+    fields = sscanf (cinfo->dlcommand, "%*s %10s %zu %c", type, &size, &junk);
+
+    OKGO = 1;
+
+    if (fields != 2)
+    {
+      if (SendPacket (cinfo, "ERROR", "AUTH requires 2 arguments", 0, 1, 1))
+        return -1;
+
+      OKGO = 0;
+    }
+    else if (size > (sizeof (credential) - 1))
+    {
+      if (SendPacket (cinfo, "ERROR", "AUTH credentials are too large", 0, 1, 1))
+        return -1;
+
+      OKGO = 0;
+    }
+    else
+    {
+      /* Read credentials of size bytes */
+      if (RecvData (cinfo, credential, size, 1) < 0)
+      {
+        lprintf (0, "[%s] Error Recv'ing data", cinfo->hostname);
+        return -1;
+      }
+
+      if (!strcmp (type, "USERPASS"))
+      {
+        /* Parse USERNAME and PASSWORD from credential payload */
+        char *ptr = strchr (credential, '\r');
+
+        if (ptr == NULL)
+        {
+          if (SendPacket (cinfo, "ERROR", "AUTH USERPASS requires payload of USER\\rPASS", 0, 1, 1))
+            return -1;
+
+          OKGO = 0;
+        }
+
+        *ptr     = '\0';
+        username = credential;
+        password = ptr + 1;
+      }
+      else if (!strcmp (type, "JWT"))
+      {
+        jwtoken = credential;
+      }
+      else
+      {
+        lprintf (0, "[%s] Unsupported AUTH type: %s", cinfo->hostname, type);
+        if (SendPacket (cinfo, "ERROR", "Unsupported AUTH type", 0, 1, 1))
+          return -1;
+      }
+    }
+
+    if (OKGO && perform_auth (cinfo, username, password, jwtoken))
+    {
+      lprintf (0, "[%s] Error performing authentication", cinfo->hostname);
+
+      if (SendPacket (cinfo, "ERROR", "Error performing authentication", 0, 1, 1))
+        return -1;
+
+      OKGO = 0;
+    }
+
+    if (OKGO && !(cinfo->permissions & CONNECT_PERMISSION))
+    {
+      lprintf (0, "[%s] Authentication failed, not allowed to connect", cinfo->hostname);
+
+      if (SendPacket (cinfo, "ERROR", "Authentication failed, not allowed to connect", 0, 1, 1))
+        return -1;
+
+      OKGO = 0;
+    }
+    else
+    {
+      lprintf (2, "[%s] Authentication successful", cinfo->hostname);
+
+      if (SendPacket (cinfo, "OK", "Authentication successful", 0, 1, 1))
+        return -1;
+    }
+  } /* End of AUTH */
 
   /* POSITION <SET|AFTER> value [time]\r\n - Set ring reading position */
   else if (!strncasecmp (cinfo->dlcommand, "POSITION", 8))
