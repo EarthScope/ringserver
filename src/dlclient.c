@@ -308,9 +308,10 @@ HandleNegotiation (ClientInfo *cinfo)
 
     /* Create server version and capability flags string (DLSERVER_ID + PACKETSIZE + WRITE if permission) */
     snprintf (sendbuffer, sizeof (sendbuffer),
-              "ID " DLSERVER_ID " PACKETSIZE:%lu%s",
+              "ID " DLSERVER_ID " PACKETSIZE:%lu%s%s",
               (unsigned long int)(param.pktsize - sizeof (RingPacket)),
-              (cinfo->permissions & WRITE_PERMISSION) ? " WRITE" : "");
+              (cinfo->permissions & WRITE_PERMISSION) ? " WRITE" : "",
+              (config.auth.program) ? " AUTH" : "");
 
     /* Send the server ID string */
     if (SendPacket (cinfo, sendbuffer, NULL, 0, 0, 0))

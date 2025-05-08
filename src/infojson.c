@@ -146,6 +146,12 @@ info_add_capabilities (yyjson_mut_doc *doc)
 
   free (string);
 
+  /* Add AUTH capabilities if enabled in the server */
+  if (config.auth.program)
+  {
+    yyjson_mut_arr_add_strcpy (doc, capability, "AUTH");
+  }
+
   return doc;
 }
 
