@@ -35,10 +35,11 @@ extern "C"
 /* The total length of SLSERVERVER should be <= 98 bytes for compatibility
    with libslink versions < 2.0. */
 #define SLSERVERVER "RingServer/" VERSION
-#define SLCAPABILITIES_ID "SLPROTO:4.0 SLPROTO:3.1 CAP WS:13"
+#define SLSERVERPROTOCOLS "SLPROTO:4.0 SLPROTO:3.1"
+#define SLCAPABILITIES_ID SLSERVERPROTOCOLS " CAP WS:13"
 #define SLSERVER_ID "SeedLink v4.0 (" SLSERVERVER ") :: " SLCAPABILITIES_ID
 
-/* Server capabilities for v4 */
+/* Server capabilities for v4 reported in INFO CAPABILITIES */
 #define SLCAPABILITIESv4 "SLPROTO:4.0 SLPROTO:3.1 TIME WS:13 SEQWILDCARD"
 
 #define SLHEADSIZE_V3 8       /* SeedLink header size */

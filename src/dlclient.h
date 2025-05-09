@@ -32,7 +32,8 @@ extern "C" {
 
 /* DataLink server capability flags */
 #define DLSERVERVER "RingServer/" VERSION
-#define DLCAPABILITIES_ID "DLPROTO:1.1"
+#define DLSERVERPROTOCOLS "DLPROTO:1.1"
+#define DLCAPABILITIES_ID DLSERVERPROTOCOLS
 #define DLSERVER_ID "DataLink v1.1 (" DLSERVERVER ") :: " DLCAPABILITIES_ID
 
 #define DLMAXREGEXLEN  1048576  /* Maximum regex pattern size */

@@ -1238,9 +1238,12 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
     yyjson_doc *json;
     yyjson_val *root;
     yyjson_val *server;
-    yyjson_val *thread_array;
-    yyjson_val *thread_iter = NULL;
+    yyjson_val *array;
+    yyjson_val *array_iter = NULL;
     size_t idx, max;
+
+    char datalink_protocols[64] = {0};
+    char seedlink_protocols[64] = {0};
 
     if ((json = yyjson_read (json_string, strlen (json_string), 0)) == NULL)
     {
@@ -1262,6 +1265,62 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
         return -1;
       }
 
+      /* Create protocol list strings */
+      if ((array = yyjson_obj_get (server, "datalink_protocol")) != NULL)
+      {
+        int written = 0;
+
+        yyjson_arr_foreach (array, idx, max, array_iter)
+        {
+          const char *protocol = yyjson_get_str (array_iter);
+          if (protocol)
+          {
+            for (int idx = 0;
+                 protocol[idx] != '\0' && written < sizeof (datalink_protocols) - 1;
+                 idx++, written++)
+            {
+              datalink_protocols[written] = protocol[idx];
+            }
+
+            if (written < sizeof (datalink_protocols) - 1)
+            {
+              datalink_protocols[written] = ',';
+              written++;
+            }
+          }
+        }
+
+        if (written > 0)
+          datalink_protocols[written - 1] = '\0'; /* Remove trailing comma */
+      }
+      if ((array = yyjson_obj_get (server, "seedlink_protocol")) != NULL)
+      {
+        int written = 0;
+
+        yyjson_arr_foreach (array, idx, max, array_iter)
+        {
+          const char *protocol = yyjson_get_str (array_iter);
+          if (protocol)
+          {
+            for (int idx = 0;
+                 protocol[idx] != '\0' && written < sizeof (seedlink_protocols) - 1;
+                 idx++, written++)
+            {
+              seedlink_protocols[written] = protocol[idx];
+            }
+
+            if (written < sizeof (seedlink_protocols) - 1)
+            {
+              seedlink_protocols[written] = ',';
+              written++;
+            }
+          }
+        }
+
+        if (written > 0)
+        seedlink_protocols[written - 1] = '\0'; /* Remove trailing comma */
+      }
+
       writeptr = *response;
 
       responsebytes = 0;
@@ -1276,6 +1335,9 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
                           "Max packets: %d\n"
                           "Memory mapped ring: %s\n"
                           "Volatile ring: %s\n"
+                          "FDSN Source Identifiers: %s\n"
+                          "DataLink protocols: %s\n"
+                          "SeedLink protocols: %s\n"
                           "Total connections: %d\n"
                           "Total streams: %d\n"
                           "TX packet rate: %.1f\n"
@@ -1295,6 +1357,9 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
                           yyjson_get_int (yyjson_obj_get (server, "maximum_packets")),
                           (yyjson_get_bool (yyjson_obj_get (server, "memory_mapped"))) ? "TRUE" : "FALSE",
                           (yyjson_get_bool (yyjson_obj_get (server, "volatile_ring"))) ? "TRUE" : "FALSE",
+                          (yyjson_get_bool (yyjson_obj_get (server, "fdsn_source_identifiers"))) ? "TRUE" : "FALSE",
+                          (datalink_protocols[0] != '\0') ? datalink_protocols : "NONE",
+                          (seedlink_protocols[0] != '\0') ? seedlink_protocols : "NONE",
                           yyjson_get_int (yyjson_obj_get (server, "connection_count")),
                           yyjson_get_int (yyjson_obj_get (server, "stream_count")),
                           yyjson_get_real (yyjson_obj_get (server, "transmit_packet_rate")),
@@ -1313,16 +1378,16 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
       writeptr += written;
       responsebytes += written;
 
-      if ((thread_array = yyjson_obj_get (server, "thread")) != NULL)
+      if ((array = yyjson_obj_get (server, "thread")) != NULL)
       {
         written = snprintf (writeptr, responsesize - responsebytes,
                             "\nServer threads:\n");
         writeptr += written;
         responsebytes += written;
 
-        yyjson_arr_foreach (thread_array, idx, max, thread_iter)
+        yyjson_arr_foreach (array, idx, max, array_iter)
         {
-          const char *thread_type = yyjson_get_str (yyjson_obj_get (thread_iter, "type"));
+          const char *thread_type = yyjson_get_str (yyjson_obj_get (array_iter, "type"));
 
           if (thread_type && !strcasecmp (thread_type, "Listener"))
           {
@@ -1331,8 +1396,8 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
                                 "    Protocol: %s\n"
                                 "    Port: %s\n",
                                 thread_type,
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "protocol"))),
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "port"))));
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "protocol"))),
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "port"))));
           }
           else if (thread_type && !strcasecmp (thread_type, "miniSEED scanner"))
           {
@@ -1347,14 +1412,14 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
                                 "    Packet rate: %g\n"
                                 "    Byte rate: %g\n",
                                 thread_type,
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "directory"))),
-                                yyjson_get_int (yyjson_obj_get (thread_iter, "max_recursion")),
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "state_file"))),
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "match"))),
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (thread_iter, "reject"))),
-                                yyjson_get_real (yyjson_obj_get (thread_iter, "scan_time")),
-                                yyjson_get_real (yyjson_obj_get (thread_iter, "packet_rate")),
-                                yyjson_get_real (yyjson_obj_get (thread_iter, "byte_rate")));
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "directory"))),
+                                yyjson_get_int (yyjson_obj_get (array_iter, "max_recursion")),
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "state_file"))),
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "match"))),
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "reject"))),
+                                yyjson_get_real (yyjson_obj_get (array_iter, "scan_time")),
+                                yyjson_get_real (yyjson_obj_get (array_iter, "packet_rate")),
+                                yyjson_get_real (yyjson_obj_get (array_iter, "byte_rate")));
           }
           else
           {
