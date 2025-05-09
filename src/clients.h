@@ -64,9 +64,10 @@ typedef enum
 typedef enum
 {
   NO_PERMISSION      = 0,
-  CONNECT_PERMISSION = 1u << 1,
-  WRITE_PERMISSION   = 1u << 2,
-  TRUST_PERMISSION   = 1u << 3,
+  AUTHENTICATED      = 1u << 1,
+  CONNECT_PERMISSION = 1u << 2,
+  WRITE_PERMISSION   = 1u << 3,
+  TRUST_PERMISSION   = 1u << 4,
 } Permissions;
 
 /* Connection information for client threads */

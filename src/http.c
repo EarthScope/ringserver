@@ -1558,6 +1558,7 @@ GenerateConnections (ClientInfo *cinfo, const char *path, const char *query,
         written = snprintf (writeptr, responsesize - responsebytes,
                             "%s [%s:%s] using %s on port %s, connected at %s\n"
                             "  %s\n"
+                            "  authenticated: %s, trusted: %s, write permission: %s\n"
                             "  Packet %s (created %s)  Lag %d%%, %.1f seconds\n"
                             "  TX %" PRIu64 " packets, %.1f packets/sec, %" PRIu64 " bytes, %.1f bytes/sec\n"
                             "  RX %" PRIu64 " packets, %.1f packets/sec, %" PRIu64 " bytes, %.1f bytes/sec\n"
@@ -1569,6 +1570,9 @@ GenerateConnections (ClientInfo *cinfo, const char *path, const char *query,
                             DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "server_port"))),
                             DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "connect_time"))),
                             DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "client_id"))),
+                            (yyjson_get_bool (yyjson_obj_get (client_iter, "authenticated"))) ? "TRUE" : "FALSE",
+                            (yyjson_get_bool (yyjson_obj_get (client_iter, "trust_permission"))) ? "TRUE" : "FALSE",
+                            (yyjson_get_bool (yyjson_obj_get (client_iter, "write_permission"))) ? "TRUE" : "FALSE",
                             packet_id_str,
                             DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "packet_creation_time"))),
                             yyjson_get_int (yyjson_obj_get (client_iter, "lag_percent")),

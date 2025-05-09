@@ -182,6 +182,8 @@ apply_permissions_json (ClientInfo *cinfo, const char *json_string)
 
   if (yyjson_get_bool (yyjson_obj_get (root, "authenticated")))
   {
+    cinfo->permissions |= AUTHENTICATED;
+
     /* Successful authentication implies connect permission */
     cinfo->permissions |= CONNECT_PERMISSION;
   }
