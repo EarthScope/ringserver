@@ -212,6 +212,7 @@ struct config_s
   {
     char *program;        /* Parsed program name for authentication and authorization */
     char **argv;          /* Parsed argument array for authentication and authorization */
+    uint8_t required;     /* Flag to require authentication for streaming data */
     uint32_t timeout_sec; /* Auth program timeout in seconds */
   } auth;
   struct tlog

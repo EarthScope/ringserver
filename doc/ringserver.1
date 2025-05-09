@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2025/04/29
+.TH RINGSERVER 1 2025/05/09
 .SH NAME
 ringserver \- stream oriented packet ring buffer
 
@@ -192,6 +192,11 @@ config file.
 .SH "Access Control"
 
 Access control is based on IP addresses and user authentication.
+Authentication is optional and can be used in combination with IP
+address based access control.  Authentication can be required for
+clients requesting streaming data using the
+\fBAuthRequiredForStreams\fP config parameter, or
+\fBS_AUTH_REQUIRED_FOR_STREAMS\fP environment variable.
 
 The IP-based access control is specified in the config file using
 the following parameters:

@@ -141,7 +141,7 @@ ringserver [options] [configfile]
 
 ## <a id='access-control'>Access Control</a>
 
-<p >Access control is based on IP addresses and user authentication.</p>
+<p >Access control is based on IP addresses and user authentication. Authentication is optional and can be used in combination with IP address based access control.  Authentication can be required for clients requesting streaming data using the <b>AuthRequiredForStreams</b> config parameter, or <b>S_AUTH_REQUIRED_FOR_STREAMS</b> environment variable.</p>
 
 <p >The IP-based access control is specified in the config file using the following parameters:</p>
 
@@ -401,4 +401,4 @@ EarthScope Data Services
 </pre>
 
 
-(man page 2025/04/29)
+(man page 2025/05/09)

@@ -139,6 +139,15 @@ DLHandleCmd (ClientInfo *cinfo)
   /* Determine if this is a request to start STREAMing and set state */
   else if (!strncmp (cinfo->dlcommand, "STREAM", 6))
   {
+    /* Check for authentication requirement */
+    if (config.auth.required && !(cinfo->permissions & AUTHENTICATED))
+    {
+      lprintf (1, "[%s] Streaming requested from client without authentication",
+               cinfo->hostname);
+      SendPacket (cinfo, "ERROR", "Authentication required for streaming, no soup for you!", 0, 1, 1);
+      return -1;
+    }
+
     /* Set read position to next packet if position not set */
     if (cinfo->reader->pktid == RINGID_NONE)
     {

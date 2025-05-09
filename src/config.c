@@ -608,6 +608,14 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
+  if ((envvar = getenv ("RS_AUTH_REQUIRED_FOR_STREAMS")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "AuthRequiredForStreams %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
   if ((envvar = getenv ("RS_AUTH_TIMEOUT")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "AuthTimeout %s", envvar);
@@ -1004,6 +1012,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
  * [D] TransferLogTX <1|0>
  * [D] TransferLogRX <1|0>
  * [D] AuthCommand <command>
+ * [D] AuthRequiredForStreams <1|0>
  * [D] AuthTimeout <timeout>
  * [D] WriteIP <IP>[/netmask]
  * [D] TrustedIP <IP>[/netmask]
@@ -1426,6 +1435,16 @@ SetParameter (const char *paramstring, int dynamiconly)
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
+  }
+  else if (!strcasecmp ("AuthRequiredForStreams", field[0]) && fieldcount == 2)
+  {
+    if ((intval = YesNo (field[1])) < 0)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    config.auth.required = intval;
   }
   else if (!strcasecmp ("AuthTimeout", field[0]) && fieldcount == 2)
   {
@@ -2675,6 +2694,13 @@ ListenPort 18000\n\
 # Equivalent environment variable: RS_AUTH_COMMAND\n\
 \n\
 #AuthCommand </path/to/program> [arguments]\n\
+\n\
+\n\
+# Require authentication for a client to request streaming data.\n\
+# This is a dynamic parameter.\n\
+# Equivalent environment variable: RS_AUTH_REQUIURED_FOR_STREAMS\n\
+\n\
+#AuthRequiredForStreams 5\n\
 \n\
 \n\
 # Specify the timeout in seconds for the authentication command to complete.\n\

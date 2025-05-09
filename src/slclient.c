@@ -173,6 +173,15 @@ SLHandleCmd (ClientInfo *cinfo)
   /* Configure ring parameters if negotiation is complete */
   if (cinfo->state == STATE_RINGCONFIG)
   {
+    /* Check for authentication requirement */
+    if (config.auth.required && !(cinfo->permissions & AUTHENTICATED))
+    {
+      lprintf (1, "[%s] Streaming requested from client without authentication",
+               cinfo->hostname);
+      SendReply (cinfo, "ERROR", ERROR_AUTH, "Authentication required for streaming");
+      return -1;
+    }
+
     lprintf (2, "[%s] Configuring ring parameters", cinfo->hostname);
 
     /* If no stations specified convert any global selectors to regexes */

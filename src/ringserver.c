@@ -1538,6 +1538,7 @@ void LogServerParameters ()
       lprintf (2, "     auth program argument: %s", *arg);
     }
   }
+  lprintf (2, "   auth required: %s", (config.auth.required) ? "yes" : "no");
   lprintf (2, "   auth timeout: %u seconds", config.auth.timeout_sec);
 
   lprintf (3, "   web root: %s", (config.webroot) ? config.webroot : "NONE");
