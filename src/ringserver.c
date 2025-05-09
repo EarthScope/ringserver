@@ -133,7 +133,7 @@ struct config_s config = {
 };
 
 /* Local functions and variables */
-static void LogServerParameters ();
+static void LogServerParameters (void);
 static struct thread_data *InitThreadData (void *prvtptr);
 static void *ListenThread (void *arg);
 static ClientInfo *ConfigClient (struct sockaddr *paddr, int clientsocket,
@@ -143,7 +143,7 @@ static int CalcStats (ClientInfo *cinfo);
 static IPNet *MatchIP (IPNet *list, struct sockaddr *addr);
 static int ClientIPCount (struct sockaddr *addr);
 static void *SignalThread (void *arg);
-static void PrintHandler ();
+static void PrintHandler (void);
 
 static sigset_t globalsigset;
 static int tcpprotonumber = -1;
@@ -1452,7 +1452,7 @@ SignalThread (void *arg)
  *
  * Log high-level server parameters, not ring buffer specific.
  ***************************************************************************/
-void LogServerParameters ()
+void LogServerParameters (void)
 {
   RingPacket packet;
   uint64_t pktid;
@@ -1695,7 +1695,7 @@ void LogServerParameters ()
  * Use a high verbosity for an explicit request to print details.
  ***************************************************************************/
 static void
-PrintHandler ()
+PrintHandler (void)
 {
   uint8_t verbose_save = config.verbose;
   config.verbose = 3;

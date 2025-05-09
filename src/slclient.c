@@ -335,7 +335,7 @@ SLHandleCmd (ClientInfo *cinfo)
       }
       else
       {
-        lprintf (0, "Time window search limit is invalid: %f", config.timewinlimit);
+        lprintf (0, "Time window search limit is invalid: %f", (double)config.timewinlimit);
         SendReply (cinfo, "ERROR", ERROR_INTERNAL, "time window search limit is invalid");
         return -1;
       }

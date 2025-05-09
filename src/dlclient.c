@@ -549,7 +549,7 @@ HandleNegotiation (ClientInfo *cinfo)
           }
           else
           {
-            lprintf (0, "Time window search limit is invalid: %f", config.timewinlimit);
+            lprintf (0, "Time window search limit is invalid: %f", (double)config.timewinlimit);
             SendPacket (cinfo, "ERROR", "time window search limit is invalid", 0, 1, 1);
             return -1;
           }

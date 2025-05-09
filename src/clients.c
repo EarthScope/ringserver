@@ -726,7 +726,7 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
     {
       if (cinfo->tlsctx)
       {
-        while ((nsent = mbedtls_ssl_write (&tlsctx->ssl, buffer[idx] + written, buflen[idx] - written)) <= 0)
+        while ((nsent = mbedtls_ssl_write (&tlsctx->ssl, (unsigned char *)buffer[idx] + written, buflen[idx] - written)) <= 0)
         {
           pollret = 1;
           if (nsent == MBEDTLS_ERR_SSL_WANT_READ)
@@ -752,7 +752,7 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
       }
       else
       {
-        while ((nsent = send (cinfo->socket, buffer[idx] + written, buflen[idx] - written, 0)) <= 0)
+        while ((nsent = send (cinfo->socket, (unsigned char *)buffer[idx] + written, buflen[idx] - written, 0)) <= 0)
         {
           pollret = 1;
           if (nsent == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))

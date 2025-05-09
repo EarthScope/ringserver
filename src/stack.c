@@ -20,7 +20,7 @@
 #include <stdlib.h>
 
 Stack *
-StackCreate ()
+StackCreate (void)
 {
   Stack *newStack;
 

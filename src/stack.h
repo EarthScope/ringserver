@@ -39,7 +39,7 @@ typedef struct Stack {
   StackNode *tail;
 } Stack;
 
-Stack *StackCreate ();
+Stack *StackCreate (void);
 void   StackPush (Stack *theStack, STACK_DATA_TYPE newDataPtr);
 void  *StackPop (Stack *theStack);
 void   StackUnshift (Stack *theStack, STACK_DATA_TYPE newDataPtr);
