@@ -221,6 +221,12 @@ info_add_filters (yyjson_mut_doc *doc)
     return NULL;
   }
 
+  /* Add filter code for miniSEED 3 */
+  if (yyjson_mut_obj_add_strcpy (doc, filter, "3", "data in miniSEED v3 (if possible)") == false)
+  {
+    return NULL;
+  }
+
   return doc;
 }
 
