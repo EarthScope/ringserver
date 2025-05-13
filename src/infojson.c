@@ -92,7 +92,10 @@ static yyjson_mut_doc *
 info_add_id (yyjson_mut_doc *doc)
 {
   yyjson_mut_val *root = yyjson_mut_doc_get_root (doc);
-  char string[64];
+  yyjson_mut_val *protocols;
+  char string[64] = {0};
+  char *cap;
+  char *rest;
 
   /* Add server start time */
 
@@ -102,6 +105,42 @@ info_add_id (yyjson_mut_doc *doc)
   if (yyjson_mut_obj_add_strcpy (doc, root, "server_start", string) == false)
   {
     return NULL;
+  }
+
+  /* Add DataLink protocols */
+  strncpy (string, DLSERVERPROTOCOLS, sizeof (string) - 1);
+
+  if ((protocols = yyjson_mut_obj_add_arr (doc, root, "datalink_protocol")) == NULL)
+  {
+    return NULL;
+  }
+
+  /* Parse capabilities string on spaces and add each capability */
+  rest = string;
+  while ((cap = strtok_r (rest, " ", &rest)))
+  {
+    if (yyjson_mut_arr_add_strcpy (doc, protocols, cap) == false)
+    {
+      return NULL;
+    }
+  }
+
+  /* Add DataLink protocols */
+  strncpy (string, SLSERVERPROTOCOLS, sizeof (string) - 1);
+
+  if ((protocols = yyjson_mut_obj_add_arr (doc, root, "seedlink_protocol")) == NULL)
+  {
+    return NULL;
+  }
+
+  /* Parse capabilities string on spaces and add each capability */
+  rest = string;
+  while ((cap = strtok_r (rest, " ", &rest)))
+  {
+    if (yyjson_mut_arr_add_strcpy (doc, protocols, cap) == false)
+    {
+      return NULL;
+    }
   }
 
   return doc;
@@ -851,72 +890,6 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
 }
 
 /***************************************************************************
- * info_add_server_protocols:
- *
- * Add DataLink and SeedLink server protocol support to the JSON document.
- *
- * Returns pointer to JSON document success and NULL on error.
- ***************************************************************************/
-static yyjson_mut_doc *
-info_add_server_protocols (yyjson_mut_doc *doc, yyjson_mut_val *root)
-{
-  yyjson_mut_val *protocols;
-  char *string;
-  char *cap;
-  char *rest;
-
-  if ((string = strdup (DLSERVERPROTOCOLS)) == NULL)
-  {
-    return NULL;
-  }
-
-  if ((protocols = yyjson_mut_obj_add_arr (doc, root, "datalink_protocol")) == NULL)
-  {
-    free (string);
-    return NULL;
-  }
-
-  /* Parse capabilities string on spaces and add each capability */
-  rest = string;
-  while ((cap = strtok_r (rest, " ", &rest)))
-  {
-    if (yyjson_mut_arr_add_strcpy (doc, protocols, cap) == false)
-    {
-      free (string);
-      return NULL;
-    }
-  }
-
-  free (string);
-
-  if ((string = strdup (SLSERVERPROTOCOLS)) == NULL)
-  {
-    return NULL;
-  }
-
-  if ((protocols = yyjson_mut_obj_add_arr (doc, root, "seedlink_protocol")) == NULL)
-  {
-    free (string);
-    return NULL;
-  }
-
-  /* Parse capabilities string on spaces and add each capability */
-  rest = string;
-  while ((cap = strtok_r (rest, " ", &rest)))
-  {
-    if (yyjson_mut_arr_add_strcpy (doc, protocols, cap) == false)
-    {
-      free (string);
-      return NULL;
-    }
-  }
-
-  free (string);
-
-  return doc;
-}
-
-/***************************************************************************
  * info_add_status:
  *
  * Add server status to the JSON document.
@@ -950,12 +923,6 @@ info_add_status (yyjson_mut_doc *doc)
   yyjson_mut_obj_add_bool (doc, server, "memory_mapped", config.memorymapring);
   yyjson_mut_obj_add_bool (doc, server, "volatile_ring", config.volatilering);
   yyjson_mut_obj_add_bool (doc, server, "fdsn_source_identifiers", true);
-
-  if (info_add_server_protocols (doc, server) == NULL)
-  {
-    return NULL;
-  }
-
   yyjson_mut_obj_add_int (doc, server, "connection_count", param.clientcount);
   yyjson_mut_obj_add_uint (doc, server, "stream_count", param.streamcount);
 

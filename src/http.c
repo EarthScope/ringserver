@@ -1031,6 +1031,11 @@ GenerateID (ClientInfo *cinfo, const char *path, char **response, MediaType *typ
   {
     yyjson_doc *json;
     yyjson_val *root;
+    yyjson_val *array;
+    yyjson_val *array_iter = NULL;
+    size_t idx, max;
+    char datalink_protocols[64] = {0};
+    char seedlink_protocols[64] = {0};
 
     if ((json = yyjson_read (json_string, strlen (json_string), 0)) == NULL)
     {
@@ -1040,13 +1045,73 @@ GenerateID (ClientInfo *cinfo, const char *path, char **response, MediaType *typ
     free (json_string);
     root = yyjson_doc_get_root (json);
 
+    /* Create protocol list strings */
+    if ((array = yyjson_obj_get (root, "datalink_protocol")) != NULL)
+    {
+      int written = 0;
+
+      yyjson_arr_foreach (array, idx, max, array_iter)
+      {
+        const char *protocol = yyjson_get_str (array_iter);
+        if (protocol)
+        {
+          for (int idx = 0;
+               protocol[idx] != '\0' && written < sizeof (datalink_protocols) - 1;
+               idx++, written++)
+          {
+            datalink_protocols[written] = protocol[idx];
+          }
+
+          if (written < sizeof (datalink_protocols) - 1)
+          {
+            datalink_protocols[written] = ',';
+            written++;
+          }
+        }
+      }
+
+      if (written > 0)
+        datalink_protocols[written - 1] = '\0'; /* Remove trailing comma */
+    }
+    if ((array = yyjson_obj_get (root, "seedlink_protocol")) != NULL)
+    {
+      int written = 0;
+
+      yyjson_arr_foreach (array, idx, max, array_iter)
+      {
+        const char *protocol = yyjson_get_str (array_iter);
+        if (protocol)
+        {
+          for (int idx = 0;
+               protocol[idx] != '\0' && written < sizeof (seedlink_protocols) - 1;
+               idx++, written++)
+          {
+            seedlink_protocols[written] = protocol[idx];
+          }
+
+          if (written < sizeof (seedlink_protocols) - 1)
+          {
+            seedlink_protocols[written] = ',';
+            written++;
+          }
+        }
+      }
+
+      if (written > 0)
+        seedlink_protocols[written - 1] = '\0'; /* Remove trailing comma */
+    }
+
     responsebytes = asprintf (response,
                               "%s\n"
                               "Organization: %s\n"
-                              "Server start: %s",
+                              "Server start: %s\n"
+                              "DataLink protocols: %s\n"
+                              "SeedLink protocols: %s\n",
                               DASHNULL (yyjson_get_str (yyjson_obj_get (root, "software"))),
                               DASHNULL (yyjson_get_str (yyjson_obj_get (root, "organization"))),
-                              DASHNULL (yyjson_get_str (yyjson_obj_get (root, "server_start"))));
+                              DASHNULL (yyjson_get_str (yyjson_obj_get (root, "server_start"))),
+                              (datalink_protocols[0] != '\0') ? datalink_protocols : "NONE",
+                              (seedlink_protocols[0] != '\0') ? seedlink_protocols : "NONE");
 
     yyjson_doc_free (json);
 
@@ -1253,6 +1318,62 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
     free (json_string);
     root = yyjson_doc_get_root (json);
 
+    /* Create protocol list strings */
+    if ((array = yyjson_obj_get (root, "datalink_protocol")) != NULL)
+    {
+      int written = 0;
+
+      yyjson_arr_foreach (array, idx, max, array_iter)
+      {
+        const char *protocol = yyjson_get_str (array_iter);
+        if (protocol)
+        {
+          for (int idx = 0;
+               protocol[idx] != '\0' && written < sizeof (datalink_protocols) - 1;
+               idx++, written++)
+          {
+            datalink_protocols[written] = protocol[idx];
+          }
+
+          if (written < sizeof (datalink_protocols) - 1)
+          {
+            datalink_protocols[written] = ',';
+            written++;
+          }
+        }
+      }
+
+      if (written > 0)
+        datalink_protocols[written - 1] = '\0'; /* Remove trailing comma */
+    }
+    if ((array = yyjson_obj_get (root, "seedlink_protocol")) != NULL)
+    {
+      int written = 0;
+
+      yyjson_arr_foreach (array, idx, max, array_iter)
+      {
+        const char *protocol = yyjson_get_str (array_iter);
+        if (protocol)
+        {
+          for (int idx = 0;
+               protocol[idx] != '\0' && written < sizeof (seedlink_protocols) - 1;
+               idx++, written++)
+          {
+            seedlink_protocols[written] = protocol[idx];
+          }
+
+          if (written < sizeof (seedlink_protocols) - 1)
+          {
+            seedlink_protocols[written] = ',';
+            written++;
+          }
+        }
+      }
+
+      if (written > 0)
+        seedlink_protocols[written - 1] = '\0'; /* Remove trailing comma */
+    }
+
     if ((server = yyjson_obj_get (root, "server")) != NULL)
     {
       responsesize = 2048;
@@ -1265,62 +1386,6 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
         return -1;
       }
 
-      /* Create protocol list strings */
-      if ((array = yyjson_obj_get (server, "datalink_protocol")) != NULL)
-      {
-        int written = 0;
-
-        yyjson_arr_foreach (array, idx, max, array_iter)
-        {
-          const char *protocol = yyjson_get_str (array_iter);
-          if (protocol)
-          {
-            for (int idx = 0;
-                 protocol[idx] != '\0' && written < sizeof (datalink_protocols) - 1;
-                 idx++, written++)
-            {
-              datalink_protocols[written] = protocol[idx];
-            }
-
-            if (written < sizeof (datalink_protocols) - 1)
-            {
-              datalink_protocols[written] = ',';
-              written++;
-            }
-          }
-        }
-
-        if (written > 0)
-          datalink_protocols[written - 1] = '\0'; /* Remove trailing comma */
-      }
-      if ((array = yyjson_obj_get (server, "seedlink_protocol")) != NULL)
-      {
-        int written = 0;
-
-        yyjson_arr_foreach (array, idx, max, array_iter)
-        {
-          const char *protocol = yyjson_get_str (array_iter);
-          if (protocol)
-          {
-            for (int idx = 0;
-                 protocol[idx] != '\0' && written < sizeof (seedlink_protocols) - 1;
-                 idx++, written++)
-            {
-              seedlink_protocols[written] = protocol[idx];
-            }
-
-            if (written < sizeof (seedlink_protocols) - 1)
-            {
-              seedlink_protocols[written] = ',';
-              written++;
-            }
-          }
-        }
-
-        if (written > 0)
-        seedlink_protocols[written - 1] = '\0'; /* Remove trailing comma */
-      }
-
       writeptr = *response;
 
       responsebytes = 0;
@@ -1329,6 +1394,8 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
                           "%s\n"
                           "Organization: %s\n"
                           "Server start time: %s\n"
+                          "DataLink protocols: %s\n"
+                          "SeedLink protocols: %s\n"
                           "Ring version: %" PRIu64 "\n"
                           "Ring size: %" PRIu64 "\n"
                           "Packet size: %d\n"
@@ -1336,8 +1403,6 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
                           "Memory mapped ring: %s\n"
                           "Volatile ring: %s\n"
                           "FDSN Source Identifiers: %s\n"
-                          "DataLink protocols: %s\n"
-                          "SeedLink protocols: %s\n"
                           "Total connections: %d\n"
                           "Total streams: %d\n"
                           "TX packet rate: %.1f\n"
@@ -1351,6 +1416,8 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
                           DASHNULL (yyjson_get_str (yyjson_obj_get (root, "software"))),
                           DASHNULL (yyjson_get_str (yyjson_obj_get (root, "organization"))),
                           DASHNULL (yyjson_get_str (yyjson_obj_get (root, "server_start"))),
+                          (datalink_protocols[0] != '\0') ? datalink_protocols : "NONE",
+                          (seedlink_protocols[0] != '\0') ? seedlink_protocols : "NONE",
                           yyjson_get_uint (yyjson_obj_get (server, "ring_version")),
                           yyjson_get_uint (yyjson_obj_get (server, "ring_size")),
                           yyjson_get_int (yyjson_obj_get (server, "packet_size")),
@@ -1358,8 +1425,6 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
                           (yyjson_get_bool (yyjson_obj_get (server, "memory_mapped"))) ? "TRUE" : "FALSE",
                           (yyjson_get_bool (yyjson_obj_get (server, "volatile_ring"))) ? "TRUE" : "FALSE",
                           (yyjson_get_bool (yyjson_obj_get (server, "fdsn_source_identifiers"))) ? "TRUE" : "FALSE",
-                          (datalink_protocols[0] != '\0') ? datalink_protocols : "NONE",
-                          (seedlink_protocols[0] != '\0') ? seedlink_protocols : "NONE",
                           yyjson_get_int (yyjson_obj_get (server, "connection_count")),
                           yyjson_get_int (yyjson_obj_get (server, "stream_count")),
                           yyjson_get_real (yyjson_obj_get (server, "transmit_packet_rate")),
