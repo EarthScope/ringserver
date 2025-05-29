@@ -1,6 +1,6 @@
 2025.149: v4.1.0 RC2
-  - Add "3" to reported filters for miniSEED v3
-  - Move the seedlink_protocol and datalink_protocol arrays to the id level
+	- Add "3" to reported filters for miniSEED v3
+	- Move the seedlink_protocol and datalink_protocol arrays to the id level
 	- Fix handling of allowed and forbidden streams from auth program.
 	- Update mbedtls to v3.6.3
 	- Update pcre2 to v10.45
