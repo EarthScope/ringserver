@@ -23,7 +23,7 @@
 // Version number
 //
 
-#  define MXML_VERSION "Mini-XML v4.0.3"
+#  define MXML_VERSION "Mini-XML v4.0.4"
 
 
 //
@@ -31,13 +31,6 @@
 //
 
 #  define inline
-
-
-//
-// Long long support
-//
-
-#  define HAVE_LONG_LONG_INT 1
 
 
 //
