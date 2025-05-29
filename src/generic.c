@@ -61,7 +61,7 @@ SplitStreamID (const char *streamid, char delim, int maxlength,
                char *type)
 {
   char *ids[6] = {NULL, NULL, NULL, NULL, NULL, NULL};
-  char *id;
+  char *id = NULL;
   char *ptr;
   int idx;
   int length;
@@ -100,7 +100,7 @@ SplitStreamID (const char *streamid, char delim, int maxlength,
     *type = '\0';
   }
 
-  /* Find delimeters, convert to terminators and set pointer array */
+  /* Find delimiters, convert to terminators and set pointer array */
   ptr    = id;
   ids[0] = ptr;
   for (idx = 1; idx < 6 && *ptr != '\0'; ptr++)
@@ -184,8 +184,7 @@ SplitStreamID (const char *streamid, char delim, int maxlength,
   }
 
   /* Free duplicated stream ID */
-  if (id)
-    free (id);
+  free (id);
 
   return count;
 } /* End of SplitStreamID() */

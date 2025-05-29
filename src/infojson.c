@@ -187,10 +187,12 @@ info_add_capabilities (yyjson_mut_doc *doc)
   free (string);
 
   /* Add AUTH capabilities if enabled in the server */
+  pthread_rwlock_rdlock (&config.config_rwlock);
   if (config.auth.program)
   {
     yyjson_mut_arr_add_strcpy (doc, capability, "AUTH");
   }
+  pthread_rwlock_unlock (&config.config_rwlock);
 
   return doc;
 }
@@ -346,8 +348,15 @@ info_add_streams (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matchexpr)
     yyjson_mut_obj_add_real (doc, stream, "data_latency",
                              (double)MS_NSTIME2EPOCH ((NSnow () - ringstream->latestdetime)));
 
-    streamcount++;
     free (ringstream);
+
+    if (streamcount == UINT32_MAX)
+    {
+      lprintf (0, "[%s] Error: stream count exceeded UINT32_MAX", cinfo->hostname);
+      break;
+    }
+
+    streamcount++;
   }
 
   yyjson_mut_obj_add_uint (doc, root, "stream_count", streamcount);
@@ -1136,7 +1145,6 @@ error_json (ClientInfo *cinfo, const char *software,
 
   if ((doc = info_create_root (software)) == NULL)
   {
-    yyjson_mut_doc_free (doc);
     return NULL;
   }
   root = yyjson_mut_doc_get_root (doc);

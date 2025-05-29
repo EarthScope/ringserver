@@ -115,6 +115,7 @@ ClientThread (void *arg)
     {
       /* Copy numeric IP address into hostname on failure to resolve */
       strncpy (cinfo->hostname, cinfo->ipstr, sizeof (cinfo->hostname) - 1);
+      cinfo->hostname[sizeof (cinfo->hostname) - 1] = '\0';
     }
   }
   /* Otherwise use the numerical IP address as the hostname */
@@ -122,6 +123,7 @@ ClientThread (void *arg)
   {
     /* Copy numeric IP address into hostname when not resolving */
     strncpy (cinfo->hostname, cinfo->ipstr, sizeof (cinfo->hostname) - 1);
+    cinfo->hostname[sizeof (cinfo->hostname) - 1] = '\0';
   }
 
   lprintf (1, "Client connected [%s]: %s [%s] port %s",
@@ -132,6 +134,12 @@ ClientThread (void *arg)
   cinfo->streams      = RBTreeCreate (KeyCompare, free, free);
   cinfo->streamscount = 0;
   pthread_mutex_unlock (&(cinfo->streams_lock));
+
+  if (cinfo->streams == NULL)
+  {
+    lprintf (0, "[%s] Error creating stream tracking binary tree", cinfo->hostname);
+    setuperr = 1;
+  }
 
   /* Allocate client specific send buffer */
   cinfo->sendbufsize = 2 * param.pktsize;
@@ -1262,6 +1270,7 @@ GetStreamNode (RBTree *tree, pthread_mutex_t *plock, char *streamid, int *new)
     if ((stream = (StreamNode *)calloc (1, sizeof (StreamNode))) == NULL)
     {
       lprintf (0, "GetStreamNode: Error allocating new node");
+      free (newkey);
       return 0;
     }
 

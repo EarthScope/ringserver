@@ -1243,6 +1243,7 @@ GenerateStreams (ClientInfo *cinfo, const char *path, const char *query,
           lprintf (0, "[%s] Error for HTTP STREAM[ID]S (response buffer overflow)",
                    cinfo->hostname);
           yyjson_doc_free (json);
+          free (*response);
           return -1;
         }
 

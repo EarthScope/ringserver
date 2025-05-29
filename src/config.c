@@ -1,8 +1,7 @@
 /**************************************************************************
- * ringserver.c
+ * config.c
  *
- * Multi-threaded TCP generic ring buffer data server with support
- * for SeedLink, DataLink and HTTP protocols.
+ * Routines for processing command line arguments and configuration files.
  *
  * This file is part of the ringserver.
  *
@@ -307,6 +306,12 @@ ProcessParam (int argcount, char **argvec)
       else
       {
         config.configfile = strdup(argvec[optind]);
+
+        if (config.configfile == NULL)
+        {
+          lprintf (0, "Error allocating memory for config file name");
+          exit (1);
+        }
       }
     }
   }
@@ -1538,9 +1543,10 @@ SetParameter (const char *paramstring, int dynamiconly)
     char *combined_value = NULL;
 
     /* Append multiple headers to composite string */
-    if (asprintf (&combined_value, "%s%s\r\n", (config.httpheaders) ? config.httpheaders : "", field[1]) == -1)
+    if (asprintf (&combined_value, "%s%s\r\n", (config.httpheaders) ? config.httpheaders : "", field[1]) < 0)
     {
       lprintf (0, "Error allocating memory");
+      free (combined_value);
       return -1;
     }
 
@@ -1610,6 +1616,9 @@ SetParameter (const char *paramstring, int dynamiconly)
 static int
 YesNo (const char *value)
 {
+  if (!value)
+    return -1;
+
   if (*value == '1' ||
       !strcasecmp (value, "y") ||
       !strcasecmp (value, "yes") ||
@@ -2288,6 +2297,8 @@ AddIPNet (IPNet **pplist, const char *network, const char *limitstr)
     if (!(newipnet = (IPNet *)calloc (1, sizeof (IPNet))))
     {
       lprintf (0, "%s(): Error allocating memory for IPNet", __func__);
+      if (addrlist)
+        freeaddrinfo (addrlist);
       return -1;
     }
 
@@ -2350,6 +2361,9 @@ AddIPNet (IPNet **pplist, const char *network, const char *limitstr)
       if (!(newipnet->limitstr = strdup (limitstr)))
       {
         lprintf (0, "%s(): Error allocating memory for limit string", __func__);
+        if (addrlist)
+          freeaddrinfo (addrlist);
+        free (newipnet);
         return -1;
       }
     }
