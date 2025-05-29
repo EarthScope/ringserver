@@ -11,8 +11,8 @@ password = "pass"
 # Example user "limited"
 [users.limited]
 password = "pass"
-allowed_streams = ["^FDSN:IU_.*", "^FDSN:II_.*"]  # List of allowed streams
-forbidden_streams = ["^FDSN:XX_.*"]              # List of forbidden streams
+allowed_streams = ["^FDSN:IU_.*", "^FDSN:II_.*"]   # List of allowed streams
+forbidden_streams = ["^FDSN:XX_.*", "^FDSN:YY_.*"] # List of forbidden streams
 
 # Example user "trusted"
 [users.trusted]
