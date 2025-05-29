@@ -225,13 +225,22 @@ apply_permissions_json (ClientInfo *cinfo, const char *json_string)
     {
       element_size = yyjson_get_len (thread_iter);
 
-      strncat (cinfo->allowedstr, yyjson_get_str (thread_iter), element_size);
-      strncat (cinfo->allowedstr, "|", 1);
+      if (element_size > 0)
+      {
+        strncat (cinfo->allowedstr, yyjson_get_str (thread_iter), element_size);
+        strncat (cinfo->allowedstr, "|", 1);
+      }
     }
 
     /* Replace last '|' with terminator */
     if ((ptr = strrchr (cinfo->allowedstr, '|')) != NULL)
       *ptr = '\0';
+
+    if (cinfo->allowedstr[0] == '\0')
+    {
+      free (cinfo->allowedstr);
+      cinfo->allowedstr = NULL;
+    }
 
     /* Compile regular expression */
     if (RingAllowed (cinfo->reader, cinfo->allowedstr) < 0)
@@ -269,13 +278,22 @@ apply_permissions_json (ClientInfo *cinfo, const char *json_string)
     {
       element_size = yyjson_get_len (thread_iter);
 
-      strncat (cinfo->forbiddenstr, yyjson_get_str (thread_iter), element_size);
-      strncat (cinfo->forbiddenstr, "|", 1);
+      if (element_size > 0)
+      {
+        strncat (cinfo->forbiddenstr, yyjson_get_str (thread_iter), element_size);
+        strncat (cinfo->forbiddenstr, "|", 1);
+      }
     }
 
     /* Replace last '|' with terminator */
     if ((ptr = strrchr (cinfo->forbiddenstr, '|')) != NULL)
       *ptr = '\0';
+
+    if (cinfo->forbiddenstr[0] == '\0')
+    {
+      free (cinfo->forbiddenstr);
+      cinfo->forbiddenstr = NULL;
+    }
 
     /* Compile regular expression */
     if (RingForbidden (cinfo->reader, cinfo->forbiddenstr) < 0)
@@ -346,11 +364,14 @@ execute_auth_program (char *envp[], uint32_t timeout_seconds,
   {
     lprintf (2, "Running auth program: %s", config.auth.program);
 
-    for (int idx = 0; config.auth.argv[idx]; idx++)
+    if (config.auth.argv)
     {
-      if (idx == 0)
-        continue; // Skip the program name
-      lprintf (2, "  Arg[%d]: %s", idx, config.auth.argv[idx]);
+      for (int idx = 0; config.auth.argv[idx]; idx++)
+      {
+        if (idx == 0)
+          continue; // Skip the program name
+        lprintf (2, "  Arg[%d]: %s", idx, config.auth.argv[idx]);
+      }
     }
   }
 
@@ -394,8 +415,19 @@ execute_auth_program (char *envp[], uint32_t timeout_seconds,
   }
 
   /* Read output and error from pipes */
-  read (stdout_pipe[0], output, output_size);
-  read (stderr_pipe[0], error, error_size);
+  if (read (stdout_pipe[0], output, output_size) == output_size)
+  {
+    lprintf (0, "%s() The stdout data from auth program is too large (> %zu bytes)", __func__, output_size);
+    return -1;
+  }
+  output[output_size - 1] = '\0';
+
+  if (read (stderr_pipe[0], error, error_size) == error_size)
+  {
+    lprintf (0, "%s() The stderr data from auth program is too large (> %zu bytes)", __func__, error_size);
+    return -1;
+  }
+  error[error_size - 1] = '\0';
 
   /* Cleanup */
   posix_spawn_file_actions_destroy (&actions);
