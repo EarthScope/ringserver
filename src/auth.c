@@ -162,7 +162,7 @@ apply_permissions_json (ClientInfo *cinfo, const char *json_string)
   yyjson_val *streams_array;
   yyjson_val *thread_iter = NULL;
   size_t idx, max, element_size;
-  char pattern[4096] = {0};
+  size_t pattern_size;
   char *ptr;
 
   if (!cinfo || !json_string)
@@ -203,36 +203,35 @@ apply_permissions_json (ClientInfo *cinfo, const char *json_string)
       yyjson_get_type (streams_array) == YYJSON_TYPE_ARR &&
       yyjson_get_len (streams_array) > 0)
   {
-    ptr = pattern;
+    pattern_size = 0;
+
+    /* Calculate total size of compound pattern, for each element + 1 for '|' */
+    yyjson_arr_foreach (streams_array, idx, max, thread_iter)
+    {
+      pattern_size += yyjson_get_len (thread_iter) + 1;
+    }
+
+    /* Replace allocation for compound pattern, +1 for terminator */
+    free (cinfo->allowedstr);
+    if ((cinfo->allowedstr = calloc (pattern_size + 1, 1)) == NULL)
+    {
+      lprintf (0, "[%s] Cannot allocate memory for allowed pattern", cinfo->hostname);
+      yyjson_doc_free (json);
+      return -1;
+    }
+
+    /* Create compound pattern */
     yyjson_arr_foreach (streams_array, idx, max, thread_iter)
     {
       element_size = yyjson_get_len (thread_iter);
 
-      if ((ptr - pattern + element_size) >= (sizeof (pattern) - 1))
-      {
-        lprintf (0, "[%s] Allowed pattern buffer overflow", cinfo->hostname);
-        yyjson_doc_free (json);
-        return -1;
-      }
-
-      strncat (ptr, yyjson_get_str (thread_iter), element_size);
-      ptr += element_size;
-
-      *ptr++ = '|';
+      strncat (cinfo->allowedstr, yyjson_get_str (thread_iter), element_size);
+      strncat (cinfo->allowedstr, "|", 1);
     }
 
     /* Replace last '|' with terminator */
-    *(ptr - 1) = '\0';
-
-    /* Replace current allowed streams */
-    free (cinfo->allowedstr);
-    cinfo->allowedstr = strdup (pattern);
-    if (!cinfo->allowedstr)
-    {
-      lprintf (0, "%s() Error allocating memory for allowed streams", __func__);
-      yyjson_doc_free (json);
-      return -1;
-    }
+    if ((ptr = strrchr (cinfo->allowedstr, '|')) != NULL)
+      *ptr = '\0';
 
     /* Compile regular expression */
     if (RingAllowed (cinfo->reader, cinfo->allowedstr) < 0)
@@ -248,36 +247,35 @@ apply_permissions_json (ClientInfo *cinfo, const char *json_string)
       yyjson_get_type (streams_array) == YYJSON_TYPE_ARR &&
       yyjson_get_len (streams_array) > 0)
   {
-    ptr = pattern;
+    pattern_size = 0;
+
+    /* Calculate total size of compound pattern, for each element + 1 for '|' */
+    yyjson_arr_foreach (streams_array, idx, max, thread_iter)
+    {
+      pattern_size += yyjson_get_len (thread_iter) + 1;
+    }
+
+    /* Replace allocation for compound pattern, +1 for terminator */
+    free (cinfo->forbiddenstr);
+    if ((cinfo->forbiddenstr = calloc (pattern_size + 1, 1)) == NULL)
+    {
+      lprintf (0, "[%s] Cannot allocate memory for allowed pattern", cinfo->hostname);
+      yyjson_doc_free (json);
+      return -1;
+    }
+
+    /* Create compound pattern */
     yyjson_arr_foreach (streams_array, idx, max, thread_iter)
     {
       element_size = yyjson_get_len (thread_iter);
 
-      if ((ptr - pattern + element_size) >= (sizeof (pattern) - 1))
-      {
-        lprintf (0, "[%s] Forbidden pattern buffer overflow", cinfo->hostname);
-        yyjson_doc_free (json);
-        return -1;
-      }
-
-      strncat (ptr, yyjson_get_str (thread_iter), element_size);
-      ptr += element_size;
-
-      *ptr++ = '|';
+      strncat (cinfo->forbiddenstr, yyjson_get_str (thread_iter), element_size);
+      strncat (cinfo->forbiddenstr, "|", 1);
     }
 
     /* Replace last '|' with terminator */
-    *(ptr - 1) = '\0';
-
-    /* Replace current forbidden streams */
-    free (cinfo->forbiddenstr);
-    cinfo->forbiddenstr = strdup (pattern);
-    if (!cinfo->forbiddenstr)
-    {
-      lprintf (0, "%s() Error allocating memory for forbidden streams", __func__);
-      yyjson_doc_free (json);
-      return -1;
-    }
+    if ((ptr = strrchr (cinfo->forbiddenstr, '|')) != NULL)
+      *ptr = '\0';
 
     /* Compile regular expression */
     if (RingForbidden (cinfo->reader, cinfo->forbiddenstr) < 0)
