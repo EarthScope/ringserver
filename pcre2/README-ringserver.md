@@ -19,8 +19,8 @@ Steps to update PCRE2 to a newer release:
    - `NON-AUTOTOOLS-BUILD`
    - `LICENSE`
    - `README`
-   - `AUTHORS`
-   - `src/*.[ch] src/*.generic`
+   - `AUTHORS.md`
+   - `src/*.[ch] src/*.generic src/pcre2_chartables.c.dist`
 3) Rename `src/pcre2_chartables.c.dist` to `src/pcre2_chartables.c`
 4) Rename `src/pcre2.h.generic` to `src/pcre2.h`
 5) Rename `src/config.h.generic` to `src/config.h`
