@@ -2,6 +2,8 @@
   - Add "3" to reported filters for miniSEED v3
   - Move the seedlink_protocol and datalink_protocol arrays to the id level
 	- Fix handling of allowed and forbidden streams from auth program.
+	- Update mbedtls to v3.6.3
+	- Update pcre2 to v10.45
 
 2025.129: v4.1.0 RC
 	- Now requires a C11 compiler and uses --std=c11 when building.

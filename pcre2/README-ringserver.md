@@ -17,7 +17,7 @@ Steps to update PCRE2 to a newer release:
 2) Extract the contents in a temporary directory
 5) Copy the following files and directories to this directory:
    - `NON-AUTOTOOLS-BUILD`
-   - `LICENSE`
+   - `LICENSE.md`
    - `README`
    - `AUTHORS.md`
    - `src/*.[ch] src/*.generic src/pcre2_chartables.c.dist`
