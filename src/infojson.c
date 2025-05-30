@@ -813,7 +813,7 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
 
         for (Selector *selector = slinfo->selectors; selector; selector = selector->next)
         {
-          char value[MAXSTREAMID];
+          char value[MAXSTREAMID + 3];
 
           if (selector->convert == CONVERT_MSEED3)
           {
@@ -869,7 +869,7 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
 
           for (Selector *selector = stationid->selectors; selector; selector = selector->next)
           {
-            char value[MAXSTREAMID];
+            char value[MAXSTREAMID + 3];
 
             if (selector->convert == CONVERT_MSEED3)
             {

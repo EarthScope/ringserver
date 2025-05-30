@@ -228,7 +228,7 @@ apply_permissions_json (ClientInfo *cinfo, const char *json_string)
       if (element_size > 0)
       {
         strncat (cinfo->allowedstr, yyjson_get_str (thread_iter), element_size);
-        strncat (cinfo->allowedstr, "|", 1);
+        strncat (cinfo->allowedstr, "|", 2);
       }
     }
 
@@ -281,7 +281,7 @@ apply_permissions_json (ClientInfo *cinfo, const char *json_string)
       if (element_size > 0)
       {
         strncat (cinfo->forbiddenstr, yyjson_get_str (thread_iter), element_size);
-        strncat (cinfo->forbiddenstr, "|", 1);
+        strncat (cinfo->forbiddenstr, "|", 2);
       }
     }
 
