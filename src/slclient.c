@@ -1039,7 +1039,7 @@ HandleNegotiation (ClientInfo *cinfo)
         OKGO = 0;
       }
 
-      strncpy (selector, newselector, sizeof (selector));
+      memcpy (selector, newselector, sizeof(selector));
     }
 
     /* Sanity check, only allowed characters */
@@ -1066,7 +1066,7 @@ HandleNegotiation (ClientInfo *cinfo)
       OKGO = 0;
     }
 
-    strncpy (newselector->string, selector, sizeof (newselector->string) - 1);
+    memcpy (newselector->string, selector, sizeof (newselector->string));
     newselector->convert = convert;
 
     /* If modifying a STATION add selector to it's entry */
