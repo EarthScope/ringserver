@@ -43,6 +43,7 @@
 MS3Record *
 msr3_init (MS3Record *msr)
 {
+  MS3Record msr_initialized = MS3Record_INITIALIZER;
   void *datasamples = NULL;
   size_t datasize = 0;
 
@@ -65,14 +66,10 @@ msr3_init (MS3Record *msr)
     return NULL;
   }
 
-  memset (msr, 0, sizeof (MS3Record));
+  memcpy (msr, &msr_initialized, sizeof (MS3Record));
 
   msr->datasamples = datasamples;
   msr->datasize = datasize;
-
-  msr->reclen    = -1;
-  msr->samplecnt = -1;
-  msr->encoding  = -1;
 
   return msr;
 } /* End of msr3_init() */
@@ -146,14 +143,15 @@ msr3_duplicate (const MS3Record *msr, int8_t datadup)
   if (msr->extralength > 0 && msr->extra)
   {
     /* Allocate memory for new FSDH structure */
-    if ((dupmsr->extra = (char *)libmseed_memory.malloc (msr->extralength)) == NULL)
+    if ((dupmsr->extra = (char *)libmseed_memory.malloc (msr->extralength + 1)) == NULL)
     {
       ms_log (2, "Error allocating memory\n");
       msr3_free (&dupmsr);
       return NULL;
     }
 
-    memcpy (dupmsr->extra, msr->extra, msr->extralength);
+    /* Copy extra headers and terminating NULL */
+    memcpy (dupmsr->extra, msr->extra, msr->extralength + 1);
 
     if (dupmsr->extra)
       dupmsr->extralength = msr->extralength;
@@ -243,7 +241,7 @@ msr3_print (const MS3Record *msr, int8_t details)
             msr->sid, msr->pubversion, msr->reclen, msr->formatversion);
     ms_log (0, "             start time: %s\n", time);
     ms_log (0, "      number of samples: %" PRId64 "\n", msr->samplecnt);
-    ms_log (0, "       sample rate (Hz): %.10g\n", msr3_sampratehz(msr));
+    ms_log (0, "       sample rate (Hz): %g\n", msr3_sampratehz(msr));
 
     if (details > 1)
     {
@@ -283,7 +281,7 @@ msr3_print (const MS3Record *msr, int8_t details)
   }
   else
   {
-    ms_log (0, "%s, %d, %d, %" PRId64 " samples, %-.10g Hz, %s\n",
+    ms_log (0, "%s, %d, %d, %" PRId64 " samples, %g Hz, %s\n",
             msr->sid, msr->pubversion, msr->reclen,
             msr->samplecnt, msr3_sampratehz(msr), time);
   }

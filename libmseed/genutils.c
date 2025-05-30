@@ -143,9 +143,8 @@ static const int monthdays_leap[] = {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30,
 
 /** @endcond */
 
-
 /**********************************************************************/ /**
- * @brief Parse network, station, location and channel from an FDSN Source ID
+ * @brief Parse network, station, location and channel codes from an FDSN Source ID
  *
  * FDSN Source Identifiers are defined at:
  *   https://docs.fdsn.org/projects/source-identifiers/
@@ -165,14 +164,21 @@ static const int monthdays_leap[] = {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30,
  * as of this writing and support is included for specialized usage or
  * future identifier changes.
  *
- * Memory for each component must already be allocated.  If a specific
- * component is not desired set the appropriate argument to NULL.
+ * Memory for each component/code must already be allocated and the
+ * size of each buffer provided.  If any code is longer than the
+ * maximum size, the code will be truncated.
+ *
+ * If a specific code is not desired set the appropriate argument to NULL.
  *
  * @param[in] sid Source identifier
  * @param[out] net Network code
+ * @param[in] netsize Maximum length of \a net in bytes
  * @param[out] sta Station code
+ * @param[in] stasize Maximum length of \a sta in bytes
  * @param[out] loc Location code
+ * @param[in] locsize Maximum length of \a loc in bytes
  * @param[out] chan Channel code
+ * @param[in] chansize Maximum length of \a chan in bytes
  *
  * @retval 0 on success
  * @retval -1 on error
@@ -180,7 +186,9 @@ static const int monthdays_leap[] = {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30,
  * \ref MessageOnError - this function logs a message on error
  ***************************************************************************/
 int
-ms_sid2nslc (const char *sid, char *net, char *sta, char *loc, char *chan)
+ms_sid2nslc_n (const char *sid,
+               char *net, size_t netsize, char *sta, size_t stasize,
+               char *loc, size_t locsize, char *chan, size_t chansize)
 {
   size_t idlen;
   const char *cid;
@@ -229,7 +237,10 @@ ms_sid2nslc (const char *sid, char *net, char *sta, char *loc, char *chan)
       *ptr = '\0';
 
       if (net)
-        strcpy (net, top);
+      {
+        strncpy (net, top, netsize - 1);
+        net[netsize - 1] = '\0';
+      }
 
       top = next;
     }
@@ -240,7 +251,10 @@ ms_sid2nslc (const char *sid, char *net, char *sta, char *loc, char *chan)
       *ptr = '\0';
 
       if (sta)
-        strcpy (sta, top);
+      {
+        strncpy (sta, top, stasize);
+        sta[stasize - 1] = '\0';
+      }
 
       top = next;
     }
@@ -251,7 +265,10 @@ ms_sid2nslc (const char *sid, char *net, char *sta, char *loc, char *chan)
       *ptr = '\0';
 
       if (loc)
-        strcpy (loc, top);
+      {
+        strncpy (loc, top, locsize);
+        loc[locsize - 1] = '\0';
+      }
 
       top = next;
     }
@@ -261,7 +278,8 @@ ms_sid2nslc (const char *sid, char *net, char *sta, char *loc, char *chan)
       /* Map extended channel to SEED channel if possible, otherwise direct copy */
       if (ms_xchan2seedchan(chan, top))
       {
-        strcpy (chan, top);
+        strncpy (chan, top, chansize);
+        chan[chansize - 1] = '\0';
       }
     }
 
@@ -276,6 +294,19 @@ ms_sid2nslc (const char *sid, char *net, char *sta, char *loc, char *chan)
   }
 
   return 0;
+} /* End of ms_sid2nslc_n() */
+
+/**********************************************************************/ /**
+ * @deprecated Use ms_sid2nslc_n() instead
+ *
+ * This deprecated function is provided for backwards compatibility.
+ * It will call ms_sid2nslc_n() while specifying the maximum sizes
+ * for each code as the maximum supported by SEED.
+ ***************************************************************************/
+int
+ms_sid2nslc (const char *sid, char *net, char *sta, char *loc, char *chan)
+{
+  return ms_sid2nslc_n (sid, net, 3, sta, 6, loc, 3, chan, 4);
 } /* End of ms_sid2nslc() */
 
 /**********************************************************************/ /**
@@ -318,6 +349,7 @@ ms_nslc2sid (char *sid, int sidlen, uint16_t flags,
   char *sptr = sid;
   char xchan[6] = {0};
   int needed = 0;
+  int length = -1;
 
   if (!sid || !net || !sta || !chan)
   {
@@ -412,7 +444,21 @@ ms_nslc2sid (char *sid, int sidlen, uint16_t flags,
     return -1;
   }
 
-  return (int)(sptr - sid);
+  /* Remove spaces from Source ID */
+  for (int in = 0, out = 0; in < sidlen; in++)
+  {
+    if (sid[in] != ' ')
+    {
+      sid[out++] = sid[in];
+    }
+    if (sid[in] == '\0')
+    {
+      length = out - 1;
+      break;
+    }
+  }
+
+  return length;
 } /* End of ms_nslc2sid() */
 
 /**********************************************************************/ /**
@@ -421,6 +467,9 @@ ms_nslc2sid (char *sid, int sidlen, uint16_t flags,
  * The SEED 2.x channel at \a seedchan must be a 3-character string.
  * The \a xchan buffer must be at least 6 bytes, for the extended
  * channel (band,source,position) and the terminating NULL.
+ *
+ * As a special case, SEED codes that are (illegally) spaces will
+ * be skipped to avoid spaces in the extended channel.
  *
  * This functionality simply maps patterns, it does not check the
  * validity of any codes.
@@ -448,6 +497,19 @@ ms_seedchan2xchan (char *xchan, const char *seedchan)
     xchan[3] = '_';
     xchan[4] = seedchan[2]; /* Position (aka orientation) code */
     xchan[5] = '\0';
+
+    /* Remove spaces from extended channel */
+    for (int in = 0, out = 0; in < 6; in++)
+    {
+      if (xchan[in] != ' ')
+      {
+        xchan[out++] = xchan[in];
+      }
+      if (xchan[in] == '\0')
+      {
+        break;
+      }
+    }
 
     return 0;
   }
@@ -1851,3 +1913,109 @@ ms_readleapsecondfile (const char *filename)
 
   return count;
 } /* End of ms_readleapsecondfile() */
+
+/***************************************************************************
+ * lmp_ftell64:
+ *
+ * Return the current file position for the specified descriptor using
+ * the system's closest match to the POSIX ftello().
+ ***************************************************************************/
+int64_t
+lmp_ftell64 (FILE *stream)
+{
+#if defined(LMP_WIN)
+  return (int64_t)_ftelli64 (stream);
+#else
+  return (int64_t)ftello (stream);
+#endif
+} /* End of lmp_ftell64() */
+
+
+/***************************************************************************
+ * lmp_fseek64:
+ *
+ * Seek to a specific file position for the specified descriptor using
+ * the system's closest match to the POSIX fseeko().
+ ***************************************************************************/
+int
+lmp_fseek64 (FILE *stream, int64_t offset, int whence)
+{
+#if defined(LMP_WIN)
+  return (int)_fseeki64 (stream, offset, whence);
+#else
+  return (int)fseeko (stream, offset, whence);
+#endif
+} /* End of lmp_fseeko() */
+
+
+/***************************************************************************
+ * @brief Sleep for a specified number of nanoseconds
+ *
+ * Sleep for a given number of nanoseconds.  Under WIN use SleepEx()
+ * and is limited to millisecond resolution.  For all others use the
+ * POSIX.4 nanosleep(), which can be interrupted by signals.
+ *
+ * @param nanoseconds Nanoseconds to sleep
+ *
+ * @return On non-WIN: the remaining nanoseconds are returned if the
+ * requested interval is interrupted.
+ ***************************************************************************/
+uint64_t
+lmp_nanosleep (uint64_t nanoseconds)
+{
+#if defined(LMP_WIN)
+
+  /* SleepEx is limited to milliseconds */
+  SleepEx ((DWORD) (nanoseconds / 1e6), 1);
+
+  return 0;
+#else
+
+  struct timespec treq, trem;
+
+  treq.tv_sec  = (time_t) (nanoseconds / 1e9);
+  treq.tv_nsec = (long)(nanoseconds - (uint64_t)treq.tv_sec * 1e9);
+
+  nanosleep (&treq, &trem);
+
+  return trem.tv_sec * 1e9 + trem.tv_nsec;
+
+#endif
+} /* End of lmp_nanosleep() */
+
+/***************************************************************************
+ * @brief Return the current system time
+ *
+ * Current system time is returned as an nstime_t value.  Under WIN this
+ * has millisecond precision as returned by _ftime_s() and for all other
+ * platforms the precision returned by gettimeofday() up to microseconds.
+ *
+ * @return nstime_t Current system time on success, NSTERROR on error
+ ***************************************************************************/
+nstime_t
+lmp_systemtime (void)
+{
+#if defined(LMP_WIN)
+
+  struct _timeb timebuffer;
+
+  if (_ftime_s (&timebuffer) != 0)
+  {
+    return NSTERROR;
+  }
+
+  return (nstime_t)timebuffer.time * NSTMODULUS + (nstime_t)timebuffer.millitm * 1000000LL;
+
+#else
+
+  struct timeval tv;
+
+  if (gettimeofday (&tv, NULL) != 0)
+  {
+    return NSTERROR;
+  }
+
+  return (nstime_t)tv.tv_sec * NSTMODULUS + tv.tv_usec * 1000LL;
+
+#endif
+} /* End of lmp_systemtime() */

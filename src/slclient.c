@@ -1966,7 +1966,7 @@ SendRecord (RingPacket *packet, char *record, uint32_t reclen, void *vcinfo)
     /* Extract network and station codes from FDSN Source ID (streamid) */
     if (strncmp (packet->streamid, "FDSN:", 5) == 0)
     {
-      if (ms_sid2nslc (packet->streamid, net, sta, NULL, NULL))
+      if (ms_sid2nslc_n (packet->streamid, net, sizeof (net), sta, sizeof (sta), NULL, 0, NULL, 0))
       {
         lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, packet->streamid);
         return -1;

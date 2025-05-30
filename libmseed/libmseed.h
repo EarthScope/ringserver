@@ -17,7 +17,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2024:
+ * Copyright (C) 2025:
  * @author Chad Trabant, EarthScope Data Services
  ***************************************************************************/
 
@@ -28,8 +28,8 @@
 extern "C" {
 #endif
 
-#define LIBMSEED_VERSION "3.1.3"     //!< Library version
-#define LIBMSEED_RELEASE "2024.165"  //!< Library release date
+#define LIBMSEED_VERSION "3.1.5"     //!< Library version
+#define LIBMSEED_RELEASE "2025.114"  //!< Library release date
 
 /** @defgroup io-functions File and URL I/O */
 /** @defgroup miniseed-record Record Handling */
@@ -77,6 +77,7 @@ extern "C" {
 #if defined(LMP_WIN)
   #include <windows.h>
   #include <sys/types.h>
+  #include <sys/timeb.h>
 
   /* Re-define print conversion for size_t values */
   #undef PRIsize_t
@@ -131,6 +132,7 @@ extern "C" {
 #else
   /* All other platforms */
   #include <inttypes.h>
+  #include <sys/time.h>
 #endif
 
 #define MINRECLEN 40       //!< Minimum miniSEED record length supported
@@ -270,11 +272,11 @@ typedef int64_t nstime_t;
 
     Formats values:
     - \b ISOMONTHDAY - \c "YYYY-MM-DDThh:mm:ss.sssssssss", ISO 8601 in month-day format
-    - \b ISOMONTHDAY_Z - \c "YYYY-MM-DDThh:mm:ss.sssssssss", ISO 8601 in month-day format with trailing Z
+    - \b ISOMONTHDAY_Z - \c "YYYY-MM-DDThh:mm:ss.sssssssssZ", ISO 8601 in month-day format with trailing Z
     - \b ISOMONTHDAY_DOY - \c "YYYY-MM-DD hh:mm:ss.sssssssss (doy)", ISOMONTHDAY with day-of-year
-    - \b ISOMONTHDAY_DOY_Z - \c "YYYY-MM-DD hh:mm:ss.sssssssss (doy)", ISOMONTHDAY with day-of-year and trailing Z
+    - \b ISOMONTHDAY_DOY_Z - \c "YYYY-MM-DD hh:mm:ss.sssssssssZ (doy)", ISOMONTHDAY with day-of-year and trailing Z
     - \b ISOMONTHDAY_SPACE - \c "YYYY-MM-DD hh:mm:ss.sssssssss", same as ISOMONTHDAY with space separator
-    - \b ISOMONTHDAY_SPACE_Z - \c "YYYY-MM-DD hh:mm:ss.sssssssss", same as ISOMONTHDAY with space separator and trailing Z
+    - \b ISOMONTHDAY_SPACE_Z - \c "YYYY-MM-DD hh:mm:ss.sssssssssZ", same as ISOMONTHDAY with space separator and trailing Z
     - \b SEEDORDINAL - \c "YYYY,DDD,hh:mm:ss.sssssssss", SEED day-of-year format
     - \b UNIXEPOCH - \c "ssssssssss.sssssssss", Unix epoch value
     - \b NANOSECONDEPOCH - \c "sssssssssssssssssss", Nanosecond epoch value
@@ -380,6 +382,31 @@ typedef struct MS3Record {
   int64_t         numsamples;        //!< Number of data samples in datasamples
   char            sampletype;        //!< Sample type code: t, i, f, d @ref sample-types
 } MS3Record;
+
+/** @def MS3Record_INITIALIZER
+    @brief Initialializer for a ::MS3Record */
+#define MS3Record_INITIALIZER \
+{                             \
+    .record = NULL,           \
+    .reclen = -1,             \
+    .swapflag = 0,            \
+    .sid = {0},               \
+    .formatversion = 0,       \
+    .flags = 0,               \
+    .starttime = NSTUNSET,    \
+    .samprate = 0.0,          \
+    .encoding = -1,           \
+    .pubversion = 0,          \
+    .samplecnt = -1,          \
+    .crc = 0,                 \
+    .extralength = 0,         \
+    .datalength = 0,          \
+    .extra = NULL,            \
+    .datasamples = NULL,      \
+    .datasize = 0,            \
+    .numsamples = 0,          \
+    .sampletype = 0           \
+}
 
 extern int msr3_parse (const char *record, uint64_t recbuflen, MS3Record **ppmsr,
                        uint32_t flags, int8_t verbose);
@@ -556,7 +583,7 @@ typedef struct MS3TraceSeg {
   uint64_t        datasize;          //!< Size of datasamples buffer in bytes
   int64_t         numsamples;        //!< Number of data samples in datasamples
   char            sampletype;        //!< Sample type code, see @ref sample-types
-  void           *prvtptr;           //!< Private pointer for general use, unused by library
+  void           *prvtptr;           //!< Private pointer for general use, unused by library unless ::MSF_PPUPDATETIME is set
   struct MS3RecordList *recordlist;  //!< List of pointers to records that contributed
   struct MS3TraceSeg *prev;          //!< Pointer to previous segment
   struct MS3TraceSeg *next;          //!< Pointer to next segment, NULL if the last
@@ -647,6 +674,11 @@ extern int mstl3_resize_buffers (MS3TraceList *mstl);
 extern int64_t mstl3_pack (MS3TraceList *mstl, void (*record_handler) (char *, int, void *),
                            void *handlerdata, int reclen, int8_t encoding,
                            int64_t *packedsamples, uint32_t flags, int8_t verbose, char *extra);
+extern int64_t mstraceseg3_pack (MS3TraceID *id, MS3TraceSeg *seg,
+                                 void (*record_handler) (char *, int, void *),
+                                 void *handlerdata, int reclen, int8_t encoding,
+                                 int64_t *packedsamples, uint32_t flags, int8_t verbose,
+                                 char *extra);
 extern void mstl3_printtracelist (const MS3TraceList *mstl, ms_timeformat_t timeformat,
                                   int8_t details, int8_t gaps, int8_t versions);
 extern void mstl3_printsynclist (const MS3TraceList *mstl, const char *dccid, ms_subseconds_t subseconds);
@@ -773,7 +805,10 @@ extern MS3FileParam *ms3_mstl_init_fd (int fd);
     combination of the codes.
 
     @{ */
-extern int ms_sid2nslc (const char *sid, char *net, char *sta, char *loc, char *chan);
+extern int ms_sid2nslc_n (const char *sid,
+                          char *net, size_t netsize, char *sta, size_t stasize,
+                          char *loc, size_t locsize, char *chan, size_t chansize);
+DEPRECATED extern int ms_sid2nslc (const char *sid, char *net, char *sta, char *loc, char *chan);
 extern int ms_nslc2sid (char *sid, int sidlen, uint16_t flags,
                         const char *net, const char *sta, const char *loc, const char *chan);
 extern int ms_seedchan2xchan (char *xchan, const char *seedchan);
@@ -1265,6 +1300,8 @@ extern int64_t lmp_ftell64 (FILE *stream);
 extern int lmp_fseek64 (FILE *stream, int64_t offset, int whence);
 /** Portable version of POSIX nanosleep() to sleep for nanoseconds */
 extern uint64_t lmp_nanosleep (uint64_t nanoseconds);
+/** Portable function to return the current system time */
+extern nstime_t lmp_systemtime (void);
 
 /** Return CRC32C value of supplied buffer, with optional starting CRC32C value */
 extern uint32_t ms_crc32c (const uint8_t *input, int length, uint32_t previousCRC32C);
@@ -1471,6 +1508,7 @@ extern void *libmseed_memory_prealloc (void *ptr, size_t size, size_t *currentsi
 #define MSF_PACKVER2      0x0080  //!< [Packing] Pack as miniSEED version 2 instead of 3
 #define MSF_RECORDLIST    0x0100  //!< [TraceList] Build a ::MS3RecordList for each ::MS3TraceSeg
 #define MSF_MAINTAINMSTL  0x0200  //!< [TraceList] Do not modify a trace list when packing
+#define MSF_PPUPDATETIME  0x0400  //!< [TraceList] Store update time (as nstime_t) at ::MS3TraceSeg.prvtptr
 /** @} */
 
 #ifdef __cplusplus

@@ -8,7 +8,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2023 Chad Trabant, EarthScope Data Services
+ * Copyright (c) 2024 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -91,7 +91,7 @@ main (int argc, char **argv)
   {
     if (mstl3_addmsr (mstl, msr, 0, 1, flags, NULL) == NULL)
     {
-      ms_log (2, "mstl2_addmsr() had problems\n");
+      ms_log (2, "mstl3_addmsr() had problems\n");
       break;
     }
 

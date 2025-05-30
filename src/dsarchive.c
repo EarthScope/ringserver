@@ -161,7 +161,10 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
   }
 
   /* Decompose SID into codes */
-  ms_sid2nslc (msr->sid, network, station, location, channel);
+  ms_sid2nslc_n (msr->sid, network, sizeof (network),
+                 station, sizeof (station),
+                 location, sizeof (location),
+                 channel, sizeof (channel));
 
   /* Decompose start time */
   ms_nstime2time (msr->starttime, &year, &yday, &hour, &min, &sec, &nsec);

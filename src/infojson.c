@@ -466,7 +466,10 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
     /* Extract codes from FDSN Source ID (streamid) */
     if (strncmp (ringstream->streamid, "FDSN:", 5) == 0)
     {
-      if (ms_sid2nslc (ringstream->streamid, net, sta, loc, chan))
+      if (ms_sid2nslc_n (ringstream->streamid, net, sizeof (net),
+                         sta, sizeof (sta),
+                         loc, sizeof (loc),
+                         chan, sizeof (chan)))
       {
         lprintf (0, "[%s] Error splitting stream ID: %s", cinfo->hostname, ringstream->streamid);
         free (ringstream);
