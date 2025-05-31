@@ -1320,33 +1320,38 @@ ClientIPCount (struct sockaddr *addr)
   ctp = param.cthreads;
   while (ctp)
   {
-    /* If the same IP protocol family */
-    if (((ClientInfo *)ctp->td->td_prvtptr)->addr->sa_family == addr->sa_family)
+    /* Check for NULL pointers before dereferencing */
+    if (ctp->td && ctp->td->td_prvtptr &&
+        ((ClientInfo *)ctp->td->td_prvtptr)->addr)
     {
-      /* Compare IPv4 addresses */
-      if (addr->sa_family == AF_INET)
+      /* If the same IP protocol family */
+      if (((ClientInfo *)ctp->td->td_prvtptr)->addr->sa_family == addr->sa_family)
       {
-        tsin[0] = (struct sockaddr_in *)((ClientInfo *)ctp->td->td_prvtptr)->addr;
-        tsin[1] = (struct sockaddr_in *)addr;
-
-        if (0 == memcmp (&tsin[0]->sin_addr.s_addr,
-                         &tsin[1]->sin_addr.s_addr,
-                         sizeof (tsin[0]->sin_addr.s_addr)))
+        /* Compare IPv4 addresses */
+        if (addr->sa_family == AF_INET)
         {
-          addrcount++;
+          tsin[0] = (struct sockaddr_in *)((ClientInfo *)ctp->td->td_prvtptr)->addr;
+          tsin[1] = (struct sockaddr_in *)addr;
+
+          if (0 == memcmp (&tsin[0]->sin_addr.s_addr,
+                           &tsin[1]->sin_addr.s_addr,
+                           sizeof (tsin[0]->sin_addr.s_addr)))
+          {
+            addrcount++;
+          }
         }
-      }
-      /* Compare IPv6 addresses */
-      else if (addr->sa_family == AF_INET6)
-      {
-        tsin6[0] = (struct sockaddr_in6 *)((ClientInfo *)ctp->td->td_prvtptr)->addr;
-        tsin6[1] = (struct sockaddr_in6 *)addr;
-
-        if (0 == memcmp (&tsin6[0]->sin6_addr.s6_addr,
-                         &tsin6[1]->sin6_addr.s6_addr,
-                         sizeof (tsin6[0]->sin6_addr.s6_addr)))
+        /* Compare IPv6 addresses */
+        else if (addr->sa_family == AF_INET6)
         {
-          addrcount++;
+          tsin6[0] = (struct sockaddr_in6 *)((ClientInfo *)ctp->td->td_prvtptr)->addr;
+          tsin6[1] = (struct sockaddr_in6 *)addr;
+
+          if (0 == memcmp (&tsin6[0]->sin6_addr.s6_addr,
+                           &tsin6[1]->sin6_addr.s6_addr,
+                           sizeof (tsin6[0]->sin6_addr.s6_addr)))
+          {
+            addrcount++;
+          }
         }
       }
     }
