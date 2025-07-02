@@ -1,5 +1,6 @@
 2025.183:
 	- Enable PCRE2 JIT compilation and matching for regexes (much faster).
+	- Update mbedtls to v3.6.4
 
 2025.149: v4.1.0 RC2
 	- Add "3" to reported filters for miniSEED v3
