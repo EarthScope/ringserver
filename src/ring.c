@@ -1467,6 +1467,16 @@ UpdatePattern (pcre2_code **code, pcre2_match_data **data,
       return -1;
     }
 
+    /* Enable PCRE2 JIT compilation */
+    int jit_rc = pcre2_jit_compile (*code, PCRE2_JIT_COMPLETE);
+
+    /* Accept success or unsupported patterns, but fail on other errors */
+    if (!(jit_rc == 0 || jit_rc == PCRE2_ERROR_JIT_UNSUPPORTED))
+    {
+      lprintf (0, "%s(): Error enabling PCRE2 JIT compilation", __func__);
+      return -1;
+    }
+
     *data = pcre2_match_data_create_from_pattern (*code, NULL);
   }
   /* If no pattern, clear any existing regex */
