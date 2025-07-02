@@ -474,7 +474,12 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
         snprintf (secWebSocketProtocolHeader, sizeof (secWebSocketProtocolHeader),
                   "SeedLink3.1");
       else
+      {
+        lprintf (2, "[%s] Error, no recognized SeedLink subprotocol for web socket upgrade: %s",
+                 cinfo->hostname, secWebSocketProtocolHeader);
+
         *secWebSocketProtocolHeader = '\0';
+      }
     }
 
     lprintf (1, "[%s] Received SeedLink WebSocket upgrade request", cinfo->hostname);
@@ -517,8 +522,16 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
       if (strstr (secWebSocketProtocolHeader, "DataLink1.0"))
         snprintf (secWebSocketProtocolHeader, sizeof (secWebSocketProtocolHeader),
                   "DataLink1.0");
+      else if (strstr (secWebSocketProtocolHeader, "DataLink1.1"))
+        snprintf (secWebSocketProtocolHeader, sizeof (secWebSocketProtocolHeader),
+                  "DataLink1.1");
       else
+      {
+        lprintf (2, "[%s] Error, no recognized DataLink subprotocol for web socket upgrade: %s",
+                 cinfo->hostname, secWebSocketProtocolHeader);
+
         *secWebSocketProtocolHeader = '\0';
+      }
     }
 
     lprintf (1, "[%s] Received DataLink WebSocket upgrade request", cinfo->hostname);
