@@ -44,8 +44,8 @@
 #include "tls.h"
 
 /* Progressive throttle stepping and maximum in milliseconds */
-#define THROTTLE_STEPPING 50  /* 50 milliseconds */
-#define THROTTLE_MAXIMUM 500  /* 1/2 second */
+#define THROTTLE_STEPPING 200 /* 200 milliseconds */
+#define THROTTLE_MAXIMUM 1000 /* 1 second */
 
 static int ClientRecv (ClientInfo *cinfo);
 
