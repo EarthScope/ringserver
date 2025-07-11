@@ -2194,20 +2194,22 @@ StationToRegex (const char *staid, Selector *selector,
 /***************************************************************************
  * SelectToRegex:
  *
- * Create a regular expression for ring stream IDs (NET_STA_LOC_CHAN)
- * for the specified network, station and SeedLink selector and add it
- * to the string specified by regex, expanding it as needed.  The
- * regex string will only be expanded up to a maximum of SLMAXREGEXLEN
- * bytes.
+ * Create a regular expression for ring stream IDs for the specified station ID
+ * (NET_STA) and SeedLink selector and add it to the string specified by regex,
+ * extending it as needed.  The regex string will only be extended up to a
+ * maximum of SLMAXREGEXLEN bytes.
  *
- * Each regex in the final string is separated with a "|" (OR) and
- * encapsulated with begin "^" and end "$" characters.
+ * A regex pattern will be created that matches FDSN Source Identifiers with
+ * either "/MSEED" or "/MSEED3" suffixes.
  *
- * Mapping is as follows:
+ * Each regex in the final string is separated with an alternation "|" (logical
+ * OR) to create a single, combined regex pattern.
+ *
+ * Mapping of SeedLink wildcards to regex is as follows:
  *   '?' -> '.'
  *   '*' -> '.*'
  *
- * The DECOTL subtypes of SeedLink selectors are not supported,
+ * The "DECOTL" subtypes or subformats of SeedLink selectors are not supported,
  * anything following a '.' in a selector will be ignored.
  *
  * Return 0 on success and -1 on error.
@@ -2229,9 +2231,9 @@ SelectToRegex (const char *staid, const char *select, char **regex)
   if (select && strlen (select) > 50)
     return -1;
 
-  /* Add starting '^' anchor and FDSN Source ID prefix */
-  memcpy (build, "^(?:FDSN:)?", 11);
-  build += 11;
+  /* Add starting FDSN Source ID prefix */
+  memcpy (build, "FDSN:", 5);
+  build += 5;
 
   /* Copy station pattern if provided, translating globbing wildcards to regex */
   if (staid)
@@ -2287,15 +2289,15 @@ SelectToRegex (const char *staid, const char *select, char **regex)
       }
     }
   }
-  /* Otherwise add wildcard if station ID was added */
+  /* Otherwise add wildcard */
   else
   {
     *build++ = '.';
     *build++ = '*';
   }
 
-  /* Finish with optional /MSEED suffix and 2 or 3 annotation and a '$' anchor */
-  memcpy (build, "(?:/MSEED)?[23]?$", 17);
+  /* Finish with optional /MSEED suffix and optional 3 and a '$' anchor */
+  memcpy (build, "/MSEED3?$", 9);
 
   /* Add new pattern to regex string, expanding as needed up to SLMAXREGEXLEN bytes*/
   if ((retval = AddToString (regex, pattern, "|", 0, SLMAXREGEXLEN)))
