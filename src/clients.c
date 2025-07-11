@@ -1226,6 +1226,12 @@ PollSocket (int socket, int readability, int writability, int timeout_ms)
   if (writability)
     pfd.events |= POLLOUT;
 
+  /* Quick check with no timeout to avoid timer setup if not needed */
+  int quick_result = poll (&pfd, 1, 0);
+  if (quick_result > 0)
+    return quick_result;
+
+  /* Poll with timeout */
   return poll (&pfd, 1, timeout_ms);
 } /* End of PollSocket() */
 
