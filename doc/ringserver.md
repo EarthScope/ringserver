@@ -195,7 +195,7 @@ ringserver [options] [configfile]
 
 <p >"FDSN:IU_COLA_00_B_H_Z/MSEED"</p>
 
-<p >For SeedLink protocol support, data source IDs should be valid FDSN Source IDs (https://docs.fdsn.org/projects/source-identifiers).</p>
+<p >For the SeedLink protocol support, data source IDs must be valid FDSN Source IDs (https://docs.fdsn.org/projects/source-identifiers) with a suffix of "/MSEED" or "/MSEED3".</p>
 
 <p >The stream ID suffix recommendations are as follows:</p>
 

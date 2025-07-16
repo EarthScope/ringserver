@@ -2,17 +2,18 @@
 How to configure ringserver as a simple SeedLink streaming server
   version 2010/03/13
 
-Overview: The EarthScope 'ringserver' software is capable of
-continuously scanning one or more directories for miniSEED data
-records and serving them as near real-time data streams using the
-SeedLink protocol.  This software allows a data collection center that
-can create miniSEED data to redistribute their data in near
-real-time.
+Overview: The EarthScope 'ringserver' software can serve miniSEED
+records via the SeedLink protocol allowing a data collection center
+to redistribute their streaming data in near real-time.  miniSEED
+data are either:
+a) written to the file system and ringserver is configured to
+continuously scan specified directories for newly arriving data,
+and/or
+b) submitted to ringserver via the DataLink protocol.
 
 Requirements:
- 1) Linux, Solaris or Mac OSX operating system
- 2) C compiler to build the ringserver software
-      (testing is done with gcc and the Sun compiler)
+ 1) Linux, or Unix-like operating system
+ 2) C compiler and GNU make to build the ringserver software
  3) Process to create 512-byte miniSEED data records
 
 ## Quick start ########################################################
@@ -20,10 +21,10 @@ Requirements:
 1) Get ringserver source code from:
   https://github.com/EarthScope/ringserver
 
-2) Compile ringserver and copy binary to a dedicated directory.
+2) Compile ringserver and copy the program to the desired location.
    Note: for SunOS/Solaris the 'src/Makefile' needs to be edited.
 
-3) Create configuration file (see below) in the dedicated directory.
+3) Create configuration file (see below) in a dedicated directory.
 
 4) Create required directories like "ring" and optionally "tlog" in
    the dedicated directory.
@@ -36,46 +37,52 @@ Requirements:
 
 Any network firewall between the server and the clients must be
 configured to allow connections from the clients on the SeedLink port
-(default is TCP port 18000).
+(default is TCP ports are 18000 or 18500 for TLS/SSL).
 
 ## The ringserver concept #############################################
 
-The ringserver program reads miniSEED records from files and inserts
-them into an internal ring buffer.  The ring buffer operates as a FIFO
-(first-in-first-out) queue, newer data inserted into the buffer pushes
-the oldest data out.  Remote clients can access data in the buffer
-using the SeedLink protocol.  The size of the buffer is fixed at
-program startup and is directly related to how much old data will be
-available to clients.  By default ringserver will create a 1 gigabyte
-ring; buffer sizes over 2 gigabytes will require a 64-bit executable.
-Ringserver maintains a stateful ring buffer, memory mapping the buffer
-by default, which allows the server to be stopped and re-started
-without any data loss to clients.
+The ringserver program reads miniSEED records from files and inserts them
+into an internal ring buffer.  The ring buffer operates as a FIFO
+(first-in-first-out) queue, newer data inserted into the buffer replaces
+the oldest data.  Remote clients can access data in the buffer using the
+SeedLink protocol.  The size of the buffer is fixed at program startup
+and is defines the limit for how much old data will be available to clients.
+By default, ringserver will create a 1 gigabyte ring.  Ringserver
+maintains a stateful ring buffer, memory mapping the buffer by default,
+which allows the server to be stopped and re-started without any data
+loss to clients.
+
+Alternatively to the scanning of files containing miniSEED records,
+ringserver accepts miniSEED records submitted using the DataLink
+protocol (seed https://github.com/EarthScope/libdali).  This method of
+data submission can be used to avoid writing miniSEED to files, but
+requires writing a program to properly submit data to the server.
 
 ## Compiling ringserver ###############################################
 
 The program should operate on any relatively modern releases of Linux,
-Solaris and Mac OSX operating systems.
+and Unix-like operating systems.
 
-Untar the ringserver source code, in the created 'ringserver'
-directory typing "make" should compile the program.
+After downloading the source code typing "make" in the source directory
+should compile the program.
 
 Compiler options can be tuned by setting the CFLAGS environment
-variable.  For example, building a 32-bit or 64-bit executable can be
-done by setting the appropriate compiler options in CFLAGS.
+variable.
 
-Under SunOS/Solaris the 'src/Makefile' needs to be edited to include
-system networking libraries.  Uncomment the LDLIBS line indicated for
-these systems.
+Under older SunOS/Solaris the 'src/Makefile' needs to be edited to
+include system networking libraries.  Uncomment the LDLIBS line
+indicated for these systems.
 
 ## Configuring ringserver #############################################
 
-The program can be configured using either command line arguments or a
-configuration file.  In general more options are settable in the
-configuration file versus the command line but a simple SeedLink
-server can be configured either way.  All configuration file options
-are documented in the example configuration file that comes with the
-source code ('doc/ring.conf') and in the man page ('doc/ringserver.1').
+The program can be configured using either command line arguments,
+environment variables or a configuration file.  Only a limited number
+of options are available via the command line, and all options are
+available via environment variables and a configuration file.
+
+All configuration file options are documented in a sample configuration
+file printed with ringserver is run with the `-C` argument.  Key
+concepts and details are also documented in the man page ('doc/ringserver.1').
 
 A minimal configuration file for a simple SeedLink server might be:
 
@@ -134,29 +141,13 @@ of a server.  The advantages of using a configuration file are: more
 options available, use of dynamic options (options which can change
 during run time) and room for notes regarding the options.
 
-Other configuration options to consider:
-
-RingSize - Specifies the size of the ring buffer, to retain more data
-  in the buffer and hence make more past data available to clients
-  increase the size of the ring.  RingSize should not be bigger than
-  the total system memory.
-
-LimitIP - Limit client connections to subsets of streams, for example
-  an client IP address can only collect data for specific stations.
-
-MatchIP - Limit connections to specific Internet addresses or range of
-  addresses.
-
-RejectIP - Explicitly reject connections from specified Internet
-  addresses or range of addresses.
-
 ## Executing the server ###############################################
 
 Ringserver is a single binary that prints log messages to standard out
 and critical errors to standard error.  It can be started from any
 environment that can start a process.  When ringserver receives a TERM
 or INT signal (i.e. Control-C) it will shut down cleanly, saving it's
-current ring buffer and scanning state.
+current ring buffer and file scanning status.
 
 Many seismic network data collection centers already have systems that
 manage continuously running processes, ringserver can usually be
