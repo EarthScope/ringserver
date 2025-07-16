@@ -1,6 +1,6 @@
 2025.196: v4.1.0
 	- For SeedLink, miniSEED packets _must_ be identified using an FDSN
-	Source Identifier with a suffix if "/MSEED" or "/MSEED3".
+	Source Identifier with a suffix of "/MSEED" or "/MSEED3".
 	- Enable PCRE2 JIT compilation and matching for regexes (much faster).
 	- Fix inclusion of `start_packet_time` element in connection station list.
 	- Update mbedtls to v3.6.4
