@@ -400,7 +400,7 @@ SLFindFilter (const SLInfo *slinfo, const char *streamid)
   if (slinfo->stationcount <= 0)
     return CONVERT_NONE;
 
-  memcpy (privateid, streamid, sizeof (privateid));
+  strncpy (privateid, streamid, sizeof (privateid));
 
   /* Decompose FDSN Source ID into SeedLink station and select IDs by
    * extracting "NET_STA" and "LOC_B_S_SS" from "FDSN:NET_STA_LOC_B_S_SS/MSEED" */
@@ -686,12 +686,12 @@ HandleNegotiation (ClientInfo *cinfo)
   ReqStationID *stationid;
   int fields = 0;
 
-  nstime_t starttime    = NSTUNSET;
-  nstime_t endtime      = NSTUNSET;
-  char starttimestr[51] = {0};
-  char endtimestr[51]   = {0};
-  char selector[64]     = {0};
-  uint64_t startpacket  = RINGID_NONE;
+  nstime_t starttime         = NSTUNSET;
+  nstime_t endtime           = NSTUNSET;
+  char starttimestr[51]      = {0};
+  char endtimestr[51]        = {0};
+  char selector[MAXSTREAMID] = {0};
+  uint64_t startpacket       = RINGID_NONE;
   Conversion convert;
 
   char *ptr;
@@ -1055,7 +1055,7 @@ HandleNegotiation (ClientInfo *cinfo)
     }
 
     /* Allocate and populate new stream selection list node */
-    Selector *newselector;
+    Selector *newselector = NULL;
     if ((newselector = (Selector *)calloc (1, sizeof (Selector))) == NULL)
     {
       lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
@@ -1078,7 +1078,10 @@ HandleNegotiation (ClientInfo *cinfo)
         lprintf (0, "[%s] Error in GetReqStationID() for command SELECT", cinfo->hostname);
 
         if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetReqStationID()"))
+        {
+          free (newselector);
           return -1;
+        }
       }
       else
       {
@@ -1101,7 +1104,10 @@ HandleNegotiation (ClientInfo *cinfo)
         }
 
         if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
+        {
+          free (newselector);
           return -1;
+        }
       }
     }
     /* Otherwise add selector to global list */
@@ -1126,7 +1132,10 @@ HandleNegotiation (ClientInfo *cinfo)
       }
 
       if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
+      {
+        free (newselector);
         return -1;
+      }
     }
   } /* End of SELECT */
 
@@ -1476,11 +1485,12 @@ HandleInfo_v3 (ClientInfo *cinfo)
     /* Skip any spaces between INFO and level identifier */
     while (*level == ' ')
       level++;
-  }
-  else if (*level == '\0' || *level == '\r' || *level == '\n')
-  {
-    lprintf (0, "[%s] HandleInfo: INFO requested without a level", cinfo->hostname);
-    return -1;
+
+    if (*level == '\0' || *level == '\r' || *level == '\n')
+    {
+      lprintf (0, "[%s] HandleInfo: INFO requested without a level", cinfo->hostname);
+      return -1;
+    }
   }
   else
   {
@@ -2218,7 +2228,7 @@ static int
 SelectToRegex (const char *staid, const char *select, char **regex)
 {
   const char *ptr;
-  char pattern[200] = {0};
+  char pattern[256] = {0};
   char *build       = pattern;
   int retval;
 

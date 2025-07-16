@@ -490,8 +490,10 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
     /* Otherwise use the stream ID as the station and stream IDs */
     else
     {
-      memcpy (staid, ringstream->streamid, sizeof (staid));
-      memcpy (streamid, ringstream->streamid, sizeof (streamid));
+      strncpy (staid, ringstream->streamid, sizeof (staid) - 1);
+      staid[sizeof (staid) - 1] = '\0';
+      strncpy (streamid, ringstream->streamid, sizeof (streamid) - 1);
+      streamid[sizeof (streamid) - 1] = '\0';
     }
 
     /* Create new station entry and add to stack */
@@ -863,7 +865,7 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
         if (stationid->datastart != NSTUNSET)
         {
           ms_nstime2timestr (stationid->datastart, timestring, ISOMONTHDAY_Z, NONE);
-          yyjson_mut_obj_add_uint (doc, station, "start_packet_time", stationid->datastart);
+          yyjson_mut_obj_add_strcpy (doc, station, "start_packet_time", timestring);
         }
 
         if (stationid->selectors)

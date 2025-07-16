@@ -231,12 +231,18 @@ main (int argc, char *argv[])
     if (!config.volatilering)
     {
       /* Create ring file path: "<ringdir>/packetbuf" */
-      strncpy (ringfilename, config.ringdir, sizeof (ringfilename) - 20);
-      strcat (ringfilename, "/packetbuf");
+      if (snprintf (ringfilename, sizeof (ringfilename), "%s/packetbuf", config.ringdir) >= sizeof (ringfilename))
+      {
+        lprintf (0, "Error: ring buffer directory too long");
+        return 1;
+      }
 
       /* Create stream index file path: "<ringdir>/streamidx" */
-      strncpy (streamfilename, config.ringdir, sizeof (streamfilename) - 20);
-      strcat (streamfilename, "/streamidx");
+      if (snprintf (streamfilename, sizeof (streamfilename), "%s/streamidx", config.ringdir) >= sizeof (streamfilename))
+      {
+        lprintf (0, "Error: ring buffer directory too long");
+        return 1;
+      }
     }
 
     /* Initialize ring system */

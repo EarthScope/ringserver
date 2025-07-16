@@ -293,7 +293,7 @@ info_xml_slv3_stations (ClientInfo *cinfo, const char *software, int include_str
             break;
           }
 
-          strncpy (idstr, yyjson_get_str (yyjson_obj_get (stream_iter, "id")),
+          strncpy (idstr, DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "id"))),
                    sizeof (idstr) - 1);
 
           /* Split location code from station code if separated by '_' */
