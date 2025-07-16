@@ -452,6 +452,16 @@ main (int argc, char *argv[])
           lprintf (3, "Requesting shutdown of client thread %lu",
                    (unsigned long int)loopctp->td->td_id);
 
+          /* Shutdown the client socket and add a 1-second linger timeout */
+          ClientInfo *cinfo = (ClientInfo *)loopctp->td->td_prvtptr;
+          if (cinfo && cinfo->socket > 0)
+          {
+            struct linger linger_opt = {1, 1}; // Enable linger with 1-second timeout
+            setsockopt (cinfo->socket, SOL_SOCKET, SO_LINGER, &linger_opt, sizeof (linger_opt));
+
+            shutdown (cinfo->socket, SHUT_RDWR);
+          }
+
           loopctp->td->td_state = TDS_CLOSE;
         }
         loopctp = loopctp->next;
@@ -1441,6 +1451,7 @@ SignalThread (void *arg)
     case SIGTERM:
       lprintf (1, "Received termination signal");
       param.shutdownsig = 1; /* Set global termination flag */
+      config.netiotimeout = 0; /* Disable network IO timeout */
       break;
     case SIGUSR1:
       PrintHandler (); /* Print global ring details */

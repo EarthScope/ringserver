@@ -746,9 +746,17 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
 
           if (pollret == 0)
           {
-            lprintf (0, "[%s] Timeout sending data", cinfo->hostname);
-            cinfo->socketerr = -1;
-            return -1;
+            if (param.shutdownsig == 0)
+            {
+              lprintf (0, "[%s] Timeout sending data", cinfo->hostname);
+              cinfo->socketerr = -1;
+              return -1;
+            }
+            else /* Indicate an orderly shutdown */
+            {
+              cinfo->socketerr = -2;
+              return -2;
+            }
           }
           else if (pollret == -1 && errno != EINTR)
           {
@@ -770,9 +778,17 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
 
           if (pollret == 0)
           {
-            lprintf (0, "[%s] Timeout sending data", cinfo->hostname);
-            cinfo->socketerr = -1;
-            return -1;
+            if (param.shutdownsig == 0)
+            {
+              lprintf (0, "[%s] Timeout sending data", cinfo->hostname);
+              cinfo->socketerr = -1;
+              return -1;
+            }
+            else /* Indicate an orderly shutdown */
+            {
+              cinfo->socketerr = -2;
+              return -2;
+            }
           }
           else if (pollret == -1 && errno != EINTR)
           {
