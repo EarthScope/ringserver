@@ -2238,8 +2238,9 @@ AddListenThreads (ListenPortParams *lpp)
   if (families == 0 || (families & FAMILY_IPv4))
   {
     lpp->options = options | FAMILY_IPv4;
+    lpp->socket = InitServerSocket (lpp->portstr, lpp->options);
 
-    if ((lpp->socket = InitServerSocket (lpp->portstr, lpp->options)) > 0)
+    if (lpp->socket > 0)
     {
       if (AddServerThread (LISTEN_THREAD, lpp))
       {
@@ -2260,8 +2261,9 @@ AddListenThreads (ListenPortParams *lpp)
   if (families == 0 || (families & FAMILY_IPv6))
   {
     lpp->options = options | FAMILY_IPv6;
+    lpp->socket = InitServerSocket (lpp->portstr, lpp->options);
 
-    if ((lpp->socket = InitServerSocket (lpp->portstr, lpp->options)) > 0)
+    if (lpp->socket > 0)
     {
       if (AddServerThread (LISTEN_THREAD, lpp))
       {
