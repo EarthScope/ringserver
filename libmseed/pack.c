@@ -41,14 +41,20 @@ static int msr3_pack_mseed2 (const MS3Record *msr, void (*record_handler) (char 
                              void *handlerdata, int64_t *packedsamples,
                              uint32_t flags, int8_t verbose);
 
+static int msr3_pack_header2_offsets (const MS3Record *msr, char *record, uint32_t recbuflen,
+                                      uint16_t *blockette_1000_offset, uint16_t *blockette_1001_offset,
+                                      int8_t verbose);
+
 static int64_t msr_pack_data (void *dest, void *src, uint64_t maxsamples, uint64_t maxdatabytes,
                               char sampletype, int8_t encoding, int8_t swapflag,
                               uint32_t *byteswritten, const char *sid, int8_t verbose);
 
 static int ms_genfactmult (double samprate, int16_t *factor, int16_t *multiplier);
 
-static int64_t ms_timestr2btime (const char *timestr, uint8_t *btime, const char *sid, int8_t swapflag);
+static nstime_t ms_timestr2btime (const char *timestr, uint8_t *btime, int8_t *usec_offset,
+                                  const char *sid, int8_t swapflag);
 
+static nstime_t nstime2fsec_usec_offset (nstime_t nstime, uint16_t *fsec, int8_t *usec_offset);
 
 /**********************************************************************/ /**
  * @brief Pack data into miniSEED records.
@@ -410,14 +416,14 @@ msr3_repack_mseed3 (const MS3Record *msr, char *record, uint32_t recbuflen,
 
   if (recbuflen < (MS3FSDH_LENGTH + strlen(msr->sid) + msr->extralength))
   {
-    ms_log (2, "%s: Record length (%u) is not large enough for header (%u), SID (%"PRIsize_t"), and extra (%d)\n",
+    ms_log (2, "%s: Record buffer length (%u) is not large enough for header (%u), SID (%"PRIsize_t"), and extra (%d)\n",
             msr->sid, recbuflen, MS3FSDH_LENGTH, strlen(msr->sid), msr->extralength);
     return -1;
   }
 
   if (msr->samplecnt > UINT32_MAX)
   {
-    ms_log (2, "%s: Too many samples in input record (%" PRId64 " for a single record)\n",
+    ms_log (2, "%s: Too many samples in input record (%" PRId64 ") for a single record)\n",
             msr->sid, msr->samplecnt);
     return -1;
   }
@@ -609,6 +615,8 @@ msr3_pack_mseed2 (const MS3Record *msr, void (*record_handler) (char *, int, voi
   int64_t packoffset;
   int64_t totalpackedsamples;
 
+  uint16_t blockette_1000_offset = 0;
+  uint16_t blockette_1001_offset = 0;
   uint32_t datalength;
   nstime_t nextstarttime;
   uint16_t year;
@@ -616,7 +624,8 @@ msr3_pack_mseed2 (const MS3Record *msr, void (*record_handler) (char *, int, voi
   uint8_t hour;
   uint8_t min;
   uint8_t sec;
-  uint32_t nsec;
+  uint16_t fsec;
+  int8_t usec_offset;
 
   if (!msr)
   {
@@ -665,16 +674,22 @@ msr3_pack_mseed2 (const MS3Record *msr, void (*record_handler) (char *, int, voi
   memset (rawrec, 0, MS2FSDH_LENGTH);
 
   /* Pack fixed header and extra headers, returned size is data offset */
-  headerlen = msr3_pack_header2 (msr, rawrec, reclen, verbose);
+  headerlen = msr3_pack_header2_offsets (msr, rawrec, reclen,
+                                         &blockette_1000_offset,
+                                         &blockette_1001_offset,
+                                         verbose);
 
-  if (headerlen < 0)
+  if (headerlen < 0 || blockette_1000_offset == 0)
+  {
+    libmseed_memory.free (rawrec);
     return -1;
+  }
 
   /* Short cut: if there are no samples, record packing is complete */
   if (msr->numsamples <= 0)
   {
     /* Set encoding to text for consistency and to reduce expectations */
-    *pMS2B1000_ENCODING (rawrec + 48) = DE_TEXT;
+    *pMS2B1000_ENCODING (rawrec + blockette_1000_offset) = DE_TEXT;
 
     /* Set empty part of record to zeros */
     memset (rawrec + headerlen, 0, reclen - headerlen);
@@ -698,6 +713,7 @@ msr3_pack_mseed2 (const MS3Record *msr, void (*record_handler) (char *, int, voi
   if (!samplesize)
   {
     ms_log (2, "%s: Unknown sample type '%c'\n", msr->sid, msr->sampletype);
+    libmseed_memory.free (rawrec);
     return -1;
   }
 
@@ -807,13 +823,15 @@ msr3_pack_mseed2 (const MS3Record *msr, void (*record_handler) (char *, int, voi
     if (totalpackedsamples >= msr->numsamples)
       break;
 
-    /* Update record start time for next record */
+    /* Update encoded record start time for next record */
     nextstarttime = ms_sampletime (msr->starttime, totalpackedsamples, msr->samprate);
 
-    if (ms_nstime2time (nextstarttime, &year, &day, &hour, &min, &sec, &nsec))
+    nstime_t second_nextstarttime = nstime2fsec_usec_offset (nextstarttime, &fsec, &usec_offset);
+
+    if (ms_nstime2time (second_nextstarttime, &year, &day, &hour, &min, &sec, NULL))
     {
       ms_log (2, "%s: Cannot convert next record starttime: %" PRId64 "\n",
-              msr->sid, nextstarttime);
+              msr->sid, second_nextstarttime);
       libmseed_memory.free (encoded);
       libmseed_memory.free (rawrec);
       return -1;
@@ -824,7 +842,12 @@ msr3_pack_mseed2 (const MS3Record *msr, void (*record_handler) (char *, int, voi
     *pMS2FSDH_HOUR (rawrec) = hour;
     *pMS2FSDH_MIN (rawrec)  = min;
     *pMS2FSDH_SEC (rawrec)  = sec;
-    *pMS2FSDH_FSEC (rawrec) = HO2u ((nsec / 100000), swapflag);
+    *pMS2FSDH_FSEC (rawrec) = HO2u (fsec, swapflag);
+
+    if (blockette_1001_offset)
+    {
+      *pMS2B1001_MICROSECOND (rawrec + blockette_1001_offset) = usec_offset;
+    }
   }
 
   if (verbose >= 2)
@@ -837,6 +860,124 @@ msr3_pack_mseed2 (const MS3Record *msr, void (*record_handler) (char *, int, voi
 
   return recordcnt;
 } /* End of msr3_pack_mseed2() */
+
+/**********************************************************************/ /**
+ * @brief Repack a parsed miniSEED record into a version 2 record.
+ *
+ * Pack the parsed header into a version 2 header and copy the raw
+ * encoded data from the original record.  The original record must be
+ * available at the ::MS3Record.record pointer.
+ *
+ * The new record will be the same length as the original record and an
+ * error will be returned if the repacked record would not fit.
+ * If the new record is shorter than the original record, the extra space
+ * will be zeroed.
+ *
+ * This can be used to efficiently convert format versions or modify
+ * header values without unpacking the data samples.
+ *
+ * @param[in] msr ::MS3Record containing record to repack
+ * @param[out] record Destination buffer for repacked record
+ * @param[in] recbuflen Length of destination buffer
+ * @param[in] verbose Controls logging verbosity, 0 is no diagnostic output
+ *
+ * @returns record length on success and -1 on error.
+ *
+ * \ref MessageOnError - this function logs a message on error
+ ***************************************************************************/
+int
+msr3_repack_mseed2 (const MS3Record *msr, char *record, uint32_t recbuflen,
+                    int8_t verbose)
+{
+  int headerlen;
+  uint16_t dataoffset;
+  uint32_t origdataoffset;
+  uint32_t origdatasize;
+  uint32_t totalsize;
+  uint8_t swapflag;
+
+  if (!msr || !msr->record || !record)
+  {
+    ms_log (2, "%s(): Required input not defined: 'msr', 'msr->record', or 'record'\n",
+            __func__);
+    return -1;
+  }
+
+  if ((int64_t)recbuflen < msr->reclen)
+  {
+    ms_log (2, "%s: Record buffer length (%u) is not large enough for requested record length (%d)\n",
+            msr->sid, recbuflen, msr->reclen);
+    return -1;
+  }
+
+  if (msr->samplecnt > UINT16_MAX)
+  {
+    ms_log (2, "%s: Too many samples in input record (%" PRId64 ") for a single v2 record)\n",
+            msr->sid, msr->samplecnt);
+    return -1;
+  }
+
+  /* Pack fixed header and blockettes */
+  headerlen = msr3_pack_header2 (msr, record, recbuflen, verbose);
+
+  if (headerlen < 0)
+  {
+    ms_log (2, "%s: Cannot pack miniSEED version 2 header\n", msr->sid);
+    return -1;
+  }
+
+  /* Determine encoded data size */
+  if (msr3_data_bounds (msr, &origdataoffset, &origdatasize))
+  {
+    ms_log (2, "%s: Cannot determine original data bounds\n", msr->sid);
+    return -1;
+  }
+
+  /* Determine offset to encoded data */
+  if (msr->encoding == DE_STEIM1 || msr->encoding == DE_STEIM2)
+  {
+    dataoffset = 64;
+    while (dataoffset < headerlen)
+      dataoffset += 64;
+
+    /* Zero memory between blockettes and data if any */
+    memset (record + headerlen, 0, dataoffset - headerlen);
+  }
+  else
+  {
+    dataoffset = headerlen;
+  }
+
+  totalsize = dataoffset + origdatasize;
+
+  if (recbuflen < totalsize)
+  {
+    ms_log (2, "%s: Repacked minimum record length (%u) is larger than destination record buffer (%u)\n",
+            msr->sid, totalsize, recbuflen);
+    return -1;
+  }
+
+  /* Copy encoded data into record */
+  memcpy (record + dataoffset, msr->record + origdataoffset, origdatasize);
+
+  /* Check if byte swapping is needed, miniSEED 2 is written big endian */
+  swapflag = (ms_bigendianhost ()) ? 0 : 1;
+
+  /* Update number of samples and data offset */
+  *pMS2FSDH_NUMSAMPLES (record) = HO2u ((uint16_t)msr->samplecnt, swapflag);
+  *pMS2FSDH_DATAOFFSET (record) = HO2u (dataoffset, swapflag);
+
+  /* Zero any space between encoded data and end of record */
+  int32_t content = dataoffset + origdatasize;
+  if (content < msr->reclen)
+    memset (record + content, 0, msr->reclen - content);
+
+  if (verbose >= 1)
+    ms_log (0, "%s: Repacked %" PRId64 " samples into a %u byte record\n",
+            msr->sid, msr->samplecnt, msr->reclen);
+
+  return msr->reclen;
+} /* End of msr3_repack_mseed2() */
 
 /**********************************************************************/ /**
  * @brief Pack a miniSEED version 2 header into the specified buffer.
@@ -857,6 +998,34 @@ msr3_pack_mseed2 (const MS3Record *msr, void (*record_handler) (char *, int, voi
 int
 msr3_pack_header2 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_t verbose)
 {
+  return msr3_pack_header2_offsets (msr, record, recbuflen, NULL, NULL, verbose);
+}
+
+/**********************************************************************/ /**
+ * @internal
+ * Pack a miniSEED version 2 header into the specified buffer and return the
+ * offsets of the 1000 and 1001 blockettes.
+ *
+ * Default values are: record length = 4096, encoding = 11 (Steim2).
+ * The defaults are triggered when \a msr.reclen and \a msr.encoding
+ * are set to -1.
+ *
+ * @param[in] msr ::MS3Record to pack
+ * @param[out] record Destination for packed header
+ * @param[in] recbuflen Length of destination buffer
+ * @param[out] blockette_1000_offset Byte offset to B1000, 0 if none
+ * @param[out] blockette_1001_offset Byte offset to B1001, 0 if none
+ * @param[in] verbose Controls logging verbosity, 0 is no diagnostic output
+ *
+ * @returns the size of the header (fixed and blockettes) on success, otherwise -1.
+ *
+ * \ref MessageOnError - this function logs a message on error
+ ***************************************************************************/
+static int
+msr3_pack_header2_offsets (const MS3Record *msr, char *record, uint32_t recbuflen,
+                           uint16_t *blockette_1000_offset, uint16_t *blockette_1001_offset,
+                           int8_t verbose)
+{
   int written = 0;
   int8_t swapflag;
   uint32_t reclen;
@@ -872,9 +1041,8 @@ msr3_pack_header2 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_
   uint8_t hour;
   uint8_t min;
   uint8_t sec;
-  uint32_t nsec;
   uint16_t fsec;
-  int8_t msec_offset;
+  int8_t usec_offset;
 
   uint32_t reclenexp = 0;
   uint32_t reclenfind;
@@ -903,6 +1071,12 @@ msr3_pack_header2 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_
     ms_log (2, "%s(): Required input not defined: 'msr' or 'record'\n", __func__);
     return -1;
   }
+
+  /* Initialize blockette offsets to 0 */
+  if (blockette_1000_offset)
+    *blockette_1000_offset = 0;
+  if (blockette_1001_offset)
+    *blockette_1001_offset = 0;
 
   /* Use default record length and encoding if needed */
   reclen = (msr->reclen < 0) ? MS_PACK_DEFAULT_RECLEN : msr->reclen;
@@ -953,16 +1127,15 @@ msr3_pack_header2 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_
   if (verbose > 2 && swapflag)
     ms_log (0, "%s: Byte swapping needed for packing of header\n", msr->sid);
 
+  /* Calculate time at fractional 100usec resolution and microsecond offset */
+  nstime_t second_nstime = nstime2fsec_usec_offset (msr->starttime, &fsec, &usec_offset);
+
   /* Break down start time into individual components */
-  if (ms_nstime2time (msr->starttime, &year, &day, &hour, &min, &sec, &nsec))
+  if (ms_nstime2time (second_nstime, &year, &day, &hour, &min, &sec, NULL))
   {
     ms_log (2, "%s: Cannot convert starttime: %" PRId64 "\n", msr->sid, msr->starttime);
     return -1;
   }
-
-  /* Calculate time at fractional 100usec resolution and microsecond offset */
-  fsec = nsec / 100000;
-  msec_offset = ((nsec / 1000) - (fsec * 100));
 
   /* Generate factor & multipler representation of sample rate */
   if (ms_genfactmult (msr3_sampratehz(msr), &factor, &multiplier))
@@ -1136,10 +1309,13 @@ msr3_pack_header2 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_
   *pMS2B1000_RECLEN (record + written)    = reclenexp;
   *pMS2B1000_RESERVED (record + written)  = 0;
 
+  if (blockette_1000_offset)
+    *blockette_1000_offset = written;
+
   written += 8;
 
   /* Add Blockette 1001 if microsecond offset or timing quality is present */
-  if (yyjson_ptr_get_uint (ehroot, "/FDSN/Time/Quality", &header_uint) || msec_offset)
+  if (yyjson_ptr_get_uint (ehroot, "/FDSN/Time/Quality", &header_uint) || usec_offset)
   {
     *next_blockette = HO2u ((uint16_t)written, swapflag);
     next_blockette = pMS2B1001_NEXT (record + written);
@@ -1153,9 +1329,12 @@ msr3_pack_header2 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_
     else
       *pMS2B1001_TIMINGQUALITY (record + written) = 0;
 
-    *pMS2B1001_MICROSECOND (record + written) = msec_offset;
+    *pMS2B1001_MICROSECOND (record + written) = usec_offset;
     *pMS2B1001_RESERVED (record + written)    = 0;
     *pMS2B1001_FRAMECOUNT (record + written)  = 0;
+
+    if (blockette_1001_offset)
+      *blockette_1001_offset = written;
 
     written += 8;
   }
@@ -1208,26 +1387,19 @@ msr3_pack_header2 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_
 
       if (yyjson_ptr_get_str (ehiterval, "/Time", &header_string))
       {
-        int64_t l_nsec;
-        uint16_t l_fsec;
-        int8_t l_msec_offset;
+        int8_t l_usec_offset;
+        nstime_t l_nstime = ms_timestr2btime (header_string,
+                                              (uint8_t *)pMS2B500_YEAR (record + written),
+                                              &l_usec_offset, msr->sid, swapflag);
 
-        l_nsec = ms_timestr2btime (header_string,
-                                   (uint8_t *)pMS2B500_YEAR (record + written),
-                                   msr->sid, swapflag);
-
-        if (l_nsec == -1)
+        if (l_nstime == NSTERROR)
         {
           ms_log (2, "%s: Cannot convert B500 time: %s\n", msr->sid, header_string);
           yyjson_doc_free (ehdoc);
           return -1;
         }
 
-        /* Calculate time at fractional 100usec resolution and microsecond offset */
-        l_fsec        = (uint16_t)(l_nsec / 100000);
-        l_msec_offset = (int8_t)((l_nsec / 1000) - (l_fsec * 100));
-
-        *pMS2B500_MICROSECOND (record + written) = l_msec_offset;
+        *pMS2B500_MICROSECOND (record + written) = l_usec_offset;
       }
 
       if (yyjson_ptr_get_uint (ehiterval, "/ReceptionQuality", &header_uint) && header_uint <= UINT8_MAX)
@@ -1316,7 +1488,7 @@ msr3_pack_header2 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_
       if (yyjson_ptr_get_str (ehiterval, "/OnsetTime", &header_string))
       {
         if (ms_timestr2btime (header_string, (uint8_t *)pMS2B200_YEAR (record + written),
-                              msr->sid, swapflag) == -1)
+                              NULL, msr->sid, swapflag) == NSTERROR)
         {
           ms_log (2, "%s: Cannot convert B%u time: %s\n", msr->sid, blockette_type, header_string);
           yyjson_doc_free (ehdoc);
@@ -1435,7 +1607,7 @@ msr3_pack_header2 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_
         if (yyjson_ptr_get_str (ehiterval, "/BeginTime", &header_string))
         {
           if (ms_timestr2btime (header_string, (uint8_t *)pMS2B300_YEAR (record + written),
-                                msr->sid, swapflag) == -1)
+                                NULL, msr->sid, swapflag) == NSTERROR)
           {
             ms_log (2, "%s: Cannot convert B%u time: %s\n", msr->sid, blockette_type, header_string);
             yyjson_doc_free (ehdoc);
@@ -1600,7 +1772,7 @@ msr3_pack_header2 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_
         *pMS2B395_NEXT (record + written) = 0;
 
         if (ms_timestr2btime (header_string, (uint8_t *)pMS2B395_YEAR (record + written),
-                              msr->sid, swapflag) == -1)
+                              NULL, msr->sid, swapflag) == NSTERROR)
         {
           ms_log (2, "%s: Cannot convert B%u time: %s\n", msr->sid, blockette_type, header_string);
           yyjson_doc_free (ehdoc);
@@ -2090,8 +2262,8 @@ ms_genfactmult (double samprate, int16_t *factor, int16_t *multiplier)
 } /* End of ms_genfactmult() */
 
 /***************************************************************************
- * Convenience function to convert a month-day time string to a SEED
- * 2.x "BTIME" structure.
+ * Convenience function to convert a time string to a SEED 2.x "BTIME"
+ * structure, and a microsecond offset.
  *
  * The 10-byte BTIME structure layout:
  *
@@ -2104,33 +2276,41 @@ ms_genfactmult (double samprate, int16_t *factor, int16_t *multiplier)
  * unused uint8_t   7       Unused, included for alignment
  * fract  uint16_t  8       0.0001 seconds, i.e. 1/10ths of milliseconds (0—9999)
  *
- * Return nanoseconds on success and -1 on error.
+ * Return second-resolution nstime_t value on success and NSTERROR on error.
  *
  * \ref MessageOnError - this function logs a message on error
  ***************************************************************************/
-static inline int64_t
-ms_timestr2btime (const char *timestr, uint8_t *btime, const char *sid, int8_t swapflag)
+static inline nstime_t
+ms_timestr2btime (const char *timestr, uint8_t *btime, int8_t *usec_offset,
+                  const char *sid, int8_t swapflag)
 {
   uint16_t year;
   uint16_t day;
   uint8_t hour;
   uint8_t min;
   uint8_t sec;
-  uint32_t nsec;
+  uint16_t fsec;
+  int8_t l_usec_offset;
   nstime_t nstime;
+  nstime_t second_nstime;
 
   if (!timestr || !btime)
   {
     ms_log (2, "%s(%s): Required input not defined: 'timestr' or 'btime'\n",
             sid, __func__);
-    return -1;
+    return NSTERROR;
   }
 
   if ((nstime = ms_timestr2nstime (timestr)) == NSTERROR)
-    return -1;
+    return NSTERROR;
 
-  if (ms_nstime2time (nstime, &year, &day, &hour, &min, &sec, &nsec))
-    return -1;
+  if (ms_nstime2time (nstime, &year, &day, &hour, &min, &sec, NULL))
+    return NSTERROR;
+
+  second_nstime = nstime2fsec_usec_offset (nstime, &fsec, &l_usec_offset);
+
+  if (second_nstime == NSTERROR)
+    return NSTERROR;
 
   *((uint16_t *)(btime))     = HO2u (year, swapflag);
   *((uint16_t *)(btime + 2)) = HO2u (day, swapflag);
@@ -2138,7 +2318,73 @@ ms_timestr2btime (const char *timestr, uint8_t *btime, const char *sid, int8_t s
   *((uint8_t *)(btime + 5))  = min;
   *((uint8_t *)(btime + 6))  = sec;
   *((uint8_t *)(btime + 7))  = 0;
-  *((uint16_t *)(btime + 8)) = HO2u (nsec / 100000, swapflag);
+  *((uint16_t *)(btime + 8)) = HO2u (fsec, swapflag);
 
-  return nsec;
+  if (usec_offset)
+    *usec_offset = l_usec_offset;
+
+  return second_nstime;
 } /* End of timestr2btime() */
+
+/***************************************************************************
+ * nstime2fsec_usec_offset
+ *
+ * Convert a nstime_t value to a time value in tenths of milliseconds (fsec) and
+ * a microsecond offset (usec_offset) from the fsec value.
+ *
+ * The nstime_t value returned is the nstime_t value at second resolution and
+ * the appropriate value to be combined with fsec and usec_offset to recover the
+ * time value (in microseconds).  Nanosecond resolution is lost in this case.
+ *
+ * When converting nstime_t values with sub-microsecond resolution, the result
+ * will be rounded to the nearest microsecond to retain as much accuracy as
+ * possible.
+ *
+ * The tenths of milliseconds value will be rounded to the nearest value having
+ * a microsecond offset value between -50 to +49.
+ *
+ * Returns second-resolution nstime_t value on success and NSTERROR on error.
+ ***************************************************************************/
+static nstime_t
+nstime2fsec_usec_offset (nstime_t nstime, uint16_t *fsec, int8_t *usec_offset)
+{
+  if (fsec == NULL || usec_offset == NULL)
+    return NSTERROR;
+
+  /* Round to nearest microsecond (loses nanosecond precision) */
+  nstime_t usec_time = (nstime + (nstime >= 0 ? 500 : -500)) / 1000 * 1000;
+
+  /* Convert to microseconds and tenths of milliseconds */
+  int64_t total_usec = usec_time / 1000;
+  int64_t total_fsec = usec_time / 100000;
+
+  /* Calculate microsecond offset from tenths of milliseconds */
+  *usec_offset = (int8_t)(total_usec - total_fsec * 100);
+
+  /* Adjust to keep usec_offset in range [-50, +49] */
+  if (*usec_offset > 49)
+  {
+    total_fsec += 1;
+    *usec_offset -= 100;
+  }
+  else if (*usec_offset < -50)
+  {
+    total_fsec -= 1;
+    *usec_offset += 100;
+  }
+
+  /* Extract fsec within current second (0-9999) */
+  int64_t fsec_remainder = total_fsec % 10000;
+  int64_t seconds = total_fsec / 10000;
+
+  /* Handle negative modulo properly */
+  if (fsec_remainder < 0)
+  {
+    fsec_remainder += 10000;
+    seconds -= 1;
+  }
+  *fsec = (uint16_t)fsec_remainder;
+
+  /* Return second-resolution time */
+  return seconds * NSTMODULUS;
+} /* End of nstime2fsec_usec_offset() */

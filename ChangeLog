@@ -1,3 +1,7 @@
+2025.291:
+	- Enable linux/arm64 docker image build for releases.
+  - Update libmseed to v3.1.6
+
 2025.196: v4.1.0
 	- For SeedLink, miniSEED packets _must_ be identified using an FDSN
 	Source Identifier with a suffix of "/MSEED" or "/MSEED3".

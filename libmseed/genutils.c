@@ -1735,15 +1735,18 @@ ms_sampletime (nstime_t time, int64_t offset, double samprate)
 
 /**********************************************************************/ /**
  * @brief Runtime test for host endianess
- * @returns 0 if the host is little endian, otherwise 1.
+ * @returns 1 if the host is big endian, 0 otherwise.
  ***************************************************************************/
 inline int
 ms_bigendianhost (void)
 {
-  const uint16_t endian = 256;
-  return *(const uint8_t *)&endian;
+  union
+  {
+    uint16_t word;
+    uint8_t bytes[2];
+  } test = {0x0102};
+  return (test.bytes[0] == 0x01);
 } /* End of ms_bigendianhost() */
-
 
 /**********************************************************************/ /**
  * @brief Read leap second file specified by an environment variable

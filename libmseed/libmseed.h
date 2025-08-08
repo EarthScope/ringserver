@@ -28,8 +28,8 @@
 extern "C" {
 #endif
 
-#define LIBMSEED_VERSION "3.1.5"     //!< Library version
-#define LIBMSEED_RELEASE "2025.114"  //!< Library release date
+#define LIBMSEED_VERSION "3.1.6"     //!< Library version
+#define LIBMSEED_RELEASE "2025.207"  //!< Library release date
 
 /** @defgroup io-functions File and URL I/O */
 /** @defgroup miniseed-record Record Handling */
@@ -417,6 +417,8 @@ extern int msr3_pack (const MS3Record *msr,
                       uint32_t flags, int8_t verbose);
 
 extern int msr3_repack_mseed3 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_t verbose);
+
+extern int msr3_repack_mseed2 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_t verbose);
 
 extern int msr3_pack_header3 (const MS3Record *msr, char *record, uint32_t recbuflen, int8_t verbose);
 
