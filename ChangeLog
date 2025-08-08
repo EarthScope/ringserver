@@ -1,4 +1,4 @@
-2025.291:
+2025.291: v4.1.1
 	- Enable linux/arm64 docker image build for releases.
   - Update libmseed to v3.1.6
   - Update mbedtls to v3.6.4
