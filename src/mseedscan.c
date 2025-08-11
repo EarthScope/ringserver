@@ -615,8 +615,8 @@ FindFile (RBTree *filetree, FileKey *fkey)
 static FileNode *
 AddFile (RBTree *filetree, ino_t inode, char *filename, time_t modtime)
 {
-  FileKey *newfkey;
-  FileNode *newfnode;
+  FileKey *newfkey = NULL;
+  FileNode *newfnode = NULL;
   size_t filelen;
 
   lprintf (1, "[MSeedScan] Adding %s", filename);
@@ -629,7 +629,11 @@ AddFile (RBTree *filetree, ino_t inode, char *filename, time_t modtime)
   newfnode = (FileNode *)malloc (sizeof (FileNode));
 
   if (!newfkey || !newfnode)
+  {
+    free (newfkey);
+    free (newfnode);
     return 0;
+  }
 
   /* Populate the new key and node */
   newfkey->inode = inode;
@@ -659,7 +663,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
 {
   ssize_t nread;
   ssize_t detlen;
-  int fd;
+  int fd         = -1;
   int reccnt     = 0;
   int reachedmax = 0;
   int flags;
@@ -714,6 +718,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
       }
       else
       {
+        close (fd);
         return newoffset;
       }
     }
@@ -752,6 +757,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
     /* File does not contain whole record, done for now */
     else if (detlen > (newsize - newoffset))
     {
+      close (fd);
       return newoffset;
     }
 
@@ -770,6 +776,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
         }
         else
         {
+          close (fd);
           return newoffset;
         }
       }
@@ -783,6 +790,7 @@ ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
     /* Write record to ring buffer */
     if (WriteRecord (mssinfo, mssinfo->readbuffer, (uint64_t)detlen))
     {
+      close (fd);
       return -newoffset;
     }
 
@@ -954,7 +962,7 @@ RecoverState (RBTree *filetree, char *statefile)
   int fields, count;
   FILE *fp;
 
-  char filename[MSSCAN_MAXFILENAME];
+  char filename[MSSCAN_MAXFILENAME] = {0};
   unsigned long long int inode;
   signed long long int offset, modtime;
 
@@ -970,6 +978,22 @@ RecoverState (RBTree *filetree, char *statefile)
 
   while ((fgets (line, sizeof (line), fp)) != NULL)
   {
+    char *tab = strchr (line, '\t');
+
+    /* If no tab found or tab is at the beginning of the line, skip line */
+    if (!tab || tab == line)
+    {
+      lprintf (0, "[MSeedScan] Could not parse line %d of state file", count);
+      continue;
+    }
+
+    /* Ensure filename is not longer than MSSCAN_MAXFILENAME */
+    if (tab - line > (MSSCAN_MAXFILENAME - 1))
+    {
+      lprintf (0, "[MSeedScan] Filename too long in line %d of state file", count);
+      continue;
+    }
+
     fields = sscanf (line, "%s %llu %lld %lld\n",
                      filename, &inode, &offset, &modtime);
 
@@ -1310,8 +1334,8 @@ SortEDirEntries (EDIR *edirp)
  * EOpenDir:
  *
  * Open a directory, read all entries, sort them and return an
- * enhanced directory stream pointer for use with edirread() and
- * edirclose().
+ * enhanced directory stream pointer for use with EReadDir() and
+ * EReadDir().
  *
  * Return a pointer to an enhanced directory stream on success and
  * NULL on error.
@@ -1319,10 +1343,10 @@ SortEDirEntries (EDIR *edirp)
 static EDIR *
 EOpenDir (const char *dirname)
 {
-  DIR *dirp;
-  EDIR *edirp;
-  struct dirent *de;
-  struct edirent *ede;
+  DIR *dirp = NULL;
+  EDIR *edirp = NULL;
+  struct dirent *de = NULL;
+  struct edirent *ede = NULL;
   struct edirent *prevede = NULL;
   int namelen;
 
@@ -1358,12 +1382,14 @@ EOpenDir (const char *dirname)
     if (namelen > sizeof (ede->d_name))
     {
       lprintf (0, "[MSeedScan] directory entry name too long (%d): '%s'", namelen, de->d_name);
+      free (ede);
       closedir (dirp);
       ECloseDir (edirp);
       return NULL;
     }
 
-    strncpy (ede->d_name, de->d_name, sizeof (ede->d_name));
+    strncpy (ede->d_name, de->d_name, sizeof (ede->d_name) - 1);
+    ede->d_name[sizeof (ede->d_name) - 1] = '\0';
     ede->d_ino = de->d_ino;
     ede->prev  = prevede;
 
