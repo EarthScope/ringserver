@@ -1735,14 +1735,16 @@ AddStreamIdx (RBTree *streamidx, RingStream *stream, Key **ppkey)
   if (!streamidx || !stream)
     return 0;
 
-  /* Create new tree key */
-  newkey = (Key *)malloc (sizeof (Key));
-
-  /* Create new stream node */
+  /* Allocate new tree key and data node */
+  newkey  = (Key *)malloc (sizeof (Key));
   newdata = (RingStream *)malloc (sizeof (RingStream));
 
   if (!newkey || !newdata)
+  {
+    free (newkey);
+    free (newdata);
     return 0;
+  }
 
   /* Populate the new data node and key */
   memcpy (newdata, stream, sizeof (RingStream));
@@ -1763,20 +1765,19 @@ AddStreamIdx (RBTree *streamidx, RingStream *stream, Key **ppkey)
  *
  * Search the specified stream index for a given RingStream.
  *
- * Return a pointer to a RingStream if found or 0 if no match.
+ * Return a pointer to a RingStream if found or NULL if no match.
  ***************************************************************************/
 static RingStream *
 GetStreamIdx (RBTree *streamidx, char *streamid)
 {
-  Key key;
-  RingStream *stream = 0;
+  RingStream *stream = NULL;
   RBNode *tnode;
 
   if (!streamidx || !streamid)
-    return 0;
+    return NULL;
 
   /* Generate key from streamid */
-  key = FNVhash64 (streamid);
+  Key key = FNVhash64 (streamid);
 
   /* Search for a matching key */
   if ((tnode = RBFind (streamidx, &key)))
