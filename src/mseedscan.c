@@ -79,21 +79,11 @@
 #define MSSCAN_MINRECLEN 40
 #define MSSCAN_READLEN 128
 
-/* The FileKey and FileNode structures form the key and data elements
- * of a balanced tree that is used to keep track of all files being
- * processed.
- */
-
-/* Structure used as the key for B-tree of file entries (FileNode) */
-typedef struct filekey
-{
-  ino_t inode;      /* Inode number, assumed to be unsigned */
-  char filename[1]; /* File name, sized appropriately */
-} FileKey;
 
 /* Structure used as the data for B-tree of file entries */
 typedef struct filenode
 {
+  char filename[MSSCAN_MAXFILENAME];
   off_t offset;    /* Last file read offset, must be signed */
   time_t modtime;  /* Last file modification time, assumed to be signed */
   time_t scantime; /* Last file scan time */
@@ -110,14 +100,13 @@ struct edirent
 {
   struct edirent *prev;
   struct edirent *next;
-  ino_t d_ino;
   char d_name[1024];
 };
 
-static int ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime);
-static FileNode *FindFile (RBTree *filetree, FileKey *fkey);
-static FileNode *AddFile (RBTree *filetree, ino_t inode, char *filename, time_t modtime);
-static off_t ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
+static int ScanFiles (MSScanInfo *mssinfo, const char *targetdir, int level, time_t scantime);
+static FileNode *FindFile (RBTree *filetree, const char *filename);
+static FileNode *AddFile (RBTree *filetree, const char *filename, time_t modtime);
+static off_t ProcessFile (MSScanInfo *mssinfo, const char *filename, FileNode *fnode,
                           off_t newsize, time_t newmodtime);
 static void PruneFiles (RBTree *filetree, time_t scantime);
 static void PrintFileList (RBTree *filetree, FILE *fd);
@@ -125,7 +114,6 @@ static int SaveState (RBTree *filetree, char *statefile);
 static int RecoverState (RBTree *filetree, char *statefile);
 static int WriteRecord (MSScanInfo *mssinfo, char *record, uint64_t reclen);
 static int Initialize (MSScanInfo *mssinfo);
-static int MSS_KeyCompare (const void *a, const void *b);
 static time_t CalcDayTime (int year, int day);
 static time_t BudFileDayTime (char *filename);
 
@@ -159,7 +147,7 @@ MS_ScanThread (void *arg)
   mytdp   = (struct thread_data *)arg;
   mssinfo = (MSScanInfo *)mytdp->td_prvtptr;
 
-  mssinfo->filetree = RBTreeCreate (MSS_KeyCompare, free, free);
+  mssinfo->filetree = RBTreeCreate (KeyCompare, free, free);
 
   /* Initialize scanning parameters */
   if (Initialize (mssinfo) < 0)
@@ -365,17 +353,14 @@ MS_ScanThread (void *arg)
  * Return 0 on success and -1 on error and -2 on fatal error.
  ***************************************************************************/
 static int
-ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
+ScanFiles (MSScanInfo *mssinfo, const char *targetdir, int level, time_t scantime)
 {
   FileNode *fnode;
-  FileKey *fkey;
-  char filekeybuf[sizeof (FileKey) + MSSCAN_MAXFILENAME]; /* Room for fkey */
+  char filename[MSSCAN_MAXFILENAME] = {0};
   struct stat st;
   struct edirent *ede;
   time_t currentday = 0;
   EDIR *dir;
-
-  fkey = (FileKey *)&filekeybuf;
 
   lprintf (3, "[MSeedScan] Processing directory '%s'", targetdir);
 
@@ -415,22 +400,21 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
       }
     }
 
-    /* Build a FileKey for this file */
-    fkey->inode = ede->d_ino;
-    filenamelen = snprintf (fkey->filename, sizeof (filekeybuf) - sizeof (FileKey),
+    /* Build a path for this file */
+    filenamelen = snprintf (filename, sizeof (filename),
                             "%s/%s", targetdir, ede->d_name);
 
     /* Make sure the filename was not truncated */
-    if (filenamelen >= (sizeof (filekeybuf) - sizeof (FileKey) - 1))
+    if (filenamelen >= (sizeof (filename) - 1))
     {
-      lprintf (0, "[MSeedScan] Directory entry name beyond maximum of %lu characters, skipping:",
-               (sizeof (filekeybuf) - sizeof (FileKey) - 1));
+      lprintf (0, "[MSeedScan] File name exceeds maximum of %lu characters, skipping:",
+               (sizeof (filename) - 1));
       lprintf (0, "  %s", ede->d_name);
       continue;
     }
 
     /* Search for a matching entry in the filetree */
-    if ((fnode = FindFile (mssinfo->filetree, fkey)))
+    if ((fnode = FindFile (mssinfo->filetree, filename)))
     {
       /* Check if the file is permanently skipped */
       if (fnode->offset == -1)
@@ -449,17 +433,17 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
     }
 
     /* Stat the file */
-    if (lstat (fkey->filename, &st) < 0)
+    if (lstat (filename, &st) < 0)
     {
       if (!(param.shutdownsig && errno == EINTR))
-        lprintf (0, "[MSeedScan] Cannot stat %s: %s", fkey->filename, strerror (errno));
+        lprintf (0, "[MSeedScan] Cannot stat %s: %s", filename, strerror (errno));
       continue;
     }
 
     /* If symbolic link stat the real file, if it's a broken link continue */
     if (S_ISLNK (st.st_mode))
     {
-      if (stat (fkey->filename, &st) < 0)
+      if (stat (filename, &st) < 0)
       {
         /* Interruption signals when the stop signal is set should break out */
         if (param.shutdownsig && errno == EINTR)
@@ -467,7 +451,7 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
 
         /* Log an error if the error is anything but a disconnected link */
         if (errno != ENOENT)
-          lprintf (0, "[MSeedScan] Cannot stat (linked) %s: %s", fkey->filename, strerror (errno));
+          lprintf (0, "[MSeedScan] Cannot stat (linked) %s: %s", filename, strerror (errno));
         else
           continue;
       }
@@ -478,10 +462,10 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
     {
       if (mssinfo->maxrecur < 0 || mssinfo->recurlevel < level)
       {
-        lprintf (4, "[MSeedScan] Recursing into %s", fkey->filename);
+        lprintf (4, "[MSeedScan] Recursing into %s", filename);
 
         mssinfo->recurlevel++;
-        if (ScanFiles (mssinfo, fkey->filename, level, scantime) == -2)
+        if (ScanFiles (mssinfo, filename, level, scantime) == -2)
           return -2;
         mssinfo->recurlevel--;
       }
@@ -507,29 +491,20 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
     /* Sanity check for a regular file */
     if (!S_ISREG (st.st_mode))
     {
-      lprintf (0, "[MSeedScan] %s is not a regular file", fkey->filename);
+      lprintf (0, "[MSeedScan] %s is not a regular file", filename);
       continue;
     }
 
-    /* Sanity check that the dirent inode and stat inode are the same */
-    if (st.st_ino != ede->d_ino)
-    {
-      lprintf (0, "[MSeedScan] Inode numbers from dirent and stat do not match for %s\n", fkey->filename);
-      lprintf (0, "  dirent: %llu  VS  stat: %llu\n",
-               (unsigned long long int)ede->d_ino, (unsigned long long int)st.st_ino);
-      continue;
-    }
-
-    lprintf (3, "[MSeedScan] Checking file %s", fkey->filename);
+    lprintf (3, "[MSeedScan] Checking file %s", filename);
 
     /* If the file has never been seen add it to the list */
     if (!fnode)
     {
       /* Add new file to tree setting modtime to one second in the
        * past so we are triggered to look at this file the first time. */
-      if (!(fnode = AddFile (mssinfo->filetree, fkey->inode, fkey->filename, st.st_mtime - 1)))
+      if (!(fnode = AddFile (mssinfo->filetree, filename, st.st_mtime - 1)))
       {
-        lprintf (0, "[MSeedScan] Error adding %s to file list", fkey->filename);
+        lprintf (0, "[MSeedScan] Error adding %s to file list", filename);
         continue;
       }
     }
@@ -541,7 +516,7 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
     /* Check if the file is quiet and mark to always skip if true */
     if (mssinfo->quietsec && st.st_mtime < (scantime - mssinfo->quietsec))
     {
-      lprintf (2, "[MSeedScan] Marking file as quiet, no processing: %s", fkey->filename);
+      lprintf (2, "[MSeedScan] Marking file as quiet, no processing: %s", filename);
       fnode->offset = -1;
     }
 
@@ -550,7 +525,7 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
              st.st_mtime < (scantime - mssinfo->idlesec))
     {
       lprintf (2, "[MSeedScan] Marking file as idle, will not check for %d scans: %s",
-               mssinfo->idledelay, fkey->filename);
+               mssinfo->idledelay, filename);
       fnode->idledelay = (mssinfo->idledelay > 0) ? (mssinfo->idledelay - 1) : 0;
     }
 
@@ -562,7 +537,7 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
       if (mssinfo->iostats)
         mssinfo->scanfilesread++;
 
-      fnode->offset = ProcessFile (mssinfo, fkey->filename, fnode, st.st_size, st.st_mtime);
+      fnode->offset = ProcessFile (mssinfo, filename, fnode, st.st_size, st.st_mtime);
 
       /* If a proper file read but fatal error occured set the offset correctly
          and return a fatal error. */
@@ -585,18 +560,20 @@ ScanFiles (MSScanInfo *mssinfo, char *targetdir, int level, time_t scantime)
 /***************************************************************************
  * FindFile:
  *
- * Search the filetree for a given FileKey.
+ * Search the filetree for a given filename.
  *
- * Return a pointer to a FileNode if found or 0 if no match found.
+ * Return a pointer to a FileNode if found or NULL if no match found.
  ***************************************************************************/
 static FileNode *
-FindFile (RBTree *filetree, FileKey *fkey)
+FindFile (RBTree *filetree, const char *filename)
 {
   FileNode *fnode = NULL;
   RBNode *tnode;
 
-  /* Search for a matching inode + file name entry */
-  if ((tnode = RBFind (filetree, fkey)))
+  Key filekey = FNVhash64 (filename);
+
+  /* Search for a matching file name entry */
+  if ((tnode = RBFind (filetree, &filekey)))
   {
     fnode = (FileNode *)tnode->data;
   }
@@ -613,39 +590,36 @@ FindFile (RBTree *filetree, FileKey *fkey)
  * Return a pointer to the added FileNode on success and 0 on error.
  ***************************************************************************/
 static FileNode *
-AddFile (RBTree *filetree, ino_t inode, char *filename, time_t modtime)
+AddFile (RBTree *filetree, const char *filename, time_t modtime)
 {
-  FileKey *newfkey = NULL;
-  FileNode *newfnode = NULL;
-  size_t filelen;
+  Key *filekey;
+  FileNode *filenode;
 
   lprintf (1, "[MSeedScan] Adding %s", filename);
 
-  /* Create new tree key */
-  filelen = strlen (filename);
-  newfkey = (FileKey *)malloc (sizeof (FileKey) + filelen);
+  /* Allocate new key and data node */
+  filekey  = (Key *)malloc (sizeof (Key));
+  filenode = (FileNode *)malloc (sizeof (FileNode));
 
-  /* Create new tree node */
-  newfnode = (FileNode *)malloc (sizeof (FileNode));
-
-  if (!newfkey || !newfnode)
+  if (!filekey || !filenode)
   {
-    free (newfkey);
-    free (newfnode);
+    free (filekey);
+    free (filenode);
     return 0;
   }
 
-  /* Populate the new key and node */
-  newfkey->inode = inode;
-  memcpy (newfkey->filename, filename, filelen + 1);
+  /* Populate the new data node and key */
+  *filekey = FNVhash64 (filename);
 
-  newfnode->offset    = 0;
-  newfnode->modtime   = modtime;
-  newfnode->idledelay = 0;
+  strncpy (filenode->filename, filename, sizeof (filenode->filename) - 1);
+  filenode->offset    = 0;
+  filenode->modtime   = modtime;
+  filenode->scantime  = 0;
+  filenode->idledelay = 0;
 
-  RBTreeInsert (filetree, newfkey, newfnode, 0);
+  RBTreeInsert (filetree, filekey, filenode, 0);
 
-  return newfnode;
+  return filenode;
 } /* End of AddFile() */
 
 /***************************************************************************
@@ -658,7 +632,7 @@ AddFile (RBTree *filetree, ino_t inode, char *filename, time_t modtime)
  * error.
  ***************************************************************************/
 static off_t
-ProcessFile (MSScanInfo *mssinfo, char *filename, FileNode *fnode,
+ProcessFile (MSScanInfo *mssinfo, const char *filename, FileNode *fnode,
              off_t newsize, time_t newmodtime)
 {
   ssize_t nread;
@@ -839,7 +813,6 @@ static void
 PruneFiles (RBTree *filetree, time_t scantime)
 {
   FileNode *fnode;
-  FileKey *fkey;
   RBNode *tnode;
   Stack *stack;
 
@@ -848,12 +821,11 @@ PruneFiles (RBTree *filetree, time_t scantime)
 
   while ((tnode = (RBNode *)StackPop (stack)))
   {
-    fkey  = (FileKey *)tnode->key;
     fnode = (FileNode *)tnode->data;
 
-    if (fnode->scantime < scantime)
+    if (fnode->scantime > 0 && fnode->scantime < scantime)
     {
-      lprintf (1, "[MSeedScan] Removing %s from file list", fkey->filename);
+      lprintf (1, "[MSeedScan] Removing %s from file list", fnode->filename);
 
       RBDelete (filetree, tnode);
     }
@@ -870,7 +842,6 @@ PruneFiles (RBTree *filetree, time_t scantime)
 static void
 PrintFileList (RBTree *filetree, FILE *fp)
 {
-  FileKey *fkey;
   FileNode *fnode;
   RBNode *tnode;
   Stack *stack;
@@ -880,12 +851,10 @@ PrintFileList (RBTree *filetree, FILE *fp)
 
   while ((tnode = (RBNode *)StackPop (stack)))
   {
-    fkey  = (FileKey *)tnode->key;
     fnode = (FileNode *)tnode->data;
 
-    fprintf (fp, "%s\t%llu\t%lld\t%lld\n",
-             fkey->filename,
-             (unsigned long long int)fkey->inode,
+    fprintf (fp, "%s\t%lld\t%lld\n",
+             fnode->filename,
              (signed long long int)fnode->offset,
              (signed long long int)fnode->modtime);
   }
@@ -963,7 +932,6 @@ RecoverState (RBTree *filetree, char *statefile)
   FILE *fp;
 
   char filename[MSSCAN_MAXFILENAME] = {0};
-  unsigned long long int inode;
   signed long long int offset, modtime;
 
   if ((fp = fopen (statefile, "r")) == NULL)
@@ -978,41 +946,66 @@ RecoverState (RBTree *filetree, char *statefile)
 
   while ((fgets (line, sizeof (line), fp)) != NULL)
   {
-    char *tab = strchr (line, '\t');
+    /* Find first tab and count total tabs */
+    char *first_tab = strchr (line, '\t');
+    int tab_count   = 0;
+
+    if (first_tab)
+    {
+      for (char *p = first_tab; *p != '\0'; p++)
+      {
+        if (*p == '\t')
+          tab_count++;
+      }
+    }
 
     /* If no tab found or tab is at the beginning of the line, skip line */
-    if (!tab || tab == line)
+    if (!first_tab || first_tab == line)
     {
       lprintf (0, "[MSeedScan] Could not parse line %d of state file", count);
       continue;
     }
 
     /* Ensure filename is not longer than MSSCAN_MAXFILENAME */
-    if (tab - line > (MSSCAN_MAXFILENAME - 1))
+    if (first_tab - line > (MSSCAN_MAXFILENAME - 1))
     {
       lprintf (0, "[MSeedScan] Filename too long in line %d of state file", count);
       continue;
     }
 
-    fields = sscanf (line, "%s %llu %lld %lld\n",
-                     filename, &inode, &offset, &modtime);
-
-    if (fields < 0)
-      continue;
-
-    if (fields < 4)
+    if (tab_count == 2)
+    {
+      fields = sscanf (line, "%s\t%lld\t%lld\n",
+                       filename, &offset, &modtime);
+    }
+    else if (tab_count == 3)
+    {
+      /* Handle unused inode field in legacy state file format */
+      fields = sscanf (line, "%s\t%*llu\t%lld\t%lld\n",
+                       filename, &offset, &modtime);
+    }
+    else
     {
       lprintf (0, "[MSeedScan] Could not parse line %d of state file", count);
       continue;
     }
 
-    fnode = AddFile (filetree, (ino_t)inode, filename, (time_t)modtime);
-
-    if (fnode)
+    if (fields != 3)
     {
-      fnode->offset   = (off_t)offset;
-      fnode->scantime = 0;
+      lprintf (0, "[MSeedScan] Could not parse line %d of state file: %d fields", count, fields);
+      continue;
     }
+
+    fnode = AddFile (filetree, filename, (time_t)modtime);
+
+    if (!fnode)
+    {
+      lprintf (0, "[MSeedScan] Error adding file %s to the tracking list", filename);
+      continue;
+    }
+
+    fnode->offset   = (off_t)offset;
+    fnode->scantime = 0;
 
     count++;
   }
@@ -1121,36 +1114,6 @@ Initialize (MSScanInfo *mssinfo)
 
   return 0;
 } /* End of Initialize() */
-
-/***************************************************************************
- * MSS_KeyCompare:
- *
- * Compare two FileKeys passed as void pointers.
- *
- * Return 1 if a > b, -1 if a < b and 0 otherwise (e.g. equality).
- ***************************************************************************/
-static int
-MSS_KeyCompare (const void *a, const void *b)
-{
-  int cmpval;
-
-  /* Compare Inode values */
-  if (((FileKey *)a)->inode > ((FileKey *)b)->inode)
-    return 1;
-
-  else if (((FileKey *)a)->inode < ((FileKey *)b)->inode)
-    return -1;
-
-  /* Compare filename values */
-  cmpval = strcmp (((FileKey *)a)->filename, ((FileKey *)b)->filename);
-
-  if (cmpval > 0)
-    return 1;
-  else if (cmpval < 0)
-    return -1;
-
-  return 0;
-} /* End of MSS_KeyCompare() */
 
 /***************************************************************************
  * CalcDayTime:
@@ -1379,7 +1342,7 @@ EOpenDir (const char *dirname)
 
     namelen = strlen (de->d_name);
 
-    if (namelen > sizeof (ede->d_name))
+    if (namelen >= sizeof (ede->d_name))
     {
       lprintf (0, "[MSeedScan] directory entry name too long (%d): '%s'", namelen, de->d_name);
       free (ede);
@@ -1390,7 +1353,6 @@ EOpenDir (const char *dirname)
 
     strncpy (ede->d_name, de->d_name, sizeof (ede->d_name) - 1);
     ede->d_name[sizeof (ede->d_name) - 1] = '\0';
-    ede->d_ino = de->d_ino;
     ede->prev  = prevede;
 
     /* Add new enhanced directory entry to the list */

@@ -1,5 +1,7 @@
 2025.222:
 	- Fix file descriptor and memory leaks on errors in miniSEED scanning.
+	- Remove use of inode values when tracking miniSEED files being scanned;
+  storage layers, such as Docker mounts, render inode values inconsistent.
 
 2025.291: v4.1.1
 	- Enable linux/arm64 docker image build for releases.
