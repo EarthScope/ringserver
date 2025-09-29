@@ -812,6 +812,9 @@ main (int argc, char *argv[])
     return 1;
   }
 
+  /* A final sync() */
+  sync();
+
   return 0;
 } /* End of main() */
 

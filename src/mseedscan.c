@@ -184,7 +184,7 @@ MS_ScanThread (void *arg)
   lprintf (1, "miniSEED scanning started [%s]", mssinfo->dirname);
 
   /* Start scan sequence */
-  while (mytdp->td_state != TDS_CLOSE && scanerror == 0)
+  while (mytdp->td_state == TDS_ACTIVE && scanerror == 0)
   {
     scantime                 = time (NULL);
     mssinfo->scanrecordsread = 0;
@@ -225,7 +225,7 @@ MS_ScanThread (void *arg)
         scanerror = 1;
     }
 
-    if (mytdp->td_state != TDS_CLOSE && !scanerror)
+    if (mytdp->td_state == TDS_ACTIVE && param.shutdownsig == 0 && scanerror == 0)
     {
       /* Prune files that were not found from the filelist */
       PruneFiles (mssinfo->filetree, scantime);
@@ -876,7 +876,7 @@ PrintFileList (RBTree *filetree, FILE *fp)
 static int
 SaveState (RBTree *filetree, char *statefile)
 {
-  char tmpstatefile[255];
+  char tmpstatefile[PATH_MAX];
   int fnsize;
   FILE *fp;
 
@@ -903,7 +903,30 @@ SaveState (RBTree *filetree, char *statefile)
   /* Write file list to temporary state file */
   PrintFileList (filetree, fp);
 
-  fclose (fp);
+  /* Ensure data is flushed to disk before closing */
+  if (fflush (fp) != 0)
+  {
+    lprintf (0, "[MSeedScan] Error flushing temporary statefile %s: %s",
+             tmpstatefile, strerror (errno));
+    fclose (fp);
+    return -1;
+  }
+
+  /* Synchronize file descriptor to ensure data reaches storage */
+  if (fsync (fileno (fp)) != 0)
+  {
+    lprintf (0, "[MSeedScan] Error syncing temporary statefile %s: %s",
+             tmpstatefile, strerror (errno));
+    fclose (fp);
+    return -1;
+  }
+
+  if (fclose (fp) != 0)
+  {
+    lprintf (0, "[MSeedScan] Error closing temporary statefile %s: %s",
+             tmpstatefile, strerror (errno));
+    return -1;
+  }
 
   /* Rename temporary state file overwriting the current state file */
   if (rename (tmpstatefile, statefile))
@@ -980,7 +1003,7 @@ RecoverState (RBTree *filetree, char *statefile)
     }
     else if (tab_count == 3)
     {
-      /* Handle unused inode field in legacy state file format */
+      /* Handle (skip) unused inode field in legacy state file format */
       fields = sscanf (line, "%s\t%*llu\t%lld\t%lld\n",
                        filename, &offset, &modtime);
     }

@@ -1,4 +1,6 @@
-2025.222:
+Unreleased:
+	- Avoid pruning files from scan list when a scan has been interrupted by
+  a termination signal and aggressively flush scanning state file.
 	- Fix file descriptor and memory leaks on errors in miniSEED scanning.
 	- Remove use of inode values when tracking miniSEED files being scanned;
   storage layers, such as Docker mounts, render inode values inconsistent.
