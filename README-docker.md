@@ -63,6 +63,8 @@ for most use of ringserver.  Options include:
    must be owned by or writable by user ID 10000 (the non-root user that runs
    ringserver in the container).
 
+The external volume must be mounted in the container at `/data`.
+
 ## Configuration options
 
 Configuration options may be specified in three ways, in order of precedence:
@@ -91,7 +93,7 @@ For example to run ringserver with:
 - setting server description to "My Data Center"
 
 ```
-docker run -ti --network host -e RS_RING_SIZE=10m -e RS_HTTP_PORT=8080 earthscope/ringserver -I "My Data Center"
+docker run -ti --network host -v ringserver-data:/data -e RS_RING_SIZE=10m -e RS_HTTP_PORT=8080 earthscope/ringserver -I "My Data Center"
 ```
 
 ### Building a container image from source
