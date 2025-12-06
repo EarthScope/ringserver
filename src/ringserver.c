@@ -122,6 +122,7 @@ struct config_s config = {
     .tlsverifyclientcert = 0,
     .auth.program        = NULL,
     .auth.argv           = NULL,
+    .auth.required       = 0,
     .auth.timeout_sec    = 5,
     .tlog.write_lock     = PTHREAD_MUTEX_INITIALIZER,
     .tlog.mode           = TLOG_NONE,

@@ -301,10 +301,11 @@ static const char *reference_config_file_parts[] = {
   "\n"
   "\n",
   "# Require authentication for a client to request streaming data.\n"
+  "# Default is 0 (off).\n"
   "# This is a dynamic parameter.\n"
   "# Equivalent environment variable: RS_AUTH_REQUIURED_FOR_STREAMS\n"
   "\n"
-  "#AuthRequiredForStreams 5\n"
+  "#AuthRequiredForStreams 0\n"
   "\n"
   "\n",
   "# Specify the timeout in seconds for the authentication command to complete.\n"
