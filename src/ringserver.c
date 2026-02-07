@@ -1204,18 +1204,23 @@ CalcStats (ClientInfo *cinfo)
   /* Determine percent lag if the current pktid is set */
   if (cinfo->reader && cinfo->reader->pktid <= RINGID_MAXIMUM)
   {
+    int64_t ringmod = param.maxoffset + config.pktsize;
+
     if (latestoffset < earliestoffset)
-      latestoffset_unwrapped = latestoffset + param.maxoffset;
+      latestoffset_unwrapped = latestoffset + ringmod;
     else
       latestoffset_unwrapped = latestoffset;
 
-    if (cinfo->reader->pktoffset < param.earliestoffset)
-      readeroffset_unwrapped = cinfo->reader->pktoffset + param.maxoffset;
+    if (cinfo->reader->pktoffset < earliestoffset)
+      readeroffset_unwrapped = cinfo->reader->pktoffset + ringmod;
     else
       readeroffset_unwrapped = cinfo->reader->pktoffset;
 
     /* Calculate percentage lag as position in ring where 0% = latest offset and 100% = earliest offset */
-    cinfo->percentlag = (int)(((double)(latestoffset_unwrapped - readeroffset_unwrapped) / (latestoffset_unwrapped - earliestoffset)) * 100);
+    if (latestoffset_unwrapped != earliestoffset)
+      cinfo->percentlag = (int)(((double)(latestoffset_unwrapped - readeroffset_unwrapped) / (latestoffset_unwrapped - earliestoffset)) * 100);
+    else
+      cinfo->percentlag = 0;
   }
   else
   {
