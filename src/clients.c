@@ -280,6 +280,9 @@ ClientThread (void *arg)
       /* If data was received do not throttle */
       throttle_msec = 0;
 
+      /* Reset incomplete recv timer, a complete command was received */
+      cinfo->recvstart = 0;
+
       /* Handle data from client according to client type */
       if (cinfo->type == CLIENT_DATALINK)
       {
@@ -342,6 +345,17 @@ ClientThread (void *arg)
           (NSnow () - cinfo->conntime) > ((nstime_t)NSTMODULUS * 10))
       {
         lprintf (0, "[%s] Non-communicating client timeout",
+                 cinfo->hostname);
+        break;
+      }
+
+      /* Check for stalled incomplete command reception (slow-loris protection).
+         If data appeared in the buffer but a complete command has not been
+         received within the network I/O timeout, disconnect the client. */
+      if (cinfo->recvstart != 0 &&
+          (NSnow () - cinfo->recvstart) > ((nstime_t)NSTMODULUS * config.netiotimeout))
+      {
+        lprintf (0, "[%s] Timeout for incomplete command reception",
                  cinfo->hostname);
         break;
       }
@@ -1010,6 +1024,9 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
     /* Update the time of the last packet exchange */
     cinfo->lastxchange = NSnow ();
 
+    /* Record when incomplete data first appeared in the buffer */
+    if (cinfo->recvstart == 0)
+      cinfo->recvstart = cinfo->lastxchange;
   }
 
   /* Copy data to supplied buffer if not the receive buffer */

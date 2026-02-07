@@ -83,6 +83,7 @@ typedef struct ClientInfo
   size_t      recvbufsize;  /* Length of receive buffer in bytes */
   size_t      recvlength;   /* Length of data in recvbuf */
   size_t      recvconsumed; /* Bytes of recvbuf that have been consumed */
+  nstime_t    recvstart;    /* Time when incomplete recv data first appeared, 0 when idle */
   char        dlcommand[UINT8_MAX + 1]; /* DataLink command buffer */
   char       *convertbuf;   /* Conversion buffer */
   size_t      convertbuflen;/* Length of conversion buffer */
