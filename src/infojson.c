@@ -52,15 +52,18 @@ info_create_root (const char *software)
   yyjson_mut_val *root;
   bool success;
 
-  doc  = yyjson_mut_doc_new (NULL);
-  root = yyjson_mut_obj (doc);
-  yyjson_mut_doc_set_root (doc, root);
+  doc = yyjson_mut_doc_new (NULL);
+  if (doc == NULL)
+    return NULL;
 
+  root = yyjson_mut_obj (doc);
   if (root == NULL)
   {
     yyjson_mut_doc_free (doc);
     return NULL;
   }
+
+  yyjson_mut_doc_set_root (doc, root);
 
   if (yyjson_mut_obj_add_strcpy (doc, root, "software", software) == false)
   {
@@ -94,6 +97,12 @@ info_add_id (yyjson_mut_doc *doc)
   yyjson_mut_val *root = yyjson_mut_doc_get_root (doc);
   yyjson_mut_val *protocols;
   char string[64] = {0};
+
+  /* Compile-time check that protocol strings fit in the local buffer */
+  _Static_assert (sizeof (DLSERVERPROTOCOLS) <= sizeof (string),
+                  "DLSERVERPROTOCOLS exceeds string buffer size");
+  _Static_assert (sizeof (SLSERVERPROTOCOLS) <= sizeof (string),
+                  "SLSERVERPROTOCOLS exceeds string buffer size");
   char *cap;
   char *rest;
 
@@ -125,7 +134,7 @@ info_add_id (yyjson_mut_doc *doc)
     }
   }
 
-  /* Add DataLink protocols */
+  /* Add SeedLink protocols */
   strncpy (string, SLSERVERPROTOCOLS, sizeof (string) - 1);
 
   if ((protocols = yyjson_mut_obj_add_arr (doc, root, "seedlink_protocol")) == NULL)
@@ -190,7 +199,11 @@ info_add_capabilities (yyjson_mut_doc *doc)
   pthread_rwlock_rdlock (&config.config_rwlock);
   if (config.auth.program)
   {
-    yyjson_mut_arr_add_strcpy (doc, capability, "AUTH");
+    if (!yyjson_mut_arr_add_strcpy (doc, capability, "AUTH"))
+    {
+      pthread_rwlock_unlock (&config.config_rwlock);
+      return NULL;
+    }
   }
   pthread_rwlock_unlock (&config.config_rwlock);
 
@@ -304,12 +317,21 @@ info_add_streams (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matchexpr)
   if ((ringstreams = GetStreamsStack (cinfo->reader)) == NULL)
   {
     lprintf (0, "[%s] Error getting streams stack", cinfo->hostname);
+    if (match_code)
+      pcre2_code_free (match_code);
+    if (match_data)
+      pcre2_match_data_free (match_data);
     return NULL;
   }
 
   /* Create JSON */
   if ((stream_array = yyjson_mut_obj_add_arr (doc, root, "stream")) == NULL)
   {
+    StackDestroy (ringstreams, free);
+    if (match_code)
+      pcre2_code_free (match_code);
+    if (match_data)
+      pcre2_match_data_free (match_data);
     return NULL;
   }
 
@@ -438,6 +460,10 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
   if ((ringstreams = GetStreamsStack (cinfo->reader)) == NULL)
   {
     lprintf (0, "[%s] Error getting streams stack", cinfo->hostname);
+    if (match_code)
+      pcre2_code_free (match_code);
+    if (match_data)
+      pcre2_match_data_free (match_data);
     return NULL;
   }
 
@@ -445,6 +471,10 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
   {
     lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
     StackDestroy (ringstreams, free);
+    if (match_code)
+      pcre2_code_free (match_code);
+    if (match_data)
+      pcre2_match_data_free (match_data);
     return NULL;
   }
 
@@ -517,6 +547,8 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
         if ((station_details->streams = StackCreate ()) == NULL)
         {
           lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
+          free (station_details);
+          station_details = NULL;
           free (ringstream);
           error = 1;
           break;
@@ -800,6 +832,12 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
       Stack *stack = StackCreate ();
       RBNode *rbnode;
 
+      if (!stack)
+      {
+        lprintf (0, "[%s] Error allocating memory for station stack", cinfo->hostname);
+        break;
+      }
+
       snprintf (string32, sizeof (string32), "%u.%u", slinfo->proto_major, slinfo->proto_minor);
       yyjson_mut_obj_add_strcpy (doc, client, "protocol_version", string32);
 
@@ -829,7 +867,7 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
             snprintf (value, sizeof (value), "%s", selector->string);
           }
 
-          yyjson_mut_arr_add_str (doc, selector_array, value);
+          yyjson_mut_arr_add_strcpy (doc, selector_array, value);
         }
       }
 
@@ -885,7 +923,7 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
               snprintf (value, sizeof (value), "%s", selector->string);
             }
 
-            yyjson_mut_arr_add_str (doc, selector_array, value);
+            yyjson_mut_arr_add_strcpy (doc, selector_array, value);
           }
         }
       }

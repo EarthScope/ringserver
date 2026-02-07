@@ -92,7 +92,8 @@ info_xml_slv3_id (ClientInfo *cinfo, const char *software)
 
   /* Generate XML string */
   mxml_options_t *options = mxmlOptionsNew ();
-  mxmlOptionsSetWrapMargin (options, 0);
+  if (options)
+    mxmlOptionsSetWrapMargin (options, 0);
   xml_string = mxmlSaveAllocString (xmldoc, options);
   mxmlOptionsDelete (options);
 
@@ -175,7 +176,8 @@ info_xml_slv3_capabilities (ClientInfo *cinfo, const char *software)
 
   /* Generate XML string */
   mxml_options_t *options = mxmlOptionsNew ();
-  mxmlOptionsSetWrapMargin (options, 0);
+  if (options)
+    mxmlOptionsSetWrapMargin (options, 0);
   xml_string = mxmlSaveAllocString (xmldoc, options);
   mxmlOptionsDelete (options);
 
@@ -213,7 +215,7 @@ info_xml_slv3_stations (ClientInfo *cinfo, const char *software, int include_str
   char *json_string;
   char *xml_string = NULL;
 
-  char idstr[32] = {0};
+  char idstr[64] = {0};
   char *ptr;
 
   InfoElements elements = (include_streams) ? INFO_STATION_STREAMS : INFO_STATIONS;
@@ -326,7 +328,8 @@ info_xml_slv3_stations (ClientInfo *cinfo, const char *software, int include_str
 
   /* Generate XML string */
   mxml_options_t *options = mxmlOptionsNew ();
-  mxmlOptionsSetWrapMargin (options, 0);
+  if (options)
+    mxmlOptionsSetWrapMargin (options, 0);
   xml_string = mxmlSaveAllocString (xmldoc, options);
   mxmlOptionsDelete (options);
 
@@ -411,11 +414,11 @@ info_xml_slv3_connections (ClientInfo *cinfo, const char *software)
       mxmlElementSetAttr (station, "name", "CLIENT");
 
       network = yyjson_get_str (yyjson_obj_get (client_iter, "type"));
-      if (strstr (network, "DataLink"))
+      if (network && strstr (network, "DataLink"))
         mxmlElementSetAttr (station, "network", "DL");
-      else if (strstr (network, "SeedLink"))
+      else if (network && strstr (network, "SeedLink"))
         mxmlElementSetAttr (station, "network", "SL");
-      else if (strstr (network, "HTTP"))
+      else if (network && strstr (network, "HTTP"))
         mxmlElementSetAttr (station, "network", "HP");
       else
         mxmlElementSetAttr (station, "network", "??");
@@ -452,7 +455,8 @@ info_xml_slv3_connections (ClientInfo *cinfo, const char *software)
 
   /* Generate XML string */
   mxml_options_t *options = mxmlOptionsNew ();
-  mxmlOptionsSetWrapMargin (options, 0);
+  if (options)
+    mxmlOptionsSetWrapMargin (options, 0);
   xml_string = mxmlSaveAllocString (xmldoc, options);
   mxmlOptionsDelete (options);
 
@@ -543,17 +547,17 @@ info_xml_dlv1 (ClientInfo *cinfo, const char *software, const char *level,
     mxmlElementSetAttr (status, "StartTime",
                         DASHNULL (yyjson_get_str (yyjson_obj_get (root, "server_start"))));
     mxmlElementSetAttrf (status, "RingVersion", "%d",
-                         yyjson_get_int (yyjson_obj_get (root, "ring_version")));
+                         yyjson_get_int (yyjson_obj_get (server, "ring_version")));
     mxmlElementSetAttrf (status, "RingSize", "%" PRIu64,
-                         yyjson_get_uint (yyjson_obj_get (root, "ring_size")));
+                         yyjson_get_uint (yyjson_obj_get (server, "ring_size")));
     mxmlElementSetAttrf (status, "PacketSize", "%" PRIu64,
-                         yyjson_get_uint (yyjson_obj_get (root, "packet_size")));
+                         yyjson_get_uint (yyjson_obj_get (server, "packet_size")));
     mxmlElementSetAttrf (status, "MaximumPackets", "%" PRIu64,
-                         yyjson_get_uint (yyjson_obj_get (root, "maximum_packets")));
+                         yyjson_get_uint (yyjson_obj_get (server, "maximum_packets")));
     mxmlElementSetAttrf (status, "MemoryMappedRing", "%s",
-                         (yyjson_get_bool (yyjson_obj_get (root, "memory_mapped"))) ? "TRUE" : "FALSE");
+                         (yyjson_get_bool (yyjson_obj_get (server, "memory_mapped"))) ? "TRUE" : "FALSE");
     mxmlElementSetAttrf (status, "VolatileRing", "%s",
-                         (yyjson_get_bool (yyjson_obj_get (root, "volatile_ring"))) ? "TRUE" : "FALSE");
+                         (yyjson_get_bool (yyjson_obj_get (server, "volatile_ring"))) ? "TRUE" : "FALSE");
     mxmlElementSetAttrf (status, "TotalConnections", "%d",
                          yyjson_get_int (yyjson_obj_get (server, "connection_count")));
     mxmlElementSetAttrf (status, "TotalStreams", "%d",
@@ -792,7 +796,8 @@ info_xml_dlv1 (ClientInfo *cinfo, const char *software, const char *level,
 
   /* Generate XML string */
   mxml_options_t *options = mxmlOptionsNew ();
-  mxmlOptionsSetWrapMargin (options, 0);
+  if (options)
+    mxmlOptionsSetWrapMargin (options, 0);
   xml_string = mxmlSaveAllocString (xmldoc, options);
   mxmlOptionsDelete (options);
 
