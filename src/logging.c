@@ -75,7 +75,7 @@ lprintf (int level, char *fmt, ...)
     printf ("%3.3s %3.3s %2.2d %2.2d:%2.2d:%2.2d %4.4d - %s%s\n",
             day[tp.tm_wday], month[tp.tm_mon], tp.tm_mday,
             tp.tm_hour, tp.tm_min, tp.tm_sec, tp.tm_year + 1900,
-            message, (rv > sizeof (message)) ? " ..." : "");
+            message, (rv >= sizeof (message)) ? " ..." : "");
 
     fflush (stdout);
     pthread_mutex_unlock(&log_mutex);
@@ -92,31 +92,25 @@ lprintf (int level, char *fmt, ...)
  *
  ***************************************************************************/
 void
-lprint (char *message)
+lprint (const char *message)
 {
   int length;
-  char *ptr;
 
-  /* Set ptr to last character in the message string */
+  if (!message)
+    return;
+
+  /* Determine length, trimming trailing newline characters */
   length = strlen (message);
-  ptr    = message + (length - 1);
 
-  /* Trim trailing newline characters */
-  while (*ptr == '\n' && ptr != message)
-  {
-    *ptr-- = '\0';
-  }
+  while (length > 0 && message[length - 1] == '\n')
+    length--;
 
-  /* Send message to lprintf() */
-  lprintf (0, "%s", message);
+  if (length == 0)
+    return;
+
+  /* Send message to lprintf() with precision-limited format to exclude trailing newlines */
+  lprintf (0, "%.*s", length, message);
 } /* End of lprint() */
-
-/* Wrapper macro to explicitly discard const annotation */
-void
-lprint_wrapper (const char *message)
-{
-  lprint ((char *)message);
-}
 
 /***************************************************************************
  * WriteTLog:
