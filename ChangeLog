@@ -3,6 +3,7 @@
 	- Add protections for edge case networking errors (incomplete commands).
 	- Fix confusing error for -version.  See #78
 	- Add --version and --help as aliases.
+	- Fix binary search for client read positioning.
 
 2025.272: v4.1.2
 	- Avoid pruning files from scan list when a scan has been interrupted by

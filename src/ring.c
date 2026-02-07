@@ -1657,7 +1657,8 @@ FindOffsetForID (uint64_t pktid, nstime_t *pkttime)
       return -1;
     }
 
-    int64_t latestoffset_unwrapped = (latestoffset < earliestoffset) ? latestoffset + param.maxoffset : latestoffset;
+    int64_t ringmod = param.maxoffset + config.pktsize;
+    int64_t latestoffset_unwrapped = (latestoffset < earliestoffset) ? latestoffset + ringmod : latestoffset;
 
     int64_t lowpkt = 0;
     int64_t highpkt = (latestoffset_unwrapped - earliestoffset) / param.pktsize;
@@ -1670,7 +1671,7 @@ FindOffsetForID (uint64_t pktid, nstime_t *pkttime)
 
       int64_t offset_unwrapped = earliestoffset + (midpkt * param.pktsize);
 
-      offset = (offset_unwrapped > param.maxoffset) ? offset_unwrapped - param.maxoffset : offset_unwrapped;
+      offset = (offset_unwrapped >= ringmod) ? offset_unwrapped - ringmod : offset_unwrapped;
 
       packet = PACKETPTR (offset);
 
