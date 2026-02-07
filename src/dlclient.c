@@ -379,10 +379,12 @@ HandleNegotiation (ClientInfo *cinfo)
 
           OKGO = 0;
         }
-
-        *ptr     = '\0';
-        username = credential;
-        password = ptr + 1;
+        else
+        {
+          *ptr     = '\0';
+          username = credential;
+          password = ptr + 1;
+        }
       }
       else if (!strcmp (type, "JWT"))
       {
@@ -415,7 +417,7 @@ HandleNegotiation (ClientInfo *cinfo)
 
       OKGO = 0;
     }
-    else
+    else if (OKGO)
     {
       lprintf (2, "[%s] Authentication successful", cinfo->hostname);
 
@@ -523,11 +525,13 @@ HandleNegotiation (ClientInfo *cinfo)
       /* Process AFTER <time> positioning */
       else if (!strncmp (subcmd, "AFTER", 5))
       {
-        /* Wire protocol uses time in microseconds ("hptime"), convert to nanoseconds ("nstime") */
-        nstime = strtoll (value, NULL, 10);
-        nstime = MS_HPTIME2NSTIME (nstime);
+        char *endptr;
 
-        if (nstime == 0 && errno == EINVAL)
+        /* Wire protocol uses time in microseconds ("hptime"), convert to nanoseconds ("nstime") */
+        errno = 0;
+        nstime = strtoll (value, &endptr, 10);
+
+        if (endptr == value || *endptr != '\0' || errno == ERANGE)
         {
           lprintf (0, "[%s] Error parsing POSITION AFTER time: %s", cinfo->hostname, value);
           if (SendPacket (cinfo, "ERROR", "Error with POSITION AFTER time", 0, 1, 1))
@@ -536,6 +540,7 @@ HandleNegotiation (ClientInfo *cinfo)
         else
         {
           char timestr[32];
+          nstime = MS_HPTIME2NSTIME (nstime);
           ms_nstime2timestr (nstime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
 
           /* Position ring according to start time, use reverse search if limited */
@@ -633,6 +638,7 @@ HandleNegotiation (ClientInfo *cinfo)
     else
     {
       free (cinfo->matchstr);
+      cinfo->matchstr = NULL;
 
       /* Read regex of size bytes from socket */
       if (!(cinfo->matchstr = (char *)malloc (size + 1)))
@@ -712,6 +718,7 @@ HandleNegotiation (ClientInfo *cinfo)
     else
     {
       free (cinfo->rejectstr);
+      cinfo->rejectstr = NULL;
 
       /* Read regex of size bytes from socket */
       if (!(cinfo->rejectstr = (char *)malloc (size + 1)))
@@ -865,10 +872,7 @@ HandleWrite (ClientInfo *cinfo)
   /* Otherwise copy stream ID verbatim */
   else
   {
-    /* Copy the stream ID verbatim */
-    memcpy (cinfo->packet.streamid, streamid, sizeof (cinfo->packet.streamid));
-
-    /* Make sure the streamid is terminated */
+    strncpy (cinfo->packet.streamid, streamid, sizeof (cinfo->packet.streamid) - 1);
     cinfo->packet.streamid[sizeof (cinfo->packet.streamid) - 1] = '\0';
   }
 
@@ -1144,9 +1148,16 @@ HandleInfo (ClientInfo *cinfo)
     return -1;
   }
 
+  if (xmlstr == NULL)
+  {
+    lprintf (0, "[%s] Error generating INFO XML", cinfo->hostname);
+    SendPacket (cinfo, "ERROR", "Error generating INFO response", 0, 1, 1);
+    return -1;
+  }
+
   /* Trim final newline character if present */
   xmllength = strlen (xmlstr);
-  if (xmlstr[xmllength - 1] == '\n')
+  if (xmllength > 0 && xmlstr[xmllength - 1] == '\n')
   {
     xmlstr[xmllength - 1] = '\0';
     xmllength--;
@@ -1249,8 +1260,12 @@ SendPacket (ClientInfo *cinfo, char *header, char *data,
   if (SendData (cinfo, wirepacket, (3 + headerlen + datalen), 0))
   {
     if (cinfo->socketerr != -2)
-      lprintf (0, "[%s] SendPacket(): Error sending packet: %s",
-               cinfo->hostname, strerror (errno));
+      lprintf (0, "[%s] SendPacket(): Error sending packet", cinfo->hostname);
+
+    /* Free the wire packet space if we allocated it */
+    if (wirepacket != cinfo->sendbuf)
+      free (wirepacket);
+
     return -1;
   }
 
@@ -1317,8 +1332,7 @@ SendRingPacket (ClientInfo *cinfo)
                   3, 0))
   {
     if (cinfo->socketerr != -2)
-      lprintf (0, "[%s] SendRingPacket(): Error sending packet: %s",
-               cinfo->hostname, strerror (errno));
+      lprintf (0, "[%s] SendRingPacket(): Error sending packet", cinfo->hostname);
     return -1;
   }
 
