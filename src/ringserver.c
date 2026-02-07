@@ -1172,7 +1172,7 @@ ConfigClient (struct sockaddr *paddr, int clientsocket,
 /***************************************************************************
  * CalcStats:
  *
- * Calculate statisics for the specified client connection.  This
+ * Calculate statistics for the specified client connection.  This
  * includes the following calculations:
  *
  * 1) Percent lag in the ring buffer, with the latest packet
@@ -1188,7 +1188,8 @@ ConfigClient (struct sockaddr *paddr, int clientsocket,
 static int
 CalcStats (ClientInfo *cinfo)
 {
-  nstime_t nsnow = NSnow ();
+  RingReader *reader;
+  nstime_t nsnow;
   int64_t earliestoffset;
   int64_t latestoffset;
   int64_t latestoffset_unwrapped;
@@ -1198,11 +1199,14 @@ CalcStats (ClientInfo *cinfo)
   if (!cinfo)
     return -1;
 
+  reader = cinfo->reader;
+  nsnow = NSnow ();
+
   earliestoffset = param.earliestoffset;
   latestoffset   = param.latestoffset;
 
   /* Determine percent lag if the current pktid is set */
-  if (cinfo->reader && cinfo->reader->pktid <= RINGID_MAXIMUM)
+  if (reader && reader->pktid <= RINGID_MAXIMUM)
   {
     int64_t ringmod = param.maxoffset + config.pktsize;
 
@@ -1211,27 +1215,49 @@ CalcStats (ClientInfo *cinfo)
     else
       latestoffset_unwrapped = latestoffset;
 
-    if (cinfo->reader->pktoffset < earliestoffset)
-      readeroffset_unwrapped = cinfo->reader->pktoffset + ringmod;
+    if (reader->pktoffset < earliestoffset)
+      readeroffset_unwrapped = reader->pktoffset + ringmod;
     else
-      readeroffset_unwrapped = cinfo->reader->pktoffset;
+      readeroffset_unwrapped = reader->pktoffset;
 
     /* Calculate percentage lag as position in ring where 0% = latest offset and 100% = earliest offset */
     if (latestoffset_unwrapped != earliestoffset)
+    {
       cinfo->percentlag = (int)(((double)(latestoffset_unwrapped - readeroffset_unwrapped) / (latestoffset_unwrapped - earliestoffset)) * 100);
+
+      /* Enforce bounds on percentage lag */
+      if (cinfo->percentlag < 0)
+        cinfo->percentlag = 0;
+      else if (cinfo->percentlag > 100)
+        cinfo->percentlag = 100;
+    }
     else
+    {
       cinfo->percentlag = 0;
+    }
   }
   else
   {
     cinfo->percentlag = 0;
   }
 
-  /* Determine time difference since the previous history values were set in seconds */
+  /* On first call, initialize history values and timestamp, skip rate calculation */
   if (cinfo->ratetime == 0)
-    deltasec = 1.0;
-  else
-    deltasec = (double)(nsnow - cinfo->ratetime) / NSTMODULUS;
+  {
+    cinfo->txpackets1 = cinfo->txpackets0;
+    cinfo->txbytes1   = cinfo->txbytes0;
+    cinfo->rxpackets1 = cinfo->rxpackets0;
+    cinfo->rxbytes1   = cinfo->rxbytes0;
+    cinfo->ratetime   = nsnow;
+
+    return 0;
+  }
+
+  /* Determine time difference since the previous history values were set in seconds */
+  deltasec = (double)(nsnow - cinfo->ratetime) / NSTMODULUS;
+
+  if (deltasec <= 0.0)
+    return 0;
 
   /* Transmission */
   if (cinfo->txpackets0 > 0)
