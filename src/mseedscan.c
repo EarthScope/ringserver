@@ -260,9 +260,11 @@ MS_ScanThread (void *arg)
       if (mssinfo->scantime == 0.0)
         mssinfo->scantime = 1.0;
 
-      /* Calculate the reception rates */
-      mssinfo->rxpacketrate = (double)(mssinfo->rxpackets[0] - mssinfo->rxpackets[1]) / mssinfo->scantime;
-      mssinfo->rxbyterate   = (double)(mssinfo->rxbytes[0] - mssinfo->rxbytes[1]) / mssinfo->scantime;
+      /* Calculate instantaneous reception rates and smooth with EMA (alpha=0.25, ~4s window) */
+      double rxpktrate_inst  = (double)(mssinfo->rxpackets[0] - mssinfo->rxpackets[1]) / mssinfo->scantime;
+      double rxbyterate_inst = (double)(mssinfo->rxbytes[0] - mssinfo->rxbytes[1]) / mssinfo->scantime;
+      mssinfo->rxpacketrate = 0.25 * rxpktrate_inst + 0.75 * mssinfo->rxpacketrate;
+      mssinfo->rxbyterate   = 0.25 * rxbyterate_inst + 0.75 * mssinfo->rxbyterate;
 
       /* Shift current values to history values */
       mssinfo->rxpackets[1] = mssinfo->rxpackets[0];

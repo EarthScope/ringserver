@@ -4,7 +4,7 @@
 	- Fix binary search for client read positioning.
 	- Fix confusing error for -version.  See #78
 	- Add --version and --help as aliases.
-	- Improve calculation of client statistics
+	- Improve calculation of client statistics, smooth rates over ~4 seconds.
 
 2025.272: v4.1.2
 	- Avoid pruning files from scan list when a scan has been interrupted by

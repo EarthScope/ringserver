@@ -1200,7 +1200,7 @@ CalcStats (ClientInfo *cinfo)
     return -1;
 
   reader = cinfo->reader;
-  nsnow = NSnow ();
+  nsnow  = NSnow ();
 
   earliestoffset = param.earliestoffset;
   latestoffset   = param.latestoffset;
@@ -1259,12 +1259,17 @@ CalcStats (ClientInfo *cinfo)
   if (deltasec <= 0.0)
     return 0;
 
+  /* EMA smoothing factor: 0.25 gives ~4 second effective averaging window */
+  double alpha = 0.25;
+
   /* Transmission */
   if (cinfo->txpackets0 > 0)
   {
-    /* Calculate the transmission rates */
-    cinfo->txpacketrate = (double)(cinfo->txpackets0 - cinfo->txpackets1) / deltasec;
-    cinfo->txbyterate   = (double)(cinfo->txbytes0 - cinfo->txbytes1) / deltasec;
+    /* Calculate instantaneous transmission rates and smooth with EMA */
+    double txpktrate_inst  = (double)(cinfo->txpackets0 - cinfo->txpackets1) / deltasec;
+    double txbyterate_inst = (double)(cinfo->txbytes0 - cinfo->txbytes1) / deltasec;
+    cinfo->txpacketrate = alpha * txpktrate_inst + (1.0 - alpha) * cinfo->txpacketrate;
+    cinfo->txbyterate   = alpha * txbyterate_inst + (1.0 - alpha) * cinfo->txbyterate;
 
     /* Shift current values to history values */
     cinfo->txpackets1 = cinfo->txpackets0;
@@ -1274,9 +1279,11 @@ CalcStats (ClientInfo *cinfo)
   /* Reception */
   if (cinfo->rxpackets0 > 0)
   {
-    /* Calculate the reception rates */
-    cinfo->rxpacketrate = (double)(cinfo->rxpackets0 - cinfo->rxpackets1) / deltasec;
-    cinfo->rxbyterate   = (double)(cinfo->rxbytes0 - cinfo->rxbytes1) / deltasec;
+    /* Calculate instantaneous reception rates and smooth with EMA */
+    double rxpktrate_inst  = (double)(cinfo->rxpackets0 - cinfo->rxpackets1) / deltasec;
+    double rxbyterate_inst = (double)(cinfo->rxbytes0 - cinfo->rxbytes1) / deltasec;
+    cinfo->rxpacketrate = alpha * rxpktrate_inst + (1.0 - alpha) * cinfo->rxpacketrate;
+    cinfo->rxbyterate   = alpha * rxbyterate_inst + (1.0 - alpha) * cinfo->rxbyterate;
 
     /* Shift current values to history values */
     cinfo->rxpackets1 = cinfo->rxpackets0;
