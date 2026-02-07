@@ -11,6 +11,7 @@
 	- Fix memory leaks in very rare edge cases of memory allocation errors.
 	- Update libmseed to v3.2.4
 	- Update mbedtls to v3.6.5
+	- Update pcre2 to v10.47
 
 2025.272: v4.1.2
 	- Avoid pruning files from scan list when a scan has been interrupted by
