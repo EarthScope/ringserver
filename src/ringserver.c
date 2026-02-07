@@ -848,6 +848,27 @@ InitThreadData (void *prvtptr)
 } /* End of InitThreadData() */
 
 /***********************************************************************
+ * FreeClientInfo:
+ *
+ * Free a partially or fully initialized ClientInfo structure and all
+ * resources allocated by ConfigClient() and ListenThread() prior to
+ * client thread creation.
+ ***********************************************************************/
+static void
+FreeClientInfo (ClientInfo *cinfo)
+{
+  if (cinfo == NULL)
+    return;
+
+  free (cinfo->addr);
+  free (cinfo->allowedstr);
+  free (cinfo->forbiddenstr);
+  free (cinfo->mswrite);
+  pthread_mutex_destroy (&cinfo->streams_lock);
+  free (cinfo);
+}
+
+/***********************************************************************
  * ListenThread:
  *
  * Thread to accept connections and dispatch client threads.
@@ -941,6 +962,7 @@ ListenThread (void *arg)
     {
       lprintf (0, "Error allocating memory for socket structure");
       close (clientsocket);
+      FreeClientInfo (cinfo);
       break;
     }
 
@@ -951,18 +973,17 @@ ListenThread (void *arg)
     if (!(tdp = InitThreadData (cinfo)))
     {
       lprintf (0, "Error initializing thread_data: %s", strerror (errno));
-      if (clientsocket)
-        close (clientsocket);
+      close (clientsocket);
+      FreeClientInfo (cinfo);
       break;
     }
 
     if ((errno = pthread_create (&ctid, NULL, ClientThread, (void *)tdp)))
     {
       lprintf (0, "Error creating new client thread: %s", strerror (errno));
-      if (clientsocket)
-        close (clientsocket);
-      if (tdp)
-        free (tdp);
+      close (clientsocket);
+      FreeClientInfo (cinfo);
+      free (tdp);
       tdp = NULL;
       continue;
     }
@@ -1154,10 +1175,7 @@ ConfigClient (struct sockaddr *paddr, int clientsocket,
     if (!(cinfo->mswrite = (DataStream *)malloc (sizeof (DataStream))))
     {
       lprintf (0, "Error allocating memory for miniSEED write parameters");
-      free (cinfo->allowedstr);
-      free (cinfo->forbiddenstr);
-      pthread_mutex_destroy (&cinfo->streams_lock);
-      free (cinfo);
+      FreeClientInfo (cinfo);
       return NULL;
     }
 
