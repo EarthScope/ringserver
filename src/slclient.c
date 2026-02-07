@@ -522,7 +522,8 @@ SLStreamPackets (ClientInfo *cinfo)
 
     /* Get (creating if needed) the StreamNode for this streamid */
     if ((stream = GetStreamNode (cinfo->streams, &cinfo->streams_lock,
-                                 cinfo->packet.streamid, &newstream)) == NULL)
+                                 cinfo->packet.streamid,
+                                 cinfo->streamscount, &newstream)) == NULL)
     {
       lprintf (0, "[%s] Error with GetStreamNode() for %s",
                cinfo->hostname, cinfo->packet.streamid);

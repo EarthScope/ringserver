@@ -163,7 +163,8 @@ extern int RecvLine (ClientInfo *cinfo);
 extern int PollSocket (int socket, int readability, int writability, int timeout_ms);
 
 extern StreamNode *GetStreamNode (RBTree *tree, pthread_mutex_t *plock,
-                                  char *streamid, int *new);
+                                  char *streamid, int streams_count,
+                                  int *new);
 
 extern int AddToString (char **string, char *source, char *delim,
                         size_t where, size_t maxlen);

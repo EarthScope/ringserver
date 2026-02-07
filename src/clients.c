@@ -50,6 +50,9 @@
 /* Maximum line length for line-based commands */
 #define MAX_LINE_LENGTH 8096
 
+/* Maximum number of streams tracked per client */
+#define MAX_STREAMS_PER_CLIENT 100000
+
 static int ClientRecv (ClientInfo *cinfo);
 
 /* Test first 3 characters of buffer for HTTP methods:
@@ -1359,10 +1362,14 @@ PollSocket (int socket, int readability, int writability, int timeout_ms)
  * locked.  If a new entry was added the value of new will be set to 1
  * otherwise it will be set to 0.
  *
- * Return a pointer to a ChanNode or 0 for error.
+ * If streams_count >= MAX_STREAMS_PER_CLIENT and the entry does not
+ * exist, creation is refused to prevent unbounded memory growth.
+ *
+ * Return a pointer to a StreamNode or 0 for error.
  ***************************************************************************/
 StreamNode *
-GetStreamNode (RBTree *tree, pthread_mutex_t *plock, char *streamid, int *new)
+GetStreamNode (RBTree *tree, pthread_mutex_t *plock, char *streamid,
+               int streams_count, int *new)
 {
   Key key;
   Key *newkey;
@@ -1380,6 +1387,12 @@ GetStreamNode (RBTree *tree, pthread_mutex_t *plock, char *streamid, int *new)
   }
   else
   {
+    if (streams_count >= MAX_STREAMS_PER_CLIENT)
+    {
+      lprintf (0, "GetStreamNode: Stream count limit reached (%d)", MAX_STREAMS_PER_CLIENT);
+      return 0;
+    }
+
     if ((newkey = (Key *)malloc (sizeof (Key))) == NULL)
     {
       lprintf (0, "GetStreamNode: Error allocating new key");
