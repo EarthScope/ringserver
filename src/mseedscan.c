@@ -283,13 +283,13 @@ MS_ScanThread (void *arg)
 
       lprintf (0, "[MSeedScan] Time: %g seconds for %d scan(s) (%g seconds/scan)",
                iostatsinterval, mssinfo->iostats,
-               iostatsinterval / mssinfo->iostats);
+               (iostatsinterval > 0.0) ? iostatsinterval / mssinfo->iostats : 0.0);
       lprintf (0, "[MSeedScan] Files checked: %d, read: %d (%g read/sec)",
                mssinfo->scanfileschecked, mssinfo->scanfilesread,
-               mssinfo->scanfilesread / iostatsinterval);
+               (iostatsinterval > 0.0) ? mssinfo->scanfilesread / iostatsinterval : 0.0);
       lprintf (0, "[MSeedScan] Records read: %d, written: %d (%g written/sec)",
                mssinfo->scanrecordsread, mssinfo->scanrecordswritten,
-               mssinfo->scanrecordswritten / iostatsinterval);
+               (iostatsinterval > 0.0) ? mssinfo->scanrecordswritten / iostatsinterval : 0.0);
 
       /* Reset counter */
       iostatscount = mssinfo->iostats;
@@ -464,6 +464,13 @@ ScanFiles (MSScanInfo *mssinfo, const char *targetdir, int level, time_t scantim
     {
       if (mssinfo->maxrecur < 0 || mssinfo->recurlevel < level)
       {
+        if (mssinfo->recurlevel >= MSSCAN_MAXRECURDEPTH)
+        {
+          lprintf (0, "[MSeedScan] Maximum recursion depth (%d) reached at %s, possible symlink loop",
+                   MSSCAN_MAXRECURDEPTH, filename);
+          continue;
+        }
+
         lprintf (4, "[MSeedScan] Recursing into %s", filename);
 
         mssinfo->recurlevel++;
@@ -574,10 +581,13 @@ FindFile (RBTree *filetree, const char *filename)
 
   Key filekey = FNVhash64 (filename);
 
-  /* Search for a matching file name entry */
+  /* Search for a matching file name entry, verify filename to guard against hash collision */
   if ((tnode = RBFind (filetree, &filekey)))
   {
     fnode = (FileNode *)tnode->data;
+
+    if (strcmp (fnode->filename, filename) != 0)
+      fnode = NULL;
   }
 
   return fnode;
@@ -998,16 +1008,18 @@ RecoverState (RBTree *filetree, char *statefile)
       continue;
     }
 
+    /* Extract filename up to first tab, which may contain spaces */
+    memcpy (filename, line, first_tab - line);
+    filename[first_tab - line] = '\0';
+
     if (tab_count == 2)
     {
-      fields = sscanf (line, "%s\t%lld\t%lld\n",
-                       filename, &offset, &modtime);
+      fields = sscanf (first_tab + 1, "%lld\t%lld", &offset, &modtime);
     }
     else if (tab_count == 3)
     {
       /* Handle (skip) unused inode field in legacy state file format */
-      fields = sscanf (line, "%s\t%*llu\t%lld\t%lld\n",
-                       filename, &offset, &modtime);
+      fields = sscanf (first_tab + 1, "%*llu\t%lld\t%lld", &offset, &modtime);
     }
     else
     {
@@ -1015,7 +1027,7 @@ RecoverState (RBTree *filetree, char *statefile)
       continue;
     }
 
-    if (fields != 3)
+    if (fields != 2)
     {
       lprintf (0, "[MSeedScan] Could not parse line %d of state file: %d fields", count, fields);
       continue;
@@ -1065,8 +1077,13 @@ WriteRecord (MSScanInfo *mssinfo, char *record, uint64_t reclen)
   /* Generate stream ID for this record: SourceID/MSEED */
   snprintf (streamid, sizeof (streamid), "%s/MSEED", mssinfo->msr->sid);
 
+  if (strlen (streamid) >= sizeof (((RingPacket *)0)->streamid))
+  {
+    lprintf (0, "[MSeedScan] Stream ID too long, truncated: %s", streamid);
+  }
+
   memset (&packet, 0, sizeof (RingPacket));
-  memcpy (packet.streamid, streamid, sizeof (packet.streamid) - 1);
+  strncpy (packet.streamid, streamid, sizeof (packet.streamid) - 1);
   packet.datastart = mssinfo->msr->starttime;
   packet.dataend   = msr3_endtime (mssinfo->msr);
   packet.datasize  = (uint32_t)mssinfo->msr->reclen;
@@ -1303,7 +1320,8 @@ SortEDirEntries (EDIR *edirp)
       p = q;
     }
 
-    tail->next = NULL;
+    if (tail)
+      tail->next = NULL;
 
     /* If we have done only one merge, we're finished. */
     if (nmerges <= 1) /* allow for nmerges==0, the empty list case */
@@ -1347,7 +1365,7 @@ EOpenDir (const char *dirname)
     return NULL;
 
   /* Allocate new EDIR */
-  if (!(edirp = (EDIR *)malloc (sizeof (EDIR))))
+  if (!(edirp = (EDIR *)calloc (1, sizeof (EDIR))))
   {
     closedir (dirp);
     return NULL;

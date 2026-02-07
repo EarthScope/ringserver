@@ -38,6 +38,9 @@ extern "C" {
 /* Maximum filename length */
 #define MSSCAN_MAXFILENAME 512
 
+/* Hard limit on directory recursion depth to prevent symlink loop stack overflow */
+#define MSSCAN_MAXRECURDEPTH 256
+
 typedef struct MSScanInfo {
   /* Configuration parameters */
   char  dirname[512];     /* Base directory to scan */
