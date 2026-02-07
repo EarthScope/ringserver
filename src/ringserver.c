@@ -1156,6 +1156,10 @@ ConfigClient (struct sockaddr *paddr, int clientsocket,
     if (!(cinfo->mswrite = (DataStream *)malloc (sizeof (DataStream))))
     {
       lprintf (0, "Error allocating memory for miniSEED write parameters");
+      free (cinfo->allowedstr);
+      free (cinfo->forbiddenstr);
+      pthread_mutex_destroy (&cinfo->streams_lock);
+      free (cinfo);
       return NULL;
     }
 
