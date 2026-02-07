@@ -1,3 +1,6 @@
+2026.037:
+	- Fix consuming of received data for quickly disconnecting clients.
+
 2025.272: v4.1.2
 	- Avoid pruning files from scan list when a scan has been interrupted by
   a termination signal and aggressively flush scanning state file.

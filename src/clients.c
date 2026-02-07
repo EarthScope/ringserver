@@ -895,11 +895,15 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
     return -1;
   }
 
-  /* Check if socket has been disconnected */
-  if (recv (cinfo->socket, peekbyte, 1, MSG_PEEK) == 0)
+  /* Check if socket has been disconnected, but only if there is no
+   * buffered data remaining to process. */
+  if (cinfo->recvlength <= cinfo->recvconsumed)
   {
-    cinfo->socketerr = -2;
-    return -2;
+    if (recv (cinfo->socket, peekbyte, 1, MSG_PEEK) == 0)
+    {
+      cinfo->socketerr = -2;
+      return -2;
+    }
   }
 
   if (requested > cinfo->recvbufsize)
@@ -949,7 +953,7 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
     if ((cinfo->tlsctx &&
          (nrecv == MBEDTLS_ERR_SSL_WANT_READ || nrecv == MBEDTLS_ERR_SSL_WANT_WRITE)) ||
         (nrecv == -1 &&
-         (errno == EAGAIN || errno != EWOULDBLOCK)))
+         (errno == EAGAIN || errno == EWOULDBLOCK)))
     {
       /* Return immediately if no data is available and no data has been read yet */
       if (fulfill == 0 && nread == 0)
@@ -1005,6 +1009,7 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
 
     /* Update the time of the last packet exchange */
     cinfo->lastxchange = NSnow ();
+
   }
 
   /* Copy data to supplied buffer if not the receive buffer */
