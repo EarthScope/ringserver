@@ -30,7 +30,7 @@ SafeMalloc (size_t size)
   void *result;
 
   if (!(result = malloc (size)))
-    printf ("memory overflow: malloc failed in SafeMalloc.");
+    fprintf (stderr, "memory overflow: malloc failed in SafeMalloc.\n");
 
   return (result);
 }
@@ -58,7 +58,10 @@ RBTreeCreate (int (*CompareFunc) (const void *, const void *),
   RBTree *newTree;
   RBNode *temp;
 
-  newTree              = (RBTree *)SafeMalloc (sizeof (RBTree));
+  newTree = (RBTree *)SafeMalloc (sizeof (RBTree));
+  if (!newTree)
+    return NULL;
+
   newTree->Compare     = CompareFunc;
   newTree->DestroyKey  = DestroyKeyFunc;
   newTree->DestroyData = DestroyDataFunc;
@@ -66,15 +69,26 @@ RBTreeCreate (int (*CompareFunc) (const void *, const void *),
   /*  see the comment in the RBTree structure in rbtree.h */
   /*  for information on nil and root */
   temp = newTree->nil = (RBNode *)SafeMalloc (sizeof (RBNode));
+  if (!temp)
+  {
+    free (newTree);
+    return NULL;
+  }
   temp->parent = temp->left = temp->right = temp;
   temp->red                               = 0;
-  temp->data                              = 0;
-  temp->key                               = 0;
+  temp->data                              = NULL;
+  temp->key                               = NULL;
 
   temp = newTree->root = (RBNode *)SafeMalloc (sizeof (RBNode));
+  if (!temp)
+  {
+    free (newTree->nil);
+    free (newTree);
+    return NULL;
+  }
   temp->parent = temp->left = temp->right = newTree->nil;
-  temp->key                               = 0;
-  temp->data                              = 0;
+  temp->key                               = NULL;
+  temp->data                              = NULL;
   temp->red                               = 0;
 
   return (newTree);
@@ -126,7 +140,7 @@ LeftRotate (RBTree *tree, RBNode *x)
 }
 
 /***********************************************************************
- *  FUNCTION:  RighttRotate
+ *  FUNCTION:  RightRotate
  *
  *  INPUTS:  This takes a tree so that it can access the appropriate
  *           root and nil pointers, and the node to rotate on.
@@ -199,7 +213,7 @@ TreeInsertHelp (RBTree *tree, RBNode *z)
   while (x != nil)
   {
     y = x;
-    if (1 == tree->Compare (x->key, z->key)) /* x.key > z.key */
+    if (tree->Compare (x->key, z->key) > 0) /* x.key > z.key */
     {
       x = x->left;
     }
@@ -212,7 +226,7 @@ TreeInsertHelp (RBTree *tree, RBNode *z)
   z->parent = y;
 
   if ((y == tree->root) ||
-      (1 == tree->Compare (y->key, z->key))) /* y.key > z.key */
+      (tree->Compare (y->key, z->key) > 0)) /* y.key > z.key */
   {
     y->left = z;
   }
@@ -250,7 +264,11 @@ RBTreeInsert (RBTree *tree, void *key, void *data, RBNode *node)
   if (node)
     x = node;
   else
+  {
     x = (RBNode *)SafeMalloc (sizeof (RBNode));
+    if (!x)
+      return NULL;
+  }
 
   /* Assign key and data to node */
   x->key  = key;
@@ -322,7 +340,7 @@ RBTreeInsert (RBTree *tree, void *key, void *data, RBNode *node)
  *    OUTPUT:  returns the a node with key equal to key.  If there are
  *             multiple nodes with key equal to key this function
  *             returns the one highest in the tree.  If no nodes have
- *             a matching key 0 is returned.
+ *             a matching key NULL is returned.
  *
  *    Modifies Input: none
  ***********************************************************************/
@@ -334,13 +352,13 @@ RBFind (RBTree *tree, void *key)
   int compVal;
 
   if (x == nil)
-    return (0);
+    return NULL;
 
   compVal = tree->Compare (x->key, key);
 
-  while (compVal != 0) /*assignemnt*/
+  while (compVal != 0) /* assignment */
   {
-    if (compVal == 1) /* x->key > key */
+    if (compVal > 0) /* x->key > key */
     {
       x = x->left;
     }
@@ -350,7 +368,7 @@ RBFind (RBTree *tree, void *key)
     }
 
     if (x == nil)
-      return (0);
+      return NULL;
 
     compVal = tree->Compare (x->key, key);
   }
@@ -364,8 +382,8 @@ RBFind (RBTree *tree, void *key)
  *    INPUTS:  tree is the tree in question, and node is the node we want the
  *             the successor of.
  *
- *    OUTPUT:  This function returns the successor of node or NULL if no
- *             successor exists.
+ *    OUTPUT:  This function returns the successor of node or tree->nil
+ *             (the sentinel) if no successor exists.
  *
  *    Modifies Input: none
  *
@@ -409,8 +427,8 @@ TreeSuccessor (RBTree *tree, RBNode *node)
  *    INPUTS:  tree is the tree in question, and node is the node we want the
  *             the predecessor of.
  *
- *    OUTPUT:  This function returns the predecessor of node or NULL if no
- *             predecessor exists.
+ *    OUTPUT:  This function returns the predecessor of node or tree->nil
+ *             (the sentinel) if no predecessor exists.
  *
  *    Modifies Input: none
  *
@@ -642,8 +660,10 @@ RBDelete (RBTree *tree, RBNode *node)
     if (!(y->red))
       RBDeleteFixUp (tree, x);
 
-    tree->DestroyKey (node->key);
-    tree->DestroyData (node->data);
+    if (tree->DestroyKey)
+      tree->DestroyKey (node->key);
+    if (tree->DestroyData)
+      tree->DestroyData (node->data);
     y->left            = node->left;
     y->right           = node->right;
     y->parent          = node->parent;
@@ -662,8 +682,10 @@ RBDelete (RBTree *tree, RBNode *node)
   }
   else
   {
-    tree->DestroyKey (y->key);
-    tree->DestroyData (y->data);
+    if (tree->DestroyKey)
+      tree->DestroyKey (y->key);
+    if (tree->DestroyData)
+      tree->DestroyData (y->data);
 
     if (!(y->red))
       RBDeleteFixUp (tree, x);
@@ -677,7 +699,9 @@ RBDelete (RBTree *tree, RBNode *node)
  *
  *    INPUTS:  tree is the tree to remove node from
  *
- *    OUTPUT:  returns pointer to node removed
+ *    OUTPUT:  returns pointer to node removed.  Only the key and data
+ *             pointers on the returned node are valid; tree pointers
+ *             (left, right, parent) are cleared to NULL.
  *
  *    EFFECT:  Removes node from tree specifically retaining the node
  *             (with key and data pointers) for return to the caller.
@@ -737,6 +761,11 @@ RBRemove (RBTree *tree, RBNode *node)
     {
       node->parent->right = y;
     }
+
+    /* Clear stale tree pointers; only key and data are valid after removal */
+    node->left   = NULL;
+    node->right  = NULL;
+    node->parent = NULL;
   }
   else
   {
@@ -744,6 +773,11 @@ RBRemove (RBTree *tree, RBNode *node)
       RBDeleteFixUp (tree, x);
 
     node = y;
+
+    /* Clear stale tree pointers; only key and data are valid after removal */
+    node->left   = NULL;
+    node->right  = NULL;
+    node->parent = NULL;
   }
 
   return node;
