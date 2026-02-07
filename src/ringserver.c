@@ -974,12 +974,10 @@ ListenThread (void *arg)
       ctp = (struct cthread *)malloc (sizeof (struct cthread));
       if (ctp == NULL)
       {
-        lprintf (0, "Error malloc'ing cthread: %s", strerror (errno));
-        if (clientsocket)
-          close (clientsocket);
-        if (tdp)
-          free (tdp);
-        break;
+        lprintf (0, "Error malloc'ing cthread, client thread will be untracked: %s",
+                 strerror (errno));
+        pthread_detach (ctid);
+        continue;
       }
 
       ctp->td   = tdp;
