@@ -835,7 +835,7 @@ RingReadPacket (int64_t offset, RingPacket *packet, char *packetdata)
 
   /* Copy packet data if a pointer is supplied */
   if (packetdata)
-    memcpy (packetdata, (uint8_t *)pkt + sizeof (RingPacket), pkt->datasize);
+    memcpy (packetdata, (uint8_t *)pkt + sizeof (RingPacket), packet->datasize);
 
   /* Sanity check that the data was not modified during the copy */
   if (pkttime != pkt->pkttime)
