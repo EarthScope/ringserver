@@ -875,7 +875,7 @@ HandleNegotiation (ClientInfo *cinfo)
 
       OKGO = 0;
     }
-    else
+    else if (OKGO)
     {
       lprintf (2, "[%s] Authentication successful", cinfo->hostname);
 
@@ -933,6 +933,17 @@ HandleNegotiation (ClientInfo *cinfo)
 
       /* Combine network and station codes into station ID */
       snprintf (slinfo->reqstaid, sizeof (slinfo->reqstaid), "%s_%s", reqnet, reqsta);
+    }
+
+    /* Limit the number of stations per client */
+    if (OKGO && slinfo->stationcount >= SLMAXSTATIONS)
+    {
+      lprintf (0, "[%s] Station limit of %d reached", cinfo->hostname, SLMAXSTATIONS);
+
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_LIMIT, "Station limit reached"))
+        return -1;
+
+      OKGO = 0;
     }
 
     /* Sanity check, only allowed characters in station ID */
@@ -1071,8 +1082,11 @@ HandleNegotiation (ClientInfo *cinfo)
       OKGO = 0;
     }
 
-    memcpy (newselector->string, selector, sizeof (newselector->string));
-    newselector->convert = convert;
+    if (OKGO)
+    {
+      memcpy (newselector->string, selector, sizeof (newselector->string));
+      newselector->convert = convert;
+    }
 
     /* If modifying a STATION add selector to it's entry */
     if (OKGO && cinfo->state == STATE_STATION)
@@ -1163,9 +1177,25 @@ HandleNegotiation (ClientInfo *cinfo)
       if (fields >= 1)
       {
         if (strcmp (seqstr, "ALL") == 0)
+        {
           startpacket = RINGID_EARLIEST;
+        }
         else
-          startpacket = (uint64_t)strtoull (seqstr, NULL, 10);
+        {
+          char *endptr = NULL;
+          startpacket = (uint64_t)strtoull (seqstr, &endptr, 10);
+
+          if (*endptr != '\0')
+          {
+            lprintf (0, "[%s] Error parsing sequence number for DATA: %s",
+                     cinfo->hostname, seqstr);
+
+            if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Invalid sequence number"))
+              return -1;
+
+            OKGO = 0;
+          }
+        }
       }
       else
       {
@@ -1343,7 +1373,7 @@ HandleNegotiation (ClientInfo *cinfo)
       }
 
       /* Sanity check for future start time */
-      if ((time_t)MS_NSTIME2EPOCH (starttime) > time (NULL))
+      if (OKGO && (time_t)MS_NSTIME2EPOCH (starttime) > time (NULL))
       {
         lprintf (0, "[%s] Start cannot be in future for TIME: %s",
                  cinfo->hostname, starttimestr);
@@ -1583,7 +1613,7 @@ HandleInfo_v3 (ClientInfo *cinfo)
   {
     /* Trim final newline character if present */
     xmllength = strlen (xmlstr);
-    if (xmlstr[xmllength - 1] == '\n')
+    if (xmllength > 0 && xmlstr[xmllength - 1] == '\n')
     {
       xmlstr[xmllength - 1] = '\0';
       xmllength--;
@@ -1710,7 +1740,7 @@ HandleInfo_v4 (ClientInfo *cinfo)
 
   if (strncasecmp (cinfo->recvbuf, "INFO", 4) != 0)
   {
-    lprintf (0, "[%s] %s() cannot detect INFO", __func__, cinfo->hostname);
+    lprintf (0, "[%s] %s() cannot detect INFO", cinfo->hostname, __func__);
     return -1;
   }
 
@@ -2118,6 +2148,7 @@ GetReqStationID (RBTree *tree, char *staid)
     if ((stationid = (ReqStationID *)malloc (sizeof (ReqStationID))) == NULL)
     {
       lprintf (0, "%s: Error allocating new node", __func__);
+      free (newkey);
       return 0;
     }
 
@@ -2237,6 +2268,7 @@ SelectToRegex (const char *staid, const char *select, char **regex)
   const char *ptr;
   char pattern[256] = {0};
   char *build       = pattern;
+  char *build_end   = pattern + sizeof (pattern) - 10; /* Reserve space for "/MSEED3?$\0" suffix */
   int retval;
 
   if (!regex)
@@ -2259,15 +2291,21 @@ SelectToRegex (const char *staid, const char *select, char **regex)
     {
       if (*ptr == '?')
       {
+        if (build >= build_end)
+          return -1;
         *build++ = '.';
       }
       else if (*ptr == '*')
       {
+        if (build + 1 >= build_end)
+          return -1;
         *build++ = '.';
         *build++ = '*';
       }
       else
       {
+        if (build >= build_end)
+          return -1;
         *build++ = *ptr;
       }
     }
@@ -2293,15 +2331,21 @@ SelectToRegex (const char *staid, const char *select, char **regex)
     {
       if (*ptr == '?')
       {
+        if (build >= build_end)
+          return -1;
         *build++ = '.';
       }
       else if (*ptr == '*')
       {
+        if (build + 1 >= build_end)
+          return -1;
         *build++ = '.';
         *build++ = '*';
       }
       else
       {
+        if (build >= build_end)
+          return -1;
         *build++ = *ptr;
       }
     }

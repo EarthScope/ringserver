@@ -48,6 +48,7 @@ extern "C"
 
 #define SLMAXREGEXLEN 2097152 /* Maximum length of match/reject regex pattern */
 #define SLMAXSELECTLEN 2048   /* Maximum length of per-station/global selector buffer */
+#define SLMAXSTATIONS 10000   /* Maximum number of stations per client */
 
 #define SLINFO_ID 1
 #define SLINFO_CAPABILITIES 2
