@@ -118,6 +118,11 @@ urldecode (char *dst, const char *src)
         b -= ('A' - 10);
       else
         b -= '0';
+      if (16 * a + b == 0)
+      {
+        src += 3; /* Skip encoded NUL bytes (RFC 3986) */
+        continue;
+      }
       *dst++ = 16 * a + b;
       src += 3;
     }
@@ -796,6 +801,8 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length)
 
       totalrecv += nrecv;
     }
+
+    return 0;
   }
 
   /* Check for Close frame, connection shutdown */
@@ -875,12 +882,14 @@ ParseHeader (char *header, char **value)
 
   *value = cp + 1;
 
-  /* Terminte at separator and backwards until first non-space character */
+  /* Terminate at separator and backwards until first non-space character */
   do
   {
     *cp = '\0';
+    if (cp == header)
+      break;
     cp--;
-  } while (*cp == ' ' && cp != header);
+  } while (*cp == ' ');
 
   /* Find first non-space character forward from separator to start value */
   while (**value == ' ' && **value != '\0')
@@ -888,11 +897,14 @@ ParseHeader (char *header, char **value)
 
   /* Find first non-space character backwards from end of value and terminate */
   length = strlen (*value);
-  cp     = *value + length - 1;
-  while (*cp == ' ' && cp != *value)
-    cp--;
+  if (length > 0)
+  {
+    cp = *value + length - 1;
+    while (*cp == ' ' && cp != *value)
+      cp--;
 
-  *(cp + 1) = '\0';
+    *(cp + 1) = '\0';
+  }
 
   return 0;
 } /* End of ParseHeader() */
@@ -1013,7 +1025,7 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
 
   pthread_rwlock_unlock (&config.config_rwlock);
 
-  return (headlen > cinfo->sendbufsize) ? cinfo->sendbufsize : headlen;
+  return ((size_t)headlen >= cinfo->sendbufsize) ? cinfo->sendbufsize - 1 : headlen;
 }
 
 /***************************************************************************
@@ -1185,7 +1197,7 @@ GenerateStreams (ClientInfo *cinfo, const char *path, const char *query,
     cp += 6; /* Advance to character after '=' */
 
     /* Copy parameter value into matchstr, stop at terminator, '&' or max length */
-    for (matchlen = 0; *cp != '\0' && *cp != '&' && matchlen < sizeof (matchstr); cp++, matchlen++)
+    for (matchlen = 0; *cp != '\0' && *cp != '&' && matchlen < sizeof (matchstr) - 1; cp++, matchlen++)
     {
       matchstr[matchlen] = *cp;
     }
@@ -1579,7 +1591,7 @@ GenerateConnections (ClientInfo *cinfo, const char *path, const char *query,
     cp += 6; /* Advance to character after '=' */
 
     /* Copy parameter value into matchstr, stop at terminator, '&' or max length */
-    for (matchlen = 0; *cp && *cp != '&' && matchlen < sizeof (matchstr); cp++, matchlen++)
+    for (matchlen = 0; *cp && *cp != '&' && matchlen < sizeof (matchstr) - 1; cp++, matchlen++)
     {
       matchstr[matchlen] = *cp;
     }
