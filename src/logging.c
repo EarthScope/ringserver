@@ -193,8 +193,8 @@ WriteTLog (ClientInfo *cinfo, int reset)
 
   /* Generate pretty strings for current & connection time */
   clock = NSnow ();
-  ms_nstime2timestr (clock, currtime, ISOMONTHDAY_Z, NONE);
-  ms_nstime2timestr (cinfo->conntime, conntime, ISOMONTHDAY_Z, NONE);
+  ms_nstime2timestr_n (clock, currtime, sizeof (currtime), ISOMONTHDAY_Z, NONE);
+  ms_nstime2timestr_n (cinfo->conntime, conntime, sizeof (conntime), ISOMONTHDAY_Z, NONE);
 
   /* Lock transfer log file writing mutex */
   pthread_mutex_lock (&config.tlog.write_lock);

@@ -323,7 +323,7 @@ SLHandleCmd (ClientInfo *cinfo)
     if (cinfo->starttime != NSTUNSET && slinfo->startid == RINGID_NONE)
     {
       char timestr[32];
-      ms_nstime2timestr (cinfo->starttime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+      ms_nstime2timestr_n (cinfo->starttime, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
 
       /* Position ring according to start time, use reverse search if limited */
       if (config.timewinlimit == 1.0)

@@ -541,7 +541,7 @@ HandleNegotiation (ClientInfo *cinfo)
         {
           char timestr[32];
           nstime = MS_HPTIME2NSTIME (nstime);
-          ms_nstime2timestr (nstime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+          ms_nstime2timestr_n (nstime, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
 
           /* Position ring according to start time, use reverse search if limited */
           if (config.timewinlimit == 1.0)

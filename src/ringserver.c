@@ -1573,9 +1573,9 @@ void LogServerParameters (void)
   if (pktid != RINGID_NONE && pktid != RINGID_ERROR)
   {
     lprintf (2, "   earliest packet ID: %"PRIu64", offset: %" PRId64, pktid, packet.offset);
-    ms_nstime2timestr (packet.pkttime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    ms_nstime2timestr_n (packet.pkttime, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
     lprintf (2, "   earliest packet creation time: %s", timestr);
-    ms_nstime2timestr (packet.datastart, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    ms_nstime2timestr_n (packet.datastart, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
     lprintf (2, "   earliest packet data start time: %s", timestr);
   }
   else
@@ -1587,9 +1587,9 @@ void LogServerParameters (void)
   if (pktid != RINGID_NONE && pktid != RINGID_ERROR)
   {
     lprintf (2, "   latest packet ID: %"PRIu64", offset: %" PRId64, pktid, packet.offset);
-    ms_nstime2timestr (packet.pkttime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    ms_nstime2timestr_n (packet.pkttime, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
     lprintf (2, "   latest packet creation time: %s", timestr);
-    ms_nstime2timestr (packet.datastart, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    ms_nstime2timestr_n (packet.datastart, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
     lprintf (2, "   latest packet data start time: %s", timestr);
   }
   else
@@ -1644,7 +1644,7 @@ void LogServerParameters (void)
 
     if (config.tlog.startint)
     {
-      ms_nstime2timestr (MS_EPOCH2NSTIME (config.tlog.startint), timestr, ISOMONTHDAY_Z, NONE);
+      ms_nstime2timestr_n (MS_EPOCH2NSTIME (config.tlog.startint), timestr, sizeof (timestr), ISOMONTHDAY_Z, NONE);
       lprintf (3, "     log interval start: %s", timestr);
     }
     else
@@ -1654,7 +1654,7 @@ void LogServerParameters (void)
 
     if (config.tlog.endint)
     {
-      ms_nstime2timestr (MS_EPOCH2NSTIME (config.tlog.endint), timestr, ISOMONTHDAY_Z, NONE);
+      ms_nstime2timestr_n (MS_EPOCH2NSTIME (config.tlog.endint), timestr, sizeof (timestr), ISOMONTHDAY_Z, NONE);
       lprintf (3, "     log interval end: %s", timestr);
     }
     else

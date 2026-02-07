@@ -11,3 +11,14 @@
 # Docs
 doc/working/
 doc/gh-pages/
+
+# Test artifacts
+test/testdata-*
+Testing
+
+TODO
+TODO.txt
+
+# CMake directories 
+build
+install

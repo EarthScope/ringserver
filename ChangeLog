@@ -9,6 +9,7 @@
 	- Add protections for edge case networking errors (incomplete commands).
 	- Add protections for misbehaving clients.
 	- Fix memory leaks in very rare edge cases of memory allocation errors.
+	- Update libmseed to v3.2.4
 
 2025.272: v4.1.2
 	- Avoid pruning files from scan list when a scan has been interrupted by

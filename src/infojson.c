@@ -109,7 +109,7 @@ info_add_id (yyjson_mut_doc *doc)
   /* Add server start time */
 
   /* Create server start time string as YYYY-MM-DDTHH:MM:SSZ */
-  ms_nstime2timestr (param.serverstarttime, string, ISOMONTHDAY_Z, NONE);
+  ms_nstime2timestr_n (param.serverstarttime, string, sizeof (string), ISOMONTHDAY_Z, NONE);
 
   if (yyjson_mut_obj_add_strcpy (doc, root, "server_start", string) == false)
   {
@@ -350,18 +350,18 @@ info_add_streams (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matchexpr)
 
     yyjson_mut_obj_add_strcpy (doc, stream, "id", ringstream->streamid);
 
-    ms_nstime2timestr (ringstream->earliestdstime, string32, ISOMONTHDAY_Z, MICRO);
+    ms_nstime2timestr_n (ringstream->earliestdstime, string32, sizeof (string32), ISOMONTHDAY_Z, MICRO);
     yyjson_mut_obj_add_strcpy (doc, stream, "start_time", string32);
 
-    ms_nstime2timestr (ringstream->latestdetime, string32, ISOMONTHDAY_Z, MICRO);
+    ms_nstime2timestr_n (ringstream->latestdetime, string32, sizeof (string32), ISOMONTHDAY_Z, MICRO);
     yyjson_mut_obj_add_strcpy (doc, stream, "end_time", string32);
 
     yyjson_mut_obj_add_uint (doc, stream, "earliest_packet_id", ringstream->earliestid);
 
-    ms_nstime2timestr (ringstream->earliestptime, string32, ISOMONTHDAY_Z, MICRO);
+    ms_nstime2timestr_n (ringstream->earliestptime, string32, sizeof (string32), ISOMONTHDAY_Z, MICRO);
     yyjson_mut_obj_add_strcpy (doc, stream, "earliest_packet_time", string32);
 
-    ms_nstime2timestr (ringstream->latestptime, string32, ISOMONTHDAY_Z, MICRO);
+    ms_nstime2timestr_n (ringstream->latestptime, string32, sizeof (string32), ISOMONTHDAY_Z, MICRO);
     yyjson_mut_obj_add_strcpy (doc, stream, "latest_packet_time", string32);
 
     yyjson_mut_obj_add_uint (doc, stream, "latest_packet_id", ringstream->latestid);
@@ -639,9 +639,9 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
           yyjson_mut_obj_add_strcpy (doc, stream, "format", stream_details->format);
           yyjson_mut_obj_add_strcpy (doc, stream, "subformat", stream_details->subformat);
 
-          ms_nstime2timestr (stream_details->earliesttime, string96, ISOMONTHDAY_Z, MICRO);
+          ms_nstime2timestr_n (stream_details->earliesttime, string96, sizeof (string96), ISOMONTHDAY_Z, MICRO);
           yyjson_mut_obj_add_strcpy (doc, stream, "start_time", string96);
-          ms_nstime2timestr (stream_details->latesttime, string96, ISOMONTHDAY_Z, MICRO);
+          ms_nstime2timestr_n (stream_details->latesttime, string96, sizeof (string96), ISOMONTHDAY_Z, MICRO);
           yyjson_mut_obj_add_strcpy (doc, stream, "end_time", string96);
 
           free (stream_details);
@@ -787,7 +787,7 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
     yyjson_mut_obj_add_bool (doc, client, "write_permission", tcinfo->permissions & WRITE_PERMISSION);
     yyjson_mut_obj_add_bool (doc, client, "trust_permission", tcinfo->permissions & TRUST_PERMISSION);
 
-    ms_nstime2timestr (tcinfo->conntime, timestring, ISOMONTHDAY_Z, NONE);
+    ms_nstime2timestr_n (tcinfo->conntime, timestring, sizeof (timestring), ISOMONTHDAY_Z, NONE);
     yyjson_mut_obj_add_strcpy (doc, client, "connect_time", timestring);
 
     if (tcinfo->reader->pktid <= RINGID_MAXIMUM)
@@ -797,7 +797,7 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
 
     if (tcinfo->reader->pkttime != NSTUNSET)
     {
-      ms_nstime2timestr (tcinfo->reader->pkttime, packettime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+      ms_nstime2timestr_n (tcinfo->reader->pkttime, packettime, sizeof (packettime), ISOMONTHDAY_Z, NANO_MICRO_NONE);
       yyjson_mut_obj_add_strcpy (doc, client, "packet_creation_time", packettime);
     }
 
@@ -885,13 +885,13 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
 
         if (stationid->starttime != NSTUNSET)
         {
-          ms_nstime2timestr (stationid->starttime, timestring, ISOMONTHDAY_Z, NONE);
+          ms_nstime2timestr_n (stationid->starttime, timestring, sizeof (timestring), ISOMONTHDAY_Z, NONE);
           yyjson_mut_obj_add_strcpy (doc, station, "start_time", timestring);
         }
 
         if (stationid->endtime != NSTUNSET)
         {
-          ms_nstime2timestr (stationid->endtime, timestring, ISOMONTHDAY_Z, NONE);
+          ms_nstime2timestr_n (stationid->endtime, timestring, sizeof (timestring), ISOMONTHDAY_Z, NONE);
           yyjson_mut_obj_add_strcpy (doc, station, "end_time", timestring);
         }
 
@@ -902,7 +902,7 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
 
         if (stationid->datastart != NSTUNSET)
         {
-          ms_nstime2timestr (stationid->datastart, timestring, ISOMONTHDAY_Z, NONE);
+          ms_nstime2timestr_n (stationid->datastart, timestring, sizeof (timestring), ISOMONTHDAY_Z, NONE);
           yyjson_mut_obj_add_strcpy (doc, station, "start_packet_time", timestring);
         }
 
@@ -987,11 +987,11 @@ info_add_status (yyjson_mut_doc *doc)
   if (pktid != RINGID_NONE && pktid != RINGID_ERROR)
   {
     yyjson_mut_obj_add_uint (doc, server, "earliest_packet_id", pktid);
-    ms_nstime2timestr (packet.pkttime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    ms_nstime2timestr_n (packet.pkttime, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
     yyjson_mut_obj_add_strcpy (doc, server, "earliest_packet_time", timestr);
-    ms_nstime2timestr (packet.datastart, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    ms_nstime2timestr_n (packet.datastart, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
     yyjson_mut_obj_add_strcpy (doc, server, "earliest_data_start", timestr);
-    ms_nstime2timestr (packet.dataend, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    ms_nstime2timestr_n (packet.dataend, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
     yyjson_mut_obj_add_strcpy (doc, server, "earliest_data_end", timestr);
   }
 
@@ -999,11 +999,11 @@ info_add_status (yyjson_mut_doc *doc)
   if (pktid != RINGID_NONE && pktid != RINGID_ERROR)
   {
     yyjson_mut_obj_add_uint (doc, server, "latest_packet_id", pktid);
-    ms_nstime2timestr (packet.pkttime, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    ms_nstime2timestr_n (packet.pkttime, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
     yyjson_mut_obj_add_strcpy (doc, server, "latest_packet_time", timestr);
-    ms_nstime2timestr (packet.datastart, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    ms_nstime2timestr_n (packet.datastart, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
     yyjson_mut_obj_add_strcpy (doc, server, "latest_data_start", timestr);
-    ms_nstime2timestr (packet.dataend, timestr, ISOMONTHDAY_Z, NANO_MICRO_NONE);
+    ms_nstime2timestr_n (packet.dataend, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
     yyjson_mut_obj_add_strcpy (doc, server, "latest_data_end", timestr);
   }
 
