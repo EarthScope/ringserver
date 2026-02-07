@@ -43,62 +43,60 @@
 #define PREVOFFSET(O, M, S) (((O) == 0) ? (M) : (O) - (S))
 
 #define RING_SIGNATUREv1 "RING"
-#define RING_VERSIONv1   1
-#define MAXSTREAMIDv1    60
+#define RING_VERSIONv1 1
+#define MAXSTREAMIDv1 60
 
 #define hptime_t int64_t /* Time value in microseconds */
 
 /* V1 Ring parameters, stored at the beginning of the packet buffer file */
 typedef struct RingParamsV1
 {
-  char      signature[4];     /* RING_SIGNATURE */
-  uint16_t  version;          /* RING_VERSION */
-  uint64_t  ringsize;         /* Ring size in bytes */
-  uint32_t  pktsize;          /* Packet size in bytes */
-  int64_t   maxpktid;         /* Maximum packet ID */
-  int64_t   maxpackets;       /* Maximum number of packets */
-  int64_t   maxoffset;        /* Maximum packet offset */
-  uint32_t  headersize;       /* Size of ring header */
-  uint8_t   corruptflag;      /* Flag indicating the ring is corrupt */
-  uint8_t   fluxflag;         /* Flag indicating the ring is in flux */
-  uint8_t   mmapflag;         /* Memory mapped flag */
-  uint8_t   volatileflag;     /* Volatile ring flag */
-  pthread_mutex_t *writelock; /* Mutex lock for ring write access */
-  RBTree   *streamidx;        /* Binary tree of streams */
-  pthread_mutex_t *streamlock;/* Mutex lock for stream index */
-  int32_t   streamcount;      /* Count of streams in index */
-  int64_t   earliestid;       /* Earliest packet ID */
-  hptime_t  earliestptime;    /* Earliest packet creation time */
-  hptime_t  earliestdstime;   /* Earliest packet data start time */
-  hptime_t  earliestdetime;   /* Earliest packet data end time */
-  int64_t   earliestoffset;   /* Earliest packet offset in bytes */
-  int64_t   latestid;         /* Latest packet ID */
-  hptime_t  latestptime;      /* Latest packet creation time */
-  hptime_t  latestdstime;     /* Latest packet data start time */
-  hptime_t  latestdetime;     /* Latest packet data end time */
-  int64_t   latestoffset;     /* Latest packet offset in bytes */
-  hptime_t  ringstart;        /* Ring initialization time */
-  double    txpacketrate;     /* Transmission packet rate in Hz */
-  double    txbyterate;       /* Transmission byte rate in Hz */
-  double    rxpacketrate;     /* Reception packet rate in Hz */
-  double    rxbyterate;       /* Reception byte rate in Hz */
-  char     *data;             /* Pointer to start of data buffer */
+  char signature[4];           /* RING_SIGNATURE */
+  uint16_t version;            /* RING_VERSION */
+  uint64_t ringsize;           /* Ring size in bytes */
+  uint32_t pktsize;            /* Packet size in bytes */
+  int64_t maxpktid;            /* Maximum packet ID */
+  int64_t maxpackets;          /* Maximum number of packets */
+  int64_t maxoffset;           /* Maximum packet offset */
+  uint32_t headersize;         /* Size of ring header */
+  uint8_t corruptflag;         /* Flag indicating the ring is corrupt */
+  uint8_t fluxflag;            /* Flag indicating the ring is in flux */
+  uint8_t mmapflag;            /* Memory mapped flag */
+  uint8_t volatileflag;        /* Volatile ring flag */
+  pthread_mutex_t *writelock;  /* Mutex lock for ring write access */
+  RBTree *streamidx;           /* Binary tree of streams */
+  pthread_mutex_t *streamlock; /* Mutex lock for stream index */
+  int32_t streamcount;         /* Count of streams in index */
+  int64_t earliestid;          /* Earliest packet ID */
+  hptime_t earliestptime;      /* Earliest packet creation time */
+  hptime_t earliestdstime;     /* Earliest packet data start time */
+  hptime_t earliestdetime;     /* Earliest packet data end time */
+  int64_t earliestoffset;      /* Earliest packet offset in bytes */
+  int64_t latestid;            /* Latest packet ID */
+  hptime_t latestptime;        /* Latest packet creation time */
+  hptime_t latestdstime;       /* Latest packet data start time */
+  hptime_t latestdetime;       /* Latest packet data end time */
+  int64_t latestoffset;        /* Latest packet offset in bytes */
+  hptime_t ringstart;          /* Ring initialization time */
+  double txpacketrate;         /* Transmission packet rate in Hz */
+  double txbyterate;           /* Transmission byte rate in Hz */
+  double rxpacketrate;         /* Reception packet rate in Hz */
+  double rxbyterate;           /* Reception byte rate in Hz */
+  char *data;                  /* Pointer to start of data buffer */
 } RingParamsV1;
-
 
 /* V1 Ring packet header structure, data follows header in the ring */
 typedef struct RingPacketV1
 {
-  int64_t   pktid;           /* RW: Packet ID */
-  int64_t   offset;          /* RW: Offset in ring */
-  hptime_t  pkttime;         /* RW: Packet creation time */
-  int64_t   nextinstream;    /* RW: ID of next packet in stream, 0 if none */
-  char      streamid[MAXSTREAMIDv1]; /* Packet stream ID, NULL terminated */
-  hptime_t  datastart;       /* Packet data start time */
-  hptime_t  dataend;         /* Packet data end time */
-  uint32_t  datasize;        /* Packet data size in bytes */
+  int64_t pktid;                /* RW: Packet ID */
+  int64_t offset;               /* RW: Offset in ring */
+  hptime_t pkttime;             /* RW: Packet creation time */
+  int64_t nextinstream;         /* RW: ID of next packet in stream, 0 if none */
+  char streamid[MAXSTREAMIDv1]; /* Packet stream ID, NULL terminated */
+  hptime_t datastart;           /* Packet data start time */
+  hptime_t dataend;             /* Packet data end time */
+  uint32_t datasize;            /* Packet data size in bytes */
 } RingPacketV1;
-
 
 /***************************************************************************
  * LoadBufferV1:
@@ -201,7 +199,7 @@ LoadBufferV1 (char *ringfile_v1)
 
   /* Traverse packet buffer from earliest to latest */
   uint64_t maxpackets = (ringparams_v1.maxoffset / ringparams_v1.pktsize) + 1;
-  offset = ringparams_v1.earliestoffset;
+  offset              = ringparams_v1.earliestoffset;
   while (offset >= 0 && offset <= ringparams_v1.maxoffset && count <= maxpackets)
   {
     /* Read packet from offset */
@@ -291,60 +289,58 @@ LoadBufferV1 (char *ringfile_v1)
   return count;
 } /* End of LoadBufferV1() */
 
-
 #define RING_SIGNATUREv2 "RING"
-#define RING_VERSIONv2   2
-#define MAXSTREAMIDv2    60
+#define RING_VERSIONv2 2
+#define MAXSTREAMIDv2 60
 
 /* V2 Ring parameters, stored at the beginning of the packet buffer file */
 typedef struct RingParamsV2
 {
-  char      signature[4];     /* RING_SIGNATURE */
-  uint16_t  version;          /* RING_VERSION */
-  uint64_t  ringsize;         /* Ring size in bytes */
-  uint32_t  pktsize;          /* Packet size in bytes */
-  uint64_t  maxpackets;       /* Maximum number of packets */
-  int64_t   maxoffset;        /* Maximum packet offset */
-  uint32_t  headersize;       /* Size of ring header */
-  uint8_t   corruptflag;      /* Flag indicating the ring is corrupt */
-  uint8_t   fluxflag;         /* Flag indicating the ring is in flux */
-  uint8_t   mmapflag;         /* Memory mapped flag */
-  uint8_t   volatileflag;     /* Volatile ring flag */
-  pthread_mutex_t *writelock; /* Mutex lock for ring write access */
-  RBTree   *streamidx;        /* Binary tree of streams */
-  pthread_mutex_t *streamlock;/* Mutex lock for stream index */
-  uint32_t   streamcount;     /* Count of streams in index */
-  uint64_t  earliestid;       /* Earliest packet ID */
-  nstime_t  earliestptime;    /* Earliest packet creation time */
-  nstime_t  earliestdstime;   /* Earliest packet data start time */
-  nstime_t  earliestdetime;   /* Earliest packet data end time */
-  int64_t   earliestoffset;   /* Earliest packet offset in bytes */
-  uint64_t  latestid;         /* Latest packet ID */
-  nstime_t  latestptime;      /* Latest packet creation time */
-  nstime_t  latestdstime;     /* Latest packet data start time */
-  nstime_t  latestdetime;     /* Latest packet data end time */
-  int64_t   latestoffset;     /* Latest packet offset in bytes */
-  nstime_t  ringstart;        /* Ring initialization time */
-  double    txpacketrate;     /* Transmission packet rate in Hz */
-  double    txbyterate;       /* Transmission byte rate in Hz */
-  double    rxpacketrate;     /* Reception packet rate in Hz */
-  double    rxbyterate;       /* Reception byte rate in Hz */
-  uint8_t  *data;             /* Pointer to start of data buffer */
+  char signature[4];           /* RING_SIGNATURE */
+  uint16_t version;            /* RING_VERSION */
+  uint64_t ringsize;           /* Ring size in bytes */
+  uint32_t pktsize;            /* Packet size in bytes */
+  uint64_t maxpackets;         /* Maximum number of packets */
+  int64_t maxoffset;           /* Maximum packet offset */
+  uint32_t headersize;         /* Size of ring header */
+  uint8_t corruptflag;         /* Flag indicating the ring is corrupt */
+  uint8_t fluxflag;            /* Flag indicating the ring is in flux */
+  uint8_t mmapflag;            /* Memory mapped flag */
+  uint8_t volatileflag;        /* Volatile ring flag */
+  pthread_mutex_t *writelock;  /* Mutex lock for ring write access */
+  RBTree *streamidx;           /* Binary tree of streams */
+  pthread_mutex_t *streamlock; /* Mutex lock for stream index */
+  uint32_t streamcount;        /* Count of streams in index */
+  uint64_t earliestid;         /* Earliest packet ID */
+  nstime_t earliestptime;      /* Earliest packet creation time */
+  nstime_t earliestdstime;     /* Earliest packet data start time */
+  nstime_t earliestdetime;     /* Earliest packet data end time */
+  int64_t earliestoffset;      /* Earliest packet offset in bytes */
+  uint64_t latestid;           /* Latest packet ID */
+  nstime_t latestptime;        /* Latest packet creation time */
+  nstime_t latestdstime;       /* Latest packet data start time */
+  nstime_t latestdetime;       /* Latest packet data end time */
+  int64_t latestoffset;        /* Latest packet offset in bytes */
+  nstime_t ringstart;          /* Ring initialization time */
+  double txpacketrate;         /* Transmission packet rate in Hz */
+  double txbyterate;           /* Transmission byte rate in Hz */
+  double rxpacketrate;         /* Reception packet rate in Hz */
+  double rxbyterate;           /* Reception byte rate in Hz */
+  uint8_t *data;               /* Pointer to start of data buffer */
 } RingParamsV2;
 
 /* V2 Ring packet header structure, data follows header in the ring */
 typedef struct RingPacketV2
 {
-  int64_t   offset;          /* RW: Offset in ring */
-  uint64_t  pktid;           /* RW: Packet ID */
-  nstime_t  pkttime;         /* RW: Packet creation time */
-  int64_t   nextinstream;    /* RW: Offset of next packet in stream, -1 if none */
-  char      streamid[MAXSTREAMIDv2]; /* Packet stream ID, NULL terminated */
-  nstime_t  datastart;       /* Packet data start time */
-  nstime_t  dataend;         /* Packet data end time */
-  uint32_t  datasize;        /* Packet data size in bytes */
+  int64_t offset;               /* RW: Offset in ring */
+  uint64_t pktid;               /* RW: Packet ID */
+  nstime_t pkttime;             /* RW: Packet creation time */
+  int64_t nextinstream;         /* RW: Offset of next packet in stream, -1 if none */
+  char streamid[MAXSTREAMIDv2]; /* Packet stream ID, NULL terminated */
+  nstime_t datastart;           /* Packet data start time */
+  nstime_t dataend;             /* Packet data end time */
+  uint32_t datasize;            /* Packet data size in bytes */
 } RingPacketV2;
-
 
 /***************************************************************************
  * LoadBufferV2:
@@ -434,7 +430,7 @@ LoadBufferV2 (char *ringfile_v2)
 
   /* Traverse packet buffer from earliest to latest */
   uint64_t maxpackets = (ringparams_v2.maxoffset / ringparams_v2.pktsize) + 1;
-  offset = ringparams_v2.earliestoffset;
+  offset              = ringparams_v2.earliestoffset;
   while (offset >= 0 && offset <= ringparams_v2.maxoffset && count <= maxpackets)
   {
     /* Read packet from offset */
@@ -486,3 +482,140 @@ LoadBufferV2 (char *ringfile_v2)
 
   return count;
 } /* End of LoadBufferV2() */
+
+/***************************************************************************
+ * LoadBufferV3:
+ *
+ * Open a ringserver version 3 packet buffer file (same version, different
+ * parameters) and insert all data packets into the current ring buffer.
+ * Used when RingSize, MaxPacketSize, or headersize change.
+ *
+ * Return >=0 on success, number of packets loaded
+ * Return  -1 on errors
+ ***************************************************************************/
+int64_t
+LoadBufferV3 (char *ringfile_v3)
+{
+  char header[RBV3_HEADERSIZE];
+  RingPacket *packetptr;
+  char *packetbuffer   = NULL;
+  int64_t offset       = -1;
+  uint8_t verbose_save = config.verbose;
+  int64_t count        = 0;
+  int ringfd_v3;
+  uint32_t old_pktsize;
+  uint32_t old_headersize;
+  int64_t old_earliestoffset;
+  int64_t old_latestoffset;
+  int64_t old_maxoffset;
+  uint64_t maxpackets;
+
+  if (!ringfile_v3)
+  {
+    return -1;
+  }
+
+  /* Open the version 3 ring file */
+  if ((ringfd_v3 = open (ringfile_v3, O_RDONLY)) < 0)
+  {
+    lprintf (0, "%s(): error opening ring file %s: %s",
+             __func__, ringfile_v3, strerror (errno));
+    return -1;
+  }
+
+  /* Read the V3 ring header */
+  if (pread (ringfd_v3, header, RBV3_HEADERSIZE, 0) != RBV3_HEADERSIZE)
+  {
+    lprintf (0, "%s(): error reading ring header from %s: %s",
+             __func__, ringfile_v3, strerror (errno));
+    close (ringfd_v3);
+    return -1;
+  }
+
+  /* Check for V3 signature and version */
+  if (memcmp (pRBV3_SIGNATURE (header), RING_SIGNATURE, RING_SIGNATURE_LENGTH) != 0 ||
+      *pRBV3_VERSION (header) != RING_VERSION)
+  {
+    lprintf (0, "%s(): ring file %s has invalid signature or version",
+             __func__, ringfile_v3);
+    close (ringfd_v3);
+    return -1;
+  }
+
+  memcpy (&old_pktsize, pRBV3_PKTSIZE (header), 4);
+  memcpy (&old_headersize, pRBV3_HEADERSIZE (header), 4);
+  memcpy (&old_earliestoffset, pRBV3_EARLIESTOFFSET (header), 8);
+  memcpy (&old_latestoffset, pRBV3_LATESTOFFSET (header), 8);
+  memcpy (&old_maxoffset, pRBV3_MAXOFFSET (header), 8);
+
+  /* Check for empty ring */
+  if (old_earliestoffset < 0)
+  {
+    lprintf (2, "%s(): ring file %s is empty", __func__, ringfile_v3);
+    close (ringfd_v3);
+    return 0;
+  }
+
+  /* Check for compatible packet size */
+  if (old_pktsize == 0 || old_pktsize > param.pktsize)
+  {
+    lprintf (0, "%s(): ring file %s has incompatible packet size %u, expected > 0 and <= %u",
+             __func__, ringfile_v3, old_pktsize, param.pktsize);
+    close (ringfd_v3);
+    return -1;
+  }
+
+  /* Allocate memory for packet data */
+  if (!(packetbuffer = (char *)malloc (param.pktsize)))
+  {
+    lprintf (0, "%s(): error allocating memory for packet data", __func__);
+    close (ringfd_v3);
+    return -1;
+  }
+
+  lprintf (0, "Loading ring file %s into current ring buffer", ringfile_v3);
+
+  /* Disable verbose logging during load */
+  config.verbose = 0;
+
+  maxpackets = (old_maxoffset / old_pktsize) + 1;
+  offset     = old_earliestoffset;
+  while (offset >= 0 && offset <= old_maxoffset && count <= maxpackets)
+  {
+    if (pread (ringfd_v3, packetbuffer, old_pktsize, old_headersize + offset) != (ssize_t)old_pktsize)
+    {
+      lprintf (0, "%s(): error reading packet from ring file %s: %s",
+               __func__, ringfile_v3, strerror (errno));
+      break;
+    }
+
+    packetptr = (RingPacket *)packetbuffer;
+
+    if (verbose_save >= 3)
+      lprintf (0, "Loading packet ID %" PRIu64 " from stream %s at offset %" PRId64,
+               packetptr->pktid, packetptr->streamid, offset);
+
+    /* Add packet to the current ring buffer (same format, no conversion) */
+    if (RingWrite (packetptr, packetbuffer + sizeof (RingPacket), packetptr->datasize))
+    {
+      lprintf (0, "%s(): error adding packet to current ring buffer", __func__);
+      break;
+    }
+
+    count++;
+
+    if (offset == old_latestoffset)
+    {
+      break;
+    }
+
+    offset = NEXTOFFSET (offset, old_maxoffset, old_pktsize);
+  }
+
+  config.verbose = verbose_save;
+
+  free (packetbuffer);
+  close (ringfd_v3);
+
+  return count;
+} /* End of LoadBufferV3() */

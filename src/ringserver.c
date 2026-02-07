@@ -340,6 +340,10 @@ main (int argc, char *argv[])
         {
           loaded_packets = LoadBufferV2 (ringfile_backup);
         }
+        else if (convert_version == RING_VERSION)
+        {
+          loaded_packets = LoadBufferV3 (ringfile_backup);
+        }
         else
         {
           lprintf (0, "Error: Cannot convert existing buffer version %d", convert_version);

@@ -1,5 +1,6 @@
 2026.038:
 	- Fix consuming of received data for quickly disconnecting clients.
+	- Retain buffer contents on parameter changes when possible.  See #75.
 	- Fix binary search for client read positioning.
 	- Improve calculation of client statistics, smooth rates over ~4 seconds.
 	- Fix confusing error for -version.  See #78

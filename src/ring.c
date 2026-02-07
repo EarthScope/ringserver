@@ -164,6 +164,47 @@ RingInitialize (char *ringfilename, char *streamfilename, int *ringfd)
       return -1;
     }
 
+    /* Pre-check: detect rebuildable V3 parameter changes before modifying the file */
+    if (ringfilestat.st_size > 0)
+    {
+      char header[RBV3_HEADERSIZE];
+      if (pread (*ringfd, header, RBV3_HEADERSIZE, 0) == RBV3_HEADERSIZE &&
+          memcmp (pRBV3_SIGNATURE (header), RING_SIGNATURE, RING_SIGNATURE_LENGTH) == 0 &&
+          *pRBV3_VERSION (header) == RING_VERSION)
+      {
+        uint64_t old_ringsize;
+        uint32_t old_pktsize;
+        uint32_t old_headersize;
+        memcpy (&old_ringsize, pRBV3_RINGSIZE (header), 8);
+        memcpy (&old_pktsize, pRBV3_PKTSIZE (header), 4);
+        memcpy (&old_headersize, pRBV3_HEADERSIZE (header), 4);
+
+        if (old_ringsize != config.ringsize || old_pktsize != config.pktsize ||
+            old_headersize != headersize)
+        {
+          if (old_pktsize <= config.pktsize)
+          {
+            /* Report changes and signal rebuild */
+            if (old_ringsize != config.ringsize)
+              lprintf (0, "** Packet buffer size change: %" PRIu64 " -> %" PRIu64,
+                       old_ringsize, config.ringsize);
+            if (old_pktsize != config.pktsize)
+              lprintf (0, "** Packet size change: %u -> %u", old_pktsize, config.pktsize);
+            if (old_headersize != headersize)
+              lprintf (0, "** Header size change: %u -> %u", old_headersize, headersize);
+            lprintf (0, "Ring buffer can be rebuilt with new parameters");
+            return RING_VERSION;
+          }
+          else
+          {
+            lprintf (0, "** MaxPacketSize decreased (%u -> %u), cannot rebuild, data will be discarded",
+                     old_pktsize, config.pktsize);
+            /* Fall through to existing reset behavior */
+          }
+        }
+      }
+    }
+
     /* If the file is new or unexpected size initialize to maximum ring file size */
     if (ringfilestat.st_size != config.ringsize)
     {

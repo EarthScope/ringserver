@@ -32,6 +32,7 @@ extern "C" {
 
 extern int64_t LoadBufferV1 (char *ringfilename);
 extern int64_t LoadBufferV2 (char *ringfilename);
+extern int64_t LoadBufferV3 (char *ringfilename);
 
 #ifdef __cplusplus
 }
