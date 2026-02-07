@@ -201,7 +201,7 @@ ClientThread (void *arg)
     mytdp->td_state = TDS_CLOSING;
 
     /* Close client socket */
-    if (cinfo->socket)
+    if (cinfo->socket != -1)
     {
       shutdown (cinfo->socket, SHUT_RDWR);
       close (cinfo->socket);
@@ -384,7 +384,7 @@ ClientThread (void *arg)
   pthread_mutex_unlock (&param.cthreads_lock);
 
   /* Close client socket */
-  if (cinfo->socket)
+  if (cinfo->socket != -1)
   {
     /* Send websocket Close frame if not already sent */
     if (cinfo->websocket == 1)
@@ -693,7 +693,7 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
       wsframelen = 2;
       wsframe[1] |= (uint8_t)totalbuflen;
     }
-    else if (totalbuflen < UINT16_MAX) /* If payload length < 16-bit int store in next two bytes */
+    else if (totalbuflen <= UINT16_MAX) /* If payload length fits in 16 bits store in next two bytes */
     {
       wsframelen = 4;
       wsframe[1] |= 126;
@@ -789,6 +789,8 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
             pollret = PollSocket (cinfo->socket, 0, 1, config.netiotimeout * 1000);
           else if (nsent < 0)
             break;
+          else if (nsent == 0)
+            break; /* No progress, avoid infinite loop */
 
           if (pollret == 0)
           {
@@ -820,6 +822,13 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
     {
       cinfo->socketerr = -2; /* Indicate an orderly shutdown */
       return -2;
+    }
+    /* send() returned 0 (no progress), treat as error */
+    else if (nsent == 0)
+    {
+      lprintf (0, "[%s] Error sending data: send returned 0", cinfo->hostname);
+      cinfo->socketerr = -1;
+      return -1;
     }
     /* Connection error */
     else if (nsent < 0)
@@ -905,7 +914,6 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
 
   if (!cinfo)
   {
-    cinfo->socketerr = -1;
     return -1;
   }
 
@@ -1003,8 +1011,18 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
     /* Connection error */
     else if (nrecv < 0)
     {
-      lprintf (0, "[%s] Error receiving data from client: %s",
-               cinfo->hostname, strerror (errno));
+      if (cinfo->tlsctx)
+      {
+        char errbuf[128];
+        mbedtls_strerror ((int)nrecv, errbuf, sizeof (errbuf));
+        lprintf (0, "[%s] Error receiving data from client: %s",
+                 cinfo->hostname, errbuf);
+      }
+      else
+      {
+        lprintf (0, "[%s] Error receiving data from client: %s",
+                 cinfo->hostname, strerror (errno));
+      }
       cinfo->socketerr = -1; /* Indicate fatal socket error */
       return -1;
     }
@@ -1069,7 +1087,10 @@ RecvDLCommand (ClientInfo *cinfo)
   int nrecv;
   uint8_t headerlen;
 
-  if (!cinfo || !cinfo->recvbuf)
+  if (!cinfo)
+    return -1;
+
+  if (!cinfo->recvbuf)
   {
     cinfo->socketerr = -1;
     return -1;
@@ -1148,7 +1169,10 @@ RecvLine (ClientInfo *cinfo)
   size_t skipped = 0;
   int nread      = 0;
 
-  if (!cinfo || !cinfo->recvbuf)
+  if (!cinfo)
+    return -1;
+
+  if (!cinfo->recvbuf)
   {
     cinfo->socketerr = -1;
     return -1;
@@ -1208,11 +1232,34 @@ RecvLine (ClientInfo *cinfo)
   char *cr = memchr (cinfo->recvbuf, '\r', cinfo->recvlength);
   char *nl = memchr (cinfo->recvbuf, '\n', cinfo->recvlength);
 
-  /* If no terminators, do not consume data */
+  /* If no terminators, preserve data and try to read more */
   if (cr == NULL && nl == NULL)
   {
     cinfo->recvconsumed = 0;
-    return 0;
+
+    /* Buffer full with no terminator: line too long, reject to avoid DoS */
+    if (cinfo->recvlength + 1 > cinfo->recvbufsize)
+    {
+      lprintf (0, "[%s] Line too long without terminator", cinfo->hostname);
+      cinfo->socketerr = -1;
+      return -1;
+    }
+
+    /* Request recvlength + 1 to force RecvData to call recv() for new data */
+    nread = RecvData (cinfo, cinfo->recvbuf, cinfo->recvlength + 1, 0);
+
+    if (nread <= 0)
+      return nread;
+
+    /* Search again with new data */
+    cr = memchr (cinfo->recvbuf, '\r', cinfo->recvlength);
+    nl = memchr (cinfo->recvbuf, '\n', cinfo->recvlength);
+
+    if (cr == NULL && nl == NULL)
+    {
+      cinfo->recvconsumed = 0;
+      return 0;
+    }
   }
 
   /* Determine first and last terminator */
@@ -1371,7 +1418,7 @@ AddToString (char **string, char *add, char *delim, size_t where, size_t maxlen)
   /* Otherwise add the addition with a delimiter */
   else
   {
-    length = strlen (*string) + strlen (delim) + strlen (add) + 1;
+    length = strlen (*string) + (delim ? strlen (delim) : 0) + strlen (add) + 1;
 
     if (length > maxlen)
       return -2;
