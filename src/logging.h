@@ -34,8 +34,7 @@ extern "C" {
 __attribute__((__format__ (__printf__, 2, 3)))
 #endif
 extern int lprintf (int level, char *fmt, ...);
-extern void lprint (char *message);
-extern void lprint_wrapper (const char *message);
+extern void lprint (const char *message);
 
 extern int WriteTLog (ClientInfo *cinfo, int reset);
 extern int CalcTLogInterval (time_t reftime);

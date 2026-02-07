@@ -24,20 +24,30 @@ StackCreate (void)
 {
   Stack *newStack;
 
-  newStack      = (Stack *)malloc (sizeof (Stack));
+  newStack = (Stack *)malloc (sizeof (Stack));
+  if (!newStack)
+    return NULL;
+
   newStack->top = newStack->tail = NULL;
   return (newStack);
 }
 
-void
+int
 StackPush (Stack *theStack, STACK_DATA_TYPE newDataPtr)
 {
   StackNode *newNode;
 
+  if (!theStack)
+    return -1;
+
+  newNode = (StackNode *)malloc (sizeof (StackNode));
+  if (!newNode)
+    return -1;
+
+  newNode->data = newDataPtr;
+
   if (!theStack->top)
   {
-    newNode        = (StackNode *)malloc (sizeof (StackNode));
-    newNode->data  = newDataPtr;
     newNode->prev  = NULL;
     newNode->next  = NULL;
     theStack->top  = newNode;
@@ -45,13 +55,13 @@ StackPush (Stack *theStack, STACK_DATA_TYPE newDataPtr)
   }
   else
   {
-    newNode             = (StackNode *)malloc (sizeof (StackNode));
-    newNode->data       = newDataPtr;
     newNode->prev       = NULL;
     newNode->next       = theStack->top;
     theStack->top->prev = newNode;
     theStack->top       = newNode;
   }
+
+  return 0;
 }
 
 STACK_DATA_TYPE
@@ -60,35 +70,38 @@ StackPop (Stack *theStack)
   STACK_DATA_TYPE popData;
   StackNode *oldNode;
 
-  if (theStack->top)
-  {
-    popData       = theStack->top->data;
-    oldNode       = theStack->top;
-    theStack->top = theStack->top->next;
-    free (oldNode);
+  if (!theStack || !theStack->top)
+    return NULL;
 
-    if (!theStack->top)
-      theStack->tail = NULL;
-    else
-      theStack->top->prev = NULL;
-  }
+  popData       = theStack->top->data;
+  oldNode       = theStack->top;
+  theStack->top = theStack->top->next;
+  free (oldNode);
+
+  if (!theStack->top)
+    theStack->tail = NULL;
   else
-  {
-    popData = NULL;
-  }
+    theStack->top->prev = NULL;
 
   return (popData);
 }
 
-void
+int
 StackUnshift (Stack *theStack, STACK_DATA_TYPE newDataPtr)
 {
   StackNode *newNode;
 
+  if (!theStack)
+    return -1;
+
+  newNode = (StackNode *)malloc (sizeof (StackNode));
+  if (!newNode)
+    return -1;
+
+  newNode->data = newDataPtr;
+
   if (!theStack->tail)
   {
-    newNode        = (StackNode *)malloc (sizeof (StackNode));
-    newNode->data  = newDataPtr;
     newNode->prev  = NULL;
     newNode->next  = NULL;
     theStack->top  = newNode;
@@ -96,13 +109,13 @@ StackUnshift (Stack *theStack, STACK_DATA_TYPE newDataPtr)
   }
   else
   {
-    newNode              = (StackNode *)malloc (sizeof (StackNode));
-    newNode->data        = newDataPtr;
     newNode->prev        = theStack->tail;
     newNode->next        = NULL;
     theStack->tail->next = newNode;
     theStack->tail       = newNode;
   }
+
+  return 0;
 }
 
 STACK_DATA_TYPE
@@ -111,22 +124,18 @@ StackShift (Stack *theStack)
   STACK_DATA_TYPE shiftData;
   StackNode *oldNode;
 
-  if (theStack->tail)
-  {
-    shiftData      = theStack->tail->data;
-    oldNode        = theStack->tail;
-    theStack->tail = theStack->tail->prev;
-    free (oldNode);
+  if (!theStack || !theStack->tail)
+    return NULL;
 
-    if (!theStack->tail)
-      theStack->top = NULL;
-    else
-      theStack->tail->next = NULL;
-  }
+  shiftData      = theStack->tail->data;
+  oldNode        = theStack->tail;
+  theStack->tail = theStack->tail->prev;
+  free (oldNode);
+
+  if (!theStack->tail)
+    theStack->top = NULL;
   else
-  {
-    shiftData = NULL;
-  }
+    theStack->tail->next = NULL;
 
   return (shiftData);
 }
@@ -134,11 +143,12 @@ StackShift (Stack *theStack)
 void
 StackDestroy (Stack *theStack, void DestFunc (void *a))
 {
-  StackNode *x = theStack->top;
+  StackNode *x;
   StackNode *y;
 
   if (theStack)
   {
+    x = theStack->top;
     while (x)
     {
       y = x->next;
@@ -154,20 +164,29 @@ StackDestroy (Stack *theStack, void DestFunc (void *a))
 int
 StackNotEmpty (Stack *theStack)
 {
-  return (theStack ? 1 : 0);
+  return (theStack && theStack->top) ? 1 : 0;
 }
 
 Stack *
 StackJoin (Stack *stack1, Stack *stack2)
 {
+  if (!stack1 || !stack2)
+    return stack1 ? stack1 : stack2;
+
   if (!stack1->tail)
   {
     free (stack1);
     return (stack2);
   }
+  else if (!stack2->top)
+  {
+    free (stack2);
+    return (stack1);
+  }
   else
   {
     stack1->tail->next = stack2->top;
+    stack2->top->prev  = stack1->tail;
     stack1->tail       = stack2->tail;
     free (stack2);
     return (stack1);
@@ -193,6 +212,9 @@ StackSort (Stack *theStack, int (*StackNodeCmp) (StackNode *a, StackNode *b))
 
   if (!theStack || !StackNodeCmp)
     return -1;
+
+  if (!theStack->top)
+    return 0;
 
   top         = theStack->top;
   totalmerges = 0;

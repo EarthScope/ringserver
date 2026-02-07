@@ -190,7 +190,7 @@ main (int argc, char *argv[])
     return 1;
 
   /* Redirect libmseed logging facility to lprintf() via the lprint() shim */
-  ms_loginit (lprint_wrapper, NULL, lprint_wrapper, NULL);
+  ms_loginit (lprint, NULL, lprint, NULL);
 
   /* Signal handling using POSIX routines, create set of all signals */
   if (sigfillset (&globalsigset))

@@ -40,9 +40,9 @@ typedef struct Stack {
 } Stack;
 
 Stack *StackCreate (void);
-void   StackPush (Stack *theStack, STACK_DATA_TYPE newDataPtr);
+int    StackPush (Stack *theStack, STACK_DATA_TYPE newDataPtr);
 void  *StackPop (Stack *theStack);
-void   StackUnshift (Stack *theStack, STACK_DATA_TYPE newDataPtr);
+int    StackUnshift (Stack *theStack, STACK_DATA_TYPE newDataPtr);
 void  *StackShift (Stack *theStack);
 void   StackDestroy (Stack *theStack, void DestFunc(void *a));
 int    StackNotEmpty (Stack *theStack);
