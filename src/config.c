@@ -1450,7 +1450,7 @@ SetParameter (const char *paramstring, int dynamiconly)
   if (!paramstring)
     return -1;
 
-  if (strlen (paramstring) > sizeof (parambuf))
+  if (strlen (paramstring) >= sizeof (parambuf))
   {
     lprintf (0, "%s() Error, parameter string too long (%zu characters): '%.20s ...'",
              __func__, strlen (paramstring), paramstring);
@@ -1605,11 +1605,11 @@ SetParameter (const char *paramstring, int dynamiconly)
          idx < fieldcount;
          idx++)
     {
-      if (allow_protocols && strcasestr ("DataLink", field[idx]))
+      if (allow_protocols && !strcasecmp ("DataLink", field[idx]))
         lpp.protocols |= PROTO_DATALINK;
-      else if (allow_protocols && strcasestr ("SeedLink", field[idx]))
+      else if (allow_protocols && !strcasecmp ("SeedLink", field[idx]))
         lpp.protocols |= PROTO_SEEDLINK;
-      else if (allow_protocols && strcasestr ("HTTP", field[idx]))
+      else if (allow_protocols && !strcasecmp ("HTTP", field[idx]))
         lpp.protocols |= PROTO_HTTP;
 
       else if (!strcasecmp ("TLS", field[idx]))
