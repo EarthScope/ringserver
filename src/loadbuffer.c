@@ -168,9 +168,9 @@ LoadBufferV1 (char *ringfile_v1)
   }
 
   /* Check for compatible packet size */
-  if (ringparams_v1.pktsize > param.pktsize)
+  if (ringparams_v1.pktsize == 0 || ringparams_v1.pktsize > param.pktsize)
   {
-    lprintf (0, "%s(): version 1 ring file %s has incompatible packet size %u, expected <= %u",
+    lprintf (0, "%s(): version 1 ring file %s has incompatible packet size %u, expected > 0 and <= %u",
              __func__, ringfile_v1, ringparams_v1.pktsize, param.pktsize);
     close (ringfd_v1);
     return -1;
@@ -200,8 +200,9 @@ LoadBufferV1 (char *ringfile_v1)
   config.verbose = 0;
 
   /* Traverse packet buffer from earliest to latest */
+  uint64_t maxpackets = (ringparams_v1.maxoffset / ringparams_v1.pktsize) + 1;
   offset = ringparams_v1.earliestoffset;
-  while (offset >= 0 && offset <= ringparams_v1.maxoffset)
+  while (offset >= 0 && offset <= ringparams_v1.maxoffset && count <= maxpackets)
   {
     /* Read packet from offset */
     if (pread (ringfd_v1, packetbuffer, ringparams_v1.pktsize, ringparams_v1.headersize + offset) != ringparams_v1.pktsize)
@@ -212,6 +213,9 @@ LoadBufferV1 (char *ringfile_v1)
     }
 
     packet_v1 = (RingPacketV1 *)packetbuffer;
+
+    /* Ensure stream ID is null-terminated before string operations */
+    packet_v1->streamid[sizeof (packet_v1->streamid) - 1] = '\0';
 
     /* Convert packet to current version */
     packet.pktid     = packet_v1->pktid;
@@ -228,11 +232,21 @@ LoadBufferV1 (char *ringfile_v1)
     {
       char *prechannel = strrchr (packet_v1->streamid, '_');
 
-      snprintf (packet.streamid, sizeof (packet.streamid),
-                "FDSN:%.*s_%c_%c_%c%s",
-                (int)(prechannel - packet_v1->streamid), packet_v1->streamid,
-                prechannel[1], prechannel[2], prechannel[3],
-                &prechannel[4]);
+      if (prechannel && strlen (prechannel) >= 4)
+      {
+        snprintf (packet.streamid, sizeof (packet.streamid),
+                  "FDSN:%.*s_%c_%c_%c%s",
+                  (int)(prechannel - packet_v1->streamid), packet_v1->streamid,
+                  prechannel[1], prechannel[2], prechannel[3],
+                  &prechannel[4]);
+      }
+      else
+      {
+        /* Fallback: copy stream ID verbatim if structure is unexpected */
+        memcpy (packet.streamid, packet_v1->streamid, sizeof (packet_v1->streamid));
+        memset (packet.streamid + sizeof (packet_v1->streamid), 0,
+                sizeof (packet.streamid) - sizeof (packet_v1->streamid));
+      }
 
       if (verbose_save >= 3)
         lprintf (3, "Translating legacy stream ID: %s -> %s",
@@ -241,11 +255,10 @@ LoadBufferV1 (char *ringfile_v1)
     /* Otherwise copy stream ID verbatim */
     else
     {
-      /* Copy the stream ID verbatim */
-      memcpy (packet.streamid, packet_v1->streamid, sizeof (packet.streamid));
-
-      /* Make sure the streamid is terminated */
-      packet.streamid[sizeof (packet.streamid) - 1] = '\0';
+      /* Copy the stream ID verbatim, zero-filling any extra bytes */
+      memcpy (packet.streamid, packet_v1->streamid, sizeof (packet_v1->streamid));
+      memset (packet.streamid + sizeof (packet_v1->streamid), 0,
+              sizeof (packet.streamid) - sizeof (packet_v1->streamid));
     }
 
     if (verbose_save >= 3)
@@ -398,9 +411,9 @@ LoadBufferV2 (char *ringfile_v2)
   }
 
   /* Check for compatible packet size */
-  if (ringparams_v2.pktsize > param.pktsize)
+  if (ringparams_v2.pktsize == 0 || ringparams_v2.pktsize > param.pktsize)
   {
-    lprintf (0, "%s(): version 2 ring file %s has incompatible packet size %u, expected <= %u",
+    lprintf (0, "%s(): version 2 ring file %s has incompatible packet size %u, expected > 0 and <= %u",
              __func__, ringfile_v2, ringparams_v2.pktsize, param.pktsize);
     close (ringfd_v2);
     return -1;
@@ -420,8 +433,9 @@ LoadBufferV2 (char *ringfile_v2)
   config.verbose = 0;
 
   /* Traverse packet buffer from earliest to latest */
+  uint64_t maxpackets = (ringparams_v2.maxoffset / ringparams_v2.pktsize) + 1;
   offset = ringparams_v2.earliestoffset;
-  while (offset >= 0 && offset <= ringparams_v2.maxoffset)
+  while (offset >= 0 && offset <= ringparams_v2.maxoffset && count <= maxpackets)
   {
     /* Read packet from offset */
     if (pread (ringfd_v2, packetbuffer, ringparams_v2.pktsize, ringparams_v2.headersize + offset) != ringparams_v2.pktsize)
@@ -439,11 +453,10 @@ LoadBufferV2 (char *ringfile_v2)
     packet.dataend   = packet_v2->dataend;
     packet.datasize  = packet_v2->datasize;
 
-    /* Copy the stream ID verbatim */
-    memcpy (packet.streamid, packet_v2->streamid, sizeof (packet.streamid));
-
-    /* Make sure the streamid is terminated */
-    packet.streamid[sizeof (packet.streamid) - 1] = '\0';
+    /* Copy the stream ID verbatim, zero-filling any extra bytes */
+    memcpy (packet.streamid, packet_v2->streamid, sizeof (packet_v2->streamid));
+    memset (packet.streamid + sizeof (packet_v2->streamid), 0,
+            sizeof (packet.streamid) - sizeof (packet_v2->streamid));
 
     if (verbose_save >= 3)
       lprintf (0, "Loading packet ID %" PRId64 " from stream %s at offset %" PRId64,
