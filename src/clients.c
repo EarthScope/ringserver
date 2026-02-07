@@ -53,6 +53,9 @@
 /* Maximum number of streams tracked per client */
 #define MAX_STREAMS_PER_CLIENT 100000
 
+/* Maximum consecutive client errors before disconnecting */
+#define MAX_CONSECUTIVE_ERRORS 20
+
 static int ClientRecv (ClientInfo *cinfo);
 
 /* Test first 3 characters of buffer for HTTP methods:
@@ -83,6 +86,7 @@ ClientThread (void *arg)
   int sockflags;
   int setuperr = 0;
   int nread;
+  int consecutive_errors = 0;
 
   /* Throttle related */
   uint32_t throttle_msec = 0; /* Throttle time in milliseconds */
@@ -283,6 +287,8 @@ ClientThread (void *arg)
     /* Data received from client */
     if (nread > 0)
     {
+      int cmd_result = 0;
+
       /* If data was received do not throttle */
       throttle_msec = 0;
 
@@ -292,13 +298,11 @@ ClientThread (void *arg)
       /* Handle data from client according to client type */
       if (cinfo->type == CLIENT_DATALINK)
       {
-        if (DLHandleCmd (cinfo))
-        {
-          break;
-        }
+        cmd_result = DLHandleCmd (cinfo);
       }
       else if (cinfo->type == CLIENT_HTTP)
       {
+        /* HTTP handler: non-zero always means disconnect */
         if (HandleHTTP (cinfo->recvbuf, cinfo))
         {
           break;
@@ -306,10 +310,29 @@ ClientThread (void *arg)
       }
       else
       {
-        if (SLHandleCmd (cinfo))
+        cmd_result = SLHandleCmd (cinfo);
+      }
+
+      /* Fatal error from command handler */
+      if (cmd_result < 0)
+      {
+        break;
+      }
+
+      /* Client error (e.g. unrecognized command), track consecutive errors */
+      if (cmd_result > 0)
+      {
+        consecutive_errors++;
+        if (consecutive_errors >= MAX_CONSECUTIVE_ERRORS)
         {
+          lprintf (0, "[%s] Too many consecutive errors (%d), disconnecting",
+                   cinfo->hostname, consecutive_errors);
           break;
         }
+      }
+      else
+      {
+        consecutive_errors = 0;
       }
     } /* Done handling data from client */
 

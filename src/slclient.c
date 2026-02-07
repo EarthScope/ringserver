@@ -99,8 +99,9 @@ static int SelectToRegex (const char *staid, const char *select,
  * Handle SeedLink command, which is expected to be in the
  * ClientInfo.recvbuf buffer.
  *
- * Returns zero on success, negative value on error.  On error the
- * client should be disconnected.
+ * Returns 0 on success, 1 on client error (e.g. unrecognized command),
+ * and negative value on fatal error.  On fatal error the client should
+ * be disconnected.
  ***********************************************************************/
 int
 SLHandleCmd (ClientInfo *cinfo)
@@ -158,16 +159,18 @@ SLHandleCmd (ClientInfo *cinfo)
   else if (cinfo->state == STATE_COMMAND ||
            cinfo->state == STATE_STATION)
   {
-    if (HandleNegotiation (cinfo))
-    {
+    int rv = HandleNegotiation (cinfo);
+    if (rv < 0)
       return -1;
-    }
+    if (rv > 0)
+      return 1;
   }
 
   /* Otherwise this is unexpected data from the client */
   else
   {
     lprintf (1, "[%s] Unexpected data received from client", cinfo->hostname);
+    return 1;
   }
 
   /* Configure ring parameters if negotiation is complete */
@@ -677,7 +680,8 @@ SLFree (ClientInfo *cinfo)
  * protocol, updating the connection configuration and state
  * specified.
  *
- * Returns 0 on success and -1 on error which should disconnect.
+ * Returns 0 on success, 1 on client error (e.g. unrecognized command),
+ * and -1 on fatal error which should disconnect.
  ***************************************************************************/
 static int
 HandleNegotiation (ClientInfo *cinfo)
@@ -1444,6 +1448,8 @@ HandleNegotiation (ClientInfo *cinfo)
 
     if (SendReply (cinfo, "ERROR", ERROR_UNSUPPORTED, sendbuffer))
       return -1;
+
+    return 1;
   }
 
   return 0;

@@ -63,8 +63,9 @@ static int SelectedStreams (RingReader *reader);
  * Handle DataLink command, which is expected to be in the
  * ClientInfo.recvbuf buffer.
  *
- * Returns zero on success, negative value on error.  On error the
- * client should be disconnected.
+ * Returns 0 on success, 1 on client error (e.g. unrecognized command),
+ * and negative value on fatal error.  On fatal error the client should
+ * be disconnected.
  ***********************************************************************/
 int
 DLHandleCmd (ClientInfo *cinfo)
@@ -176,11 +177,11 @@ DLHandleCmd (ClientInfo *cinfo)
     if (strncmp (cinfo->dlcommand, "ID", 2))
       cinfo->state = STATE_COMMAND;
 
-    /* Any errors from HandleNegotiation are fatal */
-    if (HandleNegotiation (cinfo))
-    {
+    int rv = HandleNegotiation (cinfo);
+    if (rv < 0)
       return -1;
-    }
+    if (rv > 0)
+      return 1;
   }
 
   return 0;
@@ -283,7 +284,8 @@ DLFree (ClientInfo *cinfo)
  * All commands handled by this function will return the resulting
  * status to the client.
  *
- * Returns 0 on success and -1 on error which should disconnect.
+ * Returns 0 on success, 1 on client error (e.g. unrecognized command),
+ * and -1 on fatal error which should disconnect.
  ***************************************************************************/
 static int
 HandleNegotiation (ClientInfo *cinfo)
@@ -760,6 +762,8 @@ HandleNegotiation (ClientInfo *cinfo)
 
     if (SendPacket (cinfo, "ERROR", "Unrecognized command", 0, 1, 1))
       return -1;
+
+    return 1;
   }
 
   return 0;

@@ -6,7 +6,7 @@
 	- Add --version and --help as aliases.
 	- Fix parsing of InitCurrentState and AutoRecovery from config file.
 	- Add protections for edge case networking errors (incomplete commands).
-	- Add protection by limiting streams per client to 100,000.
+	- Add protections for misbehaving clients.
 	- Fix memory leaks in very rare edge cases of memory allocation errors.
 
 2025.272: v4.1.2
