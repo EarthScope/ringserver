@@ -2442,6 +2442,7 @@ AddServerThread (ServerThreadType type, void *params)
     if (!(nstp->params = malloc (sizeof (ListenPortParams))))
     {
       lprintf (0, "Error allocating memory for server parameters");
+      free (nstp);
       return -1;
     }
 
@@ -2452,6 +2453,7 @@ AddServerThread (ServerThreadType type, void *params)
     if (!(nstp->params = malloc (sizeof (MSScanInfo))))
     {
       lprintf (0, "Error allocating memory for MSeedScan parameters");
+      free (nstp);
       return -1;
     }
 
@@ -2461,6 +2463,7 @@ AddServerThread (ServerThreadType type, void *params)
   {
     lprintf (0, "%s() Error, unrecognized server thread type: %d",
              __func__, type);
+    free (nstp);
     return -1;
   }
 
