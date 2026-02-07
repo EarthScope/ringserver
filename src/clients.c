@@ -47,6 +47,9 @@
 #define THROTTLE_STEPPING 200 /* 200 milliseconds */
 #define THROTTLE_MAXIMUM 1000 /* 1 second */
 
+/* Maximum line length for line-based commands */
+#define MAX_LINE_LENGTH 8096
+
 static int ClientRecv (ClientInfo *cinfo);
 
 /* Test first 3 characters of buffer for HTTP methods:
@@ -515,7 +518,11 @@ ClientRecv (ClientInfo *cinfo)
     }
     else
     {
-      cinfo->recvconsumed -= nread;
+      /* Un-consume peeked data so it can be processed by protocol handler */
+      if (cinfo->recvconsumed >= (size_t)nread)
+        cinfo->recvconsumed -= nread;
+      else
+        cinfo->recvconsumed = 0;
     }
 
     /* Ensure sufficient data is available for detection */
@@ -589,8 +596,11 @@ ClientRecv (ClientInfo *cinfo)
         for (size_t idx = 0; idx < payload_length; idx++, recvptr++, cinfo->wsmaskidx++)
           *recvptr = *recvptr ^ cinfo->wsmask.four[cinfo->wsmaskidx % 4];
 
-        /* Do not consume the unmasked payload */
-        cinfo->recvconsumed -= payload_length;
+        /* Un-consume the unmasked payload so it can be processed */
+        if (cinfo->recvconsumed >= payload_length)
+          cinfo->recvconsumed -= payload_length;
+        else
+          cinfo->recvconsumed = 0;
       }
       else
       {
@@ -918,8 +928,8 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
   }
 
   /* Check if socket has been disconnected, but only if there is no
-   * buffered data remaining to process. */
-  if (cinfo->recvlength <= cinfo->recvconsumed)
+   * buffered data remaining to process.  TLS connections cannot be checked. */
+  if (!cinfo->tlsctx && cinfo->recvlength <= cinfo->recvconsumed)
   {
     if (recv (cinfo->socket, peekbyte, 1, MSG_PEEK) == 0)
     {
@@ -958,6 +968,9 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
   recvptr = cinfo->recvbuf + cinfo->recvlength;
   receivable = cinfo->recvbufsize - cinfo->recvlength;
 
+  /* Deadline for total receive time, to prevent slow trickle attacks where */
+  nstime_t recv_deadline = NSnow () + (nstime_t)NSTMODULUS * config.netiotimeout * 2;
+
   while ((cinfo->recvlength + nread) < requested)
   {
     if (cinfo->tlsctx)
@@ -980,6 +993,14 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
       /* Return immediately if no data is available and no data has been read yet */
       if (fulfill == 0 && nread == 0)
         return 0;
+
+      /* Check total elapsed time to prevent slow trickle attacks */
+      if (NSnow () > recv_deadline)
+      {
+        lprintf (0, "[%s] Total receive deadline exceeded (slow trickle protection)", cinfo->hostname);
+        cinfo->socketerr = -1;
+        return -1;
+      }
 
       /* Poll up to socket timeout value (in seconds) */
       int pollret = PollSocket (cinfo->socket, 1, 0, config.netiotimeout * 1000);
@@ -1236,6 +1257,15 @@ RecvLine (ClientInfo *cinfo)
   if (cr == NULL && nl == NULL)
   {
     cinfo->recvconsumed = 0;
+
+    /* Reject lines exceeding maximum length */
+    if (cinfo->recvlength >= MAX_LINE_LENGTH)
+    {
+      lprintf (0, "[%s] Line too long (%zu bytes, max %d) without terminator",
+               cinfo->hostname, cinfo->recvlength, MAX_LINE_LENGTH);
+      cinfo->socketerr = -1;
+      return -1;
+    }
 
     /* Buffer full with no terminator: line too long, reject to avoid DoS */
     if (cinfo->recvlength + 1 > cinfo->recvbufsize)

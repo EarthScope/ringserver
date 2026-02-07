@@ -723,6 +723,14 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length)
   /* Extract opcode, bits 4-7 of the 1st byte */
   opcode = onetwo[0] & 0xf;
 
+  /* Reject reserved opcodes per RFC 6455 */
+  if ((opcode >= 0x3 && opcode <= 0x7) || opcode > 0xa)
+  {
+    lprintf (0, "[%s] WebSocket frame with reserved/unknown opcode 0x%x",
+             cinfo->hostname, opcode);
+    return -2;
+  }
+
   /* Check for ping, consume payload and send pong with same payload */
   if (opcode == 0x9)
   {
