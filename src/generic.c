@@ -271,6 +271,9 @@ IsAllDigits (const char *string)
 
   length = strlen (string);
 
+  if (length == 0)
+    return 0;
+
   for (idx = 0; idx < length; idx++)
   {
     if (!strchr ("0123456789", string[idx]))
@@ -303,7 +306,7 @@ HumanSizeString (uint64_t bytes, char *sizestring, size_t sizestringlen)
   if (!sizestring)
     return -1;
 
-  while (size >= 1024.0 && idx < 7)
+  while (size >= 1024.0 && idx < 6)
   {
     size /= 1024.0;
     idx++;

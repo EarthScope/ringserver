@@ -129,7 +129,11 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
 
   pathformat[sizeof (pathformat) - 1] = '\0';
 
-  ds_strparse (pathformat, "/", &fnlist);
+  if (ds_strparse (pathformat, "/", &fnlist) < 0)
+  {
+    lprintf (0, "[%s] ds_streamproc(): error parsing path format", hostname);
+    return -1;
+  }
 
   fnptr = fnlist;
 
@@ -191,12 +195,12 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
       def = (*w == '%');
       *w  = '\0';
 
-      strncat (filename, p, (sizeof (filename) - fnlen));
+      strncat (filename, p, (sizeof (filename) - fnlen - 1));
       fnlen = strlen (filename);
 
       if (nondefflags > 0)
       {
-        strncat (globmatch, p, (sizeof (globmatch) - globlen));
+        strncat (globmatch, p, (sizeof (globmatch) - globlen - 1));
         globlen = strlen (globmatch);
       }
 
@@ -205,60 +209,60 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
       switch (*w)
       {
       case 'n':
-        strncat (filename, network, (sizeof (filename) - fnlen));
+        strncat (filename, network, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, network, (sizeof (definition) - fnlen));
+          strncat (definition, network, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, network, (sizeof (globmatch) - globlen));
+            strncat (globmatch, network, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "*", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "*", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
         p     = w + 1;
         break;
       case 's':
-        strncat (filename, station, (sizeof (filename) - fnlen));
+        strncat (filename, station, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, station, (sizeof (definition) - fnlen));
+          strncat (definition, station, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, station, (sizeof (globmatch) - globlen));
+            strncat (globmatch, station, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "*", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "*", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
         p     = w + 1;
         break;
       case 'l':
-        strncat (filename, location, (sizeof (filename) - fnlen));
+        strncat (filename, location, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, location, (sizeof (definition) - fnlen));
+          strncat (definition, location, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, location, (sizeof (globmatch) - globlen));
+            strncat (globmatch, location, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "*", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "*", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
         p     = w + 1;
         break;
       case 'c':
-        strncat (filename, channel, (sizeof (filename) - fnlen));
+        strncat (filename, channel, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, channel, (sizeof (definition) - fnlen));
+          strncat (definition, channel, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, channel, (sizeof (globmatch) - globlen));
+            strncat (globmatch, channel, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "*", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "*", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
@@ -267,15 +271,15 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
       case 'q':
         memset (tstr, 0, sizeof (tstr));
         mseh_get_string (msr, "FDSN.DataQuality", tstr, 1);
-        strncat (filename, tstr, (sizeof (filename) - fnlen));
+        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen));
+          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen));
+            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "?", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "?", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
@@ -283,36 +287,32 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
         break;
       case 'Y':
         snprintf (tstr, sizeof (tstr), "%04d", year);
-        strncat (filename, tstr, (sizeof (filename) - fnlen));
+        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen));
+          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen));
+            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "[0-9][0-9][0-9][0-9]", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "[0-9][0-9][0-9][0-9]", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
         p     = w + 1;
         break;
       case 'y':
-        tdy = year;
-        while (tdy > 100)
-        {
-          tdy -= 100;
-        }
+        tdy = year % 100;
         snprintf (tstr, sizeof (tstr), "%02d", tdy);
-        strncat (filename, tstr, (sizeof (filename) - fnlen));
+        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen));
+          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen));
+            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "[0-9][0-9]", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "[0-9][0-9]", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
@@ -320,15 +320,15 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
         break;
       case 'j':
         snprintf (tstr, sizeof (tstr), "%03d", yday);
-        strncat (filename, tstr, (sizeof (filename) - fnlen));
+        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen));
+          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen));
+            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "[0-9][0-9][0-9]", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "[0-9][0-9][0-9]", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
@@ -336,15 +336,15 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
         break;
       case 'H':
         snprintf (tstr, sizeof (tstr), "%02d", hour);
-        strncat (filename, tstr, (sizeof (filename) - fnlen));
+        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen));
+          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen));
+            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "[0-9][0-9]", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "[0-9][0-9]", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
@@ -352,15 +352,15 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
         break;
       case 'M':
         snprintf (tstr, sizeof (tstr), "%02d", min);
-        strncat (filename, tstr, (sizeof (filename) - fnlen));
+        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen));
+          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen));
+            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "[0-9][0-9]", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "[0-9][0-9]", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
@@ -368,15 +368,15 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
         break;
       case 'S':
         snprintf (tstr, sizeof (tstr), "%02d", sec);
-        strncat (filename, tstr, (sizeof (filename) - fnlen));
+        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen));
+          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen));
+            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "[0-9][0-9]", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "[0-9][0-9]", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
@@ -384,15 +384,15 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
         break;
       case 'F':
         snprintf (tstr, sizeof (tstr), "%09d", nsec);
-        strncat (filename, tstr, (sizeof (filename) - fnlen));
+        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen));
+          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen));
+            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "[0-9][0-9][0-9][0-9]", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
@@ -408,15 +408,15 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
           break;
         }
         snprintf (tstr, sizeof (tstr), "%04d%03d", ctm.tm_year + 1900, ctm.tm_yday + 1);
-        strncat (filename, tstr, (sizeof (filename) - fnlen));
+        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen));
+          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen));
+            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "[0-9][0-9][0-9][0-9][0-9][0-9][0-9]", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "[0-9][0-9][0-9][0-9][0-9][0-9][0-9]", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
@@ -424,15 +424,15 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
         break;
       case 'L':
         snprintf (tstr, sizeof (tstr), "%d", msr->reclen);
-        strncat (filename, tstr, (sizeof (filename) - fnlen));
+        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen));
+          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen));
+            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "*", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "*", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
@@ -440,15 +440,15 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
         break;
       case 'r':
         snprintf (tstr, sizeof (tstr), "%ld", (long int)(msr->samprate + 0.5));
-        strncat (filename, tstr, (sizeof (filename) - fnlen));
+        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen));
+          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen));
+            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "*", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "*", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
@@ -456,15 +456,15 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
         break;
       case 'R':
         snprintf (tstr, sizeof (tstr), "%.6f", msr->samprate);
-        strncat (filename, tstr, (sizeof (filename) - fnlen));
+        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen));
+          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen));
+            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "*", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "*", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
@@ -472,34 +472,37 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
         break;
       case 'h':
         if (!hostname)
+        {
+          p = w + 1;
           break;
-        strncat (filename, hostname, (sizeof (filename) - fnlen));
+        }
+        strncat (filename, hostname, (sizeof (filename) - fnlen - 1));
         if (def)
-          strncat (definition, hostname, (sizeof (definition) - fnlen));
+          strncat (definition, hostname, (sizeof (definition) - fnlen - 1));
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, hostname, (sizeof (globmatch) - globlen));
+            strncat (globmatch, hostname, (sizeof (globmatch) - globlen - 1));
           else
-            strncat (globmatch, "*", (sizeof (globmatch) - globlen));
+            strncat (globmatch, "*", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
         p     = w + 1;
         break;
       case '%':
-        strncat (filename, "%", (sizeof (filename) - fnlen));
-        strncat (globmatch, "%", (sizeof (globmatch) - globlen));
+        strncat (filename, "%", (sizeof (filename) - fnlen - 1));
+        strncat (globmatch, "%", (sizeof (globmatch) - globlen - 1));
         fnlen   = strlen (filename);
         globlen = strlen (globmatch);
         p       = w + 1;
         break;
       case '#':
-        strncat (filename, "#", (sizeof (filename) - fnlen));
+        strncat (filename, "#", (sizeof (filename) - fnlen - 1));
         nondefflags--;
         if (nondefflags > 0)
         {
-          strncat (globmatch, "#", (sizeof (globmatch) - globlen));
+          strncat (globmatch, "#", (sizeof (globmatch) - globlen - 1));
           globlen = strlen (globmatch);
         }
         fnlen = strlen (filename);
@@ -513,12 +516,12 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
       }
     }
 
-    strncat (filename, p, (sizeof (filename) - fnlen));
+    strncat (filename, p, (sizeof (filename) - fnlen - 1));
     fnlen = strlen (filename);
 
     if (nondefflags > 0)
     {
-      strncat (globmatch, p, (sizeof (globmatch) - globlen));
+      strncat (globmatch, p, (sizeof (globmatch) - globlen - 1));
       globlen = strlen (globmatch);
     }
 
@@ -547,12 +550,12 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
         }
       }
 
-      strncat (filename, "/", (sizeof (filename) - fnlen));
+      strncat (filename, "/", (sizeof (filename) - fnlen - 1));
       fnlen++;
 
       if (nondefflags > 0)
       {
-        strncat (globmatch, "/", (sizeof (globmatch) - globlen));
+        strncat (globmatch, "/", (sizeof (globmatch) - globlen - 1));
         globlen++;
       }
     }
@@ -602,10 +605,9 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
         {
           lprintf (1, "[%s] ds_streamproc: Interrupted call to write (%s), retrying",
                    hostname, foundgroup->filename);
+          writeloops++;
         }
       }
-
-      writeloops++;
     }
 
     if (writeloops >= 10)
@@ -668,8 +670,8 @@ ds_closeidle (DataStream *datastream, int idletimeout, char *ident)
       if (close (searchgroup->filed))
         lprintf (2, "[%s] ds_closeidle(), closing data stream file, %s",
                  ident, strerror (errno));
-      else
-        count++;
+
+      count++;
 
       free (searchgroup->defkey);
       free (searchgroup);
@@ -795,10 +797,21 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
       lprintf (2, "[%s] Creating data stream entry for key %s", ident, defkey);
 
     foundgroup = (DataStreamGroup *)malloc (sizeof (DataStreamGroup));
+    if (!foundgroup)
+    {
+      lprintf (0, "[%s] Error allocating memory for data stream group", ident);
+      return NULL;
+    }
 
     memset (foundgroup, 0, sizeof (DataStreamGroup));
-    foundgroup->defkey  = strdup (defkey);
-    foundgroup->filed   = 0;
+    foundgroup->defkey = strdup (defkey);
+    if (!foundgroup->defkey)
+    {
+      lprintf (0, "[%s] Error allocating memory for data stream key", ident);
+      free (foundgroup);
+      return NULL;
+    }
+    foundgroup->filed   = -1;
     foundgroup->modtime = curtime;
     strncpy (foundgroup->filename, filename, sizeof (foundgroup->filename));
     if (postpath)
@@ -834,25 +847,30 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
   ds_closeidle (datastream, datastream->idletimeout, ident);
 
   /* If no file is open, well, open it */
-  if (foundgroup->filed == 0)
+  if (foundgroup->filed < 0)
   {
-    int filepos;
+    off_t filepos;
 
     lprintf (1, "[%s] Opening data stream file %s", ident, filename);
 
     if ((foundgroup->filed = ds_openfile (datastream, filename, ident)) == -1)
     {
+      /* Reset to -1 so the next call retries the open */
+      foundgroup->filed = -1;
+
+      /* Restore positive modtime so ds_closeidle() can reap this entry */
+      if (foundgroup->modtime < 0)
+        foundgroup->modtime *= -1;
+
       /* Do not complain if the call was interrupted (signals are used for shutdown) */
-      if (errno == EINTR)
-        foundgroup->filed = 0;
-      else
+      if (errno != EINTR)
         lprintf (2, "[%s] cannot open data stream file, %s",
                  ident, strerror (errno));
 
       return NULL;
     }
 
-    if ((filepos = (int)lseek (foundgroup->filed, (off_t)0, SEEK_END)) < 0)
+    if ((filepos = lseek (foundgroup->filed, (off_t)0, SEEK_END)) < 0)
     {
       lprintf (2, "[%s] cannot seek in data stream file, %s",
                ident, strerror (errno));
@@ -976,7 +994,7 @@ ds_shutdown (DataStream *datastream, char *ident)
     lprintf (3, "[%s] Shutting down stream with key: %s (%s)",
              ident, prevgroup->defkey, prevgroup->postpath);
 
-    if (prevgroup->filed)
+    if (prevgroup->filed >= 0)
       if (close (prevgroup->filed))
         lprintf (0, "[%s] ds_shutdown(), closing data stream file, %s",
                  ident, strerror (errno));
@@ -984,6 +1002,9 @@ ds_shutdown (DataStream *datastream, char *ident)
     free (prevgroup->defkey);
     free (prevgroup);
   }
+
+  datastream->grouproot     = NULL;
+  datastream->openfilecount = 0;
 } /* End of ds_shutdown() */
 
 /*************************************************************************
@@ -1036,10 +1057,21 @@ ds_strparse (const char *string, const char *delim, DSstrlist **list)
         stop = 1;
       }
 
-      tmplist       = (DSstrlist *)malloc (sizeof (DSstrlist));
+      tmplist = (DSstrlist *)malloc (sizeof (DSstrlist));
+      if (!tmplist)
+      {
+        lprintf (0, "Error allocating memory in ds_strparse()");
+        return -1;
+      }
       tmplist->next = NULL;
 
       tmplist->element = (char *)malloc ((size_t)(del - beg + 1));
+      if (!tmplist->element)
+      {
+        lprintf (0, "Error allocating memory in ds_strparse()");
+        free (tmplist);
+        return -1;
+      }
       strncpy (tmplist->element, beg, (del - beg));
       tmplist->element[(del - beg)] = '\0';
 
