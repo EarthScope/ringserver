@@ -544,12 +544,14 @@ ProcessParam (int argcount, char **argvec)
   /* Process all command line arguments */
   for (optind = 1; optind < argcount; optind++)
   {
-    if (strcmp (argvec[optind], "-V") == 0)
+    if (strcmp (argvec[optind], "-V") == 0 ||
+        strcmp (argvec[optind], "--version") == 0)
     {
       fprintf (stderr, "%s version: %s\n", PACKAGE, VERSION);
       exit (0);
     }
-    else if (strcmp (argvec[optind], "-h") == 0)
+    else if (strcmp (argvec[optind], "-h") == 0 ||
+             strcmp (argvec[optind], "--help") == 0)
     {
       Usage (0);
     }
@@ -565,7 +567,8 @@ ProcessParam (int argcount, char **argvec)
       }
       exit (0);
     }
-    else if (strncmp (argvec[optind], "-v", 2) == 0)
+    else if (strncmp (argvec[optind], "-v", 2) == 0 &&
+             argvec[optind][1 + strspn (&argvec[optind][1], "v")] == '\0')
     {
       size_t vcount = config.verbose + strspn (&argvec[optind][1], "v");
       snprintf (paramstr, sizeof (paramstr), "Verbosity %zu", vcount);
