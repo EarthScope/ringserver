@@ -336,7 +336,7 @@ RingInitialize (char *ringfilename, char *streamfilename, int *ringfd)
     if (streamfilestat.st_size > 0)
     {
       /* Read the saved RingStreams */
-      while ((rv = read (streamidxfd, &stream, sizeof (RingStream)) == sizeof (RingStream)))
+      while ((rv = read (streamidxfd, &stream, sizeof (RingStream))) == sizeof (RingStream))
       {
         /* Re-populating streams index */
         if (!AddStreamIdx (param.streamidx, &stream, 0))
