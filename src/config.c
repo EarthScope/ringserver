@@ -1194,6 +1194,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
   FILE *cfile;
   char line[200];
   char *ptr;
+  char *tail;
   int linecount = 0;
   int rv;
 
@@ -1325,13 +1326,11 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     if (*ptr == '\0' || *ptr == '#')
       continue;
 
-    /* Remove trailing newline */
-    if ((ptr = strrchr (ptr, '\n')))
-      *ptr = '\0';
-
-    /* Remove trailing carriage return */
-    if ((ptr = strrchr (ptr, '\r')))
-      *ptr = '\0';
+    /* Remove trailing newline and carriage return */
+    if ((tail = strrchr (line, '\n')))
+      *tail = '\0';
+    if ((tail = strrchr (line, '\r')))
+      *tail = '\0';
 
     rv = SetParameter (line, dynamiconly);
 
@@ -1549,9 +1548,11 @@ SetParameter (const char *paramstring, int dynamiconly)
     if (dynamiconly)
       return fieldcount;
 
-    if ((intval = YesNo (field[1])) < 0)
+    intval = strtol (field[1], NULL, 10);
+
+    if (intval < 0 || intval > 2)
     {
-      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      lprintf (0, "Error with %s config parameter, must be 0, 1, or 2: %s", field[0], paramstring);
       return -1;
     }
 
@@ -2365,7 +2366,7 @@ AddMSeedScanThread (const char *scanconfig)
     {
       strncpy (mssinfo.rejectstr, vptr, sizeof (mssinfo.rejectstr) - 1);
     }
-    else if (!strncasecmp ("InitCurrentState", kptr, 6)) /* Init current state flag */
+    else if (!strncasecmp ("InitCurrentState", kptr, 16)) /* Init current state flag */
     {
       if (*vptr == '1' || *vptr == 'Y' || *vptr == 'y')
         initcurrentstate = 1;
