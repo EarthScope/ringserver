@@ -1,4 +1,4 @@
-2026.038:
+2026.038: v4.2.0
 	- Fix consuming of received data for quickly disconnecting clients.
 	- Retain buffer contents on parameter changes when possible.  See #75.
 	- Fix binary search for client read positioning.
@@ -6,9 +6,9 @@
 	- Fix confusing error for -version.  See #78
 	- Add --version and --help as aliases.
 	- Fix parsing of InitCurrentState and AutoRecovery from config file.
-	- Add protections for edge case networking errors (incomplete commands).
+	- Add protections for edge case networking errors (e.g. incomplete commands).
 	- Add protections for misbehaving clients.
-	- Fix memory leaks in very rare edge cases of memory allocation errors.
+	- Fix memory leaks in cases of memory allocation errors.
 	- Update libmseed to v3.2.4
 	- Update mbedtls to v3.6.5
 	- Update pcre2 to v10.47
