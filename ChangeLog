@@ -1,3 +1,6 @@
+2026.040:
+	- Fix DataLink match strings for INFO requests.
+
 2026.038: v4.2.0
 	- Fix consuming of received data for quickly disconnecting clients.
 	- Retain buffer contents on parameter changes when possible.  See #75.

@@ -1079,6 +1079,10 @@ HandleInfo (ClientInfo *cinfo)
   int xmllength;
   char *type      = NULL;
   char *matchexpr = NULL;
+  char *matchstr  = NULL;
+  size_t size;
+  char junk;
+  int fields;
 
   if (!cinfo)
     return -1;
@@ -1092,12 +1096,44 @@ HandleInfo (ClientInfo *cinfo)
     while (*type == ' ')
       type++;
 
-    /* Skip type characters then spaces to get to match */
-    matchexpr = type;
-    while (*matchexpr != ' ' && *matchexpr)
-      matchexpr++;
-    while (*matchexpr == ' ')
-      matchexpr++;
+    /* Parse optional match expression size: INFO <type> <size> */
+    fields = sscanf (cinfo->dlcommand, "%*s %*s %zu %c", &size, &junk);
+
+    if (fields > 1)
+    {
+      lprintf (0, "[%s] INFO request has extra arguments", cinfo->hostname);
+      SendPacket (cinfo, "ERROR", "INFO request has extra arguments", 0, 1, 1);
+      return -1;
+    }
+    else if (fields == 1 && size > DLMAXREGEXLEN)
+    {
+      lprintf (0, "[%s] INFO match expression too large (%zu)", cinfo->hostname, size);
+
+      snprintf (string, sizeof (string), "match expression too large, must be <= %d",
+                DLMAXREGEXLEN);
+      SendPacket (cinfo, "ERROR", string, 0, 1, 1);
+      return -1;
+    }
+    else if (fields == 1 && size > 0)
+    {
+      /* Read match expression of size bytes from socket */
+      if (!(matchstr = (char *)malloc (size + 1)))
+      {
+        lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
+        return -1;
+      }
+
+      if (RecvData (cinfo, matchstr, size, 1) < 0)
+      {
+        lprintf (0, "[%s] Error Recv'ing data", cinfo->hostname);
+        free (matchstr);
+        return -1;
+      }
+
+      /* Make sure buffer is a terminated string */
+      matchstr[size] = '\0';
+      matchexpr = matchstr;
+    }
   }
   else
   {
@@ -1129,6 +1165,7 @@ HandleInfo (ClientInfo *cinfo)
                cinfo->hostname);
       SendPacket (cinfo, "ERROR", "Access to CONNECTIONS denied", 0, 1, 1);
 
+      free (matchstr);
       return -1;
     }
 
@@ -1145,8 +1182,11 @@ HandleInfo (ClientInfo *cinfo)
     snprintf (string, sizeof (string), "Unrecognized INFO request type: %s", type);
     SendPacket (cinfo, "ERROR", string, 0, 1, 1);
 
+    free (matchstr);
     return -1;
   }
+
+  free (matchstr);
 
   if (xmlstr == NULL)
   {

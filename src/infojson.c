@@ -307,14 +307,46 @@ info_add_streams (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matchexpr)
   pcre2_code *match_code       = NULL;
   pcre2_match_data *match_data = NULL;
 
+  /* Save and temporarily clear persistent match/reject when matchexpr overrides.
+   * The reader's allowed/forbidden (server access controls) must still apply. */
+  pcre2_code *saved_match              = NULL;
+  pcre2_match_data *saved_match_data   = NULL;
+  pcre2_code *saved_reject             = NULL;
+  pcre2_match_data *saved_reject_data  = NULL;
+
   /* Compile match expression if provided */
-  if (matchexpr && UpdatePattern (&match_code, &match_data, matchexpr, "stream match expression"))
+  if (matchexpr && *matchexpr && UpdatePattern (&match_code, &match_data, matchexpr, "stream match expression"))
   {
     return NULL;
   }
 
+  /* If matchexpr overrides, temporarily clear the reader's persistent match/reject
+   * so GetStreamsStack only applies server-side allowed/forbidden filters */
+  if (match_code && cinfo->reader)
+  {
+    saved_match       = cinfo->reader->match;
+    saved_match_data  = cinfo->reader->match_data;
+    saved_reject      = cinfo->reader->reject;
+    saved_reject_data = cinfo->reader->reject_data;
+    cinfo->reader->match       = NULL;
+    cinfo->reader->match_data  = NULL;
+    cinfo->reader->reject      = NULL;
+    cinfo->reader->reject_data = NULL;
+  }
+
   /* Get copy of streams as a Stack, sorted by stream ID */
-  if ((ringstreams = GetStreamsStack (cinfo->reader)) == NULL)
+  ringstreams = GetStreamsStack (cinfo->reader);
+
+  /* Restore the reader's persistent match/reject */
+  if (saved_match || saved_reject)
+  {
+    cinfo->reader->match       = saved_match;
+    cinfo->reader->match_data  = saved_match_data;
+    cinfo->reader->reject      = saved_reject;
+    cinfo->reader->reject_data = saved_reject_data;
+  }
+
+  if (ringstreams == NULL)
   {
     lprintf (0, "[%s] Error getting streams stack", cinfo->hostname);
     if (match_code)
@@ -451,13 +483,15 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
   pcre2_match_data *match_data = NULL;
 
   /* Compile match expression if provided */
-  if (matchexpr && UpdatePattern (&match_code, &match_data, matchexpr, "stream match expression"))
+  if (matchexpr && *matchexpr && UpdatePattern (&match_code, &match_data, matchexpr, "stream match expression"))
   {
     return NULL;
   }
 
   /* Get copy of streams as a Stack, sorted by stream ID */
-  if ((ringstreams = GetStreamsStack (cinfo->reader)) == NULL)
+  ringstreams = GetStreamsStack (cinfo->reader);
+
+  if (ringstreams == NULL)
   {
     lprintf (0, "[%s] Error getting streams stack", cinfo->hostname);
     if (match_code)
