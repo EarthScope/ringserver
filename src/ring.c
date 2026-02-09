@@ -336,7 +336,7 @@ RingInitialize (char *ringfilename, char *streamfilename, int *ringfd)
       if (param.maxpackets != maxpackets)
         lprintf (0, "** Maximum packets change: %" PRIu64 " -> %" PRIu64, param.maxpackets, maxpackets);
       if (param.maxoffset != maxoffset)
-        lprintf (0, "** Maximum offset change: %" PRIu64 " -> %" PRIu64, param.maxoffset, maxoffset);
+        lprintf (0, "** Maximum offset change: %" PRId64 " -> %" PRId64, param.maxoffset, maxoffset);
       if (param.headersize != headersize)
         lprintf (0, "** Header size change: %u -> %u", param.headersize, headersize);
     }
@@ -371,6 +371,7 @@ RingInitialize (char *ringfilename, char *streamfilename, int *ringfd)
     if (fstat (streamidxfd, &streamfilestat))
     {
       lprintf (0, "%s(): error stating %s: %s", __func__, streamfilename, strerror (errno));
+      close (streamidxfd);
       return -1;
     }
 
@@ -395,12 +396,14 @@ RingInitialize (char *ringfilename, char *streamfilename, int *ringfd)
       if (rv < 0)
       {
         lprintf (0, "%s(): error reading %s: %s", __func__, streamfilename, strerror (errno));
+        close (streamidxfd);
         return -1;
       }
     }
     else
     {
       lprintf (0, "%s(): stream index file empty!", __func__);
+      close (streamidxfd);
       return -1;
     }
 
@@ -457,18 +460,24 @@ RingInitialize (char *ringfilename, char *streamfilename, int *ringfd)
   {
     RBTreeDestroy (param.streamidx);
 
-    /* Unmap the ring file */
-    if (munmap ((void *)param.ringbuffer, config.ringsize))
+    if (config.memorymapring)
     {
-      lprintf (0, "%s(): error unmapping ring file: %s", __func__, strerror (errno));
-      return -1;
+      /* Unmap the ring file */
+      if (munmap ((void *)param.ringbuffer, config.ringsize))
+      {
+        lprintf (0, "%s(): error unmapping ring file: %s", __func__, strerror (errno));
+      }
     }
+    else
+    {
+      free (param.ringbuffer);
+    }
+    param.ringbuffer = NULL;
 
     /* Close the ring file and re-init the descriptor */
     if (close (*ringfd))
     {
       lprintf (0, "%s(): error closing ring file: %s", __func__, strerror (errno));
-      return -1;
     }
     *ringfd = -1;
 
@@ -530,23 +539,26 @@ RingShutdown (int ringfd, char *streamfilename)
   RBBuildStack (param.streamidx, streams);
 
   /* Write RingStreams to stream index file */
-  lprintf (1, "Writing stream index file");
-  while ((tnode = (RBNode *)StackPop (streams)))
+  if (streamidxfd >= 0)
   {
-    stream = (RingStream *)tnode->data;
-
-    if (write (streamidxfd, stream, sizeof (RingStream)) != sizeof (RingStream))
+    lprintf (1, "Writing stream index file");
+    while ((tnode = (RBNode *)StackPop (streams)))
     {
-      lprintf (0, "%s(): error writing to %s: %s", __func__, streamfilename, strerror (errno));
+      stream = (RingStream *)tnode->data;
+
+      if (write (streamidxfd, stream, sizeof (RingStream)) != sizeof (RingStream))
+      {
+        lprintf (0, "%s(): error writing to %s: %s", __func__, streamfilename, strerror (errno));
+        rv = -1;
+      }
+    }
+
+    /* Close the streams file */
+    if (close (streamidxfd))
+    {
+      lprintf (0, "%s(): error closing %s: %s", __func__, streamfilename, strerror (errno));
       rv = -1;
     }
-  }
-
-  /* Close the streams file */
-  if (close (streamidxfd))
-  {
-    lprintf (0, "%s(): error closing %s: %s", __func__, streamfilename, strerror (errno));
-    rv = -1;
   }
 
   /* Cleanup stream index related memory */
@@ -721,7 +733,7 @@ RingWrite (RingPacket *packet, char *packetdata, uint32_t datasize)
 
     next_offset  = NEXTOFFSET (earliest->offset, param.maxoffset, config.pktsize);
     nextInRing   = PACKETPTR (next_offset);
-    nextInStream = PACKETPTR (earliest->nextinstream);
+    nextInStream = (earliest->nextinstream >= 0) ? PACKETPTR (earliest->nextinstream) : NULL;
 
     /* Update global params with new earliest entry */
     param.earliestoffset = nextInRing->offset;
@@ -1437,8 +1449,8 @@ RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit,
     return RINGID_NONE;
   }
 
-  /* Position to packet before match if requested */
-  if (whence == 0)
+  /* Position to packet before match if requested and not already at earliest */
+  if (whence == 0 && soffset != param.earliestoffset)
   {
     /* Search for the previous packet */
     soffset = PREVOFFSET (soffset, param.maxoffset, config.pktsize);
@@ -1515,6 +1527,9 @@ UpdatePattern (pcre2_code **code, pcre2_match_data **data,
     if (!(jit_rc == 0 || jit_rc == PCRE2_ERROR_JIT_UNSUPPORTED))
     {
       lprintf (0, "%s(): Error enabling PCRE2 JIT compilation", __func__);
+      pcre2_code_free (*code);
+      *code = NULL;
+      *data = NULL;
       return -1;
     }
 
@@ -1619,6 +1634,9 @@ GetStreamsStack (RingReader *reader)
     if (!(newstream = (RingStream *)malloc (sizeof (RingStream))))
     {
       lprintf (0, "%s(): Error allocating memory", __func__);
+      StackDestroy (streams, 0);
+      StackDestroy (newstreams, free);
+      pthread_mutex_unlock (&param.streamlock);
       return 0;
     }
 
@@ -1641,6 +1659,7 @@ GetStreamsStack (RingReader *reader)
     if (StackSort (newstreams, StreamStackNodeCmp) < 0)
     {
       lprintf (0, "%s(): Error sorting Stack", __func__);
+      StackDestroy (newstreams, free);
       return 0;
     }
   }

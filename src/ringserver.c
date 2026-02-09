@@ -310,7 +310,7 @@ main (int argc, char *argv[])
         }
         if (unlink (streamfilename) && errno != ENOENT)
         {
-          lprintf (0, "Error renaming %s: %s", streamfilename, strerror (errno));
+          lprintf (0, "Error removing %s: %s", streamfilename, strerror (errno));
           return 1;
         }
       }
@@ -362,7 +362,7 @@ main (int argc, char *argv[])
           }
           if (unlink (streamfile_backup) && errno != ENOENT)
           {
-            lprintf (0, "Error renaming %s: %s", streamfile_backup, strerror (errno));
+            lprintf (0, "Error removing %s: %s", streamfile_backup, strerror (errno));
             return 1;
           }
         }
@@ -1560,7 +1560,7 @@ void LogServerParameters (void)
 
   lprintf (2, "   headersize: %u", param.headersize);
 
-  lprintf (2, "   maxpackets: %" PRId64 ", maxoffset: %" PRIu64,
+  lprintf (2, "   maxpackets: %" PRIu64 ", maxoffset: %" PRId64,
            param.maxpackets, param.maxoffset);
 
   lprintf (2, "   streamcount: %u", param.streamcount);
