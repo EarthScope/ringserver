@@ -1019,7 +1019,7 @@ RecoverState (RBTree *filetree, char *statefile)
     else if (tab_count == 3)
     {
       /* Handle (skip) unused inode field in legacy state file format */
-      fields = sscanf (first_tab + 1, "%*llu\t%lld\t%lld", &offset, &modtime);
+      fields = sscanf (first_tab + 1, "%*[^\t]\t%lld\t%lld", &offset, &modtime);
     }
     else
     {
@@ -1062,7 +1062,6 @@ RecoverState (RBTree *filetree, char *statefile)
 static int
 WriteRecord (MSScanInfo *mssinfo, char *record, uint64_t reclen)
 {
-  char streamid[100];
   RingPacket packet;
   uint32_t flags = MSF_VALIDATECRC;
   int rv;
@@ -1074,16 +1073,13 @@ WriteRecord (MSScanInfo *mssinfo, char *record, uint64_t reclen)
     return -1;
   }
 
-  /* Generate stream ID for this record: SourceID/MSEED */
-  snprintf (streamid, sizeof (streamid), "%s/MSEED", mssinfo->msr->sid);
-
-  if (strlen (streamid) >= sizeof (((RingPacket *)0)->streamid))
-  {
-    lprintf (0, "[MSeedScan] Stream ID too long, truncated: %s", streamid);
-  }
-
+  /* Generate stream ID for this record: SourceID/MSEED or SourceID/MSEED3 */
   memset (&packet, 0, sizeof (RingPacket));
-  strncpy (packet.streamid, streamid, sizeof (packet.streamid) - 1);
+  if (snprintf (packet.streamid, sizeof (packet.streamid), "%s/%s", mssinfo->msr->sid,
+                (mssinfo->msr->formatversion == 3) ? "MSEED3" : "MSEED") >= (int)sizeof (packet.streamid))
+  {
+    lprintf (0, "[MSeedScan] Stream ID too long, truncated: %s", packet.streamid);
+  }
   packet.datastart = mssinfo->msr->starttime;
   packet.dataend   = msr3_endtime (mssinfo->msr);
   packet.datasize  = (uint32_t)mssinfo->msr->reclen;
