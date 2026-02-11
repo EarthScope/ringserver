@@ -867,34 +867,152 @@ ReadEnvironmentVariables (void)
 
   if ((envvar = getenv ("RS_LISTEN_PORT")) && strcasecmp (envvar, "DISABLE"))
   {
-    snprintf (paramstr, sizeof (paramstr), "ListenPort %s", envvar);
-    if (SetParameter (paramstr, 0) <= 0)
+    char *envdup = strdup (envvar);
+    if (!envdup)
+    {
+      lprintf (0, "%s(): Error allocating memory", __func__);
       return -1;
-    count++;
+    }
+
+    char *entry = envdup;
+    char *comma;
+    while (entry)
+    {
+      /* Find next comma separator */
+      comma = strchr (entry, ',');
+      if (comma)
+        *comma = '\0';
+
+      /* Skip leading whitespace */
+      while (*entry == ' ' || *entry == '\t')
+        entry++;
+
+      if (*entry)
+      {
+        snprintf (paramstr, sizeof (paramstr), "ListenPort %s", entry);
+        if (SetParameter (paramstr, 0) <= 0)
+        {
+          free (envdup);
+          return -1;
+        }
+        count++;
+      }
+
+      entry = comma ? comma + 1 : NULL;
+    }
+
+    free (envdup);
   }
 
   if ((envvar = getenv ("RS_SEEDLINK_PORT")) && strcasecmp (envvar, "DISABLE"))
   {
-    snprintf (paramstr, sizeof (paramstr), "SeedLinkPort %s", envvar);
-    if (SetParameter (paramstr, 0) <= 0)
+    char *envdup = strdup (envvar);
+    if (!envdup)
+    {
+      lprintf (0, "%s(): Error allocating memory", __func__);
       return -1;
-    count++;
+    }
+
+    char *entry = envdup;
+    char *comma;
+    while (entry)
+    {
+      comma = strchr (entry, ',');
+      if (comma)
+        *comma = '\0';
+
+      while (*entry == ' ' || *entry == '\t')
+        entry++;
+
+      if (*entry)
+      {
+        snprintf (paramstr, sizeof (paramstr), "SeedLinkPort %s", entry);
+        if (SetParameter (paramstr, 0) <= 0)
+        {
+          free (envdup);
+          return -1;
+        }
+        count++;
+      }
+
+      entry = comma ? comma + 1 : NULL;
+    }
+
+    free (envdup);
   }
 
   if ((envvar = getenv ("RS_DATALINK_PORT")) && strcasecmp (envvar, "DISABLE"))
   {
-    snprintf (paramstr, sizeof (paramstr), "DataLinkPort %s", envvar);
-    if (SetParameter (paramstr, 0) <= 0)
+    char *envdup = strdup (envvar);
+    if (!envdup)
+    {
+      lprintf (0, "%s(): Error allocating memory", __func__);
       return -1;
-    count++;
+    }
+
+    char *entry = envdup;
+    char *comma;
+    while (entry)
+    {
+      comma = strchr (entry, ',');
+      if (comma)
+        *comma = '\0';
+
+      while (*entry == ' ' || *entry == '\t')
+        entry++;
+
+      if (*entry)
+      {
+        snprintf (paramstr, sizeof (paramstr), "DataLinkPort %s", entry);
+        if (SetParameter (paramstr, 0) <= 0)
+        {
+          free (envdup);
+          return -1;
+        }
+        count++;
+      }
+
+      entry = comma ? comma + 1 : NULL;
+    }
+
+    free (envdup);
   }
 
   if ((envvar = getenv ("RS_HTTP_PORT")) && strcasecmp (envvar, "DISABLE"))
   {
-    snprintf (paramstr, sizeof (paramstr), "HTTPPort %s", envvar);
-    if (SetParameter (paramstr, 0) <= 0)
+    char *envdup = strdup (envvar);
+    if (!envdup)
+    {
+      lprintf (0, "%s(): Error allocating memory", __func__);
       return -1;
-    count++;
+    }
+
+    char *entry = envdup;
+    char *comma;
+    while (entry)
+    {
+      comma = strchr (entry, ',');
+      if (comma)
+        *comma = '\0';
+
+      while (*entry == ' ' || *entry == '\t')
+        entry++;
+
+      if (*entry)
+      {
+        snprintf (paramstr, sizeof (paramstr), "HTTPPort %s", entry);
+        if (SetParameter (paramstr, 0) <= 0)
+        {
+          free (envdup);
+          return -1;
+        }
+        count++;
+      }
+
+      entry = comma ? comma + 1 : NULL;
+    }
+
+    free (envdup);
   }
 
   if ((envvar = getenv ("RS_SERVER_ID")) && strcasecmp (envvar, "DISABLE"))
@@ -1027,18 +1145,76 @@ ReadEnvironmentVariables (void)
 
   if ((envvar = getenv ("RS_WRITE_IP")) && strcasecmp (envvar, "DISABLE"))
   {
-    snprintf (paramstr, sizeof (paramstr), "WriteIP %s", envvar);
-    if (SetParameter (paramstr, 0) <= 0)
+    char *envdup = strdup (envvar);
+    if (!envdup)
+    {
+      lprintf (0, "%s(): Error allocating memory", __func__);
       return -1;
-    count++;
+    }
+
+    char *entry = envdup;
+    char *comma;
+    while (entry)
+    {
+      comma = strchr (entry, ',');
+      if (comma)
+        *comma = '\0';
+
+      while (*entry == ' ' || *entry == '\t')
+        entry++;
+
+      if (*entry)
+      {
+        snprintf (paramstr, sizeof (paramstr), "WriteIP %s", entry);
+        if (SetParameter (paramstr, 0) <= 0)
+        {
+          free (envdup);
+          return -1;
+        }
+        count++;
+      }
+
+      entry = comma ? comma + 1 : NULL;
+    }
+
+    free (envdup);
   }
 
   if ((envvar = getenv ("RS_TRUSTED_IP")) && strcasecmp (envvar, "DISABLE"))
   {
-    snprintf (paramstr, sizeof (paramstr), "TrustedIP %s", envvar);
-    if (SetParameter (paramstr, 0) <= 0)
+    char *envdup = strdup (envvar);
+    if (!envdup)
+    {
+      lprintf (0, "%s(): Error allocating memory", __func__);
       return -1;
-    count++;
+    }
+
+    char *entry = envdup;
+    char *comma;
+    while (entry)
+    {
+      comma = strchr (entry, ',');
+      if (comma)
+        *comma = '\0';
+
+      while (*entry == ' ' || *entry == '\t')
+        entry++;
+
+      if (*entry)
+      {
+        snprintf (paramstr, sizeof (paramstr), "TrustedIP %s", entry);
+        if (SetParameter (paramstr, 0) <= 0)
+        {
+          free (envdup);
+          return -1;
+        }
+        count++;
+      }
+
+      entry = comma ? comma + 1 : NULL;
+    }
+
+    free (envdup);
   }
 
   /* Deprecated LimitIP parameter, replaced by AllowedStreamsIP */
@@ -1081,10 +1257,39 @@ ReadEnvironmentVariables (void)
 
   if ((envvar = getenv ("RS_ACCEPT_IP")) && strcasecmp (envvar, "DISABLE"))
   {
-    snprintf (paramstr, sizeof (paramstr), "AcceptIP %s", envvar);
-    if (SetParameter (paramstr, 0) <= 0)
+    char *envdup = strdup (envvar);
+    if (!envdup)
+    {
+      lprintf (0, "%s(): Error allocating memory", __func__);
       return -1;
-    count++;
+    }
+
+    char *entry = envdup;
+    char *comma;
+    while (entry)
+    {
+      comma = strchr (entry, ',');
+      if (comma)
+        *comma = '\0';
+
+      while (*entry == ' ' || *entry == '\t')
+        entry++;
+
+      if (*entry)
+      {
+        snprintf (paramstr, sizeof (paramstr), "AcceptIP %s", entry);
+        if (SetParameter (paramstr, 0) <= 0)
+        {
+          free (envdup);
+          return -1;
+        }
+        count++;
+      }
+
+      entry = comma ? comma + 1 : NULL;
+    }
+
+    free (envdup);
   }
 
   /* Deprecated RS_REJECT_IP parameter, replaced by DenyIP */
@@ -1100,10 +1305,39 @@ ReadEnvironmentVariables (void)
 
   if ((envvar = getenv ("RS_DENY_IP")) && strcasecmp (envvar, "DISABLE"))
   {
-    snprintf (paramstr, sizeof (paramstr), "DenyIP %s", envvar);
-    if (SetParameter (paramstr, 0) <= 0)
+    char *envdup = strdup (envvar);
+    if (!envdup)
+    {
+      lprintf (0, "%s(): Error allocating memory", __func__);
       return -1;
-    count++;
+    }
+
+    char *entry = envdup;
+    char *comma;
+    while (entry)
+    {
+      comma = strchr (entry, ',');
+      if (comma)
+        *comma = '\0';
+
+      while (*entry == ' ' || *entry == '\t')
+        entry++;
+
+      if (*entry)
+      {
+        snprintf (paramstr, sizeof (paramstr), "DenyIP %s", entry);
+        if (SetParameter (paramstr, 0) <= 0)
+        {
+          free (envdup);
+          return -1;
+        }
+        count++;
+      }
+
+      entry = comma ? comma + 1 : NULL;
+    }
+
+    free (envdup);
   }
 
   if ((envvar = getenv ("RS_WEB_ROOT")) && strcasecmp (envvar, "DISABLE"))
