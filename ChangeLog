@@ -1,4 +1,4 @@
-2026.041: v4.2.1
+2026.041: v4.2.2
 	- Parse multiple, comma-separated values from the configuration environment
 	variables: RS_LISTEN_PORT, RS_SEEDLINK_PORT, RS_DATALINK_PORT, RS_HTTP_PORT,
 	RS_WRITE_IP, RS_TRUSTED_IP, RS_ACCEPT_IP, RS_DENY_IP.
