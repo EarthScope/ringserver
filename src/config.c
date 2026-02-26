@@ -102,8 +102,15 @@ static const char *reference_config_file_parts[] = {
   "# certificate file must be specified using the TLSCertificateFile\n"
   "# parameter. By default TLS is not enabled.\n"
   "#\n"
+  "# HAProxy PROXY protocol version 2 support can be enabled by including\n"
+  "# \"PROXYv2\" after the port.  When enabled, the server expects a PROXY\n"
+  "# protocol v2 header from every connecting client and uses the source\n"
+  "# address it contains for all access-control decisions.  Only enable\n"
+  "# this option on ports that are exclusively reachable by trusted proxies,\n"
+  "# as it otherwise allows clients to spoof their IP address.\n"
+  "#\n"
   "# For example:\n"
-  "# ListenPort <port> [DataLink] [SeedLink] [HTTP] [IPv4] [IPv6] [TLS]\n"
+  "# ListenPort <port> [DataLink] [SeedLink] [HTTP] [IPv4] [IPv6] [TLS] [PROXYv2]\n"
   "#\n"
   "# This parameter can be specified multiple times to listen for connections\n"
   "# on multiple ports.\n"
@@ -1853,6 +1860,10 @@ SetParameter (const char *paramstring, int dynamiconly)
         lpp.options |= FAMILY_IPv4;
       else if (!strcasecmp ("IPv6", field[idx]))
         lpp.options |= FAMILY_IPv6;
+
+      else if (!strcasecmp ("PROXYv2", field[idx]))
+        lpp.options |= PROXY_PROTOCOL_V2;
+
       else
       {
         lprintf (0, "Error with listen port config flag: %s", paramstring);

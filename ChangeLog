@@ -1,3 +1,6 @@
+2026.057:
+	- Add support for proxy protocol v2, configurable with PROXYv2 listener option.
+
 2026.041: v4.2.2
 	- Parse multiple, comma-separated values from the configuration environment
 	variables: RS_LISTEN_PORT, RS_SEEDLINK_PORT, RS_DATALINK_PORT, RS_HTTP_PORT,

@@ -46,6 +46,7 @@
 #include "generic.h"
 #include "logging.h"
 #include "mseedscan.h"
+#include "proxyproto.h"
 #include "ring.h"
 #include "ringserver.h"
 #include "config.h"
@@ -939,6 +940,21 @@ ListenThread (void *arg)
       lprintf (0, "Could not disable TCP delay algorithm: %s", strerror (errno));
     }
 
+    /* Read PROXY protocol v2 header when the listener is configured for it */
+    if (lpp->options & PROXY_PROTOCOL_V2)
+    {
+      int ppresult = proxy_protocol_v2_read (clientsocket, &addr_storage, &addrlen, 3000);
+      if (ppresult < 0)
+      {
+        lprintf (1, "Closing connection: failed to read PROXY protocol v2 header");
+        close (clientsocket);
+        continue;
+      }
+      /* ppresult == 0: PROXY command, addr_storage updated with real client address
+       * ppresult == 1: LOCAL command, addr_storage unchanged (keep accept() address) */
+      paddr = (struct sockaddr *)&addr_storage;
+    }
+
     /* Generate IP address and port number strings */
     if (getnameinfo (paddr, addrlen, ipstr, sizeof (ipstr), portstr, sizeof (portstr),
                      NI_NUMERICHOST | NI_NUMERICSERV))
@@ -1470,12 +1486,13 @@ GenProtocolString (ListenProtocols protocols, ListenOptions options,
     family = "Unknown family?";
 
   length = snprintf (result, maxlength,
-                     "%s: %s%s%s%s",
+                     "%s: %s%s%s%s%s",
                      family,
                      (protocols & PROTO_DATALINK) ? "DataLink " : "",
                      (protocols & PROTO_SEEDLINK) ? "SeedLink " : "",
                      (protocols & PROTO_HTTP) ? "HTTP " : "",
-                     (options & ENCRYPTION_TLS) ? "over TLS " : "");
+                     (options & ENCRYPTION_TLS) ? "over TLS " : "",
+                     (options & PROXY_PROTOCOL_V2) ? "with PROXYv2 " : "");
 
   if (length < maxlength && result[length - 1] == ' ')
     result[length - 1] = '\0';

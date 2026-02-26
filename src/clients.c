@@ -570,6 +570,17 @@ ClientRecv (ClientInfo *cinfo)
     {
       cinfo->type = CLIENT_HTTP;
     }
+    /* PROXY protocol v2 signature starts with \r\n\r, which cannot be the
+     * start of any legitimate DataLink, SeedLink, or HTTP command.
+     * If seen on a port not configured for PROXYv2, log and disconnect. */
+    else if ((uint8_t)cinfo->recvbuf[0] == 0x0D &&
+             (uint8_t)cinfo->recvbuf[1] == 0x0A &&
+             (uint8_t)cinfo->recvbuf[2] == 0x0D)
+    {
+      lprintf (0, "[%s] Received PROXY protocol v2 header on a port not configured for PROXYv2, disconnecting",
+               cinfo->hostname);
+      return -1;
+    }
     /* Everything else is SeedLink if allowed on this listener */
     else if (cinfo->protocols & PROTO_SEEDLINK)
     {
