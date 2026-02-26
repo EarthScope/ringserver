@@ -2,6 +2,7 @@
  * proxyproto.c
  *
  * HAProxy PROXY protocol version 2 parser.
+ * https://www.haproxy.org/download/3.4/doc/proxy-protocol.txt
  *
  * This file is part of the ringserver.
  *
@@ -17,7 +18,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2025:
+ * Copyright (C) 2026:
  * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
@@ -25,6 +26,7 @@
 #include <poll.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -46,32 +48,47 @@ static const uint8_t PP2_SIGNATURE[12] = {
 
 /* PROXY protocol v2 address families */
 #define PP2_FAM_UNSPEC 0x0
-#define PP2_FAM_INET 0x1
-#define PP2_FAM_INET6 0x2
+#define PP2_FAM_INET   0x1
+#define PP2_FAM_INET6  0x2
 
 /* Address data lengths per family (source + destination addr + ports) */
-#define PP2_ADDR_LEN_INET 12  /* 4+4+2+2 */
+#define PP2_ADDR_LEN_INET  12 /* 4+4+2+2 */
 #define PP2_ADDR_LEN_INET6 36 /* 16+16+2+2 */
 
-/* Maximum additional data length we will drain (TLVs, etc.) */
-#define PP2_MAX_ADD_LEN 512
+/* Maximum total payload length (address block + TLVs).
+ * IPv6 address data is 36 bytes; typical TLVs add at most ~100 bytes more.
+ * Reject headers claiming more than this to bound drain time and buffer use. */
+#define PP2_MAX_PAYLOAD 256
 
 /* recv_all: receive exactly 'len' bytes from 'sock' within 'timeout_ms'.
+ * The timeout is cumulative across all recv() calls, not per-call.
  * Returns 0 on success, -1 on timeout or error. */
 static int
 recv_all (int sock, void *buf, size_t len, int timeout_ms)
 {
   uint8_t *ptr     = (uint8_t *)buf;
   size_t remaining = len;
+  struct timespec start;
+
+  clock_gettime (CLOCK_MONOTONIC, &start);
 
   while (remaining > 0)
   {
+    struct timespec now;
+    clock_gettime (CLOCK_MONOTONIC, &now);
+    int elapsed_ms   = (int)((now.tv_sec - start.tv_sec) * 1000 +
+                             (now.tv_nsec - start.tv_nsec) / 1000000);
+    int remaining_ms = timeout_ms - elapsed_ms;
+
+    if (remaining_ms <= 0)
+      return -1; /* timeout */
+
     struct pollfd pfd;
     pfd.fd      = sock;
     pfd.events  = POLLIN;
     pfd.revents = 0;
 
-    int ready = poll (&pfd, 1, timeout_ms);
+    int ready = poll (&pfd, 1, remaining_ms);
 
     if (ready < 0)
     {
@@ -88,11 +105,25 @@ recv_all (int sock, void *buf, size_t len, int timeout_ms)
     if (n <= 0)
       return -1; /* error or EOF */
 
-    ptr += n;
+    ptr       += n;
     remaining -= (size_t)n;
   }
 
   return 0;
+}
+
+/* drain_bytes: read and discard 'len' bytes from 'sock'.
+ * 'len' must not exceed PP2_MAX_PAYLOAD.
+ * Returns 0 on success, -1 on error. */
+static int
+drain_bytes (int sock, size_t len, int timeout_ms)
+{
+  uint8_t buf[PP2_MAX_PAYLOAD];
+
+  if (len == 0)
+    return 0;
+
+  return recv_all (sock, buf, len, timeout_ms);
 }
 
 /***********************************************************************
@@ -115,7 +146,6 @@ proxy_protocol_v2_read (int socket, struct sockaddr_storage *addr,
 {
   uint8_t hdr[PP2_HEADER_LEN];
   uint8_t addrbuf[PP2_ADDR_LEN_INET6];
-  uint8_t drain[PP2_MAX_ADD_LEN];
 
   if (!addr || !addrlen)
     return -1;
@@ -143,22 +173,28 @@ proxy_protocol_v2_read (int socket, struct sockaddr_storage *addr,
 
   uint8_t cmd    = hdr[12] & 0x0F;
   uint8_t family = (hdr[13] >> 4) & 0x0F;
-  uint16_t extra = ntohs (*(uint16_t *)(hdr + 14));
 
-  /* LOCAL command: health-check from proxy; ignore the address payload */
+  /* Read length field without aliased pointer cast to avoid UB on
+   * strict-alignment architectures */
+  uint16_t extra_raw;
+  memcpy (&extra_raw, hdr + 14, 2);
+  uint16_t extra = ntohs (extra_raw);
+
+  /* Reject unreasonably large payloads to bound drain time */
+  if (extra > PP2_MAX_PAYLOAD)
+  {
+    lprintf (1, "PROXY protocol v2: payload length %u exceeds maximum %d",
+             extra, PP2_MAX_PAYLOAD);
+    return -1;
+  }
+
+  /* LOCAL command: health-check from proxy; drain payload and return */
   if (cmd == PP2_CMD_LOCAL)
   {
-    /* Drain any remaining bytes declared in the header */
-    size_t to_drain = extra;
-    while (to_drain > 0)
+    if (drain_bytes (socket, extra, timeout_ms) < 0)
     {
-      size_t chunk = (to_drain > sizeof (drain)) ? sizeof (drain) : to_drain;
-      if (recv_all (socket, drain, chunk, timeout_ms) < 0)
-      {
-        lprintf (1, "PROXY protocol v2: error draining LOCAL payload");
-        return -1;
-      }
-      to_drain -= chunk;
+      lprintf (1, "PROXY protocol v2: error draining LOCAL payload");
+      return -1;
     }
     return 1;
   }
@@ -192,17 +228,10 @@ proxy_protocol_v2_read (int socket, struct sockaddr_storage *addr,
     memcpy (&sin->sin_port, addrbuf + 8, 2); /* source port */
     *addrlen = sizeof (struct sockaddr_in);
 
-    /* Drain any trailing TLV bytes */
-    size_t to_drain = extra - PP2_ADDR_LEN_INET;
-    while (to_drain > 0)
+    if (drain_bytes (socket, extra - PP2_ADDR_LEN_INET, timeout_ms) < 0)
     {
-      size_t chunk = (to_drain > sizeof (drain)) ? sizeof (drain) : to_drain;
-      if (recv_all (socket, drain, chunk, timeout_ms) < 0)
-      {
-        lprintf (1, "PROXY protocol v2: error draining IPv4 TLV data");
-        return -1;
-      }
-      to_drain -= chunk;
+      lprintf (1, "PROXY protocol v2: error draining IPv4 TLV data");
+      return -1;
     }
 
     return 0;
@@ -228,17 +257,10 @@ proxy_protocol_v2_read (int socket, struct sockaddr_storage *addr,
     memcpy (&sin6->sin6_port, addrbuf + 32, 2); /* source port */
     *addrlen = sizeof (struct sockaddr_in6);
 
-    /* Drain any trailing TLV bytes */
-    size_t to_drain = extra - PP2_ADDR_LEN_INET6;
-    while (to_drain > 0)
+    if (drain_bytes (socket, extra - PP2_ADDR_LEN_INET6, timeout_ms) < 0)
     {
-      size_t chunk = (to_drain > sizeof (drain)) ? sizeof (drain) : to_drain;
-      if (recv_all (socket, drain, chunk, timeout_ms) < 0)
-      {
-        lprintf (1, "PROXY protocol v2: error draining IPv6 TLV data");
-        return -1;
-      }
-      to_drain -= chunk;
+      lprintf (1, "PROXY protocol v2: error draining IPv6 TLV data");
+      return -1;
     }
 
     return 0;
@@ -246,16 +268,10 @@ proxy_protocol_v2_read (int socket, struct sockaddr_storage *addr,
   else
   {
     /* AF_UNSPEC or unknown family: treat as LOCAL per spec, drain payload */
-    size_t to_drain = extra;
-    while (to_drain > 0)
+    if (drain_bytes (socket, extra, timeout_ms) < 0)
     {
-      size_t chunk = (to_drain > sizeof (drain)) ? sizeof (drain) : to_drain;
-      if (recv_all (socket, drain, chunk, timeout_ms) < 0)
-      {
-        lprintf (1, "PROXY protocol v2: error draining unspec payload");
-        return -1;
-      }
-      to_drain -= chunk;
+      lprintf (1, "PROXY protocol v2: error draining unspec payload");
+      return -1;
     }
     return 1;
   }
