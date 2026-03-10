@@ -133,7 +133,8 @@ drain_bytes (int sock, size_t len, int timeout_ms)
  *
  * On success with a PROXY command the sockaddr_storage pointed to by
  * 'addr' and the value at 'addrlen' are updated with the original
- * client address conveyed by the header.
+ * client address conveyed by the header.  If 'dest_port' is non-NULL
+ * the destination port from the header is stored there in host byte order.
  *
  * Returns:
  *   0  - PROXY command; addr/addrlen updated with client address
@@ -141,13 +142,15 @@ drain_bytes (int sock, size_t len, int timeout_ms)
  *  -1  - error
  ***********************************************************************/
 int
-proxy_protocol_v2_read (int socket, struct sockaddr_storage *addr,
-                        socklen_t *addrlen, int timeout_ms)
+proxy_protocol_v2_read (int socket, int timeout_ms,
+                        struct sockaddr_storage *source_addr,
+                        socklen_t *source_addrlen,
+                        uint16_t *dest_port)
 {
   uint8_t hdr[PP2_HEADER_LEN];
   uint8_t addrbuf[PP2_ADDR_LEN_INET6];
 
-  if (!addr || !addrlen)
+  if (!source_addr || !source_addrlen)
     return -1;
 
   /* Read the fixed 16-byte header */
@@ -221,12 +224,19 @@ proxy_protocol_v2_read (int socket, struct sockaddr_storage *addr,
       return -1;
     }
 
-    struct sockaddr_in *sin = (struct sockaddr_in *)addr;
+    struct sockaddr_in *sin = (struct sockaddr_in *)source_addr;
     memset (sin, 0, sizeof (struct sockaddr_in));
     sin->sin_family = AF_INET;
     memcpy (&sin->sin_addr, addrbuf, 4);     /* source address */
     memcpy (&sin->sin_port, addrbuf + 8, 2); /* source port */
-    *addrlen = sizeof (struct sockaddr_in);
+    *source_addrlen = sizeof (struct sockaddr_in);
+
+    if (dest_port)
+    {
+      uint16_t dp_raw;
+      memcpy (&dp_raw, addrbuf + 10, 2); /* destination port */
+      *dest_port = ntohs (dp_raw);
+    }
 
     if (drain_bytes (socket, extra - PP2_ADDR_LEN_INET, timeout_ms) < 0)
     {
@@ -250,12 +260,19 @@ proxy_protocol_v2_read (int socket, struct sockaddr_storage *addr,
       return -1;
     }
 
-    struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)addr;
+    struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)source_addr;
     memset (sin6, 0, sizeof (struct sockaddr_in6));
     sin6->sin6_family = AF_INET6;
     memcpy (&sin6->sin6_addr, addrbuf, 16);     /* source address */
     memcpy (&sin6->sin6_port, addrbuf + 32, 2); /* source port */
-    *addrlen = sizeof (struct sockaddr_in6);
+    *source_addrlen = sizeof (struct sockaddr_in6);
+
+    if (dest_port)
+    {
+      uint16_t dp_raw;
+      memcpy (&dp_raw, addrbuf + 34, 2); /* destination port */
+      *dest_port = ntohs (dp_raw);
+    }
 
     if (drain_bytes (socket, extra - PP2_ADDR_LEN_INET6, timeout_ms) < 0)
     {

@@ -49,8 +49,8 @@ static int execute_auth_program (char *envp[], uint32_t timeout_seconds,
  * program with USER/PASS and/or TOKEN provided as environment variables.
  *
  * @param cinfo: The ::ClientInfo to perform auth for and set permissions.
- * @param user: The username to authenticate.
- * @param pass: The password to authenticate.
+ * @param username: The username to authenticate.
+ * @param password: The password to authenticate.
  * @param jwtoken: The JWT token to authenticate.
  *
  * @return: 0 on success, -1 on error.
@@ -78,22 +78,32 @@ perform_auth (ClientInfo *cinfo,
     return -1;
   }
 
-  /* Set environment variables for auth program */
+  /* Set environment variables for auth program, checking for truncation */
   if (username && username[0])
   {
-    snprintf (username_env, sizeof (username_env), "AUTH_USERNAME=%s", username);
+    if (snprintf (username_env, sizeof (username_env), "AUTH_USERNAME=%s", username) >= (int)sizeof (username_env))
+    {
+      lprintf (0, "[%s] AUTH_USERNAME too large, truncated (%zu bytes)", cinfo->hostname, strlen (username));
+    }
     envp[envidx++] = username_env;
   }
 
   if (password && password[0])
   {
-    snprintf (password_env, sizeof (password_env), "AUTH_PASSWORD=%s", password);
+    if (snprintf (password_env, sizeof (password_env), "AUTH_PASSWORD=%s", password) >= (int)sizeof (password_env))
+    {
+      lprintf (0, "[%s] AUTH_PASSWORD too large, truncated (%zu bytes)", cinfo->hostname, strlen (password));
+    }
     envp[envidx++] = password_env;
   }
 
   if (jwtoken && jwtoken[0])
   {
-    snprintf (jwtoken_env, sizeof (jwtoken_env), "AUTH_JWTOKEN=%s", jwtoken);
+    if (snprintf (jwtoken_env, sizeof (jwtoken_env), "AUTH_JWTOKEN=%s", jwtoken) >= (int)sizeof (jwtoken_env))
+    {
+      lprintf (0, "[%s] AUTH_JWTOKEN too large (%zu bytes), cannot authenticate", cinfo->hostname, strlen (jwtoken));
+      return -1;
+    }
     envp[envidx++] = jwtoken_env;
   }
 
@@ -113,9 +123,27 @@ perform_auth (ClientInfo *cinfo,
     return -1;
   }
 
+  /* Store auth method when authentication succeeded */
+  if (cinfo->permissions & AUTHENTICATED)
+  {
+    if (jwtoken && jwtoken[0])
+      cinfo->auth_method = AUTH_JWT;
+    else if (username && username[0])
+      cinfo->auth_method = AUTH_USERPASS;
+
+    /* Fall back to the provided username if not returned in the JSON response */
+    if (cinfo->auth_username[0] == '\0' && username && username[0])
+    {
+      strncpy (cinfo->auth_username, username, sizeof (cinfo->auth_username) - 1);
+      cinfo->auth_username[sizeof (cinfo->auth_username) - 1] = '\0';
+    }
+  }
+
   if (config.verbose >= 3)
   {
-    lprintf (0, "Authorizations for %s:", cinfo->hostname);
+    lprintf (0, "Authorizations for '%s' at %s:",
+             cinfo->auth_username[0] != '\0' ? cinfo->auth_username : "unknown-user",
+             cinfo->hostname);
     if (cinfo->permissions & CONNECT_PERMISSION)
       lprintf (0, "  CONNECT_PERMISSION");
     if (cinfo->permissions & WRITE_PERMISSION)
@@ -140,6 +168,7 @@ perform_auth (ClientInfo *cinfo,
  *
  * The JSON object is expected to contain the following fields:
  * {
+ *  "username": "<username or JWT sub claim>",
  *  "authenticated": <boolean>,
  *  "write_permission": <boolean>,
  *  "trust_permission": <boolean>,
@@ -150,13 +179,14 @@ perform_auth (ClientInfo *cinfo,
  * No fields are required, and if missing are assumed to be false or empty.
  *
  * @param cinfo: The ::ClientInfo to apply the permissions to.
- * @param json: The JSON string to parse.
+ * @param json_string: The JSON string to parse.
  *
  * @return: 0 on success, -1 on error.
  **************************************************************************/
 static int
 apply_permissions_json (ClientInfo *cinfo, const char *json_string)
 {
+  const char *username_str;
   yyjson_doc *json;
   yyjson_val *root;
   yyjson_val *streams_array;
@@ -179,6 +209,14 @@ apply_permissions_json (ClientInfo *cinfo, const char *json_string)
   root = yyjson_doc_get_root (json);
 
   cinfo->permissions = NO_PERMISSION;
+
+  /* Store username from JSON response */
+  username_str = yyjson_get_str (yyjson_obj_get (root, "username"));
+  if (username_str)
+  {
+    strncpy (cinfo->auth_username, username_str, sizeof (cinfo->auth_username) - 1);
+    cinfo->auth_username[sizeof (cinfo->auth_username) - 1] = '\0';
+  }
 
   if (yyjson_get_bool (yyjson_obj_get (root, "authenticated")))
   {
@@ -268,7 +306,7 @@ apply_permissions_json (ClientInfo *cinfo, const char *json_string)
     free (cinfo->forbiddenstr);
     if ((cinfo->forbiddenstr = calloc (pattern_size + 1, 1)) == NULL)
     {
-      lprintf (0, "[%s] Cannot allocate memory for allowed pattern", cinfo->hostname);
+      lprintf (0, "[%s] Cannot allocate memory for forbidden pattern", cinfo->hostname);
       yyjson_doc_free (json);
       return -1;
     }
@@ -309,8 +347,9 @@ apply_permissions_json (ClientInfo *cinfo, const char *json_string)
   return 0;
 }
 
+
 /**************************************************************************
- * execute_program:
+ * execute_auth_program:
  *
  * Execute a program with the specified environment variables and timeout.
  *
@@ -327,6 +366,15 @@ execute_auth_program (char *envp[], uint32_t timeout_seconds,
                       char *output, size_t output_size,
                       char *error, size_t error_size)
 {
+  int stdout_pipe[2] = {-1, -1};
+  int stderr_pipe[2] = {-1, -1};
+  posix_spawn_file_actions_t actions;
+  int actions_initialized = 0;
+  int exit_status         = -1;
+  pid_t pid               = -1;
+  int status;
+  ssize_t nread;
+
   if (!envp || !output || !error)
   {
     lprintf (0, "%s() Invalid arguments", __func__);
@@ -340,23 +388,26 @@ execute_auth_program (char *envp[], uint32_t timeout_seconds,
   }
 
   /* Create pipes for stdout and stderr */
-  int stdout_pipe[2];
-  int stderr_pipe[2];
-  if (pipe (stdout_pipe) == -1 || pipe (stderr_pipe) == -1)
+  if (pipe (stdout_pipe) == -1)
   {
-    lprintf (0, "%s() Error creating pipes: %s", __func__, strerror (errno));
-    return -1;
+    lprintf (0, "%s() Error creating stdout pipe: %s", __func__, strerror (errno));
+    goto cleanup;
+  }
+  if (pipe (stderr_pipe) == -1)
+  {
+    lprintf (0, "%s() Error creating stderr pipe: %s", __func__, strerror (errno));
+    goto cleanup;
   }
 
   /* Initialize spawn file actions */
-  posix_spawn_file_actions_t actions;
   posix_spawn_file_actions_init (&actions);
+  actions_initialized = 1;
 
   /* Add file actions to redirect stdout and stderr */
   posix_spawn_file_actions_adddup2 (&actions, stdout_pipe[1], STDOUT_FILENO);
   posix_spawn_file_actions_adddup2 (&actions, stderr_pipe[1], STDERR_FILENO);
 
-  /* Close write ends in the child */
+  /* Close read ends in the child */
   posix_spawn_file_actions_addclose (&actions, stdout_pipe[0]);
   posix_spawn_file_actions_addclose (&actions, stderr_pipe[0]);
 
@@ -369,33 +420,32 @@ execute_auth_program (char *envp[], uint32_t timeout_seconds,
       for (int idx = 0; config.auth.argv[idx]; idx++)
       {
         if (idx == 0)
-          continue; // Skip the program name
+          continue;
         lprintf (2, "  Arg[%d]: %s", idx, config.auth.argv[idx]);
       }
     }
   }
 
   /* Spawn the process */
-  pid_t pid;
-  int status;
   if ((status = posix_spawn (&pid, config.auth.program, &actions, NULL, config.auth.argv, envp)) != 0)
   {
     lprintf (0, "%s() Could not spawn process, status: %d, %s", __func__, status, strerror (status));
-    return -1;
+    pid = -1;
+    goto cleanup;
   }
 
   /* Close write ends in the parent */
   close (stdout_pipe[1]);
+  stdout_pipe[1] = -1;
   close (stderr_pipe[1]);
+  stderr_pipe[1] = -1;
 
   /* Set up timeout loop using time-based approach */
   struct timespec start_time, current_time;
   clock_gettime (CLOCK_MONOTONIC, &start_time);
 
-  pid_t wait_result;
-  while ((wait_result = waitpid (pid, &status, WNOHANG)) == 0)
+  while (waitpid (pid, &status, WNOHANG) == 0)
   {
-    /* Check if timeout has lapsed */
     clock_gettime (CLOCK_MONOTONIC, &current_time);
 
     double elapsed_time = (current_time.tv_sec - start_time.tv_sec) +
@@ -403,47 +453,42 @@ execute_auth_program (char *envp[], uint32_t timeout_seconds,
 
     if (elapsed_time >= timeout_seconds)
     {
-      lprintf (1, "%s() Process (%s) did not exit after %d seconds, killing",
+      lprintf (1, "%s() Process (%s) did not exit after %u seconds, killing",
                __func__, config.auth.program, timeout_seconds);
 
-      kill (pid, SIGKILL);       // Kill the spawned process
-      waitpid (pid, &status, 0); // Wait for it to terminate
+      kill (pid, SIGKILL);
+      waitpid (pid, &status, 0);
       break;
     }
 
-    usleep (100000); // Check the process every 100ms
+    usleep (100000);
   }
 
   /* Read output and error from pipes */
-  if (read (stdout_pipe[0], output, output_size) == output_size)
+  nread = read (stdout_pipe[0], output, output_size - 1);
+  if (nread < 0)
   {
-    lprintf (0, "%s() The stdout data from auth program is too large (> %zu bytes)", __func__, output_size);
-    return -1;
+    lprintf (0, "%s() Error reading stdout from auth program: %s", __func__, strerror (errno));
+    goto cleanup;
   }
-  output[output_size - 1] = '\0';
+  output[nread] = '\0';
 
-  if (read (stderr_pipe[0], error, error_size) == error_size)
+  nread = read (stderr_pipe[0], error, error_size - 1);
+  if (nread < 0)
   {
-    lprintf (0, "%s() The stderr data from auth program is too large (> %zu bytes)", __func__, error_size);
-    return -1;
+    lprintf (0, "%s() Error reading stderr from auth program: %s", __func__, strerror (errno));
+    goto cleanup;
   }
-  error[error_size - 1] = '\0';
+  error[nread] = '\0';
 
-  /* Cleanup */
-  posix_spawn_file_actions_destroy (&actions);
-  close (stdout_pipe[0]);
-  close (stderr_pipe[0]);
-
-  int exit_status = -1;
+  /* Determine exit status */
   if (WIFEXITED (status))
   {
     lprintf (3, "%s() Process (%s) exited with status %d",
              __func__, config.auth.program, WEXITSTATUS (status));
 
     if (error[0])
-    {
       lprintf (0, "%s() Error from auth program: %s", __func__, error);
-    }
 
     exit_status = WEXITSTATUS (status);
   }
@@ -453,12 +498,20 @@ execute_auth_program (char *envp[], uint32_t timeout_seconds,
              __func__, config.auth.program, WTERMSIG (status));
 
     if (error[0])
-    {
       lprintf (0, "%s() Error from auth program: %s", __func__, error);
-    }
-
-    exit_status = -1;
   }
+
+cleanup:
+  if (actions_initialized)
+    posix_spawn_file_actions_destroy (&actions);
+  if (stdout_pipe[0] != -1)
+    close (stdout_pipe[0]);
+  if (stdout_pipe[1] != -1)
+    close (stdout_pipe[1]);
+  if (stderr_pipe[0] != -1)
+    close (stderr_pipe[0]);
+  if (stderr_pipe[1] != -1)
+    close (stderr_pipe[1]);
 
   return exit_status;
 }

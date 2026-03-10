@@ -295,6 +295,16 @@ static const char *reference_config_file_parts[] = {
   "#TransferLogTX 1\n"
   "#TransferLogRX 1\n"
   "\n"
+  "# Enable JSON Lines format for transfer logs.  When enabled, files are written\n"
+  "# with a \".jsonl\" extension using the same base name as the text log files.\n"
+  "# Each line is a JSON object describing one client session's transfer activity,\n"
+  "# including protocol name and version, data format, per-stream bytes, etc.\n"
+  "# This replaces the legacy text format when enabled.\n"
+  "# This is a dynamic parameter.\n"
+  "# Equivalent environment variable: RS_TRANSFER_LOG_JSONLINES\n"
+  "\n"
+  "#TransferLogJSONLines 0\n"
+  "\n"
   "\n",
   "# Specify a program and arguments to execute to perform authentication and\n"
   "# return permissions (authorizations) if successful.  Credentials, either\n"
@@ -473,6 +483,7 @@ Usage (int level)
                    " -T logdir      Directory to write transfer logs (default is no logs)\n"
                    " -Ti hours      Transfer log writing interval (default 24 hours)\n"
                    " -Tp prefix     Prefix to add to transfer log files (default is none)\n"
+                   " -Tj            Enable JSON Lines transfer log format (replaces text format)\n"
                    " -STDERR        Send all console output to stderr instead of stdout\n"
                    "\n",
            config.maxclients,
@@ -664,6 +675,11 @@ ProcessParam (int argcount, char **argvec)
     {
       snprintf (paramstr, sizeof (paramstr), "TransferLogPrefix \"%s\"", GetOptVal (argcount, argvec, optind++));
       if (SetParameter (paramstr, 0) <= 0)
+        exit (1);
+    }
+    else if (strcmp (argvec[optind], "-Tj") == 0)
+    {
+      if (SetParameter ("TransferLogJSONLines 1", 0) <= 0)
         exit (1);
     }
     else if (strcmp (argvec[optind], "-STDERR") == 0)
@@ -1121,6 +1137,14 @@ ReadEnvironmentVariables (void)
   if ((envvar = getenv ("RS_TRANSFER_LOG_RX")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "TransferLogRX %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_TRANSFER_LOG_JSONLINES")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "TransferLogJSONLines %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
       return -1;
     count++;
@@ -1652,6 +1676,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
  * [D] TransferLogPrefix <prefix>
  * [D] TransferLogTX <1|0>
  * [D] TransferLogRX <1|0>
+ * [D] TransferLogJSONLines <1|0>
  * [D] AuthCommand <command>
  * [D] AuthRequiredForStreams <1|0>
  * [D] AuthTimeout <timeout>
@@ -2074,6 +2099,19 @@ SetParameter (const char *paramstring, int dynamiconly)
       config.tlog.mode |= TLOG_RX;
     else
       config.tlog.mode &= ~TLOG_RX;
+  }
+  else if (!strcasecmp ("TransferLogJSONLines", field[0]) && fieldcount == 2)
+  {
+    if ((intval = YesNo (field[1])) < 0)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    if (intval)
+      config.tlog.mode |= TLOG_JSONL;
+    else
+      config.tlog.mode &= ~TLOG_JSONL;
   }
   else if (!strcasecmp ("AuthCommand", field[0]) && fieldcount >= 2)
   {

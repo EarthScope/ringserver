@@ -70,6 +70,14 @@ typedef enum
   TRUST_PERMISSION   = 1u << 4,
 } Permissions;
 
+/* Authentication method */
+typedef enum
+{
+  AUTH_NONE     = 0,
+  AUTH_USERPASS = 1u << 0,
+  AUTH_JWT      = 1u << 1,
+} AuthMethod;
+
 /* Connection information for client threads */
 typedef struct ClientInfo
 {
@@ -105,6 +113,8 @@ typedef struct ClientInfo
   } wsmask;                 /* Masking key for WebSocket message */
   size_t      wsmaskidx;    /* Index for unmasking WebSocket message */
   Permissions permissions;  /* Client permissions */
+  AuthMethod  auth_method;       /* Authentication method used */
+  char        auth_username[128]; /* Authenticated username, if available */
   _Atomic (RingReader *) reader; /* Ring reader parameters */
   nstime_t    conntime;     /* Client connect time */
   char       *allowedstr;   /* Regular expression string for allowed streams */

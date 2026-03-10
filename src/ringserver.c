@@ -900,6 +900,8 @@ ListenThread (void *arg)
   socklen_t addrlen      = sizeof (addr_storage);
   int one                = 1;
 
+  uint16_t proxy_dest_port = 0;
+
   mytdp = (struct thread_data *)arg;
   lpp   = (ListenPortParams *)mytdp->td_prvtptr;
 
@@ -943,7 +945,8 @@ ListenThread (void *arg)
     /* Read PROXY protocol v2 header when the listener is configured for it */
     if (lpp->options & PROXY_PROTOCOL_V2)
     {
-      int ppresult = proxy_protocol_v2_read (clientsocket, &addr_storage, &addrlen, 3000);
+      int ppresult = proxy_protocol_v2_read (clientsocket, 3000, &addr_storage, &addrlen,
+                                             &proxy_dest_port);
       if (ppresult < 0)
       {
         lprintf (1, "Closing connection: failed to read PROXY protocol v2 header");
@@ -976,6 +979,10 @@ ListenThread (void *arg)
       close (clientsocket);
       continue;
     }
+
+    /* Override serverport with the destination port from PROXY protocol header */
+    if (proxy_dest_port)
+      snprintf (cinfo->serverport, sizeof (cinfo->serverport), "%u", proxy_dest_port);
 
     /* Store client socket address structure */
     if ((cinfo->addr = (struct sockaddr *)malloc (addrlen)) == NULL)

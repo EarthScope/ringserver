@@ -30,11 +30,17 @@ extern "C" {
 #include "rbtree.h"
 #include "ringserver.h"
 
+/* DataLink protocol version */
+#define DLPROTO_MAJOR 1
+#define DLPROTO_MINOR 1
+
 /* DataLink server capability flags */
 #define DLSERVERVER "RingServer/" VERSION
-#define DLSERVERPROTOCOLS "DLPROTO:1.1"
+#define DLMKSTR(x) DLMKSTR_(x)
+#define DLMKSTR_(x) #x
+#define DLSERVERPROTOCOLS "DLPROTO:" DLMKSTR(DLPROTO_MAJOR) "." DLMKSTR(DLPROTO_MINOR)
 #define DLCAPABILITIES_ID DLSERVERPROTOCOLS
-#define DLSERVER_ID "DataLink v1.1 (" DLSERVERVER ") :: " DLCAPABILITIES_ID
+#define DLSERVER_ID "DataLink v" DLMKSTR(DLPROTO_MAJOR) "." DLMKSTR(DLPROTO_MINOR) " (" DLSERVERVER ") :: " DLCAPABILITIES_ID
 
 #define DLMAXREGEXLEN  1048576  /* Maximum regex pattern size */
 

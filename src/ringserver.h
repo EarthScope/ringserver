@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2024:
+ * Copyright (C) 2026:
  * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
@@ -137,9 +137,10 @@ typedef struct IPNet_s
 /* Transmission log modes */
 typedef enum
 {
-  TLOG_NONE = 0,
-  TLOG_RX   = 1 << 0,
-  TLOG_TX   = 1 << 1
+  TLOG_NONE  = 0,
+  TLOG_RX    = 1 << 0, /* Write transfer log for data received from clients */
+  TLOG_TX    = 1 << 1, /* Write transfer log for data transmitted to clients */
+  TLOG_JSONL = 1 << 2  /* Write JSON Lines format instead of legacy text */
 } TLogMode;
 
 /* Global server parameters */

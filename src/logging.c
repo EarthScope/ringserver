@@ -32,9 +32,12 @@
 #include <libmseed.h>
 
 #include "clients.h"
+#include "dlclient.h"
 #include "generic.h"
 #include "logging.h"
 #include "rbtree.h"
+#include "slclient.h"
+#include "yyjson.h"
 
 pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -71,14 +74,14 @@ lprintf (int level, char *fmt, ...)
     rv = vsnprintf (message, sizeof (message), fmt, argptr);
     va_end (argptr);
 
-    pthread_mutex_lock(&log_mutex);
+    pthread_mutex_lock (&log_mutex);
     printf ("%3.3s %3.3s %2.2d %2.2d:%2.2d:%2.2d %4.4d - %s%s\n",
             day[tp.tm_wday], month[tp.tm_mon], tp.tm_mday,
             tp.tm_hour, tp.tm_min, tp.tm_sec, tp.tm_year + 1900,
             message, (rv >= sizeof (message)) ? " ..." : "");
 
     fflush (stdout);
-    pthread_mutex_unlock(&log_mutex);
+    pthread_mutex_unlock (&log_mutex);
   }
 
   return rv;
@@ -132,17 +135,22 @@ WriteTLog (ClientInfo *cinfo, int reset)
   Stack *stack;
   int rv = 0;
 
+  int jsonlmode = 0;
+
   nstime_t clock;
   struct tm starttm;
   struct tm endtm;
 
-  char txfilename[500] = {0};
-  char rxfilename[500] = {0};
-  char conntime[32]    = {0};
-  char currtime[32]    = {0};
-  char *modestr        = "";
-  FILE *txfp           = NULL;
-  FILE *rxfp           = NULL;
+  time_t tlog_startint = 0;
+
+  char txfilename[512]  = {0};
+  char rxfilename[512]  = {0};
+  char conntime[32]     = {0};
+  char currtime[32]     = {0};
+  char logstarttime[32] = {0};
+  char *modestr         = "";
+  FILE *txfp            = NULL;
+  FILE *rxfp            = NULL;
 
   /* Take a config reader lock */
   pthread_rwlock_rdlock (&config.config_rwlock);
@@ -154,6 +162,10 @@ WriteTLog (ClientInfo *cinfo, int reset)
     return 0;
   }
 
+  jsonlmode = (config.tlog.mode & TLOG_JSONL) ? 1 : 0;
+
+  tlog_startint = config.tlog.startint;
+
   if (config.tlog.mode & TLOG_TX)
   {
     /* Generate file path & name for log time interval file */
@@ -161,14 +173,15 @@ WriteTLog (ClientInfo *cinfo, int reset)
     time_t endint = config.tlog.endint;
     localtime_r (&endint, &endtm);
     snprintf (txfilename, sizeof (txfilename),
-              "%s/%s%stxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d",
+              "%s/%s%stxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d%s",
               config.tlog.basedir,
               (config.tlog.prefix) ? config.tlog.prefix : "",
               (config.tlog.prefix) ? "-" : "",
               starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
               starttm.tm_hour, starttm.tm_min,
               endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
-              endtm.tm_hour, endtm.tm_min);
+              endtm.tm_hour, endtm.tm_min,
+              jsonlmode ? ".jsonl" : "");
   }
 
   if (config.tlog.mode & TLOG_RX)
@@ -178,14 +191,15 @@ WriteTLog (ClientInfo *cinfo, int reset)
     time_t endint = config.tlog.endint;
     localtime_r (&endint, &endtm);
     snprintf (rxfilename, sizeof (rxfilename),
-              "%s/%s%srxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d",
+              "%s/%s%srxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d%s",
               config.tlog.basedir,
               (config.tlog.prefix) ? config.tlog.prefix : "",
               (config.tlog.prefix) ? "-" : "",
               starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
               starttm.tm_hour, starttm.tm_min,
               endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
-              endtm.tm_hour, endtm.tm_min);
+              endtm.tm_hour, endtm.tm_min,
+              jsonlmode ? ".jsonl" : "");
   }
 
   /* Release config reader lock */
@@ -195,6 +209,11 @@ WriteTLog (ClientInfo *cinfo, int reset)
   clock = NSnow ();
   ms_nstime2timestr_n (clock, currtime, sizeof (currtime), ISOMONTHDAY_Z, NONE);
   ms_nstime2timestr_n (cinfo->conntime, conntime, sizeof (conntime), ISOMONTHDAY_Z, NONE);
+
+  /* Compute log start time: later of interval start or client connect time */
+  nstime_t intervalstart_ns = (nstime_t)tlog_startint * NSTMODULUS;
+  nstime_t logstart         = (cinfo->conntime > intervalstart_ns) ? cinfo->conntime : intervalstart_ns;
+  ms_nstime2timestr_n (logstart, logstarttime, sizeof (logstarttime), ISOMONTHDAY_Z, NONE);
 
   /* Lock transfer log file writing mutex */
   pthread_mutex_lock (&config.tlog.write_lock);
@@ -240,77 +259,281 @@ WriteTLog (ClientInfo *cinfo, int reset)
       modestr = "DataLink";
     else if (cinfo->type == CLIENT_SEEDLINK)
       modestr = "SeedLink";
+    else if (cinfo->type == CLIENT_HTTP)
+      modestr = "HTTP";
     else
       modestr = "Unknown";
 
-    /* Print client header line */
-    if (txfp)
-      fprintf (txfp, "START CLIENT %s [%s] (%s|%s) @ %s (connected %s) TX\n",
-               cinfo->hostname, cinfo->ipstr, modestr, cinfo->clientid,
-               currtime, conntime);
-    if (rxfp)
-      fprintf (rxfp, "START CLIENT %s [%s] (%s|%s) @ %s (connected %s) RX\n",
-               cinfo->hostname, cinfo->ipstr, modestr, cinfo->clientid,
-               currtime, conntime);
-
-    /* Lock stream tree and create list (Stack) of streams */
-    pthread_mutex_lock (&(cinfo->streams_lock));
-
-    stack = StackCreate ();
-
-    if (cinfo->streams)
-      RBBuildStack (cinfo->streams, stack);
-
-    /* Loop through streams and output bytecounts */
-    txtotalbytes = 0;
-    rxtotalbytes = 0;
-    while ((rbnode = (RBNode *)StackPop (stack)))
+    if (jsonlmode)
     {
-      streamnode = (StreamNode *)rbnode->data;
+      /* JSON Lines format: one JSON object per client per direction */
+      char protoversion[16] = {0};
 
-      if (txfp && streamnode->txbytes > 0)
+      /* Determine protocol version string */
+      if (cinfo->type == CLIENT_SEEDLINK && cinfo->extinfo)
       {
-        fprintf (txfp, "%s %" PRIu64 " %" PRIu64 "\n", streamnode->streamid,
-                 streamnode->txbytes, streamnode->txpackets);
+        SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
+        snprintf (protoversion, sizeof (protoversion), "%u.%u",
+                  slinfo->proto_major, slinfo->proto_minor);
+      }
+      else if (cinfo->type == CLIENT_DATALINK)
+      {
+        snprintf (protoversion, sizeof (protoversion), "%u.%u",
+                  DLPROTO_MAJOR, DLPROTO_MINOR);
+      }
 
-        txtotalbytes += streamnode->txbytes;
+      /* Lock stream tree and build list (Stack) of streams */
+      pthread_mutex_lock (&(cinfo->streams_lock));
 
-        /* Reset counts if requested */
-        if (reset)
+      stack = StackCreate ();
+      if (cinfo->streams)
+        RBBuildStack (cinfo->streams, stack);
+
+      /* Build TX JSON document */
+      yyjson_mut_doc *txdoc     = NULL;
+      yyjson_mut_doc *rxdoc     = NULL;
+      yyjson_mut_val *txstreams = NULL;
+      yyjson_mut_val *rxstreams = NULL;
+
+      if (txfp)
+      {
+        txdoc = yyjson_mut_doc_new (NULL);
+        if (txdoc)
         {
-          streamnode->txbytes   = 0;
-          streamnode->txpackets = 0;
+          yyjson_mut_val *root = yyjson_mut_obj (txdoc);
+          yyjson_mut_doc_set_root (txdoc, root);
+
+          yyjson_mut_obj_add_strcpy (txdoc, root, "log_time", currtime);
+          yyjson_mut_obj_add_strcpy (txdoc, root, "log_start_time", logstarttime);
+          yyjson_mut_obj_add_strcpy (txdoc, root, "connect_time", conntime);
+
+          yyjson_mut_val *client = yyjson_mut_obj_add_obj (txdoc, root, "client");
+          yyjson_mut_obj_add_strcpy (txdoc, client, "ip", cinfo->ipstr);
+          yyjson_mut_obj_add_strcpy (txdoc, client, "server_port", cinfo->serverport);
+          yyjson_mut_obj_add_strcpy (txdoc, client, "hostname", cinfo->hostname);
+          yyjson_mut_obj_add_strcpy (txdoc, client, "user_agent", cinfo->clientid);
+
+          if (cinfo->permissions & AUTHENTICATED)
+          {
+            const char *authmethodstr = (cinfo->auth_method == AUTH_JWT)        ? "jwt"
+                                        : (cinfo->auth_method == AUTH_USERPASS) ? "userpass"
+                                                                                : "unknown";
+            yyjson_mut_val *auth      = yyjson_mut_obj_add_obj (txdoc, root, "auth");
+            yyjson_mut_obj_add_str (txdoc, auth, "method", authmethodstr);
+            if (cinfo->auth_username[0])
+              yyjson_mut_obj_add_strcpy (txdoc, auth, "username", cinfo->auth_username);
+          }
+
+          yyjson_mut_val *proto = yyjson_mut_obj_add_obj (txdoc, root, "transfer_protocol");
+          yyjson_mut_obj_add_strcpy (txdoc, proto, "name", modestr);
+          if (protoversion[0])
+            yyjson_mut_obj_add_strcpy (txdoc, proto, "version", protoversion);
+          if (cinfo->tls)
+            yyjson_mut_obj_add_bool (txdoc, proto, "is_tls", true);
+          if (cinfo->websocket)
+            yyjson_mut_obj_add_bool (txdoc, proto, "is_websocket", true);
+
+          yyjson_mut_obj_add_strcpy (txdoc, root, "transfer_direction", "TX");
+
+          yyjson_mut_val *svc = yyjson_mut_obj_add_obj (txdoc, root, "service");
+          yyjson_mut_obj_add_strcpy (txdoc, svc, "name", PACKAGE);
+          yyjson_mut_obj_add_strcpy (txdoc, svc, "version", VERSION);
+
+          txstreams = yyjson_mut_obj_add_arr (txdoc, root, "streams");
         }
       }
 
-      if (rxfp && streamnode->rxbytes > 0)
+      if (rxfp)
       {
-        fprintf (rxfp, "%s %" PRIu64 " %" PRIu64 "\n", streamnode->streamid,
-                 streamnode->rxbytes, streamnode->rxpackets);
-
-        rxtotalbytes += streamnode->rxbytes;
-
-        /* Reset counts if requested */
-        if (reset)
+        rxdoc = yyjson_mut_doc_new (NULL);
+        if (rxdoc)
         {
-          streamnode->rxbytes   = 0;
-          streamnode->rxpackets = 0;
+          yyjson_mut_val *root = yyjson_mut_obj (rxdoc);
+          yyjson_mut_doc_set_root (rxdoc, root);
+
+          yyjson_mut_obj_add_strcpy (rxdoc, root, "log_time", currtime);
+          yyjson_mut_obj_add_strcpy (rxdoc, root, "log_start_time", logstarttime);
+          yyjson_mut_obj_add_strcpy (rxdoc, root, "connect_time", conntime);
+
+          yyjson_mut_val *client = yyjson_mut_obj_add_obj (rxdoc, root, "client");
+          yyjson_mut_obj_add_strcpy (rxdoc, client, "ip", cinfo->ipstr);
+          yyjson_mut_obj_add_strcpy (rxdoc, client, "server_port", cinfo->serverport);
+          yyjson_mut_obj_add_strcpy (rxdoc, client, "hostname", cinfo->hostname);
+          yyjson_mut_obj_add_strcpy (rxdoc, client, "user_agent", cinfo->clientid);
+
+          if (cinfo->permissions & AUTHENTICATED)
+          {
+            const char *authmethodstr = (cinfo->auth_method == AUTH_JWT)        ? "jwt"
+                                        : (cinfo->auth_method == AUTH_USERPASS) ? "userpass"
+                                                                                : "unknown";
+            yyjson_mut_val *auth      = yyjson_mut_obj_add_obj (rxdoc, root, "auth");
+            yyjson_mut_obj_add_str (rxdoc, auth, "method", authmethodstr);
+            if (cinfo->auth_username[0])
+              yyjson_mut_obj_add_strcpy (rxdoc, auth, "username", cinfo->auth_username);
+          }
+
+          yyjson_mut_val *proto = yyjson_mut_obj_add_obj (rxdoc, root, "transfer_protocol");
+          yyjson_mut_obj_add_strcpy (rxdoc, proto, "name", modestr);
+          if (protoversion[0])
+            yyjson_mut_obj_add_strcpy (rxdoc, proto, "version", protoversion);
+          if (cinfo->tls)
+            yyjson_mut_obj_add_bool (rxdoc, proto, "is_tls", true);
+          if (cinfo->websocket)
+            yyjson_mut_obj_add_bool (rxdoc, proto, "is_websocket", true);
+
+          yyjson_mut_obj_add_strcpy (rxdoc, root, "transfer_direction", "RX");
+
+          yyjson_mut_val *svc = yyjson_mut_obj_add_obj (rxdoc, root, "service");
+          yyjson_mut_obj_add_strcpy (rxdoc, svc, "name", PACKAGE);
+          yyjson_mut_obj_add_strcpy (rxdoc, svc, "version", VERSION);
+
+          rxstreams = yyjson_mut_obj_add_arr (rxdoc, root, "streams");
         }
+      }
+
+      /* Loop through streams, add JSON items */
+      while ((rbnode = (RBNode *)StackPop (stack)))
+      {
+        streamnode = (StreamNode *)rbnode->data;
+
+        if (txfp && txdoc && txstreams && streamnode->txbytes > 0)
+        {
+          yyjson_mut_val *item = yyjson_mut_arr_add_obj (txdoc, txstreams);
+          yyjson_mut_obj_add_strcpy (txdoc, item, "stream_id", streamnode->streamid);
+          yyjson_mut_obj_add_uint (txdoc, item, "bytes", streamnode->txbytes);
+          yyjson_mut_obj_add_uint (txdoc, item, "packets", streamnode->txpackets);
+
+          txtotalbytes += streamnode->txbytes;
+
+          if (reset)
+          {
+            streamnode->txbytes   = 0;
+            streamnode->txpackets = 0;
+          }
+        }
+
+        if (rxfp && rxdoc && rxstreams && streamnode->rxbytes > 0)
+        {
+          yyjson_mut_val *item = yyjson_mut_arr_add_obj (rxdoc, rxstreams);
+          yyjson_mut_obj_add_strcpy (rxdoc, item, "stream_id", streamnode->streamid);
+          yyjson_mut_obj_add_uint (rxdoc, item, "bytes", streamnode->rxbytes);
+          yyjson_mut_obj_add_uint (rxdoc, item, "packets", streamnode->rxpackets);
+
+          rxtotalbytes += streamnode->rxbytes;
+
+          if (reset)
+          {
+            streamnode->rxbytes   = 0;
+            streamnode->rxpackets = 0;
+          }
+        }
+      }
+
+      StackDestroy (stack, free);
+
+      pthread_mutex_unlock (&(cinfo->streams_lock));
+
+      if (txdoc)
+      {
+        yyjson_mut_val *root = yyjson_mut_doc_get_root (txdoc);
+        yyjson_mut_obj_add_uint (txdoc, root, "transfer_bytes", txtotalbytes);
+
+        char *json = yyjson_mut_write (txdoc, 0, NULL);
+        if (json)
+        {
+          fprintf (txfp, "%s\n", json);
+          free (json);
+        }
+        yyjson_mut_doc_free (txdoc);
+      }
+
+      if (rxdoc)
+      {
+        yyjson_mut_val *root = yyjson_mut_doc_get_root (rxdoc);
+        yyjson_mut_obj_add_uint (rxdoc, root, "transfer_bytes", rxtotalbytes);
+
+        char *json = yyjson_mut_write (rxdoc, 0, NULL);
+        if (json)
+        {
+          fprintf (rxfp, "%s\n", json);
+          free (json);
+        }
+        yyjson_mut_doc_free (rxdoc);
       }
     }
+    else
+    {
+      /* Legacy text format: START CLIENT / streams / END CLIENT */
 
-    StackDestroy (stack, free);
+      /* Print client header line */
+      if (txfp)
+        fprintf (txfp, "START CLIENT %s [%s] (%s|%s) @ %s (connected %s) TX\n",
+                 cinfo->hostname, cinfo->ipstr, modestr, cinfo->clientid,
+                 currtime, conntime);
+      if (rxfp)
+        fprintf (rxfp, "START CLIENT %s [%s] (%s|%s) @ %s (connected %s) RX\n",
+                 cinfo->hostname, cinfo->ipstr, modestr, cinfo->clientid,
+                 currtime, conntime);
 
-    /* Unlock stream tree */
-    pthread_mutex_unlock (&(cinfo->streams_lock));
+      /* Lock stream tree and create list (Stack) of streams */
+      pthread_mutex_lock (&(cinfo->streams_lock));
 
-    /* Print client footer line */
-    if (txfp)
-      fprintf (txfp, "END CLIENT %s [%s] total TX bytes: %" PRIu64 "\n",
-               cinfo->hostname, cinfo->ipstr, txtotalbytes);
-    if (rxfp)
-      fprintf (rxfp, "END CLIENT %s [%s] total RX bytes: %" PRIu64 "\n",
-               cinfo->hostname, cinfo->ipstr, rxtotalbytes);
+      stack = StackCreate ();
+
+      if (cinfo->streams)
+        RBBuildStack (cinfo->streams, stack);
+
+      /* Loop through streams and output bytecounts */
+      txtotalbytes = 0;
+      rxtotalbytes = 0;
+      while ((rbnode = (RBNode *)StackPop (stack)))
+      {
+        streamnode = (StreamNode *)rbnode->data;
+
+        if (txfp && streamnode->txbytes > 0)
+        {
+          fprintf (txfp, "%s %" PRIu64 " %" PRIu64 "\n", streamnode->streamid,
+                   streamnode->txbytes, streamnode->txpackets);
+
+          txtotalbytes += streamnode->txbytes;
+
+          /* Reset counts if requested */
+          if (reset)
+          {
+            streamnode->txbytes   = 0;
+            streamnode->txpackets = 0;
+          }
+        }
+
+        if (rxfp && streamnode->rxbytes > 0)
+        {
+          fprintf (rxfp, "%s %" PRIu64 " %" PRIu64 "\n", streamnode->streamid,
+                   streamnode->rxbytes, streamnode->rxpackets);
+
+          rxtotalbytes += streamnode->rxbytes;
+
+          /* Reset counts if requested */
+          if (reset)
+          {
+            streamnode->rxbytes   = 0;
+            streamnode->rxpackets = 0;
+          }
+        }
+      }
+
+      StackDestroy (stack, free);
+
+      /* Unlock stream tree */
+      pthread_mutex_unlock (&(cinfo->streams_lock));
+
+      /* Print client footer line */
+      if (txfp)
+        fprintf (txfp, "END CLIENT %s [%s] total TX bytes: %" PRIu64 "\n",
+                 cinfo->hostname, cinfo->ipstr, txtotalbytes);
+      if (rxfp)
+        fprintf (rxfp, "END CLIENT %s [%s] total RX bytes: %" PRIu64 "\n",
+                 cinfo->hostname, cinfo->ipstr, rxtotalbytes);
+    }
   }
 
   /* Flush log files */

@@ -26,12 +26,15 @@
 extern "C" {
 #endif
 
+#include <stdint.h>
 #include <sys/socket.h>
 
 /* Read and parse a HAProxy PROXY protocol version 2 header from a socket.
  *
  * On success the sockaddr_storage at 'addr' and the value at 'addrlen'
  * are updated to reflect the original client address conveyed by the header.
+ * If 'dest_port' is non-NULL and a PROXY command is received, the destination
+ * port from the header is stored there in host byte order.
  *
  * When the proxy sends a LOCAL command (e.g. health-checks) the address
  * is left unchanged and 1 is returned so the caller may keep the address
@@ -44,8 +47,10 @@ extern "C" {
  *   1  - LOCAL command; addr/addrlen unchanged
  *  -1  - error (bad signature, unsupported version, timeout, I/O error)
  */
-extern int proxy_protocol_v2_read (int socket, struct sockaddr_storage *addr,
-                                   socklen_t *addrlen, int timeout_ms);
+extern int proxy_protocol_v2_read (int socket, int timeout_ms,
+                                   struct sockaddr_storage *source_addr,
+                                   socklen_t *source_addrlen,
+                                   uint16_t *dest_port);
 
 #ifdef __cplusplus
 }
