@@ -15,7 +15,7 @@ RUN apt update && \
 
 # Build executable
 COPY . /build
-RUN cd /build && make clean -j && CFLAGS="-O3" make -j
+RUN cd /build && make clean -j && CFLAGS="-O3 -march=native" make -j
 
 # Build ringserver container
 FROM $BASE

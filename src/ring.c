@@ -257,6 +257,12 @@ RingInitialize (char *ringfilename, char *streamfilename, int *ringfd)
       lprintf (0, "%s(): error mmaping %s: %s", __func__, ringfilename, strerror (errno));
       return -1;
     }
+
+    /* Hint sequential access pattern: reduces page-fault stalls on the write
+     * path and encourages early writeback of dirty pages by the kernel */
+#if defined(MADV_SEQUENTIAL)
+    madvise (param.ringbuffer, config.ringsize, MADV_SEQUENTIAL);
+#endif
   }
   /* Read ring packet buffer into memory if not memory-mapping. */
   else
@@ -674,6 +680,7 @@ RingWrite (RingPacket *packet, char *packetdata, uint32_t datasize)
   int64_t offset;
   int64_t earliestoffset;
   int64_t latestoffset;
+  nstime_t pkttime = NSnow ();
 
   if (!packet || !packetdata)
     return -1;
@@ -771,7 +778,7 @@ RingWrite (RingPacket *packet, char *packetdata, uint32_t datasize)
   /* Update new packet details */
   packet->pktid        = (packet->pktid == RINGID_NONE) ? pktid : packet->pktid;
   packet->offset       = offset;
-  packet->pkttime      = NSnow ();
+  packet->pkttime      = pkttime;
   packet->nextinstream = -1;
 
   /* Find RingStream entry, creating if not found */
