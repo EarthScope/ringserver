@@ -1,9 +1,40 @@
+# ============================================================================
+# Example authorizer configuration — FOR DEMONSTRATION ONLY.
+# Passwords are stored in plaintext here for simplicity.  A production
+# deployment should use hashed passwords or an external identity provider.
+# ============================================================================
 
-# Default permissions: Used when a user does not have specific permissions defined
+# Default permissions applied when a user/subject has no explicit overrides
 [default_permissions]
 write_permission = false
 trust_permission = false
 
+# ---------- JWT authentication -----------------------------------------------
+# Tokens are verified with `secret` using `algorithm`, then the `sub` claim
+# is extracted and looked up in [jwt.subjects] below.
+[jwt]
+secret = "change-me-use-a-long-random-secret"
+algorithm = "HS256"         # HS256 or HS512 (symmetric HMAC algorithms)
+
+# Set to true to allow any valid, signed JWT (sub not required to be listed).
+# Permissions will fall back to [default_permissions].
+allow_unknown_subjects = false
+
+# Per-subject permissions keyed by the JWT `sub` claim value
+[jwt.subjects.read]
+# No overrides — inherits [default_permissions] (read-only, all streams)
+
+[jwt.subjects.limited]
+allowed_streams = ["^FDSN:IU_.*", "^FDSN:II_.*"]
+forbidden_streams = ["^FDSN:XX_.*", "^FDSN:YY_.*"]
+
+[jwt.subjects.trusted]
+trust_permission = true
+
+[jwt.subjects.write]
+write_permission = true
+
+# ---------- Username / password authentication --------------------------------
 # Example user "read"
 [users.read]
 password = "pass"

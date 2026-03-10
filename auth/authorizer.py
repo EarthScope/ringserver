@@ -1,43 +1,37 @@
 #!/usr/bin/env python3
 
 # A simple authentication and authorization system for a server
-# using a TOML configuration file.
+# using a TOML configuration file.  Requires Python 3.11+ (for tomllib).
+# JWT support additionally requires the PyJWT package (pip install PyJWT).
 #
 # Credentials are read from environment variables:
-# AUTH_USERNAME and AUTH_PASSWORD for username/password authentication
-# AUTH_JWTOKEN for JWT token authentication
-#
-# Note: JWT authentication is not implemented in this version, but is
-# stubbed out for use by those who want to implement it for their system.
+#   AUTH_USERNAME and AUTH_PASSWORD  for username/password authentication
+#   AUTH_JWTOKEN                    for JWT token authentication
 #
 # The program reads a TOML configuration file containing user credentials
-# and permissions. It checks the provided credentials against the
-# configuration file and returns a JSON object with the authentication
-# result and authorization details.  See the companion authconfig.toml
-# file for details.
+# and permissions.  For username/password, it checks against [users].
+# For JWT, it verifies the token signature using the secret and algorithm
+# configured in [jwt], then extracts the "sub" claim and looks up
+# permissions in [jwt.subjects].  See authconfig.toml for details.
 #
-# On successful authentication, it returns a JSON object with the
-# authorization details in the following format:
+# On successful authentication, it returns a JSON object:
 # {
-#   "subject": "<SUBJECT>",   // Either username (USERNAME) or sub (from JWT)
-#   "authenticated": true,    // if user is authentication was successful
-#   "write_permission": true, // if user can write streams
-#   "trust_permission": true, // if user can see connection and server details
-#   "allowed_streams": [      // list of streams allowed for this user
-#     "<STREAM_ID_PATTERN1>",
-#     "<STREAM_ID_PATTERN2>",
-#     ...],
-#   "forbidden_streams": [    // list of streams forbidden for this user
-#     "<STREAM_ID_PATTERN1>",
-#     "<STREAM_ID_PATTERN2>",
-#     ...]
+#   "username": "<USERNAME>",     // username or JWT sub claim
+#   "authenticated": true,        // authentication succeeded
+#   "write_permission": true,     // user can write streams
+#   "trust_permission": true,     // user can see connection/server details
+#   "allowed_streams": [          // stream patterns the user may access
+#     "<STREAM_ID_PATTERN>", ...
+#   ],
+#   "forbidden_streams": [        // stream patterns denied to the user
+#     "<STREAM_ID_PATTERN>", ...
+#   ]
 # }
 #
-# If authentication fails, it returns a JSON object with the
-# authentication result in the following format:
+# If authentication fails:
 # {
-#   "subject": "<SUBJECT>",   // Either username (USERNAME) or sub (from JWT)
-#   "authenticated": false,   // if user is authentication was successful
+#   "username": "<USERNAME>",     // username or JWT sub claim (may be null)
+#   "authenticated": false
 # }
 
 import os
@@ -46,6 +40,11 @@ import json
 import tomllib
 import argparse
 from typing import Dict, Optional
+
+try:
+    import jwt as pyjwt
+except ImportError:
+    pyjwt = None
 
 
 def read_toml_config(file_path: str) -> Dict:
@@ -61,7 +60,7 @@ def read_toml_config(file_path: str) -> Dict:
         sys.exit(1)
 
 
-def authenticate_with_credentials(username: str, password: str, config: Dict) -> tuple[Optional[str], bool]:
+def authenticate_with_userpass(username: str, password: str, config: Dict) -> tuple[Optional[str], bool]:
     """Authenticate using username and password."""
     users = config.get("users", {})
 
@@ -71,19 +70,61 @@ def authenticate_with_credentials(username: str, password: str, config: Dict) ->
 
 
 def authenticate_with_jwt(token: str, config: Dict) -> tuple[Optional[str], bool]:
-    """Authenticate using JWT token."""
+    """Authenticate using JWT token.
 
-    print("Error: JWT authentication not supported", file=sys.stderr)
-    return (None, False)
+    Decodes and verifies the token using the secret and algorithm from
+    config [jwt], then extracts the 'sub' claim. The subject must appear
+    in [jwt.subjects] (or default_permissions apply if allow_unknown_subjects
+    is true).
+    """
+    if pyjwt is None:
+        print("Error: PyJWT library not installed (pip install PyJWT)", file=sys.stderr)
+        return (None, False)
+
+    jwt_config = config.get("jwt", {})
+    secret = jwt_config.get("secret")
+    algorithm = jwt_config.get("algorithm", "HS256")
+
+    if not secret:
+        print("Error: JWT secret not configured in [jwt] section", file=sys.stderr)
+        return (None, False)
+
+    try:
+        payload = pyjwt.decode(token, secret, algorithms=[algorithm])
+    except pyjwt.ExpiredSignatureError:
+        print("Error: JWT token has expired", file=sys.stderr)
+        return (None, False)
+    except pyjwt.InvalidTokenError as e:
+        print(f"Error: JWT token invalid: {e}", file=sys.stderr)
+        return (None, False)
+
+    sub = payload.get("sub")
+    if not sub:
+        print("Error: JWT token missing 'sub' claim", file=sys.stderr)
+        return (None, False)
+
+    known_subjects = jwt_config.get("subjects", {})
+    allow_unknown = jwt_config.get("allow_unknown_subjects", False)
+
+    if sub not in known_subjects and not allow_unknown:
+        print(f"Error: JWT subject '{sub}' not authorized", file=sys.stderr)
+        return (sub, False)
+
+    return (sub, True)
 
 
-def get_authorization_details(name: str, config: Dict, result: Dict) -> None:
-    """Get authorization details for authenticated user."""
-    users = config.get("users", {})
+def get_authorization_details(name: str, auth_method: str, config: Dict, result: Dict) -> None:
+    """Get authorization details for an authenticated identity.
+
+    auth_method is "userpass" or "jwt", controlling which config section
+    is consulted for permissions.
+    """
     default_permissions = config.get("default_permissions", {})
 
-    # Get the user's data
-    user_data = users.get(name, {})
+    if auth_method == "jwt":
+        user_data = config.get("jwt", {}).get("subjects", {}).get(name, {})
+    else:
+        user_data = config.get("users", {}).get(name, {})
 
     # Extract permissions directly from user data (not from a nested "permissions" object)
     # Merge default permissions with user-specific ones
@@ -119,24 +160,25 @@ def main():
     # Determine authentication method
     name = None
     authenticated = False
+    auth_method = None
     if jwt_token:
-        # JWT token takes precedence if provided
+        auth_method = "jwt"
         (name, authenticated) = authenticate_with_jwt(jwt_token, config)
     elif username and password:
-        # Fall back to username/password if both are provided
-        (name, authenticated) = authenticate_with_credentials(username, password, config)
+        auth_method = "userpass"
+        (name, authenticated) = authenticate_with_userpass(username, password, config)
     else:
         print("Authentication failed: No valid credentials provided in environment variables.", file=sys.stderr)
         print("Set either AUTH_JWTOKEN or both AUTH_USERNAME and AUTH_PASSWORD.", file=sys.stderr)
         sys.exit(1)
 
     result = {
-        "name": name,
+        "username": name,
         "authenticated": authenticated
     }
 
     if authenticated:
-        get_authorization_details(name, config, result)
+        get_authorization_details(name, auth_method, config, result)
 
     # Output as JSON
     print(json.dumps(result, indent=2))
