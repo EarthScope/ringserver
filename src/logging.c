@@ -135,9 +135,10 @@ WriteTLog (ClientInfo *cinfo, int reset)
   Stack *stack;
   int rv = 0;
 
-  int jsonlmode = 0;
+  int jsonlmode;
+  int server_port;
 
-  nstime_t clock;
+  nstime_t clock = NSnow ();
   struct tm starttm;
   struct tm endtm;
 
@@ -206,7 +207,6 @@ WriteTLog (ClientInfo *cinfo, int reset)
   pthread_rwlock_unlock (&config.config_rwlock);
 
   /* Generate pretty strings for current & connection time */
-  clock = NSnow ();
   ms_nstime2timestr_n (clock, currtime, sizeof (currtime), ISOMONTHDAY_Z, NONE);
   ms_nstime2timestr_n (cinfo->conntime, conntime, sizeof (conntime), ISOMONTHDAY_Z, NONE);
 
@@ -214,6 +214,9 @@ WriteTLog (ClientInfo *cinfo, int reset)
   nstime_t intervalstart_ns = (nstime_t)tlog_startint * NSTMODULUS;
   nstime_t logstart         = (cinfo->conntime > intervalstart_ns) ? cinfo->conntime : intervalstart_ns;
   ms_nstime2timestr_n (logstart, logstarttime, sizeof (logstarttime), ISOMONTHDAY_Z, NONE);
+
+  /* Convert server port from string to integer */
+  server_port = atoi (cinfo->serverport);
 
   /* Lock transfer log file writing mutex */
   pthread_mutex_lock (&config.tlog.write_lock);
@@ -309,7 +312,7 @@ WriteTLog (ClientInfo *cinfo, int reset)
 
           yyjson_mut_val *client = yyjson_mut_obj_add_obj (txdoc, root, "client");
           yyjson_mut_obj_add_strcpy (txdoc, client, "ip", cinfo->ipstr);
-          yyjson_mut_obj_add_strcpy (txdoc, client, "server_port", cinfo->serverport);
+          yyjson_mut_obj_add_int (txdoc, client, "server_port", server_port);
           yyjson_mut_obj_add_strcpy (txdoc, client, "hostname", cinfo->hostname);
           yyjson_mut_obj_add_strcpy (txdoc, client, "user_agent", cinfo->clientid);
 
@@ -357,7 +360,7 @@ WriteTLog (ClientInfo *cinfo, int reset)
 
           yyjson_mut_val *client = yyjson_mut_obj_add_obj (rxdoc, root, "client");
           yyjson_mut_obj_add_strcpy (rxdoc, client, "ip", cinfo->ipstr);
-          yyjson_mut_obj_add_strcpy (rxdoc, client, "server_port", cinfo->serverport);
+          yyjson_mut_obj_add_int (rxdoc, client, "server_port", server_port);
           yyjson_mut_obj_add_strcpy (rxdoc, client, "hostname", cinfo->hostname);
           yyjson_mut_obj_add_strcpy (rxdoc, client, "user_agent", cinfo->clientid);
 

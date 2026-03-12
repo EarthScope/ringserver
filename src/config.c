@@ -2055,7 +2055,7 @@ SetParameter (const char *paramstring, int dynamiconly)
     config.tlog.basedir = basedir;
 
     /* Enable both TX and RX logging as defaults */
-    config.tlog.mode = TLOG_TX | TLOG_RX;
+    config.tlog.mode |= TLOG_TX | TLOG_RX;
   }
   else if (!strcasecmp ("TransferLogInterval", field[0]) && fieldcount == 2)
   {
