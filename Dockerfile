@@ -14,8 +14,15 @@ RUN apt update && \
     rm -rf /var/lib/apt/lists/*
 
 # Build executable
+# Use -march=native for amd64, -mcpu=native for arm64 (clang)
 COPY . /build
-RUN cd /build && make clean -j && CFLAGS="-O3 -march=native" make -j
+ARG TARGETARCH
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+        ARCH_FLAG="-mcpu=native"; \
+    else \
+        ARCH_FLAG="-march=native"; \
+    fi && \
+    cd /build && make clean -j && CFLAGS="-O3 $ARCH_FLAG" make -j
 
 # Build ringserver container
 FROM $BASE
