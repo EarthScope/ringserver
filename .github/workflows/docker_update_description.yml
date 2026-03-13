@@ -8,13 +8,10 @@ jobs:
     name: Push description to Docker Hub repository
     runs-on: ubuntu-latest
     permissions:
-      packages: write
       contents: read
-      attestations: write
-      id-token: write
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Sync README-docker.md with Docker Hub description
         uses: peter-evans/dockerhub-description@v4
