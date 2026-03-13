@@ -1,8 +1,8 @@
 2026.069: v4.3.0
 	- Add support for proxy protocol v2, configurable with PROXYv2 listener option.
 	- Add support for JSONL transfer logging.
-  - Authorizer program is now expected to include a `username` key in the response.
-  - Update illustrative example authorizer to support auth via JWT.
+	- Authorizer program is now expected to include a `username` key in the response.
+	- Update illustrative example authorizer to support auth via JWT.
 
 2026.041: v4.2.2
 	- Parse multiple, comma-separated values from the configuration environment
