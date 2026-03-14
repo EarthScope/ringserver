@@ -1,4 +1,4 @@
-2026.273:
+2026.273: v4.3.1
 	- Add TRUSTED listener option to grant trusted permission to all clients on a port.
 	- Include PROXYv2 and TRUSTED flags in listener info; include PROXYv2 in client
 	connection type.
