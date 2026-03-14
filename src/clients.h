@@ -83,6 +83,7 @@ typedef struct ClientInfo
 {
   int         socket;       /* Socket descriptor */
   uint8_t     tls;          /* Flag identifying TLS connection */
+  uint8_t     proxyv2;      /* Flag identifying PROXYv2 connection */
   void       *tlsctx;       /* TLS context */
   int         socketerr;    /* Socket error flag, -1: error, -2: orderly shutdown */
   char       *sendbuf;      /* Client specific send buffer */

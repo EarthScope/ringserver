@@ -1,5 +1,7 @@
 2026.273:
 	- Add TRUSTED listener option to grant trusted permission to all clients on a port.
+	- Include PROXYv2 and TRUSTED flags in listener info; include PROXYv2 in client
+	connection type.
 
 2026.069: v4.3.0
 	- Add support for proxy protocol v2, configurable with PROXYv2 listener option.

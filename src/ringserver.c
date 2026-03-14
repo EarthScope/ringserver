@@ -1131,6 +1131,7 @@ ConfigClient (struct sockaddr *paddr, int clientsocket,
   cinfo->socket    = clientsocket;
   cinfo->protocols = lpp->protocols;
   cinfo->tls       = (lpp->options & ENCRYPTION_TLS) ? 1 : 0;
+  cinfo->proxyv2   = (lpp->options & PROXY_PROTOCOL_V2) ? 1 : 0;
   cinfo->state     = STATE_COMMAND;
   cinfo->type      = CLIENT_UNDETERMINED;
   cinfo->starttime = NSTUNSET;
@@ -1499,13 +1500,14 @@ GenProtocolString (ListenProtocols protocols, ListenOptions options,
     family = "Unknown family?";
 
   length = snprintf (result, maxlength,
-                     "%s: %s%s%s%s%s",
+                     "%s: %s%s%s%s%s%s",
                      family,
                      (protocols & PROTO_DATALINK) ? "DataLink " : "",
                      (protocols & PROTO_SEEDLINK) ? "SeedLink " : "",
                      (protocols & PROTO_HTTP) ? "HTTP " : "",
                      (options & ENCRYPTION_TLS) ? "over TLS " : "",
-                     (options & PROXY_PROTOCOL_V2) ? "with PROXYv2 " : "");
+                     (options & PROXY_PROTOCOL_V2) ? "with PROXYv2 " : "",
+                     (options & GRANT_TRUSTED) ? "GRANT_TRUSTED " : "");
 
   if (length < maxlength && result[length - 1] == ' ')
     result[length - 1] = '\0';

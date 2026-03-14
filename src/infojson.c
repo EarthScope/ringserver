@@ -729,7 +729,7 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
   ClientInfo *tcinfo;
   nstime_t nsnow;
 
-  char *conntype;
+  char conntype[64];
   char timestring[50];
   char packettime[50];
 
@@ -776,36 +776,28 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
     /* Determine connection type */
     if (tcinfo->type == CLIENT_DATALINK)
     {
-      if (tcinfo->websocket && tcinfo->tls)
-        conntype = "DataLink:WebSocket:TLS";
-      else if (tcinfo->websocket)
-        conntype = "DataLink:WebSocket";
-      else if (tcinfo->tls)
-        conntype = "DataLink:TLS";
-      else
-        conntype = "DataLink";
+      snprintf (conntype, sizeof (conntype), "DataLink%s%s%s",
+                tcinfo->websocket ? ":WebSocket" : "",
+                tcinfo->tls ? ":TLS" : "",
+                tcinfo->proxyv2 ? ":PROXYv2" : "");
     }
     else if (tcinfo->type == CLIENT_SEEDLINK)
     {
-      if (tcinfo->websocket && tcinfo->tls)
-        conntype = "SeedLink:WebSocket:TLS";
-      else if (tcinfo->websocket)
-        conntype = "SeedLink:WebSocket";
-      else if (tcinfo->tls)
-        conntype = "SeedLink:TLS";
-      else
-        conntype = "SeedLink";
+      snprintf (conntype, sizeof (conntype), "SeedLink%s%s%s",
+                tcinfo->websocket ? ":WebSocket" : "",
+                tcinfo->tls ? ":TLS" : "",
+                tcinfo->proxyv2 ? ":PROXYv2" : "");
     }
     else if (tcinfo->type == CLIENT_HTTP)
     {
-      if (tcinfo->tls)
-        conntype = "HTTPS";
-      else
-        conntype = "HTTP";
+      snprintf (conntype, sizeof (conntype), "%s%s",
+                tcinfo->tls ? "HTTPS" : "HTTP",
+                tcinfo->proxyv2 ? ":PROXYv2" : "");
     }
     else
     {
-      conntype = "Unknown";
+      snprintf (conntype, sizeof (conntype), "Unknown%s",
+                tcinfo->proxyv2 ? ":PROXYv2" : "");
     }
 
     client = yyjson_mut_arr_add_obj (doc, client_array);
