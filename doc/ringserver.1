@@ -318,6 +318,23 @@ port can be set by adding flags to the port specification.  See the
 available flags in the \fBListenPort\fP description of the reference
 config file printed using the \fB-C\fP command line option.
 
+The \fBPROXYv2\fP flag enables support for the HAProxy PROXY protocol
+version 2. When this flag is set, the server will expect every client
+connection on that port to send a valid PROXY protocol v2 header before
+any actual protocol data. This allows the server to determine the true
+source address and port of the connecting client, as often required
+when the traffic flows through a trusted proxy or load balancer.
+\fBImportant:\fP The PROXY protocol should only be enabled on ports that
+are exclusively reachable by trusted proxies since the client may specify
+any IP address in the PROXY header, potentially spoofing their source
+address. Do not use the PROXYv2 flag on publicly accessible ports.
+
+The \fBTRUSTED\fP flag grants trusted status to all clients connecting
+on a port, allowing access to detailed server status and connection
+information.  \fBWARNING:\fP Do not use this flag on publicly accessible
+ports as it grants elevated access to all connecting clients regardless
+of their IP address.
+
 Examples of adding flags to a port specification:
 
 .nf
@@ -325,6 +342,8 @@ Examples of adding flags to a port specification:
   \fB-SL "18500 TLS IPv4"\fP            : CLI, SeedLink via TLS on port 18500, IPv4 only
   \fBRS_LISTEN_PORT="8080 HTTP IPv6"\fP : EnvVar, HTTPS on port 8080, IPv6 only
   \fBListenPort 16000 DataLink\fP       : Config file, DataLink on port 16000
+  \fBListenPort 14000 TRUSTED\fP        : Config file, all protocols trusted on port 14000
+  \fBListenPort 18000 PROXYv2\fP      : Config file, all protocols with PROXYv2 on port 18000
 .fi
 
 .SH "HTTP Support"

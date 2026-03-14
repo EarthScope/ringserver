@@ -216,6 +216,10 @@ ringserver [options] [configfile]
 
 <p >The network protocols and families allowed by any given listening port can be set by adding flags to the port specification.  See the available flags in the <b>ListenPort</b> description of the reference config file printed using the <b>-C</b> command line option.</p>
 
+<p >The <b>PROXYv2</b> flag enables support for the HAProxy PROXY protocol version 2. When this flag is set, the server will expect every client connection on that port to send a valid PROXY protocol v2 header before any actual protocol data. This allows the server to determine the true source address and port of the connecting client, as often required when the traffic flows through a trusted proxy or load balancer. <b>Important:</b> The PROXY protocol should only be enabled on ports that are exclusively reachable by trusted proxies since the client may specify any IP address in the PROXY header, potentially spoofing their source address. Do not use the PROXYv2 flag on publicly accessible ports.</p>
+
+<p >The <b>TRUSTED</b> flag grants trusted status to all clients connecting on a port, allowing access to detailed server status and connection information.  <b>WARNING:</b> Do not use this flag on publicly accessible ports as it grants elevated access to all connecting clients regardless of their IP address.</p>
+
 <p >Examples of adding flags to a port specification:</p>
 
 <pre >
@@ -223,6 +227,8 @@ ringserver [options] [configfile]
   <b>-SL "18500 TLS IPv4"</b>            : CLI, SeedLink via TLS on port 18500, IPv4 only
   <b>RS_LISTEN_PORT="8080 HTTP IPv6"</b> : EnvVar, HTTPS on port 8080, IPv6 only
   <b>ListenPort 16000 DataLink</b>       : Config file, DataLink on port 16000
+  <b>ListenPort 14000 TRUSTED</b>        : Config file, all protocols trusted on port 14000
+  <b>ListenPort 18000 PROXYv2</b>      : Config file, all protocols with PROXYv2 on port 18000
 </pre>
 
 ## <a id='http-support'>Http Support</a>

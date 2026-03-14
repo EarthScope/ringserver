@@ -109,8 +109,14 @@ static const char *reference_config_file_parts[] = {
   "# this option on ports that are exclusively reachable by trusted proxies,\n"
   "# as it otherwise allows clients to spoof their IP address.\n"
   "#\n"
+  "# Trusted status can be granted to all clients connecting on a port by\n"
+  "# including \"TRUSTED\" after the port.  Trusted clients have access to\n"
+  "# detailed server status and connection information.  WARNING: Do not\n"
+  "# use this option on publicly accessible ports as it grants elevated\n"
+  "# access to all connecting clients regardless of their IP address.\n"
+  "#\n"
   "# For example:\n"
-  "# ListenPort <port> [DataLink] [SeedLink] [HTTP] [IPv4] [IPv6] [TLS] [PROXYv2]\n"
+  "# ListenPort <port> [DataLink] [SeedLink] [HTTP] [IPv4] [IPv6] [TLS] [PROXYv2] [TRUSTED]\n"
   "#\n"
   "# This parameter can be specified multiple times to listen for connections\n"
   "# on multiple ports.\n"
@@ -1888,6 +1894,9 @@ SetParameter (const char *paramstring, int dynamiconly)
 
       else if (!strcasecmp ("PROXYv2", field[idx]))
         lpp.options |= PROXY_PROTOCOL_V2;
+
+      else if (!strcasecmp ("TRUSTED", field[idx]))
+        lpp.options |= GRANT_TRUSTED;
 
       else
       {

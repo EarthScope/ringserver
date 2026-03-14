@@ -1190,6 +1190,12 @@ ConfigClient (struct sockaddr *paddr, int clientsocket,
     }
   }
 
+  /* Grant trusted permission if listener port is configured with TRUSTED flag */
+  if (lpp->options & GRANT_TRUSTED)
+  {
+    cinfo->permissions |= TRUST_PERMISSION;
+  }
+
   /* Set client connect time */
   cinfo->conntime = NSnow ();
 

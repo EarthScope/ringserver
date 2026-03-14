@@ -88,6 +88,7 @@ typedef enum
   FAMILY_IPv4       = 1u << 2,
   FAMILY_IPv6       = 1u << 3,
   PROXY_PROTOCOL_V2 = 1u << 4,
+  GRANT_TRUSTED     = 1u << 5,
 } ListenOptions;
 
 /* Doubly-linked structure of client threads */
