@@ -22,7 +22,7 @@ FROM $BASE
 RUN apt update && \
     apt upgrade -y && \
     apt install -y --no-install-recommends \
-        netbase && \
+        procps netbase && \
     rm -rf /var/cache/apt/archives /var/lib/apt/lists/*
 
 # Copy executable and default config from build image
