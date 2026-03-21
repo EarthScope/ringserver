@@ -1,3 +1,7 @@
+2026.080:
+	- Rename transfer logging options to usage logging, old options still supported.
+	- Add access logging to log connections, disconnections, and important commands.
+
 2026.273: v4.3.1
 	- Add TRUSTED listener option to grant trusted permission to all clients on a port.
 	- Include PROXYv2 and TRUSTED flags in listener info; include PROXYv2 in client

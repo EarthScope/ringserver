@@ -139,6 +139,8 @@ ClientThread (void *arg)
   lprintf (1, "Client connected [%s]: %s [%s] port %s",
            cinfo->serverport, cinfo->hostname, cinfo->ipstr, cinfo->portstr);
 
+  WriteAccessLog (cinfo, "connect", NULL, NULL, NULL, NULL);
+
   /* Initialize stream tracking binary tree */
   pthread_mutex_lock (&(cinfo->streams_lock));
   cinfo->streams      = RBTreeCreate (KeyCompare, free, free);
@@ -440,10 +442,10 @@ ClientThread (void *arg)
   tls_cleanup (cinfo);
 
   /* Write out transmission log for this client if requested */
-  if (config.tlog.mode != TLOG_NONE)
+  if (config.usagelog.mode & (USAGELOG_TX | USAGELOG_RX))
   {
     lprintf (2, "[%s] Writing transmission log", cinfo->hostname);
-    WriteTLog (cinfo, 1);
+    WriteTransferLog (cinfo, 1);
   }
 
   /* Release allowed and forbidden pattern strings and related PCRE2 data */
@@ -501,6 +503,8 @@ ClientThread (void *arg)
 
   if (cinfo->type == CLIENT_DATALINK && cinfo->extinfo)
     DLFree (cinfo);
+
+  WriteAccessLog (cinfo, "disconnect", NULL, NULL, NULL, NULL);
 
   lprintf (1, "Client disconnected: %s", cinfo->hostname);
 

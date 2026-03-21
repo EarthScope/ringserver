@@ -265,6 +265,8 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
   lprintf (2, "[%s] Received HTTP request %.20s", cinfo->hostname, path);
 
+  WriteAccessLog (cinfo, "command", "GET", path, NULL, NULL);
+
   /* Separate query string (parameters) from path */
   if ((query = strchr (path, '?')) != NULL)
   {

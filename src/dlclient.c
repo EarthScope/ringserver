@@ -155,6 +155,8 @@ DLHandleCmd (ClientInfo *cinfo)
       cinfo->reader->pktid = RINGID_NEXT;
     }
 
+    WriteAccessLog (cinfo, "command", "STREAM", NULL, cinfo->matchstr, cinfo->rejectstr);
+
     cinfo->state = STATE_STREAM;
   }
 
@@ -1140,6 +1142,8 @@ HandleInfo (ClientInfo *cinfo)
     lprintf (0, "[%s] HandleInfo cannot detect INFO", cinfo->hostname);
     return -1;
   }
+
+  WriteAccessLog (cinfo, "command", "INFO", type, NULL, NULL);
 
   /* Add contents to the XML structure depending on info request */
   if (!strncasecmp (type, "STATUS", 6))

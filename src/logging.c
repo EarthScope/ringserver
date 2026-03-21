@@ -17,7 +17,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2024:
+ * Copyright (C) 2026:
  * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
@@ -36,6 +36,7 @@
 #include "generic.h"
 #include "logging.h"
 #include "rbtree.h"
+#include "ringserver.h"
 #include "slclient.h"
 #include "yyjson.h"
 
@@ -116,9 +117,9 @@ lprint (const char *message)
 } /* End of lprint() */
 
 /***************************************************************************
- * WriteTLog:
+ * WriteTransferLog:
  *
- * Write transfer packet and byte counts to files in the log base
+ * Write transfer packet and byte counts to files in the usage log base
  * directory.  Separate files are written for transmission (TX) logs
  * and reception (RX) logs.  If the 'reset' flag is true reset all
  * counts to zero after logging.
@@ -126,7 +127,7 @@ lprint (const char *message)
  * Returns 0 on success and -1 on error.
  ***************************************************************************/
 int
-WriteTLog (ClientInfo *cinfo, int reset)
+WriteTransferLog (ClientInfo *cinfo, int reset)
 {
   uint64_t txtotalbytes = 0;
   uint64_t rxtotalbytes = 0;
@@ -157,27 +158,27 @@ WriteTLog (ClientInfo *cinfo, int reset)
   pthread_rwlock_rdlock (&config.config_rwlock);
 
   /* Transfer logging not enabled */
-  if (config.tlog.mode == TLOG_NONE || config.tlog.basedir == NULL)
+  if (!(config.usagelog.mode & (USAGELOG_TX | USAGELOG_RX)) || config.usagelog.basedir == NULL)
   {
     pthread_rwlock_unlock (&config.config_rwlock);
     return 0;
   }
 
-  jsonlmode = (config.tlog.mode & TLOG_JSONL) ? 1 : 0;
+  jsonlmode = (config.usagelog.mode & USAGELOG_JSONL) ? 1 : 0;
 
-  tlog_startint = config.tlog.startint;
+  tlog_startint = config.usagelog.startint;
 
-  if (config.tlog.mode & TLOG_TX)
+  if (config.usagelog.mode & USAGELOG_TX)
   {
     /* Generate file path & name for log time interval file */
-    localtime_r (&config.tlog.startint, &starttm);
-    time_t endint = config.tlog.endint;
+    localtime_r (&config.usagelog.startint, &starttm);
+    time_t endint = config.usagelog.endint;
     localtime_r (&endint, &endtm);
     snprintf (txfilename, sizeof (txfilename),
               "%s/%s%stxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d%s",
-              config.tlog.basedir,
-              (config.tlog.prefix) ? config.tlog.prefix : "",
-              (config.tlog.prefix) ? "-" : "",
+              config.usagelog.basedir,
+              (config.usagelog.prefix) ? config.usagelog.prefix : "",
+              (config.usagelog.prefix) ? "-" : "",
               starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
               starttm.tm_hour, starttm.tm_min,
               endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
@@ -185,17 +186,17 @@ WriteTLog (ClientInfo *cinfo, int reset)
               jsonlmode ? ".jsonl" : "");
   }
 
-  if (config.tlog.mode & TLOG_RX)
+  if (config.usagelog.mode & USAGELOG_RX)
   {
     /* Generate file path & name for log time interval file */
-    localtime_r (&config.tlog.startint, &starttm);
-    time_t endint = config.tlog.endint;
+    localtime_r (&config.usagelog.startint, &starttm);
+    time_t endint = config.usagelog.endint;
     localtime_r (&endint, &endtm);
     snprintf (rxfilename, sizeof (rxfilename),
               "%s/%s%srxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d%s",
-              config.tlog.basedir,
-              (config.tlog.prefix) ? config.tlog.prefix : "",
-              (config.tlog.prefix) ? "-" : "",
+              config.usagelog.basedir,
+              (config.usagelog.prefix) ? config.usagelog.prefix : "",
+              (config.usagelog.prefix) ? "-" : "",
               starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
               starttm.tm_hour, starttm.tm_min,
               endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
@@ -218,8 +219,8 @@ WriteTLog (ClientInfo *cinfo, int reset)
   /* Convert server port from string to integer */
   server_port = atoi (cinfo->serverport);
 
-  /* Lock transfer log file writing mutex */
-  pthread_mutex_lock (&config.tlog.write_lock);
+  /* Lock usage log file writing mutex */
+  pthread_mutex_lock (&config.usagelog.write_lock);
 
   /* Open TX log file and seek to end */
   if (txfilename[0])
@@ -545,8 +546,8 @@ WriteTLog (ClientInfo *cinfo, int reset)
   if (rxfp)
     fflush (rxfp);
 
-  /* Unlock transfer file writing lock mutex */
-  pthread_mutex_unlock (&config.tlog.write_lock);
+  /* Unlock usage log file writing mutex */
+  pthread_mutex_unlock (&config.usagelog.write_lock);
 
   /* Close log files */
   if (txfp && fclose (txfp))
@@ -563,12 +564,191 @@ WriteTLog (ClientInfo *cinfo, int reset)
   }
 
   return rv;
-} /* End of WriteTLog() */
+} /* End of WriteTransferLog() */
 
 /***************************************************************************
- * CalcTLogInterval:
+ * WriteAccessLog:
  *
- * Calculate a normalized interval transfer log file time window for a
+ * Write a single access log entry to the accesslog file in the usage log
+ * base directory.  Each call appends one JSON Lines record describing a
+ * connection event or command issued by the client.
+ *
+ * event   - "connect", "disconnect", or "command"
+ * command - command name (e.g. "INFO", "DATA", "STREAM", "GET"), or NULL
+ * detail  - command detail (e.g. INFO item, HTTP path), or NULL
+ * match   - stream match expression, or NULL
+ * reject  - stream reject expression, or NULL
+ *
+ * Returns 0 on success and -1 on error.
+ ***************************************************************************/
+int
+WriteAccessLog (ClientInfo *cinfo, const char *event,
+                const char *command, const char *detail,
+                const char *match, const char *reject)
+{
+  char filename[512] = {0};
+  char currtime[32]  = {0};
+  char conntime[32]  = {0};
+  int server_port;
+  FILE *fp = NULL;
+  int rv   = 0;
+
+  if (!cinfo || !event)
+    return -1;
+
+  /* Take a config reader lock */
+  pthread_rwlock_rdlock (&config.config_rwlock);
+
+  /* Access logging not enabled */
+  if (!(config.usagelog.mode & USAGELOG_ACCESS) || config.usagelog.basedir == NULL)
+  {
+    pthread_rwlock_unlock (&config.config_rwlock);
+    return 0;
+  }
+
+  {
+    struct tm starttm;
+    struct tm endtm;
+    localtime_r (&config.usagelog.startint, &starttm);
+    time_t endint = config.usagelog.endint;
+    localtime_r (&endint, &endtm);
+    snprintf (filename, sizeof (filename),
+              "%s/%s%saccesslog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d.jsonl",
+              config.usagelog.basedir,
+              (config.usagelog.prefix) ? config.usagelog.prefix : "",
+              (config.usagelog.prefix) ? "-" : "",
+              starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
+              starttm.tm_hour, starttm.tm_min,
+              endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
+              endtm.tm_hour, endtm.tm_min);
+  }
+
+  /* Release config reader lock */
+  pthread_rwlock_unlock (&config.config_rwlock);
+
+  /* Generate ISO timestamp strings */
+  nstime_t clock = NSnow ();
+  ms_nstime2timestr_n (clock, currtime, sizeof (currtime), ISOMONTHDAY_Z, NONE);
+  ms_nstime2timestr_n (cinfo->conntime, conntime, sizeof (conntime), ISOMONTHDAY_Z, NONE);
+
+  server_port = atoi (cinfo->serverport);
+
+  /* Determine protocol name and version strings */
+  const char *modestr   = "Unknown";
+  char protoversion[16] = {0};
+
+  if (cinfo->type == CLIENT_DATALINK)
+  {
+    modestr = "DataLink";
+    snprintf (protoversion, sizeof (protoversion), "%u.%u", DLPROTO_MAJOR, DLPROTO_MINOR);
+  }
+  else if (cinfo->type == CLIENT_SEEDLINK)
+  {
+    modestr = "SeedLink";
+    if (cinfo->extinfo)
+    {
+      SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
+      snprintf (protoversion, sizeof (protoversion), "%u.%u",
+                slinfo->proto_major, slinfo->proto_minor);
+    }
+  }
+  else if (cinfo->type == CLIENT_HTTP)
+  {
+    modestr = "HTTP";
+  }
+
+  /* Build JSON document */
+  yyjson_mut_doc *doc = yyjson_mut_doc_new (NULL);
+  if (!doc)
+    return -1;
+
+  yyjson_mut_val *root = yyjson_mut_obj (doc);
+  yyjson_mut_doc_set_root (doc, root);
+
+  yyjson_mut_obj_add_strcpy (doc, root, "log_time", currtime);
+  yyjson_mut_obj_add_strcpy (doc, root, "connect_time", conntime);
+
+  yyjson_mut_val *client = yyjson_mut_obj_add_obj (doc, root, "client");
+  yyjson_mut_obj_add_strcpy (doc, client, "ip", cinfo->ipstr);
+  yyjson_mut_obj_add_int (doc, client, "server_port", server_port);
+  yyjson_mut_obj_add_strcpy (doc, client, "hostname", cinfo->hostname);
+  yyjson_mut_obj_add_strcpy (doc, client, "user_agent", cinfo->clientid);
+
+  if (cinfo->permissions & AUTHENTICATED)
+  {
+    const char *authmethodstr = (cinfo->auth_method == AUTH_JWT)        ? "jwt"
+                                : (cinfo->auth_method == AUTH_USERPASS) ? "userpass"
+                                                                        : "unknown";
+    yyjson_mut_val *auth      = yyjson_mut_obj_add_obj (doc, root, "auth");
+    yyjson_mut_obj_add_str (doc, auth, "method", authmethodstr);
+    if (cinfo->auth_username[0])
+      yyjson_mut_obj_add_strcpy (doc, auth, "username", cinfo->auth_username);
+  }
+
+  yyjson_mut_val *proto = yyjson_mut_obj_add_obj (doc, root, "protocol");
+  yyjson_mut_obj_add_strcpy (doc, proto, "name", modestr);
+  if (protoversion[0])
+    yyjson_mut_obj_add_strcpy (doc, proto, "version", protoversion);
+  if (cinfo->tls)
+    yyjson_mut_obj_add_bool (doc, proto, "is_tls", true);
+  if (cinfo->websocket)
+    yyjson_mut_obj_add_bool (doc, proto, "is_websocket", true);
+
+  yyjson_mut_obj_add_strcpy (doc, root, "event", event);
+  if (command)
+    yyjson_mut_obj_add_strcpy (doc, root, "command", command);
+  if (detail)
+    yyjson_mut_obj_add_strcpy (doc, root, "detail", detail);
+  if (match)
+    yyjson_mut_obj_add_strcpy (doc, root, "match", match);
+  if (reject)
+    yyjson_mut_obj_add_strcpy (doc, root, "reject", reject);
+
+  yyjson_mut_val *svc = yyjson_mut_obj_add_obj (doc, root, "service");
+  yyjson_mut_obj_add_strcpy (doc, svc, "name", PACKAGE);
+  yyjson_mut_obj_add_strcpy (doc, svc, "version", VERSION);
+
+  /* Lock usage log file writing mutex */
+  pthread_mutex_lock (&config.usagelog.write_lock);
+
+  if ((fp = fopen (filename, "a")) == NULL)
+  {
+    lprintf (0, "Error opening access log file %s: %s", filename, strerror (errno));
+    rv = -1;
+  }
+  else if (fseek (fp, 0, SEEK_END))
+  {
+    lprintf (0, "Error seeking to end of access log file %s: %s", filename, strerror (errno));
+    rv = -1;
+  }
+  else
+  {
+    char *json = yyjson_mut_write (doc, 0, NULL);
+    if (json)
+    {
+      fprintf (fp, "%s\n", json);
+      free (json);
+    }
+    fflush (fp);
+
+    if (fclose (fp))
+    {
+      lprintf (0, "Error closing access log file %s: %s", filename, strerror (errno));
+      rv = -1;
+    }
+  }
+
+  pthread_mutex_unlock (&config.usagelog.write_lock);
+
+  yyjson_mut_doc_free (doc);
+
+  return rv;
+} /* End of WriteAccessLog() */
+
+/***************************************************************************
+ * CalcUsageLogInterval:
+ *
+ * Calculate a normalized interval usage log file time window for a
  * given reference time (usually the current time) and interval in seconds.
  *
  * The window is always normalized relative to the current day. Intervals
@@ -578,7 +758,7 @@ WriteTLog (ClientInfo *cinfo, int reset)
  * Returns 0 on success, and -1 on failure
  ***************************************************************************/
 int
-CalcTLogInterval (time_t reftime)
+CalcUsageLogInterval (time_t reftime)
 {
   struct tm reftm;
 
@@ -594,16 +774,16 @@ CalcTLogInterval (time_t reftime)
   pthread_rwlock_wrlock (&config.config_rwlock);
 
   /* Calculate the new, rounded epoch time */
-  config.tlog.startint = mktime (&reftm);
+  config.usagelog.startint = mktime (&reftm);
 
   /* Add intervals until within the current interval */
-  while ((config.tlog.startint + config.tlog.interval) <= reftime)
-    config.tlog.startint += config.tlog.interval;
+  while ((config.usagelog.startint + config.usagelog.interval) <= reftime)
+    config.usagelog.startint += config.usagelog.interval;
 
   /* Set end of interval window */
-  config.tlog.endint = config.tlog.startint + config.tlog.interval;
+  config.usagelog.endint = config.usagelog.startint + config.usagelog.interval;
 
   pthread_rwlock_unlock (&config.config_rwlock);
 
   return 0;
-} /* End of CalcTLogInterval() */
+} /* End of CalcUsageLogInterval() */

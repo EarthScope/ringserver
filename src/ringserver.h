@@ -135,14 +135,15 @@ typedef struct IPNet_s
   struct IPNet_s *next;
 } IPNet;
 
-/* Transmission log modes */
+/* Usage log modes */
 typedef enum
 {
-  TLOG_NONE  = 0,
-  TLOG_RX    = 1 << 0, /* Write transfer log for data received from clients */
-  TLOG_TX    = 1 << 1, /* Write transfer log for data transmitted to clients */
-  TLOG_JSONL = 1 << 2  /* Write JSON Lines format instead of legacy text */
-} TLogMode;
+  USAGELOG_NONE   = 0,
+  USAGELOG_JSONL  = 1 << 0, /* Write JSON Lines format for transfer logs */
+  USAGELOG_RX     = 1 << 1, /* Write transfer log for data received from clients */
+  USAGELOG_TX     = 1 << 2, /* Write transfer log for data transmitted to clients */
+  USAGELOG_ACCESS = 1 << 3  /* Write access log for connections and key commands */
+} UsageLogMode;
 
 /* Global server parameters */
 struct param_s
@@ -218,16 +219,16 @@ struct config_s
     uint8_t required;     /* Flag to require authentication for streaming data */
     uint32_t timeout_sec; /* Auth program timeout in seconds */
   } auth;
-  struct tlog
+  struct usagelog
   {
-    pthread_mutex_t write_lock; /* Lock for writing transfer log files */
-    _Atomic TLogMode mode;      /* Transfer log mode, disabled, TX and/or RX */
-    char *basedir;              /* Transfer log base directory */
-    char *prefix;               /* Transfer log file prefix */
-    int interval;               /* Transfer log writing interval in seconds */
+    pthread_mutex_t write_lock; /* Lock for writing usage log files */
+    _Atomic UsageLogMode mode;  /* Usage log mode flags */
+    char *basedir;              /* Usage log base directory */
+    char *prefix;               /* Usage log file prefix */
+    int interval;               /* Usage log writing interval in seconds */
     time_t startint;            /* Normalized start time */
-    _Atomic time_t endint;      /* Transfer log interval end time */
-  } tlog;
+    _Atomic time_t endint;      /* Usage log interval end time */
+  } usagelog;
 };
 
 extern struct config_s config;

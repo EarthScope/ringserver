@@ -371,6 +371,10 @@ SLHandleCmd (ClientInfo *cinfo)
 
     lprintf (1, "[%s] Configured ring parameters", cinfo->hostname);
 
+    WriteAccessLog (cinfo, "command",
+                    (slinfo->dialup) ? "FETCH" : "DATA",
+                    NULL, cinfo->matchstr, cinfo->rejectstr);
+
     cinfo->state = STATE_STREAM;
   } /* Done configuring ring parameters */
 
@@ -1542,6 +1546,8 @@ HandleInfo_v3 (ClientInfo *cinfo)
     return -1;
   }
 
+  WriteAccessLog (cinfo, "command", "INFO", level, NULL, NULL);
+
   /* Parse INFO request to determine level */
   if (!strncasecmp (level, "ID", 2))
   {
@@ -1754,84 +1760,89 @@ HandleInfo_v4 (ClientInfo *cinfo)
     json_string = error_json (cinfo, SLSERVER_ID, "ARGUMENTS", "No INFO item specified");
     errflag = 1;
   }
-  else if (!strncasecmp (item, "ID", 2))
-  {
-    /* This is used to "ping" the server so only report at high verbosity */
-    lprintf (2, "[%s] Received INFO ID request", cinfo->hostname);
-
-    json_string = info_json (cinfo, SLSERVER_ID, INFO_ID, NULL);
-  }
-  else if (!strncasecmp (item, "CAPABILITIES", 12))
-  {
-    lprintf (1, "[%s] Received INFO CAPABILITIES request", cinfo->hostname);
-
-    json_string = info_json (cinfo, SLSERVER_ID, INFO_CAPABILITIES, NULL);
-  }
-  else if (!strncasecmp (item, "FORMATS", 7))
-  {
-    lprintf (1, "[%s] Received INFO FORMATS request", cinfo->hostname);
-
-    json_string = info_json (cinfo, SLSERVER_ID, INFO_FORMATS | INFO_FILTERS, NULL);
-  }
-  else if (!strncasecmp (item, "STATIONS", 8))
-  {
-    lprintf (1, "[%s] Received INFO STATIONS request", cinfo->hostname);
-
-    /* Configure regex for matching included station and stream patterns */
-    if (station[0] != '\0')
-    {
-      if (StationToRegex (station, (selector.string[0] != '\0') ? &selector : NULL,
-                          &matchregex, &rejectregex))
-      {
-        lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
-        SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error with StationToRegex()");
-        return -1;
-      }
-    }
-
-    json_string = info_json (cinfo, SLSERVER_ID, INFO_STATIONS, matchregex);
-  }
-  else if (!strncasecmp (item, "STREAMS", 7))
-  {
-    lprintf (1, "[%s] Received INFO STREAMS request", cinfo->hostname);
-
-    /* Configure regex for matching included station and stream patterns */
-    if (station[0] != '\0')
-    {
-      if (StationToRegex (station, (selector.string[0] != '\0') ? &selector : NULL,
-                          &matchregex, &rejectregex))
-      {
-        lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
-        SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error with StationToRegex()");
-        return -1;
-      }
-    }
-
-    json_string = info_json (cinfo, SLSERVER_ID, INFO_STATION_STREAMS, matchregex);
-  }
-  else if (!strncasecmp (item, "CONNECTIONS", 11))
-  {
-    if (!(cinfo->permissions & TRUST_PERMISSION))
-    {
-      lprintf (1, "[%s] Refusing INFO CONNECTIONS request from un-trusted client", cinfo->hostname);
-      json_string = error_json (cinfo, SLSERVER_ID, "UNAUTHORIZED", "Client is not authorized to request connections");
-      errflag = 1;
-    }
-    else
-    {
-      lprintf (1, "[%s] Received INFO CONNECTIONS request", cinfo->hostname);
-
-      json_string = info_json (cinfo, SLSERVER_ID, INFO_CONNECTIONS,
-                               (station[0] != '\0') ? station : NULL);
-    }
-  }
-  /* Unrecognized INFO request */
   else
   {
-    json_string = error_json (cinfo, SLSERVER_ID, "ARGUMENTS", "Unrecognized INFO item");
-    errflag = 1;
+    WriteAccessLog (cinfo, "command", "INFO", item, NULL, NULL);
 
-    lprintf (0, "[%s] Unrecognized INFO item: %s", cinfo->hostname, item);
+    if (!strncasecmp (item, "ID", 2))
+    {
+      /* This is used to "ping" the server so only report at high verbosity */
+      lprintf (2, "[%s] Received INFO ID request", cinfo->hostname);
+
+      json_string = info_json (cinfo, SLSERVER_ID, INFO_ID, NULL);
+    }
+    else if (!strncasecmp (item, "CAPABILITIES", 12))
+    {
+      lprintf (1, "[%s] Received INFO CAPABILITIES request", cinfo->hostname);
+
+      json_string = info_json (cinfo, SLSERVER_ID, INFO_CAPABILITIES, NULL);
+    }
+    else if (!strncasecmp (item, "FORMATS", 7))
+    {
+      lprintf (1, "[%s] Received INFO FORMATS request", cinfo->hostname);
+
+      json_string = info_json (cinfo, SLSERVER_ID, INFO_FORMATS | INFO_FILTERS, NULL);
+    }
+    else if (!strncasecmp (item, "STATIONS", 8))
+    {
+      lprintf (1, "[%s] Received INFO STATIONS request", cinfo->hostname);
+
+      /* Configure regex for matching included station and stream patterns */
+      if (station[0] != '\0')
+      {
+        if (StationToRegex (station, (selector.string[0] != '\0') ? &selector : NULL,
+                            &matchregex, &rejectregex))
+        {
+          lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
+          SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error with StationToRegex()");
+          return -1;
+        }
+      }
+
+      json_string = info_json (cinfo, SLSERVER_ID, INFO_STATIONS, matchregex);
+    }
+    else if (!strncasecmp (item, "STREAMS", 7))
+    {
+      lprintf (1, "[%s] Received INFO STREAMS request", cinfo->hostname);
+
+      /* Configure regex for matching included station and stream patterns */
+      if (station[0] != '\0')
+      {
+        if (StationToRegex (station, (selector.string[0] != '\0') ? &selector : NULL,
+                            &matchregex, &rejectregex))
+        {
+          lprintf (0, "[%s] Error with StationToRegex", cinfo->hostname);
+          SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error with StationToRegex()");
+          return -1;
+        }
+      }
+
+      json_string = info_json (cinfo, SLSERVER_ID, INFO_STATION_STREAMS, matchregex);
+    }
+    else if (!strncasecmp (item, "CONNECTIONS", 11))
+    {
+      if (!(cinfo->permissions & TRUST_PERMISSION))
+      {
+        lprintf (1, "[%s] Refusing INFO CONNECTIONS request from un-trusted client", cinfo->hostname);
+        json_string = error_json (cinfo, SLSERVER_ID, "UNAUTHORIZED", "Client is not authorized to request connections");
+        errflag = 1;
+      }
+      else
+      {
+        lprintf (1, "[%s] Received INFO CONNECTIONS request", cinfo->hostname);
+
+        json_string = info_json (cinfo, SLSERVER_ID, INFO_CONNECTIONS,
+                                 (station[0] != '\0') ? station : NULL);
+      }
+    }
+    /* Unrecognized INFO request */
+    else
+    {
+      json_string = error_json (cinfo, SLSERVER_ID, "ARGUMENTS", "Unrecognized INFO item");
+      errflag = 1;
+
+      lprintf (0, "[%s] Unrecognized INFO item: %s", cinfo->hostname, item);
+    }
   }
 
   /* Send INFO response to client */

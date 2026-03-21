@@ -125,13 +125,13 @@ struct config_s config = {
     .auth.argv           = NULL,
     .auth.required       = 0,
     .auth.timeout_sec    = 5,
-    .tlog.write_lock     = PTHREAD_MUTEX_INITIALIZER,
-    .tlog.mode           = TLOG_NONE,
-    .tlog.basedir        = NULL,
-    .tlog.prefix         = NULL,
-    .tlog.interval       = 86400,
-    .tlog.startint       = 0,
-    .tlog.endint         = 0,
+    .usagelog.write_lock = PTHREAD_MUTEX_INITIALIZER,
+    .usagelog.mode       = USAGELOG_NONE,
+    .usagelog.basedir    = NULL,
+    .usagelog.prefix     = NULL,
+    .usagelog.interval   = 86400,
+    .usagelog.startint   = 0,
+    .usagelog.endint     = 0,
 };
 
 /* Local functions and variables */
@@ -387,10 +387,10 @@ main (int argc, char *argv[])
   curtime = time (NULL);
   chktime = curtime;
 
-  /* Initialize transfer log window timers */
-  if (config.tlog.mode)
+  /* Initialize usage log window timers */
+  if (config.usagelog.mode)
   {
-    if (CalcTLogInterval (curtime))
+    if (CalcUsageLogInterval (curtime))
     {
       lprintf (0, "Error calculating interval time window");
       return 1;
@@ -487,10 +487,10 @@ main (int argc, char *argv[])
       param.shutdownsig++;
     }
 
-    /* Transmission log writing time window check */
-    if (config.tlog.mode && !param.shutdownsig)
+    /* Usage log writing time window check */
+    if (config.usagelog.mode && !param.shutdownsig)
     {
-      if (curtime >= config.tlog.endint)
+      if (curtime >= config.usagelog.endint)
         tlogwrite = 1;
       else
         tlogwrite = 0;
@@ -722,7 +722,7 @@ main (int argc, char *argv[])
 
         /* Write transfer logs and reset byte counts */
         if (tlogwrite)
-          WriteTLog ((ClientInfo *)ctp->td->td_prvtptr, 1);
+          WriteTransferLog ((ClientInfo *)ctp->td->td_prvtptr, 1);
 
         /* Close idle clients if limit is set and exceeded */
         if (config.clienttimeout &&
@@ -763,12 +763,12 @@ main (int argc, char *argv[])
       }
     }
 
-    /* Reset transfer log writing time windows using the current time as the reference */
-    if (config.tlog.mode && !param.shutdownsig && (tlogwrite || configreset))
+    /* Reset usage log writing time windows using the current time as the reference */
+    if (config.usagelog.mode && !param.shutdownsig && (tlogwrite || configreset))
     {
       tlogwrite = 0;
 
-      if (CalcTLogInterval (time (NULL)))
+      if (CalcUsageLogInterval (time (NULL)))
       {
         lprintf (0, "Error calculating interval time window");
         return 1;
@@ -1666,17 +1666,18 @@ void LogServerParameters (void)
   lprintf (3, "   miniSEED archive: %s", (config.mseedarchive) ? config.mseedarchive : "NONE");
   lprintf (3, "   miniSEED idle file timeout: %u seconds", config.mseedidleto);
 
-  lprintf (3, "   transfer log: %s", (config.tlog.basedir) ? config.tlog.basedir : "NONE");
-  if (config.tlog.basedir && config.verbose >= 3)
+  lprintf (3, "   usage log: %s", (config.usagelog.basedir) ? config.usagelog.basedir : "NONE");
+  if (config.usagelog.basedir && config.verbose >= 3)
   {
-    lprintf (3, "     log prefix: %s", (config.tlog.prefix) ? config.tlog.prefix : "NONE");
-    lprintf (3, "     log interval: %d seconds", config.tlog.interval);
-    lprintf (3, "     log transmission: %s", (config.tlog.mode & TLOG_TX) ? "yes" : "no");
-    lprintf (3, "     log reception: %s", (config.tlog.mode & TLOG_RX) ? "yes" : "no");
+    lprintf (3, "     log prefix: %s", (config.usagelog.prefix) ? config.usagelog.prefix : "NONE");
+    lprintf (3, "     log interval: %d seconds", config.usagelog.interval);
+    lprintf (3, "     log transmission: %s", (config.usagelog.mode & USAGELOG_TX) ? "yes" : "no");
+    lprintf (3, "     log reception: %s", (config.usagelog.mode & USAGELOG_RX) ? "yes" : "no");
+    lprintf (3, "     log access: %s", (config.usagelog.mode & USAGELOG_ACCESS) ? "yes" : "no");
 
-    if (config.tlog.startint)
+    if (config.usagelog.startint)
     {
-      ms_nstime2timestr_n (MS_EPOCH2NSTIME (config.tlog.startint), timestr, sizeof (timestr), ISOMONTHDAY_Z, NONE);
+      ms_nstime2timestr_n (MS_EPOCH2NSTIME (config.usagelog.startint), timestr, sizeof (timestr), ISOMONTHDAY_Z, NONE);
       lprintf (3, "     log interval start: %s", timestr);
     }
     else
@@ -1684,9 +1685,9 @@ void LogServerParameters (void)
       lprintf (3, "     log interval start: NONE");
     }
 
-    if (config.tlog.endint)
+    if (config.usagelog.endint)
     {
-      ms_nstime2timestr_n (MS_EPOCH2NSTIME (config.tlog.endint), timestr, sizeof (timestr), ISOMONTHDAY_Z, NONE);
+      ms_nstime2timestr_n (MS_EPOCH2NSTIME (config.usagelog.endint), timestr, sizeof (timestr), ISOMONTHDAY_Z, NONE);
       lprintf (3, "     log interval end: %s", timestr);
     }
     else

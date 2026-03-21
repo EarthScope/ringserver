@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2025/05/09
+.TH RINGSERVER 1 2026/03/21
 .SH NAME
 ringserver \- stream oriented packet ring buffer
 
@@ -32,7 +32,7 @@ Detailed descriptions for each option are included in the example
 config file that accompanies the source code.  Many options are dynamic,
 meaning that they can be changed while the server is running when
 using a config file.  The server will recognize that the config file
-has changed and re-read it's configuration.  This is especially useful
+has changed and re-read its configuration.  This is especially useful
 for updating access controls, logging verbosity and other logging
 parameters without restarting the server.
 
@@ -47,10 +47,11 @@ Client access is controlled using IP addresses.  Controls include
 match, reject, limit, write and trust permissions.
 See \fBAccess Control\fP for more details.
 
-Transfer logs can optionally be written to track the transmission and
-reception of data packets to and from the server.  This tracking is
-stream-based and identifies the number of packet bytes of each unique
-stream transferred to or from each client connection.
+Usage logs can optionally be written to track server activity.  Transfer
+logs (TX/RX) record the number of data packet bytes of each unique stream
+transferred to or from each client connection.  Access logs record
+connection events and key commands (connect, disconnect, INFO requests,
+data streaming starts, and HTTP requests) in JSON Lines format.
 
 The server supports streaming data with multiple protocols: SeedLink,
 DataLink, HTTP with WebSocket.  The server can listen on multiple
@@ -142,21 +143,38 @@ information.
 These options are shortcuts for configuring a listening port for only
 SeedLink, DataLink or HTTP protocols respectively.
 
-.IP "-T \fIlogdir\fP"
-Transfer log file base directory, by default the server does not write
-transfer logs.  If a directory is specified both transmission and
-reception logs will be written, these two logs can be toggled
-individually in the server config file.
+.IP "-U \fIlogdir\fP"
+Usage log base directory.  By default the server does not write usage
+logs.  If a directory is specified, both transmission (TX) and reception
+(RX) transfer logs will be written; these can be toggled individually
+with the \fBUsageLogTX\fP and \fBUsageLogRX\fP config file parameters.
+Access logging must be separately enabled with \fB-Ua\fP.
+The \fB-T\fP flag is accepted as a backward-compatible alias.
 
-.IP "-Ti \fIhours\fP"
-Transfer log writing interval in hours, default interval is 24 hours.
+.IP "-Ui \fIhours\fP"
+Usage log writing interval in hours, default interval is 24 hours.
 The interval always starts at day boundaries, for example if the
 interval is set to 2 hours then the first interval in a given day will
 cover hours 0 through 2, the next 2 through 4, etc.
+The \fB-Ti\fP flag is accepted as a backward-compatible alias.
 
-.IP "-Tp \fIprefix\fP"
-Transfer log file prefix, by default no prefix is added to the fixed
+.IP "-Up \fIprefix\fP"
+Usage log file prefix, by default no prefix is added to the fixed
 section of the log file name.
+The \fB-Tp\fP flag is accepted as a backward-compatible alias.
+
+.IP "-Uj"
+Enable JSON Lines format for transfer logs.  When enabled, each TX and
+RX log file uses a \fB.jsonl\fP extension and contains one JSON object
+per client session describing the protocol, streams, and byte counts.
+This replaces the legacy text format for transfer logs.
+The \fB-Tj\fP flag is accepted as a backward-compatible alias.
+
+.IP "-Ua"
+Enable access logging.  When enabled, an access log file in JSON Lines
+format is written to the usage log directory, recording connection
+events and key commands.  The \fB-U\fP option (or \fBUsageLogDirectory\fP
+config parameter) must be set for access logging to function.
 
 .IP "-STDERR"
 Send all diagnostic output to stderr instead of stdout.  This is
@@ -185,7 +203,7 @@ when no stateful buffer is needed.
 .SH "Config file parameters"
 All of the command line parameters have config file and environment
 variable equivalents.  Many of the config file parameters are dynamic,
-if they are changed the server will re-read it's configuration on the
+if they are changed the server will re-read its configuration on the
 fly. See the detailed parameter descriptions in the documented example
 config file.
 
@@ -340,7 +358,7 @@ Examples of adding flags to a port specification:
 .nf
   \fB-L "18000 SeedLink HTTP"\fP        : CLI, SeedLink and HTTP on port 18000
   \fB-SL "18500 TLS IPv4"\fP            : CLI, SeedLink via TLS on port 18500, IPv4 only
-  \fBRS_LISTEN_PORT="8080 HTTP IPv6"\fP : EnvVar, HTTPS on port 8080, IPv6 only
+  \fBRS_LISTEN_PORT="8080 HTTP IPv6"\fP : EnvVar, HTTP on port 8080, IPv6 only
   \fBListenPort 16000 DataLink\fP       : Config file, DataLink on port 16000
   \fBListenPort 14000 TRUSTED\fP        : Config file, all protocols trusted on port 14000
   \fBListenPort 18000 PROXYv2\fP      : Config file, all protocols with PROXYv2 on port 18000
@@ -392,17 +410,40 @@ Custom HTTP headers may be included in HTTP responses using the
 \fBHTTPHeader\fP config file parameter.  This can be used, for example,
 to enable cross-site HTTP requests via Cross-Origin Resource Sharing (CORS).
 
-.SH "Transfer logging"
-The \fB-T\fP command line option or the \fBTransferLogTX\fP or
-\fBTransferLogRX\fP config file parameters (or equivalent environment
-variables) turn on logging of data either transmitted or received.
-The log interval and file name prefix can be changed via
-the \fB-Ti\fP and \fB-Tp\fP command line options.
+.SH "Usage logging"
 
-Both the transmission (TX) and reception (RX) log files contain
-entries that following this pattern:
+Usage logging covers two distinct log types: transfer logs (TX/RX) that
+track data volume per stream per client, and access logs that record
+connection events and key commands.  All log types share the same base
+directory, file prefix, and rotation interval, configured via the
+\fB-U\fP command line option or the \fBUsageLogDirectory\fP config file
+parameter (the \fBTransferLogDirectory\fP alias is also accepted for
+backward compatibility).  Access logging is disabled by default and must
+be explicitly enabled.
 
-1) A "START CLIENT" line that contains the host name, IP address,
+.SS "Transfer logging"
+
+The \fBUsageLogTX\fP and \fBUsageLogRX\fP config file parameters (or their
+\fBTransferLogTX\fP / \fBTransferLogRX\fP aliases, or equivalent environment
+variables) control logging of data transmitted or received.  By default
+both TX and RX logging are enabled when a log directory is set.  The log
+interval and file name prefix can be changed via the \fB-Ui\fP and \fB-Up\fP
+command line options.
+
+Log files are named with the interval time window, for example:
+.nf
+  \fBtxlog-20260316T0000-20260317T0000\fP
+  \fBrxlog-20260316T0000-20260317T0000\fP
+.fi
+
+By default transfer logs use a legacy text format.  The \fB-Uj\fP command
+line option or the \fBUsageLogJSONLines\fP config parameter enables JSON
+Lines format instead, where each line is a JSON object containing
+protocol details, per-stream byte counts, and client metadata.
+
+In text format, each TX or RX log file contains entries with this pattern:
+
+1) A "START CLIENT" line containing the host name, IP address,
 protocol, client ID, log time, and connection time.
 
 2) One or more data lines of the following form:
@@ -411,18 +452,68 @@ protocol, client ID, log time, and connection time.
 \fB[Stream ID] [bytes] [packets]\fP
 .fi
 
-3) An "END CLIENT" line including the total bytes or this entry.
+3) An "END CLIENT" line including the total bytes for this entry.
 
 Note: the byte counts are the sum of the data payload bytes in each
 packet and do not include the DataLink or SeedLink protocol headers.
 
-An example "TX" file illustrating a transmission entry:
+An example "TX" file illustrating a transmission entry in legacy text format:
 
 .nf
 START CLIENT host.iris.edu [192.168.255.255] (SeedLink|Client) @ 2018-03-30 07:00:05 (connected 2018-03-30 06:59:36) TX
 FDSN:IU_SNZO_10_B_H_Z/MSEED 2560 5
 FDSN:IU_SNZO_00_B_H_Z/MSEED 2048 4
 END CLIENT host.iris.edu [192.168.255.255] total TX bytes: 4608
+.fi
+
+.SS "Access logging"
+
+Access logging is enabled with the \fB-Ua\fP command line option or the
+\fBUsageLogAccess\fP config file parameter (or the \fBRS_USAGE_LOG_ACCESS\fP
+environment variable).  The \fBUsageLogDirectory\fP (or \fB-U\fP option)
+must be set for access logging to function.
+
+Access log files are always written in JSON Lines format, one JSON object
+per line, with a \fB.jsonl\fP extension.  Files are named:
+.nf
+  \fBaccesslog-20260316T0000-20260317T0000.jsonl\fP
+.fi
+
+Each access log record contains the event time, client metadata
+(IP address, hostname, server port, user agent), authentication details
+if applicable, protocol information (name, version, TLS, WebSocket), and
+the event or command details.
+
+The following events are logged:
+
+.nf
+  \fBconnect\fP    - Client TCP connection established
+  \fBdisconnect\fP - Client connection closed
+  \fBcommand\fP    - Key protocol command received
+.fi
+
+Key commands recorded include:
+
+.nf
+  \fBINFO\fP         - SeedLink or DataLink INFO request (with item/type)
+  \fBDATA\fP/\fBFETCH\fP  - SeedLink data streaming request (with stream selection criteria)
+  \fBSTREAM\fP       - DataLink streaming start (with stream selection criteria)
+  \fBGET\fP          - HTTP GET request (with path)
+.fi
+
+For DATA/FETCH and STREAM commands, the \fBmatch\fP and \fBreject\fP fields
+in the JSON record contain the regular expressions used to select streams,
+if any were specified by the client.
+
+An example access log record:
+
+.nf
+{"log_time":"2026-03-16T12:00:00Z","connect_time":"2026-03-16T11:59:55Z",
+ "client":{"ip":"192.168.1.10","server_port":18000,"hostname":"host.example.com",
+           "user_agent":"slinktool/4.1"},
+ "protocol":{"name":"SeedLink","version":"4.0"},
+ "event":"command","command":"DATA","match":"FDSN:IU_.*",
+ "service":{"name":"ringserver","version":"4.3.1"}}
 .fi
 
 .SH "External packet IDs"

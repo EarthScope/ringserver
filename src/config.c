@@ -17,7 +17,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2025:
+ * Copyright (C) 2026:
  * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
@@ -266,50 +266,60 @@ static const char *reference_config_file_parts[] = {
   "#TimeWindowLimit 100\n"
   "\n"
   "\n",
-  "# Define the base directory for data transfer logs including both\n"
-  "# data transmission and reception logs.  By default no logs are written.\n"
-  "# This facility will log the number of data packet bytes and packet\n"
-  "# count sent to and/or received from each client during the log interval.\n"
+  "# Define the base directory for usage logs including data transfer logs\n"
+  "# and an access log.  By default no logs are written.\n"
   "# If this parameter is specified and the directory exists, files will\n"
-  "# be written at a user defined interval with the format:\n"
-  "# \"<dir>/[prefix-]txlog-YYYYMMDDTHHMM-YYYYMMDDTHHMM\" and\n"
-  "# \"<dir>/[prefix-]rxlog-YYYYMMDDTHHMM-YYYYMMDDTHHMM\"\n"
+  "# be written at a user defined interval with the formats:\n"
+  "# \"<dir>/[prefix-]txlog-YYYYMMDDTHHMM-YYYYMMDDTHHMM[.jsonl]\"\n"
+  "# \"<dir>/[prefix-]rxlog-YYYYMMDDTHHMM-YYYYMMDDTHHMM[.jsonl]\"\n"
+  "# \"<dir>/[prefix-]accesslog-YYYYMMDDTHHMM-YYYYMMDDTHHMM.jsonl\"\n"
   "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_TRANSFER_LOG_DIRECTORY\n"
+  "# Equivalent environment variables: RS_USAGE_LOG_DIRECTORY\n"
   "\n"
-  "#TransferLogDirectory tlog\n"
+  "#UsageLogDirectory usagelog\n"
   "\n"
-  "# Specify the transfer log interval in hours.  This is a dynamic\n"
-  "# parameter.\n"
-  "# Equivalent environment variable: RS_TRANSFER_LOG_INTERVAL\n"
   "\n"
-  "#TransferLogInterval 24\n"
+  "# Specify the usage log interval in hours.  This is a dynamic parameter.\n"
+  "# Equivalent environment variables: RS_USAGE_LOG_INTERVAL\n"
   "\n"
-  "# Specify a transfer log file prefix, the default is no prefix.\n"
+  "#UsageLogInterval 24\n"
+  "\n"
+  "\n"
+  "# Specify a usage log file prefix, the default is no prefix.\n"
   "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_TRANSFER_LOG_PREFIX\n"
+  "# Equivalent environment variables: RS_USAGE_LOG_PREFIX\n"
   "\n"
-  "#TransferLogPrefix <prefix>\n"
+  "#UsageLogPrefix <prefix>\n"
   "\n"
-  "# Control the logging of data transmission and reception independently,\n"
-  "# by default both are logged.  The TransferLogDirectory must be set for\n"
-  "# any transfer logs to be written.  To turn off logging of either\n"
-  "# transmission (TX) or reception (RX) set the appropriate parameter to 0.\n"
-  "# These are dynamic parameters.\n"
-  "# Equivalent environment variables: RS_TRANSFER_LOG_TX, RS_TRANSFER_LOG_RX\n"
-  "\n"
-  "#TransferLogTX 1\n"
-  "#TransferLogRX 1\n"
   "\n"
   "# Enable JSON Lines format for transfer logs.  When enabled, files are written\n"
-  "# with a \".jsonl\" extension using the same base name as the text log files.\n"
+  "# with a \".jsonl\" extension using the same generated filename.\n"
   "# Each line is a JSON object describing one client session's transfer activity,\n"
   "# including protocol name and version, data format, per-stream bytes, etc.\n"
   "# This replaces the legacy text format when enabled.\n"
   "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_TRANSFER_LOG_JSONLINES\n"
+  "# Equivalent environment variables: RS_USAGE_LOG_JSONLINES\n"
   "\n"
-  "#TransferLogJSONLines 0\n"
+  "#UsageLogJSONLines 0\n"
+  "\n"
+  "\n"
+  "# Control the logging of data transmission and reception independently,\n"
+  "# by default both are logged when UsageLogDirectory is set.  To turn off\n"
+  "# logging of either transmission (TX) or reception (RX) set to 0.\n"
+  "# These are dynamic parameters.\n"
+  "# Equivalent environment variables: RS_USAGE_LOG_TX, RS_USAGE_LOG_RX\n"
+  "\n"
+  "#UsageLogTX 1\n"
+  "#UsageLogRX 1\n"
+  "\n"
+  "\n"
+  "# Enable access logging.  When enabled, a JSON Lines file is written recording\n"
+  "# connections, disconnections and key commands (INFO, DATA/FETCH, STREAM,\n"
+  "# HTTP GET).  UsageLogDirectory must be set.\n"
+  "# This is a dynamic parameter.\n"
+  "# Equivalent environment variable: RS_USAGE_LOG_ACCESS\n"
+  "\n"
+  "#UsageLogAccess 0\n"
   "\n"
   "\n",
   "# Specify a program and arguments to execute to perform authentication and\n"
@@ -486,10 +496,11 @@ Usage (int level)
                    " -Rp pktsize    Maximum ring packet data size in bytes (currently %" PRIu32 ")\n"
                    " -NOMM          Do not memory map the packet buffer, use memory instead\n"
                    " -L port        Listen for connections on port, all protocols (default off)\n"
-                   " -T logdir      Directory to write transfer logs (default is no logs)\n"
-                   " -Ti hours      Transfer log writing interval (default 24 hours)\n"
-                   " -Tp prefix     Prefix to add to transfer log files (default is none)\n"
-                   " -Tj            Enable JSON Lines transfer log format (replaces text format)\n"
+                   " -U logdir      Directory to write usage logs (default is no logs) [-T accepted]\n"
+                   " -Ui hours      Usage log writing interval (default 24 hours) [-Ti accepted]\n"
+                   " -Up prefix     Prefix to add to usage log files (default is none) [-Tp accepted]\n"
+                   " -Uj            Enable JSON Lines transfer log format (replaces text format) [-Tj accepted]\n"
+                   " -Ua            Enable access logging (connections and key commands)\n"
                    " -STDERR        Send all console output to stderr instead of stdout\n"
                    "\n",
            config.maxclients,
@@ -665,27 +676,32 @@ ProcessParam (int argcount, char **argvec)
       if (SetParameter (paramstr, 0) <= 0)
         exit (1);
     }
-    else if (strcmp (argvec[optind], "-T") == 0)
+    else if (strcmp (argvec[optind], "-U") == 0 || strcmp (argvec[optind], "-T") == 0)
     {
-      snprintf (paramstr, sizeof (paramstr), "TransferLogDirectory \"%s\"", GetOptVal (argcount, argvec, optind++));
+      snprintf (paramstr, sizeof (paramstr), "UsageLogDirectory \"%s\"", GetOptVal (argcount, argvec, optind++));
       if (SetParameter (paramstr, 0) <= 0)
         exit (1);
     }
-    else if (strcmp (argvec[optind], "-Ti") == 0)
+    else if (strcmp (argvec[optind], "-Ui") == 0 || strcmp (argvec[optind], "-Ti") == 0)
     {
-      snprintf (paramstr, sizeof (paramstr), "TransferLogInterval %s", GetOptVal (argcount, argvec, optind++));
+      snprintf (paramstr, sizeof (paramstr), "UsageLogInterval %s", GetOptVal (argcount, argvec, optind++));
       if (SetParameter (paramstr, 0) <= 0)
         exit (1);
     }
-    else if (strcmp (argvec[optind], "-Tp") == 0)
+    else if (strcmp (argvec[optind], "-Up") == 0 || strcmp (argvec[optind], "-Tp") == 0)
     {
-      snprintf (paramstr, sizeof (paramstr), "TransferLogPrefix \"%s\"", GetOptVal (argcount, argvec, optind++));
+      snprintf (paramstr, sizeof (paramstr), "UsageLogPrefix \"%s\"", GetOptVal (argcount, argvec, optind++));
       if (SetParameter (paramstr, 0) <= 0)
         exit (1);
     }
-    else if (strcmp (argvec[optind], "-Tj") == 0)
+    else if (strcmp (argvec[optind], "-Uj") == 0 || strcmp (argvec[optind], "-Tj") == 0)
     {
-      if (SetParameter ("TransferLogJSONLines 1", 0) <= 0)
+      if (SetParameter ("UsageLogJSONLines 1", 0) <= 0)
+        exit (1);
+    }
+    else if (strcmp (argvec[optind], "-Ua") == 0)
+    {
+      if (SetParameter ("UsageLogAccess 1", 0) <= 0)
         exit (1);
     }
     else if (strcmp (argvec[optind], "-STDERR") == 0)
@@ -1108,49 +1124,99 @@ ReadEnvironmentVariables (void)
     count++;
   }
 
-  if ((envvar = getenv ("RS_TRANSFER_LOG_DIRECTORY")) && strcasecmp (envvar, "DISABLE"))
+  if ((envvar = getenv ("RS_USAGE_LOG_DIRECTORY")) && strcasecmp (envvar, "DISABLE"))
   {
-    snprintf (paramstr, sizeof (paramstr), "TransferLogDirectory \"%s\"", envvar);
+    snprintf (paramstr, sizeof (paramstr), "UsageLogDirectory \"%s\"", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+  else if ((envvar = getenv ("RS_TRANSFER_LOG_DIRECTORY")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "UsageLogDirectory \"%s\"", envvar);
     if (SetParameter (paramstr, 0) <= 0)
       return -1;
     count++;
   }
 
-  if ((envvar = getenv ("RS_TRANSFER_LOG_INTERVAL")) && strcasecmp (envvar, "DISABLE"))
+  if ((envvar = getenv ("RS_USAGE_LOG_INTERVAL")) && strcasecmp (envvar, "DISABLE"))
   {
-    snprintf (paramstr, sizeof (paramstr), "TransferLogInterval %s", envvar);
+    snprintf (paramstr, sizeof (paramstr), "UsageLogInterval %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+  else if ((envvar = getenv ("RS_TRANSFER_LOG_INTERVAL")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "UsageLogInterval %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
       return -1;
     count++;
   }
 
-  if ((envvar = getenv ("RS_TRANSFER_LOG_PREFIX")) && strcasecmp (envvar, "DISABLE"))
+  if ((envvar = getenv ("RS_USAGE_LOG_PREFIX")) && strcasecmp (envvar, "DISABLE"))
   {
-    snprintf (paramstr, sizeof (paramstr), "TransferLogPrefix \"%s\"", envvar);
+    snprintf (paramstr, sizeof (paramstr), "UsageLogPrefix \"%s\"", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+  else if ((envvar = getenv ("RS_TRANSFER_LOG_PREFIX")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "UsageLogPrefix \"%s\"", envvar);
     if (SetParameter (paramstr, 0) <= 0)
       return -1;
     count++;
   }
 
-  if ((envvar = getenv ("RS_TRANSFER_LOG_TX")) && strcasecmp (envvar, "DISABLE"))
+  if ((envvar = getenv ("RS_USAGE_LOG_TX")) && strcasecmp (envvar, "DISABLE"))
   {
-    snprintf (paramstr, sizeof (paramstr), "TransferLogTX %s", envvar);
+    snprintf (paramstr, sizeof (paramstr), "UsageLogTX %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+  else if ((envvar = getenv ("RS_TRANSFER_LOG_TX")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "UsageLogTX %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
       return -1;
     count++;
   }
 
-  if ((envvar = getenv ("RS_TRANSFER_LOG_RX")) && strcasecmp (envvar, "DISABLE"))
+  if ((envvar = getenv ("RS_USAGE_LOG_RX")) && strcasecmp (envvar, "DISABLE"))
   {
-    snprintf (paramstr, sizeof (paramstr), "TransferLogRX %s", envvar);
+    snprintf (paramstr, sizeof (paramstr), "UsageLogRX %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+  else if ((envvar = getenv ("RS_TRANSFER_LOG_RX")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "UsageLogRX %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
       return -1;
     count++;
   }
 
-  if ((envvar = getenv ("RS_TRANSFER_LOG_JSONLINES")) && strcasecmp (envvar, "DISABLE"))
+  if ((envvar = getenv ("RS_USAGE_LOG_JSONLINES")) && strcasecmp (envvar, "DISABLE"))
   {
-    snprintf (paramstr, sizeof (paramstr), "TransferLogJSONLines %s", envvar);
+    snprintf (paramstr, sizeof (paramstr), "UsageLogJSONLines %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+  else if ((envvar = getenv ("RS_TRANSFER_LOG_JSONLINES")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "UsageLogJSONLines %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_USAGE_LOG_ACCESS")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "UsageLogAccess %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
       return -1;
     count++;
@@ -1574,14 +1640,14 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     config.httpheaders = NULL;
   }
 
-  /* Clear existing transfer log parameters */
-  if (config.tlog.basedir)
+  /* Clear existing usage log parameters */
+  if (config.usagelog.basedir)
   {
-    config.tlog.mode = TLOG_NONE;
-    free (config.tlog.basedir);
-    config.tlog.basedir = NULL;
-    free (config.tlog.prefix);
-    config.tlog.prefix = NULL;
+    config.usagelog.mode = USAGELOG_NONE;
+    free (config.usagelog.basedir);
+    config.usagelog.basedir = NULL;
+    free (config.usagelog.prefix);
+    config.usagelog.prefix = NULL;
   }
 
   /* Read and process all lines */
@@ -1677,12 +1743,13 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
  * [D] NetIOTimeout <timeout>
  * [D] ResolveHostnames <1|0>
  * [D] TimeWindowLimit <percent>
- * [D] TransferLogDirectory <dir>
- * [D] TransferLogInterval <interval>
- * [D] TransferLogPrefix <prefix>
- * [D] TransferLogTX <1|0>
- * [D] TransferLogRX <1|0>
- * [D] TransferLogJSONLines <1|0>
+ * [D] UsageLogDirectory <dir>     (alias: TransferLogDirectory)
+ * [D] UsageLogInterval <interval> (alias: TransferLogInterval)
+ * [D] UsageLogPrefix <prefix>     (alias: TransferLogPrefix)
+ * [D] UsageLogTX <1|0>            (alias: TransferLogTX)
+ * [D] UsageLogRX <1|0>            (alias: TransferLogRX)
+ * [D] UsageLogJSONLines <1|0>     (alias: TransferLogJSONLines)
+ * [D] UsageLogAccess <1|0>
  * [D] AuthCommand <command>
  * [D] AuthRequiredForStreams <1|0>
  * [D] AuthTimeout <timeout>
@@ -2043,7 +2110,8 @@ SetParameter (const char *paramstring, int dynamiconly)
 
     config.timewinlimit = (intval > 0) ? intval / 100.0 : 0.0;
   }
-  else if (!strcasecmp ("TransferLogDirectory", field[0]) && fieldcount == 2)
+  else if ((!strcasecmp ("UsageLogDirectory", field[0]) ||
+            !strcasecmp ("TransferLogDirectory", field[0])) && fieldcount == 2)
   {
     if (realpath (field[1], resolved_path) == NULL)
     {
@@ -2059,14 +2127,15 @@ SetParameter (const char *paramstring, int dynamiconly)
       return -1;
     }
 
-    free (config.tlog.basedir);
+    free (config.usagelog.basedir);
     char *basedir = strdup (resolved_path);
-    config.tlog.basedir = basedir;
+    config.usagelog.basedir = basedir;
 
     /* Enable both TX and RX logging as defaults */
-    config.tlog.mode |= TLOG_TX | TLOG_RX;
+    config.usagelog.mode |= USAGELOG_TX | USAGELOG_RX;
   }
-  else if (!strcasecmp ("TransferLogInterval", field[0]) && fieldcount == 2)
+  else if ((!strcasecmp ("UsageLogInterval", field[0]) ||
+            !strcasecmp ("TransferLogInterval", field[0])) && fieldcount == 2)
   {
     float fvalue;
     if (sscanf (field[1], "%f", &fvalue) != 1)
@@ -2076,27 +2145,16 @@ SetParameter (const char *paramstring, int dynamiconly)
     }
 
     /* Parameter is specified in hours but value needs to be seconds */
-    config.tlog.interval = (int)(fvalue * 3600.0 + 0.5);
+    config.usagelog.interval = (int)(fvalue * 3600.0 + 0.5);
   }
-  else if (!strcasecmp ("TransferLogPrefix", field[0]) && fieldcount == 2)
+  else if ((!strcasecmp ("UsageLogPrefix", field[0]) ||
+            !strcasecmp ("TransferLogPrefix", field[0])) && fieldcount == 2)
   {
-    free (config.tlog.prefix);
-    config.tlog.prefix = strdup (field[1]);
+    free (config.usagelog.prefix);
+    config.usagelog.prefix = strdup (field[1]);
   }
-  else if (!strcasecmp ("TransferLogTX", field[0]) && fieldcount == 2)
-  {
-    if ((intval = YesNo (field[1])) < 0)
-    {
-      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
-      return -1;
-    }
-
-    if (intval)
-      config.tlog.mode |= TLOG_TX;
-    else
-      config.tlog.mode &= ~TLOG_TX;
-  }
-  else if (!strcasecmp ("TransferLogRX", field[0]) && fieldcount == 2)
+  else if ((!strcasecmp ("UsageLogTX", field[0]) ||
+            !strcasecmp ("TransferLogTX", field[0])) && fieldcount == 2)
   {
     if ((intval = YesNo (field[1])) < 0)
     {
@@ -2105,11 +2163,12 @@ SetParameter (const char *paramstring, int dynamiconly)
     }
 
     if (intval)
-      config.tlog.mode |= TLOG_RX;
+      config.usagelog.mode |= USAGELOG_TX;
     else
-      config.tlog.mode &= ~TLOG_RX;
+      config.usagelog.mode &= ~USAGELOG_TX;
   }
-  else if (!strcasecmp ("TransferLogJSONLines", field[0]) && fieldcount == 2)
+  else if ((!strcasecmp ("UsageLogRX", field[0]) ||
+            !strcasecmp ("TransferLogRX", field[0])) && fieldcount == 2)
   {
     if ((intval = YesNo (field[1])) < 0)
     {
@@ -2118,9 +2177,36 @@ SetParameter (const char *paramstring, int dynamiconly)
     }
 
     if (intval)
-      config.tlog.mode |= TLOG_JSONL;
+      config.usagelog.mode |= USAGELOG_RX;
     else
-      config.tlog.mode &= ~TLOG_JSONL;
+      config.usagelog.mode &= ~USAGELOG_RX;
+  }
+  else if ((!strcasecmp ("UsageLogJSONLines", field[0]) ||
+            !strcasecmp ("TransferLogJSONLines", field[0])) && fieldcount == 2)
+  {
+    if ((intval = YesNo (field[1])) < 0)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    if (intval)
+      config.usagelog.mode |= USAGELOG_JSONL;
+    else
+      config.usagelog.mode &= ~USAGELOG_JSONL;
+  }
+  else if (!strcasecmp ("UsageLogAccess", field[0]) && fieldcount == 2)
+  {
+    if ((intval = YesNo (field[1])) < 0)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    if (intval)
+      config.usagelog.mode |= USAGELOG_ACCESS;
+    else
+      config.usagelog.mode &= ~USAGELOG_ACCESS;
   }
   else if (!strcasecmp ("AuthCommand", field[0]) && fieldcount >= 2)
   {

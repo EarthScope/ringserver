@@ -11,7 +11,7 @@
 1. [Stream Ids](#stream-ids)
 1. [Multi-Protocol Support](#multi-protocol-support)
 1. [Http Support](#http-support)
-1. [Transfer Logging](#transfer-logging)
+1. [Usage Logging](#usage-logging)
 1. [External Packet Ids](#external-packet-ids)
 1. [Miniseed Archiving](#miniseed-archiving)
 1. [Miniseed Scanning](#miniseed-scanning)
@@ -31,13 +31,13 @@ ringserver [options] [configfile]
 
 <p >The server is configured either with options on the command line, through environment variables, and/or by using a <b>ringserver</b> config file.  The order of precedence for configuration options is command line, environment variables, and then config file.</p>
 
-<p >Only the most common options are available on the command line, all options are controllable via environment variables and the config file. Detailed descriptions for each option are included in the example config file that accompanies the source code.  Many options are dynamic, meaning that they can be changed while the server is running when using a config file.  The server will recognize that the config file has changed and re-read it's configuration.  This is especially useful for updating access controls, logging verbosity and other logging parameters without restarting the server.</p>
+<p >Only the most common options are available on the command line, all options are controllable via environment variables and the config file. Detailed descriptions for each option are included in the example config file that accompanies the source code.  Many options are dynamic, meaning that they can be changed while the server is running when using a config file.  The server will recognize that the config file has changed and re-read its configuration.  This is especially useful for updating access controls, logging verbosity and other logging parameters without restarting the server.</p>
 
 <p >In normal operation packet buffer contents are saved in files when the server is shut down making the server stateful across restarts.  By default the packet buffer is managed as a memory-mapped file. The buffer can optionally be maintained completely in system memory, only reading and writing the buffer contents on startup and shutdown (useful in environments where memory-mapping is not possible).</p>
 
 <p >Client access is controlled using IP addresses.  Controls include match, reject, limit, write and trust permissions. See <b>Access Control</b> for more details.</p>
 
-<p >Transfer logs can optionally be written to track the transmission and reception of data packets to and from the server.  This tracking is stream-based and identifies the number of packet bytes of each unique stream transferred to or from each client connection.</p>
+<p >Usage logs can optionally be written to track server activity.  Transfer logs (TX/RX) record the number of data packet bytes of each unique stream transferred to or from each client connection.  Access logs record connection events and key commands (connect, disconnect, INFO requests, data streaming starts, and HTTP requests) in JSON Lines format.</p>
 
 <p >The server supports streaming data with multiple protocols: SeedLink, DataLink, HTTP with WebSocket.  The server can listen on multiple network ports, and each port can be configured to support any combination of the protocols. See <b>Multi-protocol support</b> for more information.</p>
 
@@ -107,17 +107,25 @@ ringserver [options] [configfile]
 
 <p style="padding-left: 30px;">These options are shortcuts for configuring a listening port for only SeedLink, DataLink or HTTP protocols respectively.</p>
 
-<b>-T </b><i>logdir</i>
+<b>-U </b><i>logdir</i>
 
-<p style="padding-left: 30px;">Transfer log file base directory, by default the server does not write transfer logs.  If a directory is specified both transmission and reception logs will be written, these two logs can be toggled individually in the server config file.</p>
+<p style="padding-left: 30px;">Usage log base directory.  By default the server does not write usage logs.  If a directory is specified, both transmission (TX) and reception (RX) transfer logs will be written; these can be toggled individually with the <b>UsageLogTX</b> and <b>UsageLogRX</b> config file parameters. Access logging must be separately enabled with <b>-Ua</b>. The <b>-T</b> flag is accepted as a backward-compatible alias.</p>
 
-<b>-Ti </b><i>hours</i>
+<b>-Ui </b><i>hours</i>
 
-<p style="padding-left: 30px;">Transfer log writing interval in hours, default interval is 24 hours. The interval always starts at day boundaries, for example if the interval is set to 2 hours then the first interval in a given day will cover hours 0 through 2, the next 2 through 4, etc.</p>
+<p style="padding-left: 30px;">Usage log writing interval in hours, default interval is 24 hours. The interval always starts at day boundaries, for example if the interval is set to 2 hours then the first interval in a given day will cover hours 0 through 2, the next 2 through 4, etc. The <b>-Ti</b> flag is accepted as a backward-compatible alias.</p>
 
-<b>-Tp </b><i>prefix</i>
+<b>-Up </b><i>prefix</i>
 
-<p style="padding-left: 30px;">Transfer log file prefix, by default no prefix is added to the fixed section of the log file name.</p>
+<p style="padding-left: 30px;">Usage log file prefix, by default no prefix is added to the fixed section of the log file name. The <b>-Tp</b> flag is accepted as a backward-compatible alias.</p>
+
+<b>-Uj</b>
+
+<p style="padding-left: 30px;">Enable JSON Lines format for transfer logs.  When enabled, each TX and RX log file uses a <b>.jsonl</b> extension and contains one JSON object per client session describing the protocol, streams, and byte counts. This replaces the legacy text format for transfer logs. The <b>-Tj</b> flag is accepted as a backward-compatible alias.</p>
+
+<b>-Ua</b>
+
+<p style="padding-left: 30px;">Enable access logging.  When enabled, an access log file in JSON Lines format is written to the usage log directory, recording connection events and key commands.  The <b>-U</b> option (or <b>UsageLogDirectory</b> config parameter) must be set for access logging to function.</p>
 
 <b>-STDERR</b>
 
@@ -137,7 +145,7 @@ ringserver [options] [configfile]
 
 ## <a id='config-file-parameters'>Config File Parameters</a>
 
-<p >All of the command line parameters have config file and environment variable equivalents.  Many of the config file parameters are dynamic, if they are changed the server will re-read it's configuration on the fly. See the detailed parameter descriptions in the documented example config file.</p>
+<p >All of the command line parameters have config file and environment variable equivalents.  Many of the config file parameters are dynamic, if they are changed the server will re-read its configuration on the fly. See the detailed parameter descriptions in the documented example config file.</p>
 
 ## <a id='access-control'>Access Control</a>
 
@@ -225,7 +233,7 @@ ringserver [options] [configfile]
 <pre >
   <b>-L "18000 SeedLink HTTP"</b>        : CLI, SeedLink and HTTP on port 18000
   <b>-SL "18500 TLS IPv4"</b>            : CLI, SeedLink via TLS on port 18500, IPv4 only
-  <b>RS_LISTEN_PORT="8080 HTTP IPv6"</b> : EnvVar, HTTPS on port 8080, IPv6 only
+  <b>RS_LISTEN_PORT="8080 HTTP IPv6"</b> : EnvVar, HTTP on port 8080, IPv6 only
   <b>ListenPort 16000 DataLink</b>       : Config file, DataLink on port 16000
   <b>ListenPort 14000 TRUSTED</b>        : Config file, all protocols trusted on port 14000
   <b>ListenPort 18000 PROXYv2</b>      : Config file, all protocols with PROXYv2 on port 18000
@@ -259,13 +267,25 @@ ringserver [options] [configfile]
 
 <p >Custom HTTP headers may be included in HTTP responses using the <b>HTTPHeader</b> config file parameter.  This can be used, for example, to enable cross-site HTTP requests via Cross-Origin Resource Sharing (CORS).</p>
 
-## <a id='transfer-logging'>Transfer Logging</a>
+## <a id='usage-logging'>Usage Logging</a>
 
-<p >The <b>-T</b> command line option or the <b>TransferLogTX</b> or <b>TransferLogRX</b> config file parameters (or equivalent environment variables) turn on logging of data either transmitted or received. The log interval and file name prefix can be changed via the <b>-Ti</b> and <b>-Tp</b> command line options.</p>
+<p >Usage logging covers two distinct log types: transfer logs (TX/RX) that track data volume per stream per client, and access logs that record connection events and key commands.  All log types share the same base directory, file prefix, and rotation interval, configured via the <b>-U</b> command line option or the <b>UsageLogDirectory</b> config file parameter (the <b>TransferLogDirectory</b> alias is also accepted for backward compatibility).  Access logging is disabled by default and must be explicitly enabled.</p>
 
-<p >Both the transmission (TX) and reception (RX) log files contain entries that following this pattern:</p>
+<p >.SS "Transfer logging"</p>
 
-<p >1) A "START CLIENT" line that contains the host name, IP address, protocol, client ID, log time, and connection time.</p>
+<p >The <b>UsageLogTX</b> and <b>UsageLogRX</b> config file parameters (or their <b>TransferLogTX</b> / <b>TransferLogRX</b> aliases, or equivalent environment variables) control logging of data transmitted or received.  By default both TX and RX logging are enabled when a log directory is set.  The log interval and file name prefix can be changed via the <b>-Ui</b> and <b>-Up</b> command line options.</p>
+
+<p >Log files are named with the interval time window, for example:</p>
+<pre >
+  <b>txlog-20260316T0000-20260317T0000</b>
+  <b>rxlog-20260316T0000-20260317T0000</b>
+</pre>
+
+<p >By default transfer logs use a legacy text format.  The <b>-Uj</b> command line option or the <b>UsageLogJSONLines</b> config parameter enables JSON Lines format instead, where each line is a JSON object containing protocol details, per-stream byte counts, and client metadata.</p>
+
+<p >In text format, each TX or RX log file contains entries with this pattern:</p>
+
+<p >1) A "START CLIENT" line containing the host name, IP address, protocol, client ID, log time, and connection time.</p>
 
 <p >2) One or more data lines of the following form:</p>
 
@@ -273,17 +293,58 @@ ringserver [options] [configfile]
 <b>[Stream ID] [bytes] [packets]</b>
 </pre>
 
-<p >3) An "END CLIENT" line including the total bytes or this entry.</p>
+<p >3) An "END CLIENT" line including the total bytes for this entry.</p>
 
 <p >Note: the byte counts are the sum of the data payload bytes in each packet and do not include the DataLink or SeedLink protocol headers.</p>
 
-<p >An example "TX" file illustrating a transmission entry:</p>
+<p >An example "TX" file illustrating a transmission entry in legacy text format:</p>
 
 <pre >
 START CLIENT host.iris.edu [192.168.255.255] (SeedLink|Client) @ 2018-03-30 07:00:05 (connected 2018-03-30 06:59:36) TX
 FDSN:IU_SNZO_10_B_H_Z/MSEED 2560 5
 FDSN:IU_SNZO_00_B_H_Z/MSEED 2048 4
 END CLIENT host.iris.edu [192.168.255.255] total TX bytes: 4608
+</pre>
+
+<p >.SS "Access logging"</p>
+
+<p >Access logging is enabled with the <b>-Ua</b> command line option or the <b>UsageLogAccess</b> config file parameter (or the <b>RS_USAGE_LOG_ACCESS</b> environment variable).  The <b>UsageLogDirectory</b> (or <b>-U</b> option) must be set for access logging to function.</p>
+
+<p >Access log files are always written in JSON Lines format, one JSON object per line, with a <b>.jsonl</b> extension.  Files are named:</p>
+<pre >
+  <b>accesslog-20260316T0000-20260317T0000.jsonl</b>
+</pre>
+
+<p >Each access log record contains the event time, client metadata (IP address, hostname, server port, user agent), authentication details if applicable, protocol information (name, version, TLS, WebSocket), and the event or command details.</p>
+
+<p >The following events are logged:</p>
+
+<pre >
+  <b>connect</b>    - Client TCP connection established
+  <b>disconnect</b> - Client connection closed
+  <b>command</b>    - Key protocol command received
+</pre>
+
+<p >Key commands recorded include:</p>
+
+<pre >
+  <b>INFO</b>         - SeedLink or DataLink INFO request (with item/type)
+  <b>DATA</b>/<b>FETCH</b>  - SeedLink data streaming request (with stream selection criteria)
+  <b>STREAM</b>       - DataLink streaming start (with stream selection criteria)
+  <b>GET</b>          - HTTP GET request (with path)
+</pre>
+
+<p >For DATA/FETCH and STREAM commands, the <b>match</b> and <b>reject</b> fields in the JSON record contain the regular expressions used to select streams, if any were specified by the client.</p>
+
+<p >An example access log record:</p>
+
+<pre >
+{"log_time":"2026-03-16T12:00:00Z","connect_time":"2026-03-16T11:59:55Z",
+ "client":{"ip":"192.168.1.10","server_port":18000,"hostname":"host.example.com",
+           "user_agent":"slinktool/4.1"},
+ "protocol":{"name":"SeedLink","version":"4.0"},
+ "event":"command","command":"DATA","match":"FDSN:IU_.*",
+ "service":{"name":"ringserver","version":"4.3.1"}}
 </pre>
 
 ## <a id='external-packet-ids'>External Packet Ids</a>
@@ -407,4 +468,4 @@ EarthScope Data Services
 </pre>
 
 
-(man page 2025/05/09)
+(man page 2026/03/21)

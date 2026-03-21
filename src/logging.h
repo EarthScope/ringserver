@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions andd
  * limitations under the License.
  *
- * Copyright (C) 2024:
+ * Copyright (C) 2026:
  * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
@@ -36,9 +36,11 @@ __attribute__((__format__ (__printf__, 2, 3)))
 extern int lprintf (int level, char *fmt, ...);
 extern void lprint (const char *message);
 
-extern int WriteTLog (ClientInfo *cinfo, int reset);
-extern int CalcTLogInterval (time_t reftime);
-
+extern int WriteTransferLog (ClientInfo *cinfo, int reset);
+extern int WriteAccessLog (ClientInfo *cinfo, const char *event,
+                           const char *command, const char *detail,
+                           const char *match, const char *reject);
+extern int CalcUsageLogInterval (time_t reftime);
 
 #ifdef __cplusplus
 }
