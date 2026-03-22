@@ -18,7 +18,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright (C) 2024:
+ * Copyright (C) 2026:
  * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
@@ -1366,11 +1366,11 @@ MatchIP (IPNet *list, struct sockaddr *addr)
   struct in6_addr *testnet6 = &((struct sockaddr_in6 *)addr)->sin6_addr;
 
   if (!list)
-    return 0;
+    return NULL;
 
   /* Sanity, only IPv4 and IPv6 addresses */
   if (addr->sa_family != AF_INET && addr->sa_family != AF_INET6)
-    return 0;
+    return NULL;
 
   /* Search IPNet list for a matching entry for addr */
   while (net)
