@@ -301,7 +301,7 @@ main (int argc, char *argv[])
       /* Removing existing packet buffer and index */
       else if (config.autorecovery == 2)
       {
-        lprintf (0, "Auto recovery, removing exising packet buffer and stream index files");
+        lprintf (0, "Auto recovery, removing existing packet buffer and stream index files");
 
         /* Delete existing ring and stream files */
         if (unlink (ringfilename) && errno != ENOENT)
@@ -805,7 +805,7 @@ main (int argc, char *argv[])
     }
   }
 
-  /* Cancel and re-joing the signal handling thread */
+  /* Cancel and re-joining the signal handling thread */
   if ((errno = pthread_cancel (sigtid)))
   {
     lprintf (0, "Error cancelling signal handling thread: %s", strerror (errno));

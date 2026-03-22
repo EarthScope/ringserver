@@ -336,7 +336,7 @@ static const char *reference_config_file_parts[] = {
   "# Require authentication for a client to request streaming data.\n"
   "# Default is 0 (off).\n"
   "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_AUTH_REQUIURED_FOR_STREAMS\n"
+  "# Equivalent environment variable: RS_AUTH_REQUIRED_FOR_STREAMS\n"
   "\n"
   "#AuthRequiredForStreams 0\n"
   "\n"
@@ -1998,7 +1998,7 @@ SetParameter (const char *paramstring, int dynamiconly)
 
     if (access (resolved_path, R_OK))
     {
-      lprintf (0, "Error with %s value, cannot write to directory: %s",
+      lprintf (0, "Error with %s value, cannot read file: %s",
                field[0], resolved_path);
       return -1;
     }
@@ -2017,7 +2017,7 @@ SetParameter (const char *paramstring, int dynamiconly)
 
     if (access (resolved_path, R_OK))
     {
-      lprintf (0, "Error with %s value, cannot write to directory: %s",
+      lprintf (0, "Error with %s value, cannot read file: %s",
                field[0], resolved_path);
       return -1;
     }

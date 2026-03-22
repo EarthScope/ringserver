@@ -688,7 +688,7 @@ RingWrite (RingPacket *packet, char *packetdata, uint32_t datasize)
   /* Check packet size */
   if ((sizeof (RingPacket) + datasize) > param.pktsize)
   {
-    lprintf (0, "%s(): %s packet size too large (%lu), maximum is %d bytes",
+    lprintf (0, "%s(): %s packet size too large (%zu), maximum is %u bytes",
              __func__, packet->streamid, (sizeof (RingPacket) + datasize), param.pktsize);
     return -1;
   }
