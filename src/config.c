@@ -2320,7 +2320,6 @@ SetParameter (const char *paramstring, int dynamiconly)
     if (asprintf (&combined_value, "%s%s\r\n", (config.httpheaders) ? config.httpheaders : "", field[1]) < 0)
     {
       lprintf (0, "Error allocating memory");
-      free (combined_value);
       return -1;
     }
 
@@ -3198,12 +3197,12 @@ SetAuthCommand (const char *program, char **argv, int argc)
   /* Create argument vector */
   if (argv && argc > 0)
   {
-    config.auth.argv = malloc (sizeof (char *) * (argc + 2));
+    config.auth.argv = calloc (argc + 2, sizeof (char *));
 
     if (config.auth.argv == NULL)
     {
       lprintf (0, "Error allocating memory for auth command arguments");
-      return -1;
+      goto cleanup_error;
     }
 
     /* Add program path as first element in argument vector */
@@ -3211,7 +3210,7 @@ SetAuthCommand (const char *program, char **argv, int argc)
     if (config.auth.argv[0] == NULL)
     {
       lprintf (0, "Error allocating memory for auth command arguments");
-      return -1;
+      goto cleanup_error;
     }
 
     /* Copy arguments to the argument vector */
@@ -3222,7 +3221,7 @@ SetAuthCommand (const char *program, char **argv, int argc)
       if (config.auth.argv[count + 1] == NULL)
       {
         lprintf (0, "Error allocating memory for auth command arguments");
-        return -1;
+        goto cleanup_error;
       }
     }
 
@@ -3237,4 +3236,17 @@ SetAuthCommand (const char *program, char **argv, int argc)
   }
 
   return 0;
+
+cleanup_error:
+  free (config.auth.program);
+  config.auth.program = NULL;
+  if (config.auth.argv != NULL)
+  {
+    for (char **arg = config.auth.argv; *arg != NULL; arg++)
+      free (*arg);
+    free (config.auth.argv);
+    config.auth.argv = NULL;
+  }
+
+  return -1;
 } /* End of SetAuthCommand() */
