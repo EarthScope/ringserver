@@ -40,17 +40,17 @@
 #include <libmseed.h>
 
 #include "clients.h"
+#include "config.h"
 #include "dlclient.h"
-#include "slclient.h"
 #include "dsarchive.h"
 #include "generic.h"
+#include "loadbuffer.h"
 #include "logging.h"
 #include "mseedscan.h"
 #include "proxyproto.h"
 #include "ring.h"
 #include "ringserver.h"
-#include "config.h"
-#include "loadbuffer.h"
+#include "slclient.h"
 
 /* Reserve connection count, allows connections from addresses with write
  * permission even when the maximum connection count has been reached. */
@@ -60,21 +60,21 @@
 
 /* Global parameter declaration and defaults */
 struct param_s param = {
-    .ringlock        = PTHREAD_MUTEX_INITIALIZER,
-    .ringbuffer      = NULL,
-    .datastart       = NULL,
-    .version         = RING_VERSION,
-    .ringsize        = 0,
-    .pktsize         = 0,
-    .maxpackets      = 0,
-    .maxoffset       = 0,
-    .headersize      = 0,
-    .earliestoffset  = -1,
-    .latestoffset    = -1,
+    .ringlock       = PTHREAD_MUTEX_INITIALIZER,
+    .ringbuffer     = NULL,
+    .datastart      = NULL,
+    .version        = RING_VERSION,
+    .ringsize       = 0,
+    .pktsize        = 0,
+    .maxpackets     = 0,
+    .maxoffset      = 0,
+    .headersize     = 0,
+    .earliestoffset = -1,
+    .latestoffset   = -1,
 
-    .streamlock      = PTHREAD_MUTEX_INITIALIZER,
-    .streamidx       = NULL,
-    .streamcount     = 0,
+    .streamlock  = PTHREAD_MUTEX_INITIALIZER,
+    .streamidx   = NULL,
+    .streamcount = 0,
 
     .clientcount     = 0,
     .shutdownsig     = 0,
@@ -819,7 +819,7 @@ main (int argc, char *argv[])
   }
 
   /* A final sync() */
-  sync();
+  sync ();
 
   return 0;
 } /* End of main() */
@@ -946,7 +946,7 @@ ListenThread (void *arg)
     if (lpp->options & PROXY_PROTOCOL_V2)
     {
       int ppresult = ProxyProtocolV2Read (clientsocket, 3000, &addr_storage, &addrlen,
-                                             &proxy_dest_port);
+                                          &proxy_dest_port);
       if (ppresult < 0)
       {
         lprintf (1, "Closing connection: failed to read PROXY protocol v2 header");
@@ -1322,8 +1322,8 @@ CalcStats (ClientInfo *cinfo)
     /* Calculate instantaneous transmission rates and smooth with EMA */
     double txpktrate_inst  = (double)(cinfo->txpackets0 - cinfo->txpackets1) / deltasec;
     double txbyterate_inst = (double)(cinfo->txbytes0 - cinfo->txbytes1) / deltasec;
-    cinfo->txpacketrate = alpha * txpktrate_inst + (1.0 - alpha) * cinfo->txpacketrate;
-    cinfo->txbyterate   = alpha * txbyterate_inst + (1.0 - alpha) * cinfo->txbyterate;
+    cinfo->txpacketrate    = alpha * txpktrate_inst + (1.0 - alpha) * cinfo->txpacketrate;
+    cinfo->txbyterate      = alpha * txbyterate_inst + (1.0 - alpha) * cinfo->txbyterate;
 
     /* Shift current values to history values */
     cinfo->txpackets1 = cinfo->txpackets0;
@@ -1336,8 +1336,8 @@ CalcStats (ClientInfo *cinfo)
     /* Calculate instantaneous reception rates and smooth with EMA */
     double rxpktrate_inst  = (double)(cinfo->rxpackets0 - cinfo->rxpackets1) / deltasec;
     double rxbyterate_inst = (double)(cinfo->rxbytes0 - cinfo->rxbytes1) / deltasec;
-    cinfo->rxpacketrate = alpha * rxpktrate_inst + (1.0 - alpha) * cinfo->rxpacketrate;
-    cinfo->rxbyterate   = alpha * rxbyterate_inst + (1.0 - alpha) * cinfo->rxbyterate;
+    cinfo->rxpacketrate    = alpha * rxpktrate_inst + (1.0 - alpha) * cinfo->rxpacketrate;
+    cinfo->rxbyterate      = alpha * rxbyterate_inst + (1.0 - alpha) * cinfo->rxbyterate;
 
     /* Shift current values to history values */
     cinfo->rxpackets1 = cinfo->rxpackets0;
@@ -1385,22 +1385,11 @@ MatchIP (IPNet *list, struct sockaddr *addr)
     }
     else if (addr->sa_family == AF_INET6 && net->family == AF_INET6)
     {
-      if ((testnet6->s6_addr[0] & net->netmask.in6_addr.s6_addr[0]) == net->network.in6_addr.s6_addr[0] &&
-          (testnet6->s6_addr[1] & net->netmask.in6_addr.s6_addr[1]) == net->network.in6_addr.s6_addr[1] &&
-          (testnet6->s6_addr[2] & net->netmask.in6_addr.s6_addr[2]) == net->network.in6_addr.s6_addr[2] &&
-          (testnet6->s6_addr[3] & net->netmask.in6_addr.s6_addr[3]) == net->network.in6_addr.s6_addr[3] &&
-          (testnet6->s6_addr[4] & net->netmask.in6_addr.s6_addr[4]) == net->network.in6_addr.s6_addr[4] &&
-          (testnet6->s6_addr[5] & net->netmask.in6_addr.s6_addr[5]) == net->network.in6_addr.s6_addr[5] &&
-          (testnet6->s6_addr[6] & net->netmask.in6_addr.s6_addr[6]) == net->network.in6_addr.s6_addr[6] &&
-          (testnet6->s6_addr[7] & net->netmask.in6_addr.s6_addr[7]) == net->network.in6_addr.s6_addr[7] &&
-          (testnet6->s6_addr[8] & net->netmask.in6_addr.s6_addr[8]) == net->network.in6_addr.s6_addr[8] &&
-          (testnet6->s6_addr[9] & net->netmask.in6_addr.s6_addr[9]) == net->network.in6_addr.s6_addr[9] &&
-          (testnet6->s6_addr[10] & net->netmask.in6_addr.s6_addr[10]) == net->network.in6_addr.s6_addr[10] &&
-          (testnet6->s6_addr[11] & net->netmask.in6_addr.s6_addr[11]) == net->network.in6_addr.s6_addr[11] &&
-          (testnet6->s6_addr[12] & net->netmask.in6_addr.s6_addr[12]) == net->network.in6_addr.s6_addr[12] &&
-          (testnet6->s6_addr[13] & net->netmask.in6_addr.s6_addr[13]) == net->network.in6_addr.s6_addr[13] &&
-          (testnet6->s6_addr[14] & net->netmask.in6_addr.s6_addr[14]) == net->network.in6_addr.s6_addr[14] &&
-          (testnet6->s6_addr[15] & net->netmask.in6_addr.s6_addr[15]) == net->network.in6_addr.s6_addr[15])
+      uint8_t masked[16];
+      for (int i = 0; i < 16; i++)
+        masked[i] = testnet6->s6_addr[i] & net->netmask.in6_addr.s6_addr[i];
+
+      if (memcmp (masked, net->network.in6_addr.s6_addr, 16) == 0)
       {
         return net;
       }
@@ -1548,7 +1537,7 @@ SignalThread (void *arg)
     case SIGINT:
     case SIGTERM:
       lprintf (1, "Received termination signal");
-      param.shutdownsig = 1; /* Set global termination flag */
+      param.shutdownsig   = 1; /* Set global termination flag */
       config.netiotimeout = 0; /* Disable network IO timeout */
       break;
     case SIGUSR1:
@@ -1572,7 +1561,8 @@ SignalThread (void *arg)
  *
  * Log high-level server parameters, not ring buffer specific.
  ***************************************************************************/
-void LogServerParameters (void)
+void
+LogServerParameters (void)
 {
   RingPacket packet;
   uint64_t pktid;
@@ -1604,7 +1594,7 @@ void LogServerParameters (void)
   pktid = RingReadPacket (param.earliestoffset, &packet, NULL);
   if (pktid != RINGID_NONE && pktid != RINGID_ERROR)
   {
-    lprintf (2, "   earliest packet ID: %"PRIu64", offset: %" PRId64, pktid, packet.offset);
+    lprintf (2, "   earliest packet ID: %" PRIu64 ", offset: %" PRId64, pktid, packet.offset);
     ms_nstime2timestr_n (packet.pkttime, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
     lprintf (2, "   earliest packet creation time: %s", timestr);
     ms_nstime2timestr_n (packet.datastart, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
@@ -1618,7 +1608,7 @@ void LogServerParameters (void)
   pktid = RingReadPacket (param.latestoffset, &packet, NULL);
   if (pktid != RINGID_NONE && pktid != RINGID_ERROR)
   {
-    lprintf (2, "   latest packet ID: %"PRIu64", offset: %" PRId64, pktid, packet.offset);
+    lprintf (2, "   latest packet ID: %" PRIu64 ", offset: %" PRId64, pktid, packet.offset);
     ms_nstime2timestr_n (packet.pkttime, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
     lprintf (2, "   latest packet creation time: %s", timestr);
     ms_nstime2timestr_n (packet.datastart, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
@@ -1819,7 +1809,7 @@ static void
 PrintHandler (void)
 {
   uint8_t verbose_save = config.verbose;
-  config.verbose = 3;
+  config.verbose       = 3;
   LogServerParameters ();
   config.verbose = verbose_save;
 }
