@@ -36,13 +36,13 @@
 #include "logging.h"
 #include "yyjson.h"
 
-static int apply_permissions_json (ClientInfo *cinfo, const char *json_string);
-static int execute_auth_program (char *envp[], uint32_t timeout_seconds,
-                                 char *output, size_t output_size,
-                                 char *error, size_t error_size);
+static int ApplyPermissionsJSON (ClientInfo *cinfo, const char *json_string);
+static int ExecuteAuthProgram (char *envp[], uint32_t timeout_seconds,
+                               char *output, size_t output_size,
+                               char *error, size_t error_size);
 
 /**************************************************************************
- * perform_auth:
+ * PerformAuth:
  *
  * Perform user authentication and set permissions for the client.
  * Authentication and permissions are determined by executing an external
@@ -56,9 +56,9 @@ static int execute_auth_program (char *envp[], uint32_t timeout_seconds,
  * @return: 0 on success, -1 on error.
  **************************************************************************/
 int
-perform_auth (ClientInfo *cinfo,
-              const char *username, const char *password,
-              const char *jwtoken)
+PerformAuth (ClientInfo *cinfo,
+             const char *username, const char *password,
+             const char *jwtoken)
 {
   char username_env[1024] = {0};
   char password_env[1024] = {0};
@@ -108,9 +108,9 @@ perform_auth (ClientInfo *cinfo,
   }
 
   /* Execute auth program */
-  status = execute_auth_program (envp, config.auth.timeout_sec,
-                                 output, sizeof (output),
-                                 error, sizeof (error));
+  status = ExecuteAuthProgram (envp, config.auth.timeout_sec,
+                               output, sizeof (output),
+                               error, sizeof (error));
   if (status != 0)
   {
     lprintf (0, "[%s] Error executing auth program: %s", cinfo->hostname, config.auth.program);
@@ -118,7 +118,7 @@ perform_auth (ClientInfo *cinfo,
   }
 
   /* Apply permissions from returned JSON */
-  if (apply_permissions_json (cinfo, output) != 0)
+  if (ApplyPermissionsJSON (cinfo, output) != 0)
   {
     return -1;
   }
@@ -162,7 +162,7 @@ perform_auth (ClientInfo *cinfo,
 }
 
 /**************************************************************************
- * apply_permissions_json:
+ * ApplyPermissionsJSON:
  *
  * Parse specified JSON and set permissions for the client.
  *
@@ -184,7 +184,7 @@ perform_auth (ClientInfo *cinfo,
  * @return: 0 on success, -1 on error.
  **************************************************************************/
 static int
-apply_permissions_json (ClientInfo *cinfo, const char *json_string)
+ApplyPermissionsJSON (ClientInfo *cinfo, const char *json_string)
 {
   const char *username_str;
   yyjson_doc *json;
@@ -347,9 +347,8 @@ apply_permissions_json (ClientInfo *cinfo, const char *json_string)
   return 0;
 }
 
-
 /**************************************************************************
- * execute_auth_program:
+ * ExecuteAuthProgram:
  *
  * Execute a program with the specified environment variables and timeout.
  *
@@ -362,9 +361,9 @@ apply_permissions_json (ClientInfo *cinfo, const char *json_string)
  * @return: exit status of the program, 0 on success, non-zero on error.
  **************************************************************************/
 static int
-execute_auth_program (char *envp[], uint32_t timeout_seconds,
-                      char *output, size_t output_size,
-                      char *error, size_t error_size)
+ExecuteAuthProgram (char *envp[], uint32_t timeout_seconds,
+                    char *output, size_t output_size,
+                    char *error, size_t error_size)
 {
   int stdout_pipe[2] = {-1, -1};
   int stderr_pipe[2] = {-1, -1};

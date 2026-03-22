@@ -127,7 +127,7 @@ drain_bytes (int sock, size_t len, int timeout_ms)
 }
 
 /***********************************************************************
- * proxy_protocol_v2_read:
+ * ProxyProtocolV2Read:
  *
  * Read and parse a HAProxy PROXY protocol v2 header from 'socket'.
  *
@@ -142,10 +142,10 @@ drain_bytes (int sock, size_t len, int timeout_ms)
  *  -1  - error
  ***********************************************************************/
 int
-proxy_protocol_v2_read (int socket, int timeout_ms,
-                        struct sockaddr_storage *source_addr,
-                        socklen_t *source_addrlen,
-                        uint16_t *dest_port)
+ProxyProtocolV2Read (int socket, int timeout_ms,
+                     struct sockaddr_storage *source_addr,
+                     socklen_t *source_addrlen,
+                     uint16_t *dest_port)
 {
   uint8_t hdr[PP2_HEADER_LEN];
   uint8_t addrbuf[PP2_ADDR_LEN_INET6];
@@ -292,4 +292,4 @@ proxy_protocol_v2_read (int socket, int timeout_ms,
     }
     return 1;
   }
-} /* End of proxy_protocol_v2_read() */
+} /* End of ProxyProtocolV2Read() */

@@ -56,7 +56,7 @@ tls_debug (void *ctx, int level, const char *file, int line, const char *str)
  * Return 0 on success and non-zero on error.
  ***********************************************************************/
 int
-tls_configure (ClientInfo *cinfo)
+TLSConfigure (ClientInfo *cinfo)
 {
   TLSCTX *tlsctx = NULL;
   char *evalue   = NULL;
@@ -231,7 +231,7 @@ tls_configure (ClientInfo *cinfo)
   lprintf (1, "[%s] TLS connection established", cinfo->hostname);
 
   return 0;
-} /* End of tls_configure() */
+} /* End of TLSConfigure() */
 
 /***********************************************************************
  *
@@ -239,7 +239,7 @@ tls_configure (ClientInfo *cinfo)
  *
  ***********************************************************************/
 void
-tls_cleanup (ClientInfo *cinfo)
+TLSCleanup (ClientInfo *cinfo)
 {
   if (cinfo->tlsctx)
   {

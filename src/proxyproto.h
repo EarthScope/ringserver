@@ -47,10 +47,10 @@ extern "C" {
  *   1  - LOCAL command; addr/addrlen unchanged
  *  -1  - error (bad signature, unsupported version, timeout, I/O error)
  */
-extern int proxy_protocol_v2_read (int socket, int timeout_ms,
-                                   struct sockaddr_storage *source_addr,
-                                   socklen_t *source_addrlen,
-                                   uint16_t *dest_port);
+extern int ProxyProtocolV2Read (int socket, int timeout_ms,
+                                struct sockaddr_storage *source_addr,
+                                socklen_t *source_addrlen,
+                                uint16_t *dest_port);
 
 #ifdef __cplusplus
 }

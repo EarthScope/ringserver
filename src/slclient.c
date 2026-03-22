@@ -860,7 +860,7 @@ HandleNegotiation (ClientInfo *cinfo)
       }
     }
 
-    if (OKGO && perform_auth (cinfo, username, password, jwtoken))
+    if (OKGO && PerformAuth (cinfo, username, password, jwtoken))
     {
       lprintf (0, "[%s] Error performing authentication", cinfo->hostname);
 

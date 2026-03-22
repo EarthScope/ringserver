@@ -945,7 +945,7 @@ ListenThread (void *arg)
     /* Read PROXY protocol v2 header when the listener is configured for it */
     if (lpp->options & PROXY_PROTOCOL_V2)
     {
-      int ppresult = proxy_protocol_v2_read (clientsocket, 3000, &addr_storage, &addrlen,
+      int ppresult = ProxyProtocolV2Read (clientsocket, 3000, &addr_storage, &addrlen,
                                              &proxy_dest_port);
       if (ppresult < 0)
       {

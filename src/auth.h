@@ -28,9 +28,9 @@ extern "C" {
 
 #include "clients.h"
 
-extern int perform_auth (ClientInfo *cinfo,
-                         const char *username, const char *password,
-                         const char *jwtoken);
+extern int PerformAuth (ClientInfo *cinfo,
+                        const char *username, const char *password,
+                        const char *jwtoken);
 
 #ifdef __cplusplus
 }

@@ -50,8 +50,8 @@ typedef struct TLSCTX
   mbedtls_pk_context pkey;
 } TLSCTX;
 
-extern int tls_configure (ClientInfo *cinfo);
-extern void tls_cleanup (ClientInfo *cinfo);
+extern int TLSConfigure (ClientInfo *cinfo);
+extern void TLSCleanup (ClientInfo *cinfo);
 
 #ifdef __cplusplus
 }

@@ -200,7 +200,7 @@ ClientThread (void *arg)
     }
   }
 
-  if (cinfo->tls && tls_configure (cinfo))
+  if (cinfo->tls && TLSConfigure (cinfo))
   {
     lprintf (0, "[%s] Error negotiating TLS", cinfo->hostname);
     setuperr = 1;
@@ -220,7 +220,7 @@ ClientThread (void *arg)
       cinfo->socket = -1;
     }
 
-    tls_cleanup (cinfo);
+    TLSCleanup (cinfo);
 
     /* Release allowed and forbidden related PCRE2 data */
     free (cinfo->allowedstr);
@@ -439,7 +439,7 @@ ClientThread (void *arg)
     cinfo->socket = -1;
   }
 
-  tls_cleanup (cinfo);
+  TLSCleanup (cinfo);
 
   /* Write out transmission log for this client if requested */
   if (config.usagelog.mode & (USAGELOG_TX | USAGELOG_RX))
