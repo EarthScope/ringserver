@@ -1509,7 +1509,7 @@ GenProtocolString (ListenProtocols protocols, ListenOptions options,
                      (options & PROXY_PROTOCOL_V2) ? "with PROXYv2 " : "",
                      (options & GRANT_TRUSTED) ? "GRANT_TRUSTED " : "");
 
-  if (length < maxlength && result[length - 1] == ' ')
+  if (length > 0 && length < maxlength && result[length - 1] == ' ')
     result[length - 1] = '\0';
 
   return (length > maxlength) ? maxlength - 1 : length;
