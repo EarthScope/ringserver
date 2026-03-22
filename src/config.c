@@ -1529,7 +1529,7 @@ int
 ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
 {
   FILE *cfile;
-  char line[200];
+  char line[1024];
   char *ptr;
   char *tail;
   int linecount = 0;
@@ -2344,10 +2344,17 @@ SetParameter (const char *paramstring, int dynamiconly)
 
     /* Recombine option parameters for AddMSeedScanThread() to parse, TODO improve this */
     char scanparams[1024] = {0};
+    size_t offset         = 0;
     for (int idx = 1; idx < fieldcount; idx++)
     {
-      strcat (scanparams, field[idx]);
-      strcat (scanparams, " ");
+      int written = snprintf (scanparams + offset, sizeof (scanparams) - offset,
+                              "%s ", field[idx]);
+      if (written < 0 || (size_t)written >= sizeof (scanparams) - offset)
+      {
+        lprintf (0, "Error with %s config parameter, value too long: %s", field[0], paramstring);
+        return -1;
+      }
+      offset += (size_t)written;
     }
 
     if (AddMSeedScanThread (scanparams))
