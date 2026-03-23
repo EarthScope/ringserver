@@ -1009,7 +1009,8 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
   recvptr = cinfo->recvbuf + cinfo->recvlength;
   receivable = cinfo->recvbufsize - cinfo->recvlength;
 
-  /* Deadline for total receive time, to prevent slow trickle attacks where */
+  /* Deadline for total receive time, to prevent slow trickle attacks.
+   * Only meaningful when netiotimeout > 0 (i.e. not during shutdown). */
   nstime_t recv_deadline = NSnow () + (nstime_t)NSTMODULUS * config.netiotimeout * 2;
 
   while ((cinfo->recvlength + nread) < requested)
@@ -1035,8 +1036,10 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
       if (fulfill == 0 && nread == 0)
         return 0;
 
-      /* Check total elapsed time to prevent slow trickle attacks */
-      if (NSnow () > recv_deadline)
+      /* Check total elapsed time to prevent slow trickle attacks.
+       * Skip this check during shutdown (netiotimeout == 0) to avoid
+       * a misleading "slow trickle protection" log message. */
+      if (param.shutdownsig == 0 && NSnow () > recv_deadline)
       {
         lprintf (0, "[%s] Total receive deadline exceeded (slow trickle protection)", cinfo->hostname);
         cinfo->socketerr = -1;
@@ -1048,9 +1051,17 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
 
       if (pollret == 0)
       {
-        lprintf (0, "[%s] Timeout receiving data", cinfo->hostname);
-        cinfo->socketerr = -1;
-        return -1;
+        if (param.shutdownsig == 0)
+        {
+          lprintf (0, "[%s] Timeout receiving data", cinfo->hostname);
+          cinfo->socketerr = -1;
+          return -1;
+        }
+        else
+        {
+          cinfo->socketerr = -2;
+          return -2;
+        }
       }
       else if (pollret == -1 && errno != EINTR)
       {

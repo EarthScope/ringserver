@@ -1757,7 +1757,6 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   FILE *fp = NULL;
   struct stat filestat;
   MediaType type    = RAW;
-  char *response    = NULL;
   char *webpath     = NULL;
   char *filename    = NULL;
   char *indexfile   = NULL;
@@ -1765,6 +1764,7 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   char filebuffer[65535];
   char webroot[PATH_MAX] = {0};
   size_t length;
+  int rv = -1;
 
   if (!path || !cinfo)
     return -1;
@@ -1788,39 +1788,39 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
     return -1;
 
   filename = realpath (webpath, NULL);
+  free (webpath);
+  webpath = NULL;
+
   if (filename == NULL)
   {
     /* Only print log message if not the special value of favicon.ico */
     if (strcasecmp (path, "/favicon.ico"))
-      lprintf (0, "Error resolving path to requested file: %s", webpath);
+      lprintf (0, "Error resolving path to requested file: %s/%s", webroot, path);
     return -1;
   }
-
-  free (webpath);
 
   /* Sanity check that file is within web root */
   if (strncmp (webroot, filename, strlen (webroot)))
   {
     lprintf (0, "Refusing to send file outside of WebRoot: %s", filename);
-    return -1;
+    goto cleanup;
   }
 
   if (stat (filename, &filestat))
-    return -1;
+    goto cleanup;
 
   /* If directory and check for index.html */
   if (S_ISDIR (filestat.st_mode))
   {
     if (asprintf (&indexfile, "%s/index.html", filename) < 0)
-      return -1;
+      goto cleanup;
 
-    if (stat (indexfile, &filestat))
-      return -1;
-
-    if (filename)
-      free (filename);
-
+    free (filename);
     filename = indexfile;
+    indexfile = NULL;
+
+    if (stat (filename, &filestat))
+      goto cleanup;
   }
 
   /* Check for extension and set Content-Type accordingly, hopefully it's true */
@@ -1853,7 +1853,7 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   {
     lprintf (0, "Error opening file %s:  %s",
              filename, strerror (errno));
-    return -1;
+    goto cleanup;
   }
 
   /* Create header */
@@ -1862,7 +1862,8 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   if (length <= 0)
   {
     fclose (fp);
-    return -1;
+    fp = NULL;
+    goto cleanup;
   }
 
   /* Send header and file */
@@ -1875,14 +1876,16 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   }
 
   fclose (fp);
+  fp = NULL;
 
-  if (filename)
-    free (filename);
+  rv = (cinfo->socketerr) ? -1 : (int)filestat.st_size;
 
-  if (response)
-    free (response);
+cleanup:
+  if (fp)
+    fclose (fp);
+  free (filename);
 
-  return (cinfo->socketerr) ? -1 : filestat.st_size;
+  return rv;
 } /* End of SendFileHTTP() */
 
 /***************************************************************************

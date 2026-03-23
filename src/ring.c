@@ -847,7 +847,7 @@ RingWrite (RingPacket *packet, char *packetdata, uint32_t datasize)
   pthread_mutex_unlock (&param.ringlock);
   pthread_mutex_unlock (&param.streamlock);
 
-  lprintf (3, "Added packet for stream %s, pktid: %" PRIu64 ", offset: %" PRIu64,
+  lprintf (3, "Added packet for stream %s, pktid: %" PRIu64 ", offset: %" PRId64,
            packet->streamid, packet->pktid, packet->offset);
 
   return 0;
@@ -1791,6 +1791,13 @@ FindOffsetForID (uint64_t pktid, nstime_t *pkttime)
  * Add a RingStream to the specified stream index, no checking is done
  * to determine if this entry already exists.  Return a pointer to the
  * newly generated Key if **ppkey is supplied.
+ *
+ * NOTE: The tree key is a 64-bit FNV-1a hash of the stream ID. In the
+ * extremely unlikely event of a hash collision between two distinct stream
+ * IDs, one stream's entry would silently shadow the other in the index.
+ * With a 64-bit key space and realistic stream counts (hundreds to low
+ * thousands) this probability is negligible, but it is a known design
+ * constraint.
  *
  * Return a pointer to the added RingStream on success and 0 on error.
  ***************************************************************************/
