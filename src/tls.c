@@ -70,9 +70,15 @@ TLSConfigure (ClientInfo *cinfo)
 
   pthread_rwlock_rdlock (&config.config_rwlock);
   if (config.tlscertfile)
+  {
     strncpy (tlscertfile, config.tlscertfile, sizeof (tlscertfile) - 1);
+    tlscertfile[sizeof (tlscertfile) - 1] = '\0';
+  }
   if (config.tlskeyfile)
+  {
     strncpy (tlskeyfile, config.tlskeyfile, sizeof (tlskeyfile) - 1);
+    tlskeyfile[sizeof (tlskeyfile) - 1] = '\0';
+  }
   pthread_rwlock_unlock (&config.config_rwlock);
 
   if (tlscertfile[0] == '\0')

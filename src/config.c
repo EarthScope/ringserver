@@ -1801,6 +1801,7 @@ SetParameter (const char *paramstring, int dynamiconly)
   /* Set field pointers to space-delimited strings, while handling
    * quoted strings and trailing '#' comments. */
   strncpy (parambuf, paramstring, sizeof (parambuf) - 1);
+  parambuf[sizeof (parambuf) - 1] = '\0';
   for (int idx = 0, start = 1, inside_quotes = 0;
        parambuf[idx] && fieldcount < MAX_FIELDS;
        idx++)
@@ -2705,6 +2706,7 @@ AddMSeedScanThread (const char *scanconfig)
   mssinfo.stateint     = 300;                /* State saving interval in seconds */
 
   strncpy (myconfig, scanconfig, sizeof (myconfig) - 1);
+  myconfig[sizeof (myconfig) - 1] = '\0';
   configstr = myconfig;
 
   /* Skip initial whitespace */
@@ -2741,14 +2743,17 @@ AddMSeedScanThread (const char *scanconfig)
     if (!strncasecmp ("StateFile", kptr, 9)) /* State file name */
     {
       strncpy (mssinfo.statefile, vptr, sizeof (mssinfo.statefile) - 1);
+      mssinfo.statefile[sizeof (mssinfo.statefile) - 1] = '\0';
     }
     else if (!strncasecmp ("Match", kptr, 5)) /* File name match */
     {
       strncpy (mssinfo.matchstr, vptr, sizeof (mssinfo.matchstr) - 1);
+      mssinfo.matchstr[sizeof (mssinfo.matchstr) - 1] = '\0';
     }
     else if (!strncasecmp ("Reject", kptr, 6)) /* File name reject */
     {
       strncpy (mssinfo.rejectstr, vptr, sizeof (mssinfo.rejectstr) - 1);
+      mssinfo.rejectstr[sizeof (mssinfo.rejectstr) - 1] = '\0';
     }
     else if (!strncasecmp ("InitCurrentState", kptr, 16)) /* Init current state flag */
     {
@@ -3007,6 +3012,7 @@ AddIPNet (IPNet **pplist, const char *network, const char *limitstr)
 
   /* Copy network string for manipulation */
   strncpy (net, network, sizeof (net) - 1);
+  net[sizeof (net) - 1] = '\0';
 
   /* Split netmask/prefixlen from network if present: "IP/netmask" */
   if ((prefixstr = strchr (net, '/')))

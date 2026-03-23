@@ -268,6 +268,7 @@ info_xml_slv3_stations (ClientInfo *cinfo, const char *software, int include_str
 
       strncpy (idstr, DASHNULL (yyjson_get_str (yyjson_obj_get (station_iter, "id"))),
                sizeof (idstr) - 1);
+      idstr[sizeof (idstr) - 1] = '\0';
 
       /* Split network code from station if separated by '_' */
       if ((ptr = strchr (idstr, '_')))
@@ -297,6 +298,7 @@ info_xml_slv3_stations (ClientInfo *cinfo, const char *software, int include_str
 
           strncpy (idstr, DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "id"))),
                    sizeof (idstr) - 1);
+          idstr[sizeof (idstr) - 1] = '\0';
 
           /* Split location code from station code if separated by '_' */
           if ((ptr = strchr (idstr, '_')))

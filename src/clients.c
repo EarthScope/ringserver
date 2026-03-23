@@ -890,7 +890,7 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
       size_t maxlength = (buflen[idx] < sizeof (pbuffer)) ? buflen[idx] : sizeof (pbuffer);
 
       strncpy (pbuffer, (char *)buffer[idx], maxlength - 1);
-      pbuffer[sizeof (pbuffer) - 1] = '\0';
+      pbuffer[maxlength - 1] = '\0';
 
       if ((cp = memchr (pbuffer, '\r', maxlength)))
         *cp = '\0';
@@ -1448,6 +1448,7 @@ GetStreamNode (RBTree *tree, pthread_mutex_t *plock, char *streamid,
 
     /* Initialize the new StreamNode, values that are not 0 */
     strncpy (stream->streamid, streamid, sizeof (stream->streamid) - 1);
+    stream->streamid[sizeof (stream->streamid) - 1] = '\0';
 
     /* Add the new entry while locking the tree */
     pthread_mutex_lock (plock);

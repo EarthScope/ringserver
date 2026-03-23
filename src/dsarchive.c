@@ -813,9 +813,13 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
     }
     foundgroup->filed   = -1;
     foundgroup->modtime = curtime;
-    strncpy (foundgroup->filename, filename, sizeof (foundgroup->filename));
+    strncpy (foundgroup->filename, filename, sizeof (foundgroup->filename) - 1);
+    foundgroup->filename[sizeof (foundgroup->filename) - 1] = '\0';
     if (postpath)
+    {
       strncpy (foundgroup->postpath, postpath, sizeof (foundgroup->postpath) - 1);
+      foundgroup->postpath[sizeof (foundgroup->postpath) - 1] = '\0';
+    }
     else
       foundgroup->postpath[0] = '\0';
     foundgroup->next = NULL;

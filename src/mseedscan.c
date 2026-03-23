@@ -624,6 +624,7 @@ AddFile (RBTree *filetree, const char *filename, time_t modtime)
   *filekey = FNVhash64 (filename);
 
   strncpy (filenode->filename, filename, sizeof (filenode->filename) - 1);
+  filenode->filename[sizeof (filenode->filename) - 1] = '\0';
   filenode->offset    = 0;
   filenode->modtime   = modtime;
   filenode->scantime  = 0;

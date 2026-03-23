@@ -118,6 +118,7 @@ info_add_id (yyjson_mut_doc *doc)
 
   /* Add DataLink protocols */
   strncpy (string, DLSERVERPROTOCOLS, sizeof (string) - 1);
+  string[sizeof (string) - 1] = '\0';
 
   if ((protocols = yyjson_mut_obj_add_arr (doc, root, "datalink_protocol")) == NULL)
   {
@@ -136,6 +137,7 @@ info_add_id (yyjson_mut_doc *doc)
 
   /* Add SeedLink protocols */
   strncpy (string, SLSERVERPROTOCOLS, sizeof (string) - 1);
+  string[sizeof (string) - 1] = '\0';
 
   if ((protocols = yyjson_mut_obj_add_arr (doc, root, "seedlink_protocol")) == NULL)
   {

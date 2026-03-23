@@ -1771,7 +1771,10 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
 
   pthread_rwlock_rdlock (&config.config_rwlock);
   if (config.webroot)
+  {
     strncpy (webroot, config.webroot, sizeof (webroot) - 1);
+    webroot[sizeof (webroot) - 1] = '\0';
+  }
   pthread_rwlock_unlock (&config.config_rwlock);
 
   /* No webroot, return immediately */
