@@ -1511,6 +1511,24 @@ ReadEnvironmentVariables (void)
 }  /* End of ReadEnvironmentVariables() */
 
 /***************************************************************************
+ * FreeIPNetList:
+ *
+ * Free all nodes of an IPNet linked list.
+ ***************************************************************************/
+static void
+FreeIPNetList (IPNet *list)
+{
+  IPNet *next;
+  while (list)
+  {
+    next = list->next;
+    free (list->limitstr);
+    free (list);
+    list = next;
+  }
+} /* End of FreeIPNetList() */
+
+/***************************************************************************
  * ReadConfigFile:
  *
  * Reads the ringserver configuration from a file containing simple
@@ -1535,8 +1553,18 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
   int linecount = 0;
   int rv;
 
-  IPNet *ipnet     = NULL;
-  IPNet *nextipnet = NULL;
+  /* Saved copies of dynamic fields, used to restore on parse failure */
+  IPNet *saved_writeips      = NULL;
+  IPNet *saved_trustedips    = NULL;
+  IPNet *saved_allowedips    = NULL;
+  IPNet *saved_forbiddenips  = NULL;
+  IPNet *saved_acceptips     = NULL;
+  IPNet *saved_denyips       = NULL;
+  char *saved_webroot        = NULL;
+  char *saved_httpheaders    = NULL;
+  UsageLogMode saved_usagelog_mode   = USAGELOG_NONE;
+  char *saved_usagelog_basedir = NULL;
+  char *saved_usagelog_prefix  = NULL;
 
   if (!configfile)
     return -1;
@@ -1558,6 +1586,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     {
       lprintf (0, "Error stating config file %s: %s",
                configfile, strerror (errno));
+      fclose (cfile);
       return -1;
     }
 
@@ -1567,88 +1596,37 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
   /* Reset the configuration file mtime */
   param.configfilemtime = mtime;
 
+  /* Save existing dynamic state so it can be restored on parse failure */
+  saved_writeips           = config.writeips;
+  saved_trustedips         = config.trustedips;
+  saved_allowedips         = config.allowedips;
+  saved_forbiddenips       = config.forbiddenips;
+  saved_acceptips          = config.acceptips;
+  saved_denyips            = config.denyips;
+  saved_webroot            = config.webroot;
+  saved_httpheaders        = config.httpheaders;
+  saved_usagelog_mode      = config.usagelog.mode;
+  saved_usagelog_basedir   = config.usagelog.basedir;
+  saved_usagelog_prefix    = config.usagelog.prefix;
+
   /* Clear the write, trusted, allowed, forbidden, match and reject IPs lists */
-  ipnet = nextipnet = config.writeips;
-  while (ipnet)
-  {
-    nextipnet = ipnet->next;
-    free (ipnet);
-    ipnet = nextipnet;
-  }
-  config.writeips = NULL;
-
-  ipnet = nextipnet = config.trustedips;
-  while (ipnet)
-  {
-    nextipnet = ipnet->next;
-    free (ipnet);
-    ipnet = nextipnet;
-  }
-  config.trustedips = NULL;
-
-  ipnet = nextipnet = config.allowedips;
-  while (ipnet)
-  {
-    nextipnet = ipnet->next;
-    if (ipnet->limitstr)
-      free (ipnet->limitstr);
-    free (ipnet);
-    ipnet = nextipnet;
-  }
-  config.allowedips = NULL;
-
-  ipnet = nextipnet = config.forbiddenips;
-  while (ipnet)
-  {
-    nextipnet = ipnet->next;
-    if (ipnet->limitstr)
-      free (ipnet->limitstr);
-    free (ipnet);
-    ipnet = nextipnet;
-  }
+  config.writeips     = NULL;
+  config.trustedips   = NULL;
+  config.allowedips   = NULL;
   config.forbiddenips = NULL;
-
-  ipnet = nextipnet = config.acceptips;
-  while (ipnet)
-  {
-    nextipnet = ipnet->next;
-    free (ipnet);
-    ipnet = nextipnet;
-  }
-  config.acceptips = NULL;
-
-  ipnet = nextipnet = config.denyips;
-  while (ipnet)
-  {
-    nextipnet = ipnet->next;
-    free (ipnet);
-    ipnet = nextipnet;
-  }
-  config.denyips = NULL;
+  config.acceptips    = NULL;
+  config.denyips      = NULL;
 
   /* Clear webroot specification */
-  if (config.webroot)
-  {
-    free (config.webroot);
-    config.webroot = NULL;
-  }
+  config.webroot = NULL;
 
   /* Clear existing HTTP headers */
-  if (config.httpheaders)
-  {
-    free (config.httpheaders);
-    config.httpheaders = NULL;
-  }
+  config.httpheaders = NULL;
 
   /* Clear existing usage log parameters */
-  if (config.usagelog.basedir)
-  {
-    config.usagelog.mode = USAGELOG_NONE;
-    free (config.usagelog.basedir);
-    config.usagelog.basedir = NULL;
-    free (config.usagelog.prefix);
-    config.usagelog.prefix = NULL;
-  }
+  config.usagelog.mode    = USAGELOG_NONE;
+  config.usagelog.basedir = NULL;
+  config.usagelog.prefix  = NULL;
 
   /* Read and process all lines */
   while (fgets (line, sizeof (line), cfile))
@@ -1674,7 +1652,8 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     if (rv < 0)
     {
       lprintf (0, "Error processing config file line (line %d): %s", linecount, line);
-      return -1;
+      fclose (cfile);
+      goto restore_config;
     }
     else if (rv == 0)
     {
@@ -1687,7 +1666,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
   {
     lprintf (0, "Error closing config file %s: %s",
              configfile, strerror (errno));
-    return -1;
+    goto restore_config;
   }
 
   /* Add localhost (loopback) to write permission list if list empty */
@@ -1696,7 +1675,7 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     if (AddIPNet (&config.writeips, "localhost/128", NULL))
     {
       lprintf (0, "Error adding localhost/128 to write permission list");
-      return -1;
+      goto restore_config;
     }
   }
 
@@ -1706,11 +1685,50 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
     if (AddIPNet (&config.trustedips, "localhost/128", NULL))
     {
       lprintf (0, "Error adding localhost/128 to trusted list");
-      return -1;
+      goto restore_config;
     }
   }
 
+  /* Parse succeeded: free the saved old dynamic state */
+  FreeIPNetList (saved_writeips);
+  FreeIPNetList (saved_trustedips);
+  FreeIPNetList (saved_allowedips);
+  FreeIPNetList (saved_forbiddenips);
+  FreeIPNetList (saved_acceptips);
+  FreeIPNetList (saved_denyips);
+  free (saved_webroot);
+  free (saved_httpheaders);
+  free (saved_usagelog_basedir);
+  free (saved_usagelog_prefix);
+
   return 0;
+
+restore_config:
+  /* Parse failed: discard any partially-built new state and restore saved state */
+  FreeIPNetList (config.writeips);
+  FreeIPNetList (config.trustedips);
+  FreeIPNetList (config.allowedips);
+  FreeIPNetList (config.forbiddenips);
+  FreeIPNetList (config.acceptips);
+  FreeIPNetList (config.denyips);
+  free (config.webroot);
+  free (config.httpheaders);
+  free (config.usagelog.basedir);
+  free (config.usagelog.prefix);
+
+  config.writeips           = saved_writeips;
+  config.trustedips         = saved_trustedips;
+  config.allowedips         = saved_allowedips;
+  config.forbiddenips       = saved_forbiddenips;
+  config.acceptips          = saved_acceptips;
+  config.denyips            = saved_denyips;
+  config.webroot            = saved_webroot;
+  config.httpheaders        = saved_httpheaders;
+  config.usagelog.mode      = saved_usagelog_mode;
+  config.usagelog.basedir   = saved_usagelog_basedir;
+  config.usagelog.prefix    = saved_usagelog_prefix;
+
+  return -1;
 } /* End of ReadConfigFile() */
 
 /***************************************************************************

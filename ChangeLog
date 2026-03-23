@@ -1,6 +1,8 @@
-2026.080:
+2026.082:
 	- Rename transfer logging options to usage logging, old options still supported.
 	- Add access logging to log connections, disconnections, and important commands.
+	- Restore config file options when parsing fails, avoid indeterminate state.
+	- Numerous fixes to edge cases, string handling robustness, etc.
 
 2026.273: v4.3.1
 	- Add TRUSTED listener option to grant trusted permission to all clients on a port.
