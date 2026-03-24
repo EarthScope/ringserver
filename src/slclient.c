@@ -407,8 +407,7 @@ SLFindFilter (const SLInfo *slinfo, const char *streamid)
   if (slinfo->stationcount <= 0)
     return CONVERT_NONE;
 
-  strncpy (privateid, streamid, sizeof (privateid) - 1);
-  privateid[sizeof (privateid) - 1] = '\0';
+  snprintf (privateid, sizeof (privateid), "%s", streamid);
 
   /* Decompose FDSN Source ID into SeedLink station and select IDs by
    * extracting "NET_STA" and "LOC_B_S_SS" from "FDSN:NET_STA_LOC_B_S_SS/MSEED" */

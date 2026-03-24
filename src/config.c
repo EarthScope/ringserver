@@ -2716,8 +2716,7 @@ AddMSeedScanThread (const char *scanconfig)
   mssinfo.filemaxrecs  = 100;                /* Maximum records to read from each file per scan */
   mssinfo.stateint     = 300;                /* State saving interval in seconds */
 
-  strncpy (myconfig, scanconfig, sizeof (myconfig) - 1);
-  myconfig[sizeof (myconfig) - 1] = '\0';
+  snprintf (myconfig, sizeof (myconfig), "%s", scanconfig);
   configstr = myconfig;
 
   /* Skip initial whitespace */
