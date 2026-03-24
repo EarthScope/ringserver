@@ -145,10 +145,10 @@ SeedLink, DataLink or HTTP protocols respectively.
 
 .IP "-U \fIlogdir\fP"
 Usage log base directory.  By default the server does not write usage
-logs.  If a directory is specified, both transmission (TX) and reception
-(RX) transfer logs will be written; these can be toggled individually
-with the \fBUsageLogTX\fP and \fBUsageLogRX\fP config file parameters.
-Access logging must be separately enabled with \fB-Ua\fP.
+logs.  If a directory is specified, transmission (TX), reception (RX),
+and access logs are all written by default; these can be toggled
+individually with the \fBUsageLogTX\fP, \fBUsageLogRX\fP, and
+\fBUsageLogAccess\fP config file parameters.
 The \fB-T\fP flag is accepted as a backward-compatible alias.
 
 .IP "-Ui \fIhours\fP"
@@ -169,12 +169,6 @@ RX log file uses a \fB.jsonl\fP extension and contains one JSON object
 per client session describing the protocol, streams, and byte counts.
 This replaces the legacy text format for transfer logs.
 The \fB-Tj\fP flag is accepted as a backward-compatible alias.
-
-.IP "-Ua"
-Enable access logging.  When enabled, an access log file in JSON Lines
-format is written to the usage log directory, recording connection
-events and key commands.  The \fB-U\fP option (or \fBUsageLogDirectory\fP
-config parameter) must be set for access logging to function.
 
 .IP "-STDERR"
 Send all diagnostic output to stderr instead of stdout.  This is
@@ -418,8 +412,8 @@ connection events and key commands.  All log types share the same base
 directory, file prefix, and rotation interval, configured via the
 \fB-U\fP command line option or the \fBUsageLogDirectory\fP config file
 parameter (the \fBTransferLogDirectory\fP alias is also accepted for
-backward compatibility).  Access logging is disabled by default and must
-be explicitly enabled.
+backward compatibility).  All three log types (TX, RX, and access) are
+enabled by default when a usage log directory is specified.
 
 .SS "Transfer logging"
 
@@ -468,10 +462,10 @@ END CLIENT host.iris.edu [192.168.255.255] total TX bytes: 4608
 
 .SS "Access logging"
 
-Access logging is enabled with the \fB-Ua\fP command line option or the
-\fBUsageLogAccess\fP config file parameter (or the \fBRS_USAGE_LOG_ACCESS\fP
-environment variable).  The \fBUsageLogDirectory\fP (or \fB-U\fP option)
-must be set for access logging to function.
+Access logging is enabled by default when \fBUsageLogDirectory\fP
+(or the \fB-U\fP option) is set.  It can be disabled with
+\fBUsageLogAccess 0\fP in the config file or the \fBRS_USAGE_LOG_ACCESS\fP
+environment variable.
 
 Access log files are always written in JSON Lines format, one JSON object
 per line, with a \fB.jsonl\fP extension.  Files are named:

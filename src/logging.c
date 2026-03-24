@@ -315,7 +315,8 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
           yyjson_mut_obj_add_strcpy (txdoc, client, "ip", cinfo->ipstr);
           yyjson_mut_obj_add_int (txdoc, client, "server_port", server_port);
           yyjson_mut_obj_add_strcpy (txdoc, client, "hostname", cinfo->hostname);
-          yyjson_mut_obj_add_strcpy (txdoc, client, "user_agent", cinfo->clientid);
+          if (cinfo->clientid[0])
+            yyjson_mut_obj_add_strcpy (txdoc, client, "user_agent", cinfo->clientid);
 
           if (cinfo->permissions & AUTHENTICATED)
           {
@@ -328,14 +329,18 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
               yyjson_mut_obj_add_strcpy (txdoc, auth, "username", cinfo->auth_username);
           }
 
-          yyjson_mut_val *proto = yyjson_mut_obj_add_obj (txdoc, root, "transfer_protocol");
-          yyjson_mut_obj_add_strcpy (txdoc, proto, "name", modestr);
-          if (protoversion[0])
-            yyjson_mut_obj_add_strcpy (txdoc, proto, "version", protoversion);
-          if (cinfo->tls)
-            yyjson_mut_obj_add_bool (txdoc, proto, "is_tls", true);
-          if (cinfo->websocket)
-            yyjson_mut_obj_add_bool (txdoc, proto, "is_websocket", true);
+          if (cinfo->type != CLIENT_UNDETERMINED || cinfo->tls)
+          {
+            yyjson_mut_val *proto = yyjson_mut_obj_add_obj (txdoc, root, "transfer_protocol");
+            if (cinfo->type != CLIENT_UNDETERMINED)
+              yyjson_mut_obj_add_strcpy (txdoc, proto, "name", modestr);
+            if (protoversion[0])
+              yyjson_mut_obj_add_strcpy (txdoc, proto, "version", protoversion);
+            if (cinfo->tls)
+              yyjson_mut_obj_add_bool (txdoc, proto, "is_tls", true);
+            if (cinfo->websocket)
+              yyjson_mut_obj_add_bool (txdoc, proto, "is_websocket", true);
+          }
 
           yyjson_mut_obj_add_strcpy (txdoc, root, "transfer_direction", "TX");
 
@@ -363,7 +368,8 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
           yyjson_mut_obj_add_strcpy (rxdoc, client, "ip", cinfo->ipstr);
           yyjson_mut_obj_add_int (rxdoc, client, "server_port", server_port);
           yyjson_mut_obj_add_strcpy (rxdoc, client, "hostname", cinfo->hostname);
-          yyjson_mut_obj_add_strcpy (rxdoc, client, "user_agent", cinfo->clientid);
+          if (cinfo->clientid[0])
+            yyjson_mut_obj_add_strcpy (rxdoc, client, "user_agent", cinfo->clientid);
 
           if (cinfo->permissions & AUTHENTICATED)
           {
@@ -376,14 +382,18 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
               yyjson_mut_obj_add_strcpy (rxdoc, auth, "username", cinfo->auth_username);
           }
 
-          yyjson_mut_val *proto = yyjson_mut_obj_add_obj (rxdoc, root, "transfer_protocol");
-          yyjson_mut_obj_add_strcpy (rxdoc, proto, "name", modestr);
-          if (protoversion[0])
-            yyjson_mut_obj_add_strcpy (rxdoc, proto, "version", protoversion);
-          if (cinfo->tls)
-            yyjson_mut_obj_add_bool (rxdoc, proto, "is_tls", true);
-          if (cinfo->websocket)
-            yyjson_mut_obj_add_bool (rxdoc, proto, "is_websocket", true);
+          if (cinfo->type != CLIENT_UNDETERMINED || cinfo->tls)
+          {
+            yyjson_mut_val *proto = yyjson_mut_obj_add_obj (rxdoc, root, "transfer_protocol");
+            if (cinfo->type != CLIENT_UNDETERMINED)
+              yyjson_mut_obj_add_strcpy (rxdoc, proto, "name", modestr);
+            if (protoversion[0])
+              yyjson_mut_obj_add_strcpy (rxdoc, proto, "version", protoversion);
+            if (cinfo->tls)
+              yyjson_mut_obj_add_bool (rxdoc, proto, "is_tls", true);
+            if (cinfo->websocket)
+              yyjson_mut_obj_add_bool (rxdoc, proto, "is_websocket", true);
+          }
 
           yyjson_mut_obj_add_strcpy (rxdoc, root, "transfer_direction", "RX");
 
@@ -472,11 +482,13 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
       /* Print client header line */
       if (txfp)
         fprintf (txfp, "START CLIENT %s [%s] (%s|%s) @ %s (connected %s) TX\n",
-                 cinfo->hostname, cinfo->ipstr, modestr, cinfo->clientid,
+                 cinfo->hostname, cinfo->ipstr, modestr,
+                 cinfo->clientid[0] ? cinfo->clientid : "Client",
                  currtime, conntime);
       if (rxfp)
         fprintf (rxfp, "START CLIENT %s [%s] (%s|%s) @ %s (connected %s) RX\n",
-                 cinfo->hostname, cinfo->ipstr, modestr, cinfo->clientid,
+                 cinfo->hostname, cinfo->ipstr, modestr,
+                 cinfo->clientid[0] ? cinfo->clientid : "Client",
                  currtime, conntime);
 
       /* Lock stream tree and create list (Stack) of streams */
@@ -672,7 +684,8 @@ WriteAccessLog (ClientInfo *cinfo, const char *event,
   yyjson_mut_obj_add_strcpy (doc, client, "ip", cinfo->ipstr);
   yyjson_mut_obj_add_int (doc, client, "server_port", server_port);
   yyjson_mut_obj_add_strcpy (doc, client, "hostname", cinfo->hostname);
-  yyjson_mut_obj_add_strcpy (doc, client, "user_agent", cinfo->clientid);
+  if (cinfo->clientid[0])
+    yyjson_mut_obj_add_strcpy (doc, client, "user_agent", cinfo->clientid);
 
   if (cinfo->permissions & AUTHENTICATED)
   {
@@ -685,14 +698,18 @@ WriteAccessLog (ClientInfo *cinfo, const char *event,
       yyjson_mut_obj_add_strcpy (doc, auth, "username", cinfo->auth_username);
   }
 
-  yyjson_mut_val *proto = yyjson_mut_obj_add_obj (doc, root, "protocol");
-  yyjson_mut_obj_add_strcpy (doc, proto, "name", modestr);
-  if (protoversion[0])
-    yyjson_mut_obj_add_strcpy (doc, proto, "version", protoversion);
-  if (cinfo->tls)
-    yyjson_mut_obj_add_bool (doc, proto, "is_tls", true);
-  if (cinfo->websocket)
-    yyjson_mut_obj_add_bool (doc, proto, "is_websocket", true);
+  if (cinfo->type != CLIENT_UNDETERMINED || cinfo->tls)
+  {
+    yyjson_mut_val *proto = yyjson_mut_obj_add_obj (doc, root, "protocol");
+    if (cinfo->type != CLIENT_UNDETERMINED)
+      yyjson_mut_obj_add_strcpy (doc, proto, "name", modestr);
+    if (protoversion[0])
+      yyjson_mut_obj_add_strcpy (doc, proto, "version", protoversion);
+    if (cinfo->tls)
+      yyjson_mut_obj_add_bool (doc, proto, "is_tls", true);
+    if (cinfo->websocket)
+      yyjson_mut_obj_add_bool (doc, proto, "is_websocket", true);
+  }
 
   yyjson_mut_obj_add_strcpy (doc, root, "event", event);
   if (command)

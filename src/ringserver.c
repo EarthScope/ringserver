@@ -1145,9 +1145,6 @@ ConfigClient (struct sockaddr *paddr, int clientsocket,
   snprintf (cinfo->portstr, sizeof (cinfo->portstr), "%s", portstr);
   snprintf (cinfo->serverport, sizeof (cinfo->serverport), "%s", lpp->portstr);
 
-  /* Set initial client ID string */
-  snprintf (cinfo->clientid, sizeof (cinfo->clientid), "Client");
-
   /* Set allowed stream limit if specified for address */
   if (config.allowedips)
   {

@@ -109,7 +109,7 @@ ringserver [options] [configfile]
 
 <b>-U </b><i>logdir</i>
 
-<p style="padding-left: 30px;">Usage log base directory.  By default the server does not write usage logs.  If a directory is specified, both transmission (TX) and reception (RX) transfer logs will be written; these can be toggled individually with the <b>UsageLogTX</b> and <b>UsageLogRX</b> config file parameters. Access logging must be separately enabled with <b>-Ua</b>. The <b>-T</b> flag is accepted as a backward-compatible alias.</p>
+<p style="padding-left: 30px;">Usage log base directory.  By default the server does not write usage logs.  If a directory is specified, transmission (TX), reception (RX), and access logs are all written by default; these can be toggled individually with the <b>UsageLogTX</b>, <b>UsageLogRX</b>, and <b>UsageLogAccess</b> config file parameters. The <b>-T</b> flag is accepted as a backward-compatible alias.</p>
 
 <b>-Ui </b><i>hours</i>
 
@@ -122,10 +122,6 @@ ringserver [options] [configfile]
 <b>-Uj</b>
 
 <p style="padding-left: 30px;">Enable JSON Lines format for transfer logs.  When enabled, each TX and RX log file uses a <b>.jsonl</b> extension and contains one JSON object per client session describing the protocol, streams, and byte counts. This replaces the legacy text format for transfer logs. The <b>-Tj</b> flag is accepted as a backward-compatible alias.</p>
-
-<b>-Ua</b>
-
-<p style="padding-left: 30px;">Enable access logging.  When enabled, an access log file in JSON Lines format is written to the usage log directory, recording connection events and key commands.  The <b>-U</b> option (or <b>UsageLogDirectory</b> config parameter) must be set for access logging to function.</p>
 
 <b>-STDERR</b>
 
@@ -269,7 +265,7 @@ ringserver [options] [configfile]
 
 ## <a id='usage-logging'>Usage Logging</a>
 
-<p >Usage logging covers two distinct log types: transfer logs (TX/RX) that track data volume per stream per client, and access logs that record connection events and key commands.  All log types share the same base directory, file prefix, and rotation interval, configured via the <b>-U</b> command line option or the <b>UsageLogDirectory</b> config file parameter (the <b>TransferLogDirectory</b> alias is also accepted for backward compatibility).  Access logging is disabled by default and must be explicitly enabled.</p>
+<p >Usage logging covers two distinct log types: transfer logs (TX/RX) that track data volume per stream per client, and access logs that record connection events and key commands.  All log types share the same base directory, file prefix, and rotation interval, configured via the <b>-U</b> command line option or the <b>UsageLogDirectory</b> config file parameter (the <b>TransferLogDirectory</b> alias is also accepted for backward compatibility).  All three log types (TX, RX, and access) are enabled by default when a usage log directory is specified.</p>
 
 <p >.SS "Transfer logging"</p>
 
@@ -308,7 +304,7 @@ END CLIENT host.iris.edu [192.168.255.255] total TX bytes: 4608
 
 <p >.SS "Access logging"</p>
 
-<p >Access logging is enabled with the <b>-Ua</b> command line option or the <b>UsageLogAccess</b> config file parameter (or the <b>RS_USAGE_LOG_ACCESS</b> environment variable).  The <b>UsageLogDirectory</b> (or <b>-U</b> option) must be set for access logging to function.</p>
+<p >Access logging is enabled by default when <b>UsageLogDirectory</b> (or the <b>-U</b> option) is set.  It can be disabled with <b>UsageLogAccess 0</b> in the config file or the <b>RS_USAGE_LOG_ACCESS</b> environment variable.</p>
 
 <p >Access log files are always written in JSON Lines format, one JSON object per line, with a <b>.jsonl</b> extension.  Files are named:</p>
 <pre >

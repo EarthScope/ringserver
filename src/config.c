@@ -304,22 +304,22 @@ static const char *reference_config_file_parts[] = {
   "\n"
   "\n"
   "# Control the logging of data transmission and reception independently,\n"
-  "# by default both are logged when UsageLogDirectory is set.  To turn off\n"
-  "# logging of either transmission (TX) or reception (RX) set to 0.\n"
-  "# These are dynamic parameters.\n"
+  "# by default all three (TX, RX, access) are logged when UsageLogDirectory\n"
+  "# is set.  To turn off logging of either transmission (TX) or reception\n"
+  "# (RX) set to 0.  These are dynamic parameters.\n"
   "# Equivalent environment variables: RS_USAGE_LOG_TX, RS_USAGE_LOG_RX\n"
   "\n"
   "#UsageLogTX 1\n"
   "#UsageLogRX 1\n"
   "\n"
   "\n"
-  "# Enable access logging.  When enabled, a JSON Lines file is written recording\n"
-  "# connections, disconnections and key commands (INFO, DATA/FETCH, STREAM,\n"
-  "# HTTP GET).  UsageLogDirectory must be set.\n"
+  "# Control access logging.  When enabled, a JSON Lines file is written\n"
+  "# recording connections, disconnections and key commands (INFO, DATA/FETCH,\n"
+  "# STREAM, HTTP GET).  Enabled by default when UsageLogDirectory is set.\n"
   "# This is a dynamic parameter.\n"
   "# Equivalent environment variable: RS_USAGE_LOG_ACCESS\n"
   "\n"
-  "#UsageLogAccess 0\n"
+  "#UsageLogAccess 1\n"
   "\n"
   "\n",
   "# Specify a program and arguments to execute to perform authentication and\n"
@@ -496,11 +496,10 @@ Usage (int level)
                    " -Rp pktsize    Maximum ring packet data size in bytes (currently %" PRIu32 ")\n"
                    " -NOMM          Do not memory map the packet buffer, use memory instead\n"
                    " -L port        Listen for connections on port, all protocols (default off)\n"
-                   " -U logdir      Directory to write usage logs (default is no logs) [-T accepted]\n"
-                   " -Ui hours      Usage log writing interval (default 24 hours) [-Ti accepted]\n"
-                   " -Up prefix     Prefix to add to usage log files (default is none) [-Tp accepted]\n"
-                   " -Uj            Enable JSON Lines transfer log format (replaces text format) [-Tj accepted]\n"
-                   " -Ua            Enable access logging (connections and key commands)\n"
+                   " -U logdir      Directory to write usage logs (default is no logs)\n"
+                   " -Ui hours      Usage log writing interval (default 24 hours)\n"
+                   " -Up prefix     Prefix to add to usage log files (default is none)\n"
+                   " -Uj            Enable JSON Lines transfer log format (replaces text format)\n"
                    " -STDERR        Send all console output to stderr instead of stdout\n"
                    "\n",
            config.maxclients,
@@ -557,7 +556,6 @@ Usage (int level)
 
   exit (1);
 } /* End of Usage() */
-
 
 /***************************************************************************
  * ProcessParam:
@@ -697,11 +695,6 @@ ProcessParam (int argcount, char **argvec)
     else if (strcmp (argvec[optind], "-Uj") == 0 || strcmp (argvec[optind], "-Tj") == 0)
     {
       if (SetParameter ("UsageLogJSONLines 1", 0) <= 0)
-        exit (1);
-    }
-    else if (strcmp (argvec[optind], "-Ua") == 0)
-    {
-      if (SetParameter ("UsageLogAccess 1", 0) <= 0)
         exit (1);
     }
     else if (strcmp (argvec[optind], "-STDERR") == 0)
@@ -2150,8 +2143,8 @@ SetParameter (const char *paramstring, int dynamiconly)
     char *basedir = strdup (resolved_path);
     config.usagelog.basedir = basedir;
 
-    /* Enable both TX and RX logging as defaults */
-    config.usagelog.mode |= USAGELOG_TX | USAGELOG_RX;
+    /* Enable TX, RX, and access logging as defaults */
+    config.usagelog.mode |= USAGELOG_TX | USAGELOG_RX | USAGELOG_ACCESS;
   }
   else if ((!strcasecmp ("UsageLogInterval", field[0]) ||
             !strcasecmp ("TransferLogInterval", field[0])) && fieldcount == 2)
