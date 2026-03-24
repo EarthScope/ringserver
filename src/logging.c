@@ -449,28 +449,34 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
 
       if (txdoc)
       {
-        yyjson_mut_val *root = yyjson_mut_doc_get_root (txdoc);
-        yyjson_mut_obj_add_uint (txdoc, root, "transfer_bytes", txtotalbytes);
-
-        char *json = yyjson_mut_write (txdoc, 0, NULL);
-        if (json)
+        if (txtotalbytes > 0)
         {
-          fprintf (txfp, "%s\n", json);
-          free (json);
+          yyjson_mut_val *root = yyjson_mut_doc_get_root (txdoc);
+          yyjson_mut_obj_add_uint (txdoc, root, "transfer_bytes", txtotalbytes);
+
+          char *json = yyjson_mut_write (txdoc, 0, NULL);
+          if (json)
+          {
+            fprintf (txfp, "%s\n", json);
+            free (json);
+          }
         }
         yyjson_mut_doc_free (txdoc);
       }
 
       if (rxdoc)
       {
-        yyjson_mut_val *root = yyjson_mut_doc_get_root (rxdoc);
-        yyjson_mut_obj_add_uint (rxdoc, root, "transfer_bytes", rxtotalbytes);
-
-        char *json = yyjson_mut_write (rxdoc, 0, NULL);
-        if (json)
+        if (rxtotalbytes > 0)
         {
-          fprintf (rxfp, "%s\n", json);
-          free (json);
+          yyjson_mut_val *root = yyjson_mut_doc_get_root (rxdoc);
+          yyjson_mut_obj_add_uint (rxdoc, root, "transfer_bytes", rxtotalbytes);
+
+          char *json = yyjson_mut_write (rxdoc, 0, NULL);
+          if (json)
+          {
+            fprintf (rxfp, "%s\n", json);
+            free (json);
+          }
         }
         yyjson_mut_doc_free (rxdoc);
       }
@@ -479,17 +485,14 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
     {
       /* Legacy text format: START CLIENT / streams / END CLIENT */
 
-      /* Print client header line */
-      if (txfp)
-        fprintf (txfp, "START CLIENT %s [%s] (%s|%s) @ %s (connected %s) TX\n",
-                 cinfo->hostname, cinfo->ipstr, modestr,
-                 cinfo->clientid[0] ? cinfo->clientid : "Client",
-                 currtime, conntime);
-      if (rxfp)
-        fprintf (rxfp, "START CLIENT %s [%s] (%s|%s) @ %s (connected %s) RX\n",
-                 cinfo->hostname, cinfo->ipstr, modestr,
-                 cinfo->clientid[0] ? cinfo->clientid : "Client",
-                 currtime, conntime);
+      /* Buffer stream lines in memory, then emit header+lines+footer only if
+         there were transfers in the respective direction */
+      char *txbuf   = NULL;
+      char *rxbuf   = NULL;
+      size_t txsize = 0;
+      size_t rxsize = 0;
+      FILE *txmem   = (txfp) ? open_memstream (&txbuf, &txsize) : NULL;
+      FILE *rxmem   = (rxfp) ? open_memstream (&rxbuf, &rxsize) : NULL;
 
       /* Lock stream tree and create list (Stack) of streams */
       pthread_mutex_lock (&(cinfo->streams_lock));
@@ -499,16 +502,16 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
       if (cinfo->streams)
         RBBuildStack (cinfo->streams, stack);
 
-      /* Loop through streams and output bytecounts */
+      /* Loop through streams and output bytecounts into memory buffers */
       txtotalbytes = 0;
       rxtotalbytes = 0;
       while ((rbnode = (RBNode *)StackPop (stack)))
       {
         streamnode = (StreamNode *)rbnode->data;
 
-        if (txfp && streamnode->txbytes > 0)
+        if (txmem && streamnode->txbytes > 0)
         {
-          fprintf (txfp, "%s %" PRIu64 " %" PRIu64 "\n", streamnode->streamid,
+          fprintf (txmem, "%s %" PRIu64 " %" PRIu64 "\n", streamnode->streamid,
                    streamnode->txbytes, streamnode->txpackets);
 
           txtotalbytes += streamnode->txbytes;
@@ -521,9 +524,9 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
           }
         }
 
-        if (rxfp && streamnode->rxbytes > 0)
+        if (rxmem && streamnode->rxbytes > 0)
         {
-          fprintf (rxfp, "%s %" PRIu64 " %" PRIu64 "\n", streamnode->streamid,
+          fprintf (rxmem, "%s %" PRIu64 " %" PRIu64 "\n", streamnode->streamid,
                    streamnode->rxbytes, streamnode->rxpackets);
 
           rxtotalbytes += streamnode->rxbytes;
@@ -542,13 +545,38 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
       /* Unlock stream tree */
       pthread_mutex_unlock (&(cinfo->streams_lock));
 
-      /* Print client footer line */
-      if (txfp)
+      /* Flush memory streams to finalise buffers */
+      if (txmem) fclose (txmem);
+      if (rxmem) fclose (rxmem);
+
+      /* Emit TX block only if there were bytes */
+      if (txfp && txtotalbytes > 0)
+      {
+        fprintf (txfp, "START CLIENT %s [%s] (%s|%s) @ %s (connected %s) TX\n",
+                 cinfo->hostname, cinfo->ipstr, modestr,
+                 cinfo->clientid[0] ? cinfo->clientid : "Client",
+                 currtime, conntime);
+        if (txbuf)
+          fwrite (txbuf, 1, txsize, txfp);
         fprintf (txfp, "END CLIENT %s [%s] total TX bytes: %" PRIu64 "\n",
                  cinfo->hostname, cinfo->ipstr, txtotalbytes);
-      if (rxfp)
+      }
+
+      /* Emit RX block only if there were bytes */
+      if (rxfp && rxtotalbytes > 0)
+      {
+        fprintf (rxfp, "START CLIENT %s [%s] (%s|%s) @ %s (connected %s) RX\n",
+                 cinfo->hostname, cinfo->ipstr, modestr,
+                 cinfo->clientid[0] ? cinfo->clientid : "Client",
+                 currtime, conntime);
+        if (rxbuf)
+          fwrite (rxbuf, 1, rxsize, rxfp);
         fprintf (rxfp, "END CLIENT %s [%s] total RX bytes: %" PRIu64 "\n",
                  cinfo->hostname, cinfo->ipstr, rxtotalbytes);
+      }
+
+      free (txbuf);
+      free (rxbuf);
     }
   }
 

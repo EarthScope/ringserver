@@ -277,6 +277,8 @@ ringserver [options] [configfile]
   <b>rxlog-20260316T0000-20260317T0000</b>
 </pre>
 
+<p >Entries are only written for clients that transmitted or received data; clients with no activity in a given direction are omitted from the respective log file.</p>
+
 <p >By default transfer logs use a legacy text format.  The <b>-Uj</b> command line option or the <b>UsageLogJSONLines</b> config parameter enables JSON Lines format instead, where each line is a JSON object containing protocol details, per-stream byte counts, and client metadata.</p>
 
 <p >In text format, each TX or RX log file contains entries with this pattern:</p>
@@ -296,7 +298,7 @@ ringserver [options] [configfile]
 <p >An example "TX" file illustrating a transmission entry in legacy text format:</p>
 
 <pre >
-START CLIENT host.iris.edu [192.168.255.255] (SeedLink|Client) @ 2018-03-30 07:00:05 (connected 2018-03-30 06:59:36) TX
+START CLIENT host.iris.edu [192.168.255.255] (SeedLink|slinktool/4.11) @ 2018-03-30 07:00:05 (connected 2018-03-30 06:59:36) TX
 FDSN:IU_SNZO_10_B_H_Z/MSEED 2560 5
 FDSN:IU_SNZO_00_B_H_Z/MSEED 2048 4
 END CLIENT host.iris.edu [192.168.255.255] total TX bytes: 4608

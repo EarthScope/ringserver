@@ -1,6 +1,7 @@
-2026.082:
+2026.083: v4.4.0
 	- Rename transfer logging options to usage logging, old options still supported.
 	- Add access logging to log connections, disconnections, and important commands.
+	- Omit entries in transfer logging output with no entries in favor of usage logging.
 	- Restore config file options when parsing fails, avoid indeterminate state.
 	- Numerous fixes to edge cases, string handling robustness, etc.
 
