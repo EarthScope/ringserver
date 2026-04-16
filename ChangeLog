@@ -1,3 +1,6 @@
+2026.106:
+	- Fix race condition where ClientInfo could be dereferenced during client cleanup.
+
 2026.083: v4.4.0
 	- Rename transfer logging options to usage logging, old options still supported.
 	- Add access logging to log connections, disconnections, and important commands.

@@ -74,6 +74,15 @@ static int ClientRecv (ClientInfo *cinfo);
  *
  * Thread to handle all communications with a client.
  *
+ * State-transition discipline for param.cthreads_lock:
+ *   All writes to mytdp->td_state that exit TDS_ACTIVE (i.e. the transitions
+ *   to TDS_CLOSING and TDS_CLOSED) must be performed while holding
+ *   param.cthreads_lock.  This guarantees that outside readers walking the
+ *   cthreads list under that lock see a consistent snapshot: they may
+ *   safely dereference ClientInfo fields only when td_state == TDS_ACTIVE,
+ *   and the lock acquisition provides the required happens-before ordering
+ *   so all cleanup writes are visible to the reaper before it joins the thread.
+ *
  * Returns NULL.
  ***********************************************************************/
 void *
@@ -209,8 +218,11 @@ ClientThread (void *arg)
   /* Shutdown the client connection if there were setup errors */
   if (setuperr)
   {
-    /* Set thread closing status */
+    /* Set thread closing status under lock so outside readers see the
+       transition out of TDS_ACTIVE before ClientInfo is freed */
+    pthread_mutex_lock (&param.cthreads_lock);
     mytdp->td_state = TDS_CLOSING;
+    pthread_mutex_unlock (&param.cthreads_lock);
 
     /* Close client socket */
     if (cinfo->socket != -1)
@@ -252,8 +264,11 @@ ClientThread (void *arg)
 
     lprintf (1, "Client setup error, disconnected: %s", cinfo->hostname);
 
-    /* Set thread CLOSED status */
+    /* Publish TDS_CLOSED under lock so the reaper sees all cleanup writes
+       before it joins this thread */
+    pthread_mutex_lock (&param.cthreads_lock);
     mytdp->td_state = TDS_CLOSED;
+    pthread_mutex_unlock (&param.cthreads_lock);
 
     return NULL;
   }
@@ -508,8 +523,11 @@ ClientThread (void *arg)
 
   lprintf (1, "Client disconnected: %s", cinfo->hostname);
 
-  /* Set thread CLOSED status */
+  /* Publish TDS_CLOSED under lock so the reaper sees all cleanup writes
+     before it joins this thread */
+  pthread_mutex_lock (&param.cthreads_lock);
   mytdp->td_state = TDS_CLOSED;
+  pthread_mutex_unlock (&param.cthreads_lock);
 
   return NULL;
 } /* End of ClientThread() */

@@ -458,14 +458,17 @@ main (int argc, char *argv[])
           lprintf (3, "Requesting shutdown of client thread %lu",
                    (unsigned long int)loopctp->td->td_id);
 
-          /* Shutdown the client socket and add a 1-second linger timeout */
-          ClientInfo *cinfo = (ClientInfo *)loopctp->td->td_prvtptr;
-          if (cinfo && cinfo->socket > 0)
+          /* Only touch the socket for ACTIVE threads; CLOSING threads are
+             already mid-cleanup and their ClientInfo must not be dereferenced */
+          if (loopctp->td->td_state == TDS_ACTIVE)
           {
-            struct linger linger_opt = {1, 1}; // Enable linger with 1-second timeout
-            setsockopt (cinfo->socket, SOL_SOCKET, SO_LINGER, &linger_opt, sizeof (linger_opt));
-
-            shutdown (cinfo->socket, SHUT_RDWR);
+            ClientInfo *cinfo = (ClientInfo *)loopctp->td->td_prvtptr;
+            if (cinfo && cinfo->socket > 0)
+            {
+              struct linger linger_opt = {1, 1};
+              setsockopt (cinfo->socket, SOL_SOCKET, SO_LINGER, &linger_opt, sizeof (linger_opt));
+              shutdown (cinfo->socket, SHUT_RDWR);
+            }
           }
 
           loopctp->td->td_state = TDS_CLOSE;
@@ -709,7 +712,7 @@ main (int argc, char *argv[])
         /* Free thread data */
         free (ctp);
       }
-      else
+      else if (ctp->td->td_state == TDS_ACTIVE)
       {
         /* Update transmission and reception rates */
         CalcStats ((ClientInfo *)ctp->td->td_prvtptr);
@@ -728,13 +731,8 @@ main (int argc, char *argv[])
         if (config.clienttimeout &&
             (hpcurtime - ((ClientInfo *)ctp->td->td_prvtptr)->lastxchange) > (config.clienttimeout * (nstime_t)NSTMODULUS))
         {
-          if (ctp->td->td_state != TDS_CLOSE &&
-              ctp->td->td_state != TDS_CLOSING &&
-              ctp->td->td_state != TDS_CLOSED)
-          {
-            lprintf (1, "Closing idle client connection: %s", ((ClientInfo *)ctp->td->td_prvtptr)->hostname);
-            ctp->td->td_state = TDS_CLOSE;
-          }
+          lprintf (1, "Closing idle client connection: %s", ((ClientInfo *)ctp->td->td_prvtptr)->hostname);
+          ctp->td->td_state = TDS_CLOSE;
         }
       }
     } /* Done looping through client threads */
@@ -1418,8 +1416,9 @@ ClientIPCount (struct sockaddr *addr)
   ctp = param.cthreads;
   while (ctp)
   {
-    /* Check for NULL pointers before dereferencing */
-    if (ctp->td && ctp->td->td_prvtptr &&
+    /* Only dereference ClientInfo for ACTIVE threads (invariant: see ClientThread) */
+    if (ctp->td && ctp->td->td_state == TDS_ACTIVE &&
+        ctp->td->td_prvtptr &&
         ((ClientInfo *)ctp->td->td_prvtptr)->addr)
     {
       /* If the same IP protocol family */

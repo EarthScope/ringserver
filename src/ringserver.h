@@ -170,7 +170,12 @@ struct param_s
   time_t configfilemtime;        /* Modification time of configuration file */
   pthread_mutex_t sthreads_lock; /* Lock for server threads list */
   struct sthread *sthreads;      /* Server threads list */
-  pthread_mutex_t cthreads_lock; /* Lock for client threads list */
+  /* Lock for the client threads list.
+   * Invariant: a ClientInfo pointer obtained by walking cthreads under this
+   * lock may only be dereferenced while the corresponding td_state == TDS_ACTIVE.
+   * Client threads transition into and out of TDS_ACTIVE under this lock, so
+   * readers have a happens-before guarantee on all ClientInfo field accesses. */
+  pthread_mutex_t cthreads_lock;
   struct cthread *cthreads;      /* Client threads list */
   _Atomic double txpacketrate;   /* Transmission packet rate in Hz */
   _Atomic double txbyterate;     /* Transmission byte rate in Hz */
