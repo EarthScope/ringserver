@@ -33,17 +33,17 @@
 
 #include <libmseed.h>
 
+#include "auth.h"
 #include "clients.h"
 #include "dlclient.h"
 #include "generic.h"
 #include "http.h"
+#include "infoxml.h"
 #include "logging.h"
 #include "mseedscan.h"
 #include "rbtree.h"
 #include "ring.h"
 #include "ringserver.h"
-#include "infoxml.h"
-#include "auth.h"
 
 /* Define the number of no-action loops that trigger the throttle */
 #define THROTTLE_TRIGGER 10
@@ -530,7 +530,7 @@ HandleNegotiation (ClientInfo *cinfo)
         char *endptr;
 
         /* Wire protocol uses time in microseconds ("hptime"), convert to nanoseconds ("nstime") */
-        errno = 0;
+        errno  = 0;
         nstime = strtoll (value, &endptr, 10);
 
         if (endptr == value || *endptr != '\0' || errno == ERANGE)
@@ -1033,6 +1033,8 @@ HandleRead (ClientInfo *cinfo)
 
     if (SendPacket (cinfo, "ERROR", "Error parsing READ command parameters", 0, 1, 1))
       return -1;
+
+    return 0;
   }
 
   /* Read the packet from the ring */
@@ -1134,7 +1136,7 @@ HandleInfo (ClientInfo *cinfo)
 
       /* Make sure buffer is a terminated string */
       matchstr[size] = '\0';
-      matchexpr = matchstr;
+      matchexpr      = matchstr;
     }
   }
   else
@@ -1366,7 +1368,7 @@ SendRingPacket (ClientInfo *cinfo)
   /* Populate pre-header sequence of wire packet */
   preheader[0] = 'D';
   preheader[1] = 'L';
-  headerlen_u8      = (uint8_t)headerlen;
+  headerlen_u8 = (uint8_t)headerlen;
   memcpy (preheader + 2, &headerlen_u8, 1);
 
   /* Send complete wire packet */

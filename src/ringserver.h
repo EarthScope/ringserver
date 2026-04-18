@@ -32,10 +32,29 @@ extern "C" {
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 
-#include "clients.h"
-
 #define PACKAGE   "ringserver"
 #define VERSION   "4.4.0"
+
+/* Listen thread protocols, defined before including clients.h to avoid circular include */
+typedef enum
+{
+  PROTO_DATALINK = 1u << 1,
+  PROTO_SEEDLINK = 1u << 2,
+  PROTO_HTTP     = 1u << 3,
+  PROTO_ALL      = PROTO_DATALINK | PROTO_SEEDLINK | PROTO_HTTP
+} ListenProtocols;
+
+/* Listen thread options */
+typedef enum
+{
+  ENCRYPTION_TLS    = 1u << 1,
+  FAMILY_IPv4       = 1u << 2,
+  FAMILY_IPv6       = 1u << 3,
+  PROXY_PROTOCOL_V2 = 1u << 4,
+  GRANT_TRUSTED     = 1u << 5,
+} ListenOptions;
+
+#include "clients.h"
 
 /* Thread states */
 typedef enum
@@ -71,25 +90,6 @@ struct sthread
   struct sthread *prev;
   struct sthread *next;
 };
-
-/* Listen thread protocols */
-typedef enum
-{
-  PROTO_DATALINK = 1u << 1,
-  PROTO_SEEDLINK = 1u << 2,
-  PROTO_HTTP     = 1u << 3,
-  PROTO_ALL      = PROTO_DATALINK | PROTO_SEEDLINK | PROTO_HTTP
-} ListenProtocols;
-
-/* Listen thread options */
-typedef enum
-{
-  ENCRYPTION_TLS    = 1u << 1,
-  FAMILY_IPv4       = 1u << 2,
-  FAMILY_IPv6       = 1u << 3,
-  PROXY_PROTOCOL_V2 = 1u << 4,
-  GRANT_TRUSTED     = 1u << 5,
-} ListenOptions;
 
 /* Doubly-linked structure of client threads */
 struct cthread
@@ -170,12 +170,7 @@ struct param_s
   time_t configfilemtime;        /* Modification time of configuration file */
   pthread_mutex_t sthreads_lock; /* Lock for server threads list */
   struct sthread *sthreads;      /* Server threads list */
-  /* Lock for the client threads list.
-   * Invariant: a ClientInfo pointer obtained by walking cthreads under this
-   * lock may only be dereferenced while the corresponding td_state == TDS_ACTIVE.
-   * Client threads transition into and out of TDS_ACTIVE under this lock, so
-   * readers have a happens-before guarantee on all ClientInfo field accesses. */
-  pthread_mutex_t cthreads_lock;
+  pthread_mutex_t cthreads_lock; /* Lock for the client threads list */
   struct cthread *cthreads;      /* Client threads list */
   _Atomic double txpacketrate;   /* Transmission packet rate in Hz */
   _Atomic double txbyterate;     /* Transmission byte rate in Hz */

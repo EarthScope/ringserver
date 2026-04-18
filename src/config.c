@@ -21,18 +21,18 @@
  * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
 
+#include <arpa/inet.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/stat.h>
-#include <arpa/inet.h>
 #include <unistd.h>
 
 #include "clients.h"
-#include "ringserver.h"
-#include "mseedscan.h"
+#include "config.h"
 #include "generic.h"
 #include "logging.h"
-#include "config.h"
+#include "mseedscan.h"
+#include "ringserver.h"
 
 static char *GetOptVal (int argcount, char **argvec, int argopt);
 static int ReadEnvironmentVariables (void);
@@ -50,427 +50,427 @@ static int SetAuthCommand (const char *program, char **argv, int argc);
 /* This array defines the reference config file documentation printed
  * using the -C argument */
 static const char *reference_config_file_parts[] = {
-  "# Example ringserver configuration file.\n"
-  "#\n"
-  "# Default values are in comments where appropriate.\n"
-  "#\n"
-  "# Dynamic parameters: some parameters will be re-read by ringserver\n"
-  "# whenever the configuration file is modified.\n"
-  "#\n"
-  "# Config options can be set on the command line, via environment variables\n"
-  "# and via a configuration file like this one.  The order of precedence is:\n"
-  "# command line, environment variables, configuration file.\n"
-  "# Equivalent variables are listed in the description of each parameter.\n"
-  "#\n"
-  "# A configuration file can be specified on the command line or with\n"
-  "# the environment variable RS_CONFIG_FILE.\n"
-  "#\n"
-  "# Comment lines begin with a '#' character.\n"
-  "\n"
-  "\n",
-  "# Specify the directory where the ringserver will store\n"
-  "# the packet and stream buffers.  This must be specified.\n"
-  "# Equivalent environment variable: RS_RING_DIRECTORY\n"
-  "\n"
-  "RingDirectory ring\n"
-  "\n"
-  "\n",
-  "# Specify the ring packet buffer size in bytes.  A trailing\n"
-  "# 'K', 'M' or 'G' may be added for kibibytes, mebibytes or gibibytes.\n"
-  "# Equivalent environment variable: RS_RING_SIZE\n"
-  "\n"
-  "#RingSize 1G\n"
-  "\n"
-  "\n",
-  "# Specify the maximum packet data size in bytes.\n"
-  "# Equivalent environment variable: RS_MAX_PACKET_SIZE\n"
-  "\n"
-  "#MaxPacketSize 512\n"
-  "\n"
-  "\n",
-  "# Listen for connections on a specified port.  By default all supported\n"
-  "# protocols and network protocol families (IPv4 and IPv6) are allowed and\n"
-  "# optional flags can be used to limit to specified protocols/families.\n"
-  "#\n"
-  "# Protocol flags are specified by including \"DataLink\", \"SeedLink\"\n"
-  "# and/or \"HTTP\" after the port.  By default all protocols are allowed.\n"
-  "#\n"
-  "# Network families are specified by including \"IPv4\" or \"IPv6\" after\n"
-  "# the port.  Default is any combination supported by the system.\n"
-  "#\n"
-  "# TLS (SSL) can be enabled by including \"TLS\" after the port.  A\n"
-  "# certificate file must be specified using the TLSCertificateFile\n"
-  "# parameter. By default TLS is not enabled.\n"
-  "#\n"
-  "# HAProxy PROXY protocol version 2 support can be enabled by including\n"
-  "# \"PROXYv2\" after the port.  When enabled, the server expects a PROXY\n"
-  "# protocol v2 header from every connecting client and uses the source\n"
-  "# address it contains for all access-control decisions.  Only enable\n"
-  "# this option on ports that are exclusively reachable by trusted proxies,\n"
-  "# as it otherwise allows clients to spoof their IP address.\n"
-  "#\n"
-  "# Trusted status can be granted to all clients connecting on a port by\n"
-  "# including \"TRUSTED\" after the port.  Trusted clients have access to\n"
-  "# detailed server status and connection information.  WARNING: Do not\n"
-  "# use this option on publicly accessible ports as it grants elevated\n"
-  "# access to all connecting clients regardless of their IP address.\n"
-  "#\n"
-  "# For example:\n"
-  "# ListenPort <port> [DataLink] [SeedLink] [HTTP] [IPv4] [IPv6] [TLS] [PROXYv2] [TRUSTED]\n"
-  "#\n"
-  "# This parameter can be specified multiple times to listen for connections\n"
-  "# on multiple ports.\n"
-  "# Equivalent environment variable: RS_LISTEN_PORT\n"
-  "\n"
-  "ListenPort 18000\n"
-  "\n"
-  "# Port 18500 is the standard port for SeedLink v4 connections over TLS (SSL).\n"
-  "#ListenPort 18500 TLS\n"
-  "\n"
-  "# Listen for DataLink connections on a specified port.  This is an alias\n"
-  "# for a ListenPort configured with only DataLink allowed.\n"
-  "# Equivalent environment variable: RS_DATALINK_PORT\n"
-  "\n"
-  "#DataLinkPort 16000\n"
-  "\n"
-  "\n"
-  "# Listen for SeedLink connections on a specified port. This is an alias\n"
-  "# for a ListenPort configured with only SeedLink allowed.\n"
-  "# Equivalent environment variable: RS_SEEDLINK_PORT\n"
-  "\n"
-  "#SeedLinkPort 18000\n"
-  "\n"
-  "\n"
-  "# Listen for HTTP connections on a specified port. This is an alias\n"
-  "# for a ListenPort configured with only HTTP allowed.\n"
-  "# Equivalent environment variable: RS_HTTP_PORT\n"
-  "\n"
-  "#HTTPPort 80\n"
-  "\n"
-  "\n",
-  "# Certificate file for TLS connections.  This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_TLS_CERT_FILE\n"
-  "\n"
-  "#TLSCertFile /path/to/certificate.pem\n"
-  "\n"
-  "# Private key file for TLS connections.  This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_TLS_KEY_FILE\n"
-  "\n"
-  "#TLSKeyFile /path/to/private_key.pem\n"
-  "\n"
-  "# Enable client certificate verification for TLS connections.  This is\n"
-  "# not a common option, but can be used to require clients to present\n"
-  "# a certificate for authentication.  This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_TLS_VERIFY_CLIENT_CERT\n"
-  "\n"
-  "#TLSVerifyClientCert 0\n"
-  "\n"
-  "\n",
-  "# Specify the Server ID as reported to the clients.  The parameter may\n"
-  "# be a quoted string including spaces.  Default is \"Ring Server\".\n"
-  "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_SERVER_ID\n"
-  "\n"
-  "#ServerID \"Ring Server\"\n"
-  "\n"
-  "\n",
-  "# Specify the level of verbosity for the server log output.  Valid\n"
-  "# verbosity levels are 0 - 3.  This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_VERBOSITY\n"
-  "\n"
-  "#Verbosity 0\n"
-  "\n"
-  "\n",
-  "# Specify the maximum number of clients per IP address, regardless of\n"
-  "# protocol, allowed to be connected concurrently.  This limit does\n"
-  "# not apply to addresses with write permission.  Set to 0 for unlimited.\n"
-  "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_MAX_CLIENTS_PER_IP\n"
-  "\n"
-  "#MaxClientsPerIP 0\n"
-  "\n"
-  "\n",
-  "# Specify the maximum number of clients, regardless of protocol,\n"
-  "# allowed to be connected simultaneously, set to 0 for unlimited.\n"
-  "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_MAX_CLIENTS\n"
-  "\n"
-  "#MaxClients 600\n"
-  "\n"
-  "\n",
-  "# Specify an idle client timeout in seconds after which the client is\n"
-  "# disconnected.  Set to 0 to disable.\n"
-  "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_CLIENT_TIMEOUT\n"
-  "\n"
-  "#ClientTimeout 3600\n"
-  "\n"
-  "\n",
-  "# Configure the network I/O timeout in seconds.  This controls the duration\n"
-  "# that a network read or write operation will wait until failure, after\n"
-  "# which the client is disconnected.  The default value of 10 seconds is\n"
-  "# appropriate for most scenarios.\n"
-  "# \n"
-  "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_NETIO_TIMEOUT\n"
-  "\n"
-  "#NetIOTimeout 10\n"
-  "\n"
-  "\n",
-  "# Control the usage of memory mapping of the ring packet buffer.  If\n"
-  "# this parameter is 1 (or not defined) the packet buffer will be\n"
-  "# memory-mapped directly from the packet buffer file, otherwise it\n"
-  "# will be stored in memory during operation and only read/written\n"
-  "# to/from the packet buffer file during startup and shutdown.\n"
-  "# Normally memory mapping the packet buffer is the best option,\n"
-  "# this parameter allows for operation in environments where memory\n"
-  "# mapping is slow or not possible (e.g. NFS storage).\n"
-  "# Equivalent environment variable: RS_MEMORY_MAP_RING\n"
-  "\n"
-  "#MemoryMapRing 1\n"
-  "\n"
-  "\n",
-  "# Control auto-recovery after corruption detection.  Be default if\n"
-  "# corruption is detected in the ring packet buffer file or stream\n"
-  "# index file during initialization the ring and stream files will be\n"
-  "# renamed with .corrupt extensions and initialization will be\n"
-  "# attempted a 2nd time.  If this option is 0 (off) the server will\n"
-  "# exit on these corruption errors.  If this option is 1 (the default)\n"
-  "# the server will move the buffers to .corrupt files.  If this option\n"
-  "# is 2 (delete) the server will delete the corrupt buffer files.\n"
-  "# Equivalent environment variable: RS_AUTO_RECOVERY\n"
-  "\n"
-  "#AutoRecovery 1\n"
-  "\n"
-  "\n",
-  "# Control reverse DNS lookups to resolve hostnames for client IPs.\n"
-  "# By default a reverse lookup is performed whenever a client connects.\n"
-  "# When a reverse DNS lookup fails a small delay will occur, this can\n"
-  "# be avoided by setting this option to 0 (off).\n"
-  "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_RESOLVE_HOSTNAMES\n"
-  "\n"
-  "#ResolveHostnames 1\n"
-  "\n"
-  "\n",
-  "# Specify a limit, in percent, of the packet buffer to search for time\n"
-  "# windowing requests.  By default the entire packet buffer will be\n"
-  "# searched starting from the earliest packet traversing forward.  If\n"
-  "# this option is set, only the specified percent of the ring will be\n"
-  "# searched starting from the latest packet traversing backward.  To\n"
-  "# turn off time window requests set this parameter to 0.  This is a\n"
-  "# dynamic parameter, but updated values will only apply to new\n"
-  "# connections.\n"
-  "# Equivalent environment variable: RS_TIME_WINDOW_LIMIT\n"
-  "\n"
-  "#TimeWindowLimit 100\n"
-  "\n"
-  "\n",
-  "# Define the base directory for usage logs including data transfer logs\n"
-  "# and an access log.  By default no logs are written.\n"
-  "# If this parameter is specified and the directory exists, files will\n"
-  "# be written at a user defined interval with the formats:\n"
-  "# \"<dir>/[prefix-]txlog-YYYYMMDDTHHMM-YYYYMMDDTHHMM[.jsonl]\"\n"
-  "# \"<dir>/[prefix-]rxlog-YYYYMMDDTHHMM-YYYYMMDDTHHMM[.jsonl]\"\n"
-  "# \"<dir>/[prefix-]accesslog-YYYYMMDDTHHMM-YYYYMMDDTHHMM.jsonl\"\n"
-  "# This is a dynamic parameter.\n"
-  "# Equivalent environment variables: RS_USAGE_LOG_DIRECTORY\n"
-  "\n"
-  "#UsageLogDirectory usagelog\n"
-  "\n"
-  "\n"
-  "# Specify the usage log interval in hours.  This is a dynamic parameter.\n"
-  "# Equivalent environment variables: RS_USAGE_LOG_INTERVAL\n"
-  "\n"
-  "#UsageLogInterval 24\n"
-  "\n"
-  "\n"
-  "# Specify a usage log file prefix, the default is no prefix.\n"
-  "# This is a dynamic parameter.\n"
-  "# Equivalent environment variables: RS_USAGE_LOG_PREFIX\n"
-  "\n"
-  "#UsageLogPrefix <prefix>\n"
-  "\n"
-  "\n"
-  "# Enable JSON Lines format for transfer logs.  When enabled, files are written\n"
-  "# with a \".jsonl\" extension using the same generated filename.\n"
-  "# Each line is a JSON object describing one client session's transfer activity,\n"
-  "# including protocol name and version, data format, per-stream bytes, etc.\n"
-  "# This replaces the legacy text format when enabled.\n"
-  "# This is a dynamic parameter.\n"
-  "# Equivalent environment variables: RS_USAGE_LOG_JSONLINES\n"
-  "\n"
-  "#UsageLogJSONLines 0\n"
-  "\n"
-  "\n"
-  "# Control the logging of data transmission and reception independently,\n"
-  "# by default all three (TX, RX, access) are logged when UsageLogDirectory\n"
-  "# is set.  To turn off logging of either transmission (TX) or reception\n"
-  "# (RX) set to 0.  These are dynamic parameters.\n"
-  "# Equivalent environment variables: RS_USAGE_LOG_TX, RS_USAGE_LOG_RX\n"
-  "\n"
-  "#UsageLogTX 1\n"
-  "#UsageLogRX 1\n"
-  "\n"
-  "\n"
-  "# Control access logging.  When enabled, a JSON Lines file is written\n"
-  "# recording connections, disconnections and key commands (INFO, DATA/FETCH,\n"
-  "# STREAM, HTTP GET).  Enabled by default when UsageLogDirectory is set.\n"
-  "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_USAGE_LOG_ACCESS\n"
-  "\n"
-  "#UsageLogAccess 1\n"
-  "\n"
-  "\n",
-  "# Specify a program and arguments to execute to perform authentication and\n"
-  "# return permissions (authorizations) if successful.  Credentials, either\n"
-  "# as username and password or a JSON Web Token (JWT) are provided to the\n"
-  "# program via environment variables: AUTH_USERNAME, AUTH_PASSWORD, AUTH_JWTOKEN.\n"
-  "# See the manual for details on the authentication process.\n"
-  "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_AUTH_COMMAND\n"
-  "\n"
-  "#AuthCommand </path/to/program> [arguments]\n"
-  "\n"
-  "\n",
-  "# Require authentication for a client to request streaming data.\n"
-  "# Default is 0 (off).\n"
-  "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_AUTH_REQUIRED_FOR_STREAMS\n"
-  "\n"
-  "#AuthRequiredForStreams 0\n"
-  "\n"
-  "\n",
-  "# Specify the timeout in seconds for the authentication command to complete.\n"
-  "# The default is 5 seconds.\n"
-  "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_AUTH_TIMEOUT\n"
-  "\n"
-  "#AuthTimeout 5\n"
-  "\n"
-  "\n",
-  "# Specify IP addresses or ranges which are allowed to submit (write)\n"
-  "# data to the ringserver.  This parameter can be specified multiple\n"
-  "# times and should be specified in address/prefix (CIDR) notation, e.g.:\n"
-  "# \"WriteIP 192.168.0.1/24\".  The prefix may be omitted in which case\n"
-  "# only the specific host is allowed.  If no addresses are explicitly\n"
-  "# granted write permission, permission is granted to clients from\n"
-  "# localhost (local loopback).\n"
-  "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_WRITE_IP\n"
-  "\n"
-  "#WriteIP <address>[/prefix]\n"
-  "#WriteIP <address>[/prefix]\n"
-  "\n"
-  "\n",
-  "# Specify IP addresses or ranges which are allowed to request and\n"
-  "# receive server connections and detailed status.  This parameter can\n"
-  "# be specified multiple times and should be specified in\n"
-  "# address/prefix (CIDR) notation, e.g.: \"TrustedIP 192.168.0.1/24\".\n"
-  "# The prefix may be omitted in which case only the specific host is\n"
-  "# trusted. If no addresses are explicitly trusted, trust is granted to\n"
-  "# clients from localhost (local loopback).  This is a dynamic\n"
-  "# parameter.\n"
-  "# Equivalent environment variable: RS_TRUSTED_IP\n"
-  "\n"
-  "#TrustedIP <address>[/prefix]\n"
-  "#TrustedIP <address>[/prefix]\n"
-  "\n"
-  "\n",
-  "# Allow IP addresses or ranges to access only specified stream IDs in the\n"
-  "# ringserver.  A regular expression is used to specify which Stream\n"
-  "# IDs the address range is allowed to read and write, the expression\n"
-  "# may be compound and must not contain spaces.  By default clients\n"
-  "# can access any streams in the buffer, or write any streams if write\n"
-  "# permission is granted.  This parameter can be specified multiple times\n"
-  "# and should be specified in address/prefix (CIDR) notation,\n"
-  "# for example: \"AllowedStreamsIP 192.168.0.1/24\".  The prefix may be omitted\n"
-  "# in which case only the specific host is limited. This is a dynamic\n"
-  "# parameter.\n"
-  "# Equivalent environment variable: RS_ALLOWED_STREAMS_IP\n"
-  "\n"
-  "#AllowedStreamsIP <address>[/prefix] <StreamID Pattern>\n"
-  "#AllowedStreamsIP <address>[/prefix] <StreamID Pattern>\n"
-  "\n"
-  "\n",
-  "# Forbid IP addresses or ranges from accessing specified stream IDs in the\n"
-  "# ringserver.  A regular expression is used to specify which Stream\n"
-  "# IDs the address range is allowed to access (and write), the\n"
-  "# expression may be compound and must not contain spaces.  By default\n"
-  "# clients can access any streams in the buffer, or write any streams\n"
-  "# if write permission is granted.  This parameter can be specified\n"
-  "# multiple times and should be specified in address/prefix (CIDR)\n"
-  "# notation, e.g.: \"ForbiddenStreamsIP 192.168.0.1/24\".  The prefix may\n"
-  "# be omitted in which case only the specific host is limited.\n"
-  "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_FORBIDDEN_STREAMS_IP\n"
-  "\n"
-  "#ForbiddenStreamsIP <address>[/prefix] <StreamID Pattern>\n"
-  "#ForbiddenStreamsIP <address>[/prefix] <StreamID Pattern>\n"
-  "\n"
-  "\n",
-  "# Specify IP addresses or ranges which should be specifically allowed\n"
-  "# to connect while all others will be rejected.  By default all IPs\n"
-  "# are allowed to connect.  This parameter can be specified multiple\n"
-  "# times and should be specified in address/prefix (CIDR) notation,\n"
-  "# e.g.: \"AcceptIP 192.168.0.1/24\".  The prefix may be omitted in which\n"
-  "# case only the specific host is matched. This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_ACCEPT_IP\n"
-  "\n"
-  "#AcceptIP <address>[/prefix]\n"
-  "#AcceptIP <address>[/prefix]\n"
-  "\n"
-  "\n",
-  "# Specify IP addresses or ranges which should be rejected immediately\n"
-  "# after connecting.  This parameter can be specified multiple times\n"
-  "# and should be specified in address/prefix (CIDR) notation, e.g.:\n"
-  "# \"DenyIP 192.168.0.1/24\".  The prefix may be omitted in which case\n"
-  "# only the specific host is rejected.  This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_DENY_IP\n"
-  "\n"
-  "#DenyIP <address>[/prefix]\n"
-  "#DenyIP <address>[/prefix]\n"
-  "\n"
-  "\n",
-  "# Serve content via HTTP from the specified directory. The HTTP server\n"
-  "# implementation is limited to returning existing files and returning\n"
-  "# \"index.html\" files when a directory is requested using the HTTP GET\n"
-  "# method. This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_WEB_ROOT\n"
-  "\n"
-  "#WebRoot <Web content root directory>\n"
-  "\n"
-  "\n",
-  "# Add custom HTTP headers to HTTP responses.  This can be useful to\n"
-  "# enable Cross-Origin Resource Sharing (CORS) for example.\n"
-  "# This is a dynamic parameter.\n"
-  "# Equivalent environment variable: RS_HTTP_HEADER\n"
-  "\n"
-  "#HTTPHeader \"Access-Control-Allow-Origin: *\"\n"
-  "#HTTPHeader <Custom HTTP header>\n"
-  "\n"
-  "\n",
-  "# Enable a special mode of operation where all miniSEED records\n"
-  "# received using the DataLink protocol are written to user specified\n"
-  "# directory and file structures.  See the ringserver(1) man page for\n"
-  "# more details.\n"
-  "# Equivalent environment variable: RS_MSEED_WRITE\n"
-  "\n"
-  "#MSeedWrite <format>\n"
-  "\n"
-  "\n",
-  "# Enable a special mode of operation where files containing miniSEED\n"
-  "# are scanned continuously and data records are inserted into the ring.\n"
-  "# By default all sub-directories will be recursively scanned.  Sub-options\n"
-  "# can be used to control the scanning, the StateFile sub-option is highly\n"
-  "# recommended.  Values for sub-options should not be quoted and cannot\n"
-  "# contain spaces.\n"
-  "# Equivalent environment variable: RS_MSEED_SCAN\n"
-  "# See the ringserver(1) man page for more details.\n"
-  "\n"
-  "#MSeedScan <directory> [StateFile=scan.state] [Match=pattern] [Reject=pattern] [InitCurrentState=y]\n"
-  "\n",
-  NULL};
+    "# Example ringserver configuration file.\n"
+    "#\n"
+    "# Default values are in comments where appropriate.\n"
+    "#\n"
+    "# Dynamic parameters: some parameters will be re-read by ringserver\n"
+    "# whenever the configuration file is modified.\n"
+    "#\n"
+    "# Config options can be set on the command line, via environment variables\n"
+    "# and via a configuration file like this one.  The order of precedence is:\n"
+    "# command line, environment variables, configuration file.\n"
+    "# Equivalent variables are listed in the description of each parameter.\n"
+    "#\n"
+    "# A configuration file can be specified on the command line or with\n"
+    "# the environment variable RS_CONFIG_FILE.\n"
+    "#\n"
+    "# Comment lines begin with a '#' character.\n"
+    "\n"
+    "\n",
+    "# Specify the directory where the ringserver will store\n"
+    "# the packet and stream buffers.  This must be specified.\n"
+    "# Equivalent environment variable: RS_RING_DIRECTORY\n"
+    "\n"
+    "RingDirectory ring\n"
+    "\n"
+    "\n",
+    "# Specify the ring packet buffer size in bytes.  A trailing\n"
+    "# 'K', 'M' or 'G' may be added for kibibytes, mebibytes or gibibytes.\n"
+    "# Equivalent environment variable: RS_RING_SIZE\n"
+    "\n"
+    "#RingSize 1G\n"
+    "\n"
+    "\n",
+    "# Specify the maximum packet data size in bytes.\n"
+    "# Equivalent environment variable: RS_MAX_PACKET_SIZE\n"
+    "\n"
+    "#MaxPacketSize 512\n"
+    "\n"
+    "\n",
+    "# Listen for connections on a specified port.  By default all supported\n"
+    "# protocols and network protocol families (IPv4 and IPv6) are allowed and\n"
+    "# optional flags can be used to limit to specified protocols/families.\n"
+    "#\n"
+    "# Protocol flags are specified by including \"DataLink\", \"SeedLink\"\n"
+    "# and/or \"HTTP\" after the port.  By default all protocols are allowed.\n"
+    "#\n"
+    "# Network families are specified by including \"IPv4\" or \"IPv6\" after\n"
+    "# the port.  Default is any combination supported by the system.\n"
+    "#\n"
+    "# TLS (SSL) can be enabled by including \"TLS\" after the port.  A\n"
+    "# certificate file must be specified using the TLSCertificateFile\n"
+    "# parameter. By default TLS is not enabled.\n"
+    "#\n"
+    "# HAProxy PROXY protocol version 2 support can be enabled by including\n"
+    "# \"PROXYv2\" after the port.  When enabled, the server expects a PROXY\n"
+    "# protocol v2 header from every connecting client and uses the source\n"
+    "# address it contains for all access-control decisions.  Only enable\n"
+    "# this option on ports that are exclusively reachable by trusted proxies,\n"
+    "# as it otherwise allows clients to spoof their IP address.\n"
+    "#\n"
+    "# Trusted status can be granted to all clients connecting on a port by\n"
+    "# including \"TRUSTED\" after the port.  Trusted clients have access to\n"
+    "# detailed server status and connection information.  WARNING: Do not\n"
+    "# use this option on publicly accessible ports as it grants elevated\n"
+    "# access to all connecting clients regardless of their IP address.\n"
+    "#\n"
+    "# For example:\n"
+    "# ListenPort <port> [DataLink] [SeedLink] [HTTP] [IPv4] [IPv6] [TLS] [PROXYv2] [TRUSTED]\n"
+    "#\n"
+    "# This parameter can be specified multiple times to listen for connections\n"
+    "# on multiple ports.\n"
+    "# Equivalent environment variable: RS_LISTEN_PORT\n"
+    "\n"
+    "ListenPort 18000\n"
+    "\n"
+    "# Port 18500 is the standard port for SeedLink v4 connections over TLS (SSL).\n"
+    "#ListenPort 18500 TLS\n"
+    "\n"
+    "# Listen for DataLink connections on a specified port.  This is an alias\n"
+    "# for a ListenPort configured with only DataLink allowed.\n"
+    "# Equivalent environment variable: RS_DATALINK_PORT\n"
+    "\n"
+    "#DataLinkPort 16000\n"
+    "\n"
+    "\n"
+    "# Listen for SeedLink connections on a specified port. This is an alias\n"
+    "# for a ListenPort configured with only SeedLink allowed.\n"
+    "# Equivalent environment variable: RS_SEEDLINK_PORT\n"
+    "\n"
+    "#SeedLinkPort 18000\n"
+    "\n"
+    "\n"
+    "# Listen for HTTP connections on a specified port. This is an alias\n"
+    "# for a ListenPort configured with only HTTP allowed.\n"
+    "# Equivalent environment variable: RS_HTTP_PORT\n"
+    "\n"
+    "#HTTPPort 80\n"
+    "\n"
+    "\n",
+    "# Certificate file for TLS connections.  This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_TLS_CERT_FILE\n"
+    "\n"
+    "#TLSCertFile /path/to/certificate.pem\n"
+    "\n"
+    "# Private key file for TLS connections.  This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_TLS_KEY_FILE\n"
+    "\n"
+    "#TLSKeyFile /path/to/private_key.pem\n"
+    "\n"
+    "# Enable client certificate verification for TLS connections.  This is\n"
+    "# not a common option, but can be used to require clients to present\n"
+    "# a certificate for authentication.  This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_TLS_VERIFY_CLIENT_CERT\n"
+    "\n"
+    "#TLSVerifyClientCert 0\n"
+    "\n"
+    "\n",
+    "# Specify the Server ID as reported to the clients.  The parameter may\n"
+    "# be a quoted string including spaces.  Default is \"Ring Server\".\n"
+    "# This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_SERVER_ID\n"
+    "\n"
+    "#ServerID \"Ring Server\"\n"
+    "\n"
+    "\n",
+    "# Specify the level of verbosity for the server log output.  Valid\n"
+    "# verbosity levels are 0 - 3.  This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_VERBOSITY\n"
+    "\n"
+    "#Verbosity 0\n"
+    "\n"
+    "\n",
+    "# Specify the maximum number of clients per IP address, regardless of\n"
+    "# protocol, allowed to be connected concurrently.  This limit does\n"
+    "# not apply to addresses with write permission.  Set to 0 for unlimited.\n"
+    "# This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_MAX_CLIENTS_PER_IP\n"
+    "\n"
+    "#MaxClientsPerIP 0\n"
+    "\n"
+    "\n",
+    "# Specify the maximum number of clients, regardless of protocol,\n"
+    "# allowed to be connected simultaneously, set to 0 for unlimited.\n"
+    "# This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_MAX_CLIENTS\n"
+    "\n"
+    "#MaxClients 600\n"
+    "\n"
+    "\n",
+    "# Specify an idle client timeout in seconds after which the client is\n"
+    "# disconnected.  Set to 0 to disable.\n"
+    "# This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_CLIENT_TIMEOUT\n"
+    "\n"
+    "#ClientTimeout 3600\n"
+    "\n"
+    "\n",
+    "# Configure the network I/O timeout in seconds.  This controls the duration\n"
+    "# that a network read or write operation will wait until failure, after\n"
+    "# which the client is disconnected.  The default value of 10 seconds is\n"
+    "# appropriate for most scenarios.\n"
+    "# \n"
+    "# This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_NETIO_TIMEOUT\n"
+    "\n"
+    "#NetIOTimeout 10\n"
+    "\n"
+    "\n",
+    "# Control the usage of memory mapping of the ring packet buffer.  If\n"
+    "# this parameter is 1 (or not defined) the packet buffer will be\n"
+    "# memory-mapped directly from the packet buffer file, otherwise it\n"
+    "# will be stored in memory during operation and only read/written\n"
+    "# to/from the packet buffer file during startup and shutdown.\n"
+    "# Normally memory mapping the packet buffer is the best option,\n"
+    "# this parameter allows for operation in environments where memory\n"
+    "# mapping is slow or not possible (e.g. NFS storage).\n"
+    "# Equivalent environment variable: RS_MEMORY_MAP_RING\n"
+    "\n"
+    "#MemoryMapRing 1\n"
+    "\n"
+    "\n",
+    "# Control auto-recovery after corruption detection.  Be default if\n"
+    "# corruption is detected in the ring packet buffer file or stream\n"
+    "# index file during initialization the ring and stream files will be\n"
+    "# renamed with .corrupt extensions and initialization will be\n"
+    "# attempted a 2nd time.  If this option is 0 (off) the server will\n"
+    "# exit on these corruption errors.  If this option is 1 (the default)\n"
+    "# the server will move the buffers to .corrupt files.  If this option\n"
+    "# is 2 (delete) the server will delete the corrupt buffer files.\n"
+    "# Equivalent environment variable: RS_AUTO_RECOVERY\n"
+    "\n"
+    "#AutoRecovery 1\n"
+    "\n"
+    "\n",
+    "# Control reverse DNS lookups to resolve hostnames for client IPs.\n"
+    "# By default a reverse lookup is performed whenever a client connects.\n"
+    "# When a reverse DNS lookup fails a small delay will occur, this can\n"
+    "# be avoided by setting this option to 0 (off).\n"
+    "# This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_RESOLVE_HOSTNAMES\n"
+    "\n"
+    "#ResolveHostnames 1\n"
+    "\n"
+    "\n",
+    "# Specify a limit, in percent, of the packet buffer to search for time\n"
+    "# windowing requests.  By default the entire packet buffer will be\n"
+    "# searched starting from the earliest packet traversing forward.  If\n"
+    "# this option is set, only the specified percent of the ring will be\n"
+    "# searched starting from the latest packet traversing backward.  To\n"
+    "# turn off time window requests set this parameter to 0.  This is a\n"
+    "# dynamic parameter, but updated values will only apply to new\n"
+    "# connections.\n"
+    "# Equivalent environment variable: RS_TIME_WINDOW_LIMIT\n"
+    "\n"
+    "#TimeWindowLimit 100\n"
+    "\n"
+    "\n",
+    "# Define the base directory for usage logs including data transfer logs\n"
+    "# and an access log.  By default no logs are written.\n"
+    "# If this parameter is specified and the directory exists, files will\n"
+    "# be written at a user defined interval with the formats:\n"
+    "# \"<dir>/[prefix-]txlog-YYYYMMDDTHHMM-YYYYMMDDTHHMM[.jsonl]\"\n"
+    "# \"<dir>/[prefix-]rxlog-YYYYMMDDTHHMM-YYYYMMDDTHHMM[.jsonl]\"\n"
+    "# \"<dir>/[prefix-]accesslog-YYYYMMDDTHHMM-YYYYMMDDTHHMM.jsonl\"\n"
+    "# This is a dynamic parameter.\n"
+    "# Equivalent environment variables: RS_USAGE_LOG_DIRECTORY\n"
+    "\n"
+    "#UsageLogDirectory usagelog\n"
+    "\n"
+    "\n"
+    "# Specify the usage log interval in hours.  This is a dynamic parameter.\n"
+    "# Equivalent environment variables: RS_USAGE_LOG_INTERVAL\n"
+    "\n"
+    "#UsageLogInterval 24\n"
+    "\n"
+    "\n"
+    "# Specify a usage log file prefix, the default is no prefix.\n"
+    "# This is a dynamic parameter.\n"
+    "# Equivalent environment variables: RS_USAGE_LOG_PREFIX\n"
+    "\n"
+    "#UsageLogPrefix <prefix>\n"
+    "\n"
+    "\n"
+    "# Enable JSON Lines format for transfer logs.  When enabled, files are written\n"
+    "# with a \".jsonl\" extension using the same generated filename.\n"
+    "# Each line is a JSON object describing one client session's transfer activity,\n"
+    "# including protocol name and version, data format, per-stream bytes, etc.\n"
+    "# This replaces the legacy text format when enabled.\n"
+    "# This is a dynamic parameter.\n"
+    "# Equivalent environment variables: RS_USAGE_LOG_JSONLINES\n"
+    "\n"
+    "#UsageLogJSONLines 0\n"
+    "\n"
+    "\n"
+    "# Control the logging of data transmission and reception independently,\n"
+    "# by default all three (TX, RX, access) are logged when UsageLogDirectory\n"
+    "# is set.  To turn off logging of either transmission (TX) or reception\n"
+    "# (RX) set to 0.  These are dynamic parameters.\n"
+    "# Equivalent environment variables: RS_USAGE_LOG_TX, RS_USAGE_LOG_RX\n"
+    "\n"
+    "#UsageLogTX 1\n"
+    "#UsageLogRX 1\n"
+    "\n"
+    "\n"
+    "# Control access logging.  When enabled, a JSON Lines file is written\n"
+    "# recording connections, disconnections and key commands (INFO, DATA/FETCH,\n"
+    "# STREAM, HTTP GET).  Enabled by default when UsageLogDirectory is set.\n"
+    "# This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_USAGE_LOG_ACCESS\n"
+    "\n"
+    "#UsageLogAccess 1\n"
+    "\n"
+    "\n",
+    "# Specify a program and arguments to execute to perform authentication and\n"
+    "# return permissions (authorizations) if successful.  Credentials, either\n"
+    "# as username and password or a JSON Web Token (JWT) are provided to the\n"
+    "# program via environment variables: AUTH_USERNAME, AUTH_PASSWORD, AUTH_JWTOKEN.\n"
+    "# See the manual for details on the authentication process.\n"
+    "# This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_AUTH_COMMAND\n"
+    "\n"
+    "#AuthCommand </path/to/program> [arguments]\n"
+    "\n"
+    "\n",
+    "# Require authentication for a client to request streaming data.\n"
+    "# Default is 0 (off).\n"
+    "# This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_AUTH_REQUIRED_FOR_STREAMS\n"
+    "\n"
+    "#AuthRequiredForStreams 0\n"
+    "\n"
+    "\n",
+    "# Specify the timeout in seconds for the authentication command to complete.\n"
+    "# The default is 5 seconds.\n"
+    "# This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_AUTH_TIMEOUT\n"
+    "\n"
+    "#AuthTimeout 5\n"
+    "\n"
+    "\n",
+    "# Specify IP addresses or ranges which are allowed to submit (write)\n"
+    "# data to the ringserver.  This parameter can be specified multiple\n"
+    "# times and should be specified in address/prefix (CIDR) notation, e.g.:\n"
+    "# \"WriteIP 192.168.0.1/24\".  The prefix may be omitted in which case\n"
+    "# only the specific host is allowed.  If no addresses are explicitly\n"
+    "# granted write permission, permission is granted to clients from\n"
+    "# localhost (local loopback).\n"
+    "# This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_WRITE_IP\n"
+    "\n"
+    "#WriteIP <address>[/prefix]\n"
+    "#WriteIP <address>[/prefix]\n"
+    "\n"
+    "\n",
+    "# Specify IP addresses or ranges which are allowed to request and\n"
+    "# receive server connections and detailed status.  This parameter can\n"
+    "# be specified multiple times and should be specified in\n"
+    "# address/prefix (CIDR) notation, e.g.: \"TrustedIP 192.168.0.1/24\".\n"
+    "# The prefix may be omitted in which case only the specific host is\n"
+    "# trusted. If no addresses are explicitly trusted, trust is granted to\n"
+    "# clients from localhost (local loopback).  This is a dynamic\n"
+    "# parameter.\n"
+    "# Equivalent environment variable: RS_TRUSTED_IP\n"
+    "\n"
+    "#TrustedIP <address>[/prefix]\n"
+    "#TrustedIP <address>[/prefix]\n"
+    "\n"
+    "\n",
+    "# Allow IP addresses or ranges to access only specified stream IDs in the\n"
+    "# ringserver.  A regular expression is used to specify which Stream\n"
+    "# IDs the address range is allowed to read and write, the expression\n"
+    "# may be compound and must not contain spaces.  By default clients\n"
+    "# can access any streams in the buffer, or write any streams if write\n"
+    "# permission is granted.  This parameter can be specified multiple times\n"
+    "# and should be specified in address/prefix (CIDR) notation,\n"
+    "# for example: \"AllowedStreamsIP 192.168.0.1/24\".  The prefix may be omitted\n"
+    "# in which case only the specific host is limited. This is a dynamic\n"
+    "# parameter.\n"
+    "# Equivalent environment variable: RS_ALLOWED_STREAMS_IP\n"
+    "\n"
+    "#AllowedStreamsIP <address>[/prefix] <StreamID Pattern>\n"
+    "#AllowedStreamsIP <address>[/prefix] <StreamID Pattern>\n"
+    "\n"
+    "\n",
+    "# Forbid IP addresses or ranges from accessing specified stream IDs in the\n"
+    "# ringserver.  A regular expression is used to specify which Stream\n"
+    "# IDs the address range is allowed to access (and write), the\n"
+    "# expression may be compound and must not contain spaces.  By default\n"
+    "# clients can access any streams in the buffer, or write any streams\n"
+    "# if write permission is granted.  This parameter can be specified\n"
+    "# multiple times and should be specified in address/prefix (CIDR)\n"
+    "# notation, e.g.: \"ForbiddenStreamsIP 192.168.0.1/24\".  The prefix may\n"
+    "# be omitted in which case only the specific host is limited.\n"
+    "# This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_FORBIDDEN_STREAMS_IP\n"
+    "\n"
+    "#ForbiddenStreamsIP <address>[/prefix] <StreamID Pattern>\n"
+    "#ForbiddenStreamsIP <address>[/prefix] <StreamID Pattern>\n"
+    "\n"
+    "\n",
+    "# Specify IP addresses or ranges which should be specifically allowed\n"
+    "# to connect while all others will be rejected.  By default all IPs\n"
+    "# are allowed to connect.  This parameter can be specified multiple\n"
+    "# times and should be specified in address/prefix (CIDR) notation,\n"
+    "# e.g.: \"AcceptIP 192.168.0.1/24\".  The prefix may be omitted in which\n"
+    "# case only the specific host is matched. This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_ACCEPT_IP\n"
+    "\n"
+    "#AcceptIP <address>[/prefix]\n"
+    "#AcceptIP <address>[/prefix]\n"
+    "\n"
+    "\n",
+    "# Specify IP addresses or ranges which should be rejected immediately\n"
+    "# after connecting.  This parameter can be specified multiple times\n"
+    "# and should be specified in address/prefix (CIDR) notation, e.g.:\n"
+    "# \"DenyIP 192.168.0.1/24\".  The prefix may be omitted in which case\n"
+    "# only the specific host is rejected.  This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_DENY_IP\n"
+    "\n"
+    "#DenyIP <address>[/prefix]\n"
+    "#DenyIP <address>[/prefix]\n"
+    "\n"
+    "\n",
+    "# Serve content via HTTP from the specified directory. The HTTP server\n"
+    "# implementation is limited to returning existing files and returning\n"
+    "# \"index.html\" files when a directory is requested using the HTTP GET\n"
+    "# method. This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_WEB_ROOT\n"
+    "\n"
+    "#WebRoot <Web content root directory>\n"
+    "\n"
+    "\n",
+    "# Add custom HTTP headers to HTTP responses.  This can be useful to\n"
+    "# enable Cross-Origin Resource Sharing (CORS) for example.\n"
+    "# This is a dynamic parameter.\n"
+    "# Equivalent environment variable: RS_HTTP_HEADER\n"
+    "\n"
+    "#HTTPHeader \"Access-Control-Allow-Origin: *\"\n"
+    "#HTTPHeader <Custom HTTP header>\n"
+    "\n"
+    "\n",
+    "# Enable a special mode of operation where all miniSEED records\n"
+    "# received using the DataLink protocol are written to user specified\n"
+    "# directory and file structures.  See the ringserver(1) man page for\n"
+    "# more details.\n"
+    "# Equivalent environment variable: RS_MSEED_WRITE\n"
+    "\n"
+    "#MSeedWrite <format>\n"
+    "\n"
+    "\n",
+    "# Enable a special mode of operation where files containing miniSEED\n"
+    "# are scanned continuously and data records are inserted into the ring.\n"
+    "# By default all sub-directories will be recursively scanned.  Sub-options\n"
+    "# can be used to control the scanning, the StateFile sub-option is highly\n"
+    "# recommended.  Values for sub-options should not be quoted and cannot\n"
+    "# contain spaces.\n"
+    "# Equivalent environment variable: RS_MSEED_SCAN\n"
+    "# See the ringserver(1) man page for more details.\n"
+    "\n"
+    "#MSeedScan <directory> [StateFile=scan.state] [Match=pattern] [Reject=pattern] [InitCurrentState=y]\n"
+    "\n",
+    NULL};
 
 /***************************************************************************
  * Usage:
@@ -738,7 +738,7 @@ ProcessParam (int argcount, char **argvec)
       }
       else
       {
-        config.configfile = strdup(argvec[optind]);
+        config.configfile = strdup (argvec[optind]);
 
         if (config.configfile == NULL)
         {
@@ -854,7 +854,7 @@ ReadEnvironmentVariables (void)
 {
   const char *envvar;
   char paramstr[512] = {0};
-  int count = 0;
+  int count          = 0;
 
   if ((envvar = getenv ("RS_CONFIG_FILE")) && strcasecmp (envvar, "DISABLE"))
   {
@@ -1501,7 +1501,7 @@ ReadEnvironmentVariables (void)
   }
 
   return count;
-}  /* End of ReadEnvironmentVariables() */
+} /* End of ReadEnvironmentVariables() */
 
 /***************************************************************************
  * FreeIPNetList:
@@ -1547,17 +1547,17 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
   int rv;
 
   /* Saved copies of dynamic fields, used to restore on parse failure */
-  IPNet *saved_writeips      = NULL;
-  IPNet *saved_trustedips    = NULL;
-  IPNet *saved_allowedips    = NULL;
-  IPNet *saved_forbiddenips  = NULL;
-  IPNet *saved_acceptips     = NULL;
-  IPNet *saved_denyips       = NULL;
-  char *saved_webroot        = NULL;
-  char *saved_httpheaders    = NULL;
-  UsageLogMode saved_usagelog_mode   = USAGELOG_NONE;
-  char *saved_usagelog_basedir = NULL;
-  char *saved_usagelog_prefix  = NULL;
+  IPNet *saved_writeips            = NULL;
+  IPNet *saved_trustedips          = NULL;
+  IPNet *saved_allowedips          = NULL;
+  IPNet *saved_forbiddenips        = NULL;
+  IPNet *saved_acceptips           = NULL;
+  IPNet *saved_denyips             = NULL;
+  char *saved_webroot              = NULL;
+  char *saved_httpheaders          = NULL;
+  UsageLogMode saved_usagelog_mode = USAGELOG_NONE;
+  char *saved_usagelog_basedir     = NULL;
+  char *saved_usagelog_prefix      = NULL;
 
   if (!configfile)
     return -1;
@@ -1590,17 +1590,17 @@ ReadConfigFile (char *configfile, int dynamiconly, time_t mtime)
   param.configfilemtime = mtime;
 
   /* Save existing dynamic state so it can be restored on parse failure */
-  saved_writeips           = config.writeips;
-  saved_trustedips         = config.trustedips;
-  saved_allowedips         = config.allowedips;
-  saved_forbiddenips       = config.forbiddenips;
-  saved_acceptips          = config.acceptips;
-  saved_denyips            = config.denyips;
-  saved_webroot            = config.webroot;
-  saved_httpheaders        = config.httpheaders;
-  saved_usagelog_mode      = config.usagelog.mode;
-  saved_usagelog_basedir   = config.usagelog.basedir;
-  saved_usagelog_prefix    = config.usagelog.prefix;
+  saved_writeips         = config.writeips;
+  saved_trustedips       = config.trustedips;
+  saved_allowedips       = config.allowedips;
+  saved_forbiddenips     = config.forbiddenips;
+  saved_acceptips        = config.acceptips;
+  saved_denyips          = config.denyips;
+  saved_webroot          = config.webroot;
+  saved_httpheaders      = config.httpheaders;
+  saved_usagelog_mode    = config.usagelog.mode;
+  saved_usagelog_basedir = config.usagelog.basedir;
+  saved_usagelog_prefix  = config.usagelog.prefix;
 
   /* Clear the write, trusted, allowed, forbidden, match and reject IPs lists */
   config.writeips     = NULL;
@@ -1709,17 +1709,17 @@ restore_config:
   free (config.usagelog.basedir);
   free (config.usagelog.prefix);
 
-  config.writeips           = saved_writeips;
-  config.trustedips         = saved_trustedips;
-  config.allowedips         = saved_allowedips;
-  config.forbiddenips       = saved_forbiddenips;
-  config.acceptips          = saved_acceptips;
-  config.denyips            = saved_denyips;
-  config.webroot            = saved_webroot;
-  config.httpheaders        = saved_httpheaders;
-  config.usagelog.mode      = saved_usagelog_mode;
-  config.usagelog.basedir   = saved_usagelog_basedir;
-  config.usagelog.prefix    = saved_usagelog_prefix;
+  config.writeips         = saved_writeips;
+  config.trustedips       = saved_trustedips;
+  config.allowedips       = saved_allowedips;
+  config.forbiddenips     = saved_forbiddenips;
+  config.acceptips        = saved_acceptips;
+  config.denyips          = saved_denyips;
+  config.webroot          = saved_webroot;
+  config.httpheaders      = saved_httpheaders;
+  config.usagelog.mode    = saved_usagelog_mode;
+  config.usagelog.basedir = saved_usagelog_basedir;
+  config.usagelog.prefix  = saved_usagelog_prefix;
 
   return -1;
 } /* End of ReadConfigFile() */
@@ -1948,8 +1948,8 @@ SetParameter (const char *paramstring, int dynamiconly)
     else
       lpp.protocols = 0;
 
-    lpp.options   = 0;
-    lpp.socket    = -1;
+    lpp.options = 0;
+    lpp.socket  = -1;
 
     /* Parse optional protocol flags to limit allowed protocols */
     for (int idx = 2, allow_protocols = (lpp.protocols == 0) ? 1 : 0;
@@ -2123,7 +2123,8 @@ SetParameter (const char *paramstring, int dynamiconly)
     config.timewinlimit = (intval > 0) ? intval / 100.0 : 0.0;
   }
   else if ((!strcasecmp ("UsageLogDirectory", field[0]) ||
-            !strcasecmp ("TransferLogDirectory", field[0])) && fieldcount == 2)
+            !strcasecmp ("TransferLogDirectory", field[0])) &&
+           fieldcount == 2)
   {
     if (realpath (field[1], resolved_path) == NULL)
     {
@@ -2140,33 +2141,46 @@ SetParameter (const char *paramstring, int dynamiconly)
     }
 
     free (config.usagelog.basedir);
-    char *basedir = strdup (resolved_path);
+    char *basedir           = strdup (resolved_path);
     config.usagelog.basedir = basedir;
 
     /* Enable TX, RX, and access logging as defaults */
     config.usagelog.mode |= USAGELOG_TX | USAGELOG_RX | USAGELOG_ACCESS;
   }
   else if ((!strcasecmp ("UsageLogInterval", field[0]) ||
-            !strcasecmp ("TransferLogInterval", field[0])) && fieldcount == 2)
+            !strcasecmp ("TransferLogInterval", field[0])) &&
+           fieldcount == 2)
   {
     float fvalue;
+    int ivalue;
     if (sscanf (field[1], "%f", &fvalue) != 1)
     {
       lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
       return -1;
     }
 
-    /* Parameter is specified in hours but value needs to be seconds */
-    config.usagelog.interval = (int)(fvalue * 3600.0 + 0.5);
+    /* Parameter is specified in hours but value needs to be seconds.
+     * Reject non-positive values. */
+    ivalue = (int)(fvalue * 3600.0 + 0.5);
+    if (ivalue <= 0)
+    {
+      lprintf (0, "Error with %s config parameter: must be > 0 hours (%s)",
+               field[0], paramstring);
+      return -1;
+    }
+
+    config.usagelog.interval = ivalue;
   }
   else if ((!strcasecmp ("UsageLogPrefix", field[0]) ||
-            !strcasecmp ("TransferLogPrefix", field[0])) && fieldcount == 2)
+            !strcasecmp ("TransferLogPrefix", field[0])) &&
+           fieldcount == 2)
   {
     free (config.usagelog.prefix);
     config.usagelog.prefix = strdup (field[1]);
   }
   else if ((!strcasecmp ("UsageLogTX", field[0]) ||
-            !strcasecmp ("TransferLogTX", field[0])) && fieldcount == 2)
+            !strcasecmp ("TransferLogTX", field[0])) &&
+           fieldcount == 2)
   {
     if ((intval = YesNo (field[1])) < 0)
     {
@@ -2180,7 +2194,8 @@ SetParameter (const char *paramstring, int dynamiconly)
       config.usagelog.mode &= ~USAGELOG_TX;
   }
   else if ((!strcasecmp ("UsageLogRX", field[0]) ||
-            !strcasecmp ("TransferLogRX", field[0])) && fieldcount == 2)
+            !strcasecmp ("TransferLogRX", field[0])) &&
+           fieldcount == 2)
   {
     if ((intval = YesNo (field[1])) < 0)
     {
@@ -2194,7 +2209,8 @@ SetParameter (const char *paramstring, int dynamiconly)
       config.usagelog.mode &= ~USAGELOG_RX;
   }
   else if ((!strcasecmp ("UsageLogJSONLines", field[0]) ||
-            !strcasecmp ("TransferLogJSONLines", field[0])) && fieldcount == 2)
+            !strcasecmp ("TransferLogJSONLines", field[0])) &&
+           fieldcount == 2)
   {
     if ((intval = YesNo (field[1])) < 0)
     {
@@ -2639,7 +2655,7 @@ AddListenThreads (ListenPortParams *lpp)
   if (families == 0 || (families & FAMILY_IPv4))
   {
     lpp->options = options | FAMILY_IPv4;
-    lpp->socket = InitServerSocket (lpp->portstr, lpp->options);
+    lpp->socket  = InitServerSocket (lpp->portstr, lpp->options);
 
     if (lpp->socket > 0)
     {
@@ -2662,7 +2678,7 @@ AddListenThreads (ListenPortParams *lpp)
   if (families == 0 || (families & FAMILY_IPv6))
   {
     lpp->options = options | FAMILY_IPv6;
-    lpp->socket = InitServerSocket (lpp->portstr, lpp->options);
+    lpp->socket  = InitServerSocket (lpp->portstr, lpp->options);
 
     if (lpp->socket > 0)
     {
@@ -2889,7 +2905,6 @@ AddServerThread (ServerThreadType type, void *params)
 
   return 0;
 } /* End of AddServerThread() */
-
 
 /***************************************************************************
  * CalcSize:

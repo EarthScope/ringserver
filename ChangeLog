@@ -1,5 +1,15 @@
-2026.106:
+2026.108:
+	- Fix multiple edge case failures, on OOM or esoteric/malicious usage.
 	- Fix race condition where ClientInfo could be dereferenced during client cleanup.
+	- Fix sending success-indicating "OK" on internal lookup error.
+	- Fix potential path-traversal bug for HTTP webroot sanitizing.
+	- Add empty ring guards to RingAfter() and RingAfterRev().
+	- Avoid client thread leak on malloc error.
+	- Fail fast on malformed READ command for DataLink to avoid multiple ERRORS.
+	- Fix race condition in GetStreamNode() for duplicates or rebalancing.
+	- Protect against <= 0 values for UsageLogInterval.
+	- Avoid negative values in Content-Length HTTP response headers.
+	- Protect ring reads against corrupt/truncated ring buffers.
 
 2026.083: v4.4.0
 	- Rename transfer logging options to usage logging, old options still supported.

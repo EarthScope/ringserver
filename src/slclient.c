@@ -57,17 +57,17 @@
 #include <libmseed.h>
 #include <mseedformat.h>
 
+#include "auth.h"
 #include "clients.h"
 #include "generic.h"
 #include "http.h"
+#include "infojson.h"
+#include "infoxml.h"
 #include "logging.h"
 #include "rbtree.h"
 #include "ring.h"
 #include "ringserver.h"
 #include "slclient.h"
-#include "infojson.h"
-#include "infoxml.h"
-#include "auth.h"
 
 /* Define list of valid characters for selectors and station & network codes */
 #define VALIDSELECTCHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_-!"
@@ -131,7 +131,13 @@ SLHandleCmd (ClientInfo *cinfo)
 
     slinfo->startid = RINGID_NONE;
 
-    slinfo->stations = RBTreeCreate (StaKeyCompare, free, FreeReqStationID);
+    if ((slinfo->stations = RBTreeCreate (StaKeyCompare, free, FreeReqStationID)) == NULL)
+    {
+      lprintf (0, "[%s] Error allocating SeedLink stations tree", cinfo->hostname);
+      free (slinfo);
+      cinfo->extinfo = NULL;
+      return -1;
+    }
   }
 
   slinfo = (SLInfo *)cinfo->extinfo;
@@ -886,7 +892,7 @@ HandleNegotiation (ClientInfo *cinfo)
       if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
         return -1;
     }
-  }  /* End of AUTH */
+  } /* End of AUTH */
 
   /* STATION (v3.x and v4.0) - Select specified station */
   else if (!strncasecmp (cinfo->recvbuf, "STATION", 7))
@@ -972,19 +978,21 @@ HandleNegotiation (ClientInfo *cinfo)
         if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetReqStationID()"))
           return -1;
       }
+      else
+      {
+        if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
+          return -1;
 
-      if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
-        return -1;
-
-      slinfo->stationcount++;
-      cinfo->state = STATE_STATION;
+        slinfo->stationcount++;
+        cinfo->state = STATE_STATION;
+      }
     }
   } /* End of STATION */
 
   /* SELECT (v3.x and v4.0) - Refine selection of channels for STATION */
   else if (!strncasecmp (cinfo->recvbuf, "SELECT", 6))
   {
-    OKGO = 1;
+    OKGO    = 1;
     convert = CONVERT_NONE;
 
     /* Parse pattern from request */
@@ -1059,7 +1067,7 @@ HandleNegotiation (ClientInfo *cinfo)
         OKGO = 0;
       }
 
-      memcpy (selector, newselector, sizeof(selector));
+      memcpy (selector, newselector, sizeof (selector));
     }
 
     /* Sanity check, only allowed characters */
@@ -1100,11 +1108,11 @@ HandleNegotiation (ClientInfo *cinfo)
       {
         lprintf (0, "[%s] Error in GetReqStationID() for command SELECT", cinfo->hostname);
 
+        free (newselector);
+        newselector = NULL;
+
         if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetReqStationID()"))
-        {
-          free (newselector);
           return -1;
-        }
       }
       else
       {
@@ -1187,7 +1195,7 @@ HandleNegotiation (ClientInfo *cinfo)
         else
         {
           char *endptr = NULL;
-          startpacket = (uint64_t)strtoull (seqstr, &endptr, 10);
+          startpacket  = (uint64_t)strtoull (seqstr, &endptr, 10);
 
           if (*endptr != '\0')
           {
@@ -1503,10 +1511,10 @@ static int
 HandleInfo_v3 (ClientInfo *cinfo)
 {
   SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
-  char *xmlstr = NULL;
+  char *xmlstr   = NULL;
   int xmllength;
-  char *level   = NULL;
-  char errflag  = 0;
+  char *level  = NULL;
+  char errflag = 0;
 
   char *record = NULL;
   int8_t swapflag;
@@ -1609,10 +1617,9 @@ HandleInfo_v3 (ClientInfo *cinfo)
   {
     lprintf (0, "[%s] Unrecognized/unsupported INFO level: %s", cinfo->hostname, level);
 
-    xmlstr = info_xml_slv3_id (cinfo, SLSERVER_ID);
+    xmlstr  = info_xml_slv3_id (cinfo, SLSERVER_ID);
     errflag = 1;
   }
-
 
   /* Pack XML into miniSEED and send to client */
   if (xmlstr)
@@ -1758,7 +1765,7 @@ HandleInfo_v4 (ClientInfo *cinfo)
     lprintf (0, "[%s] INFO requested without a level", cinfo->hostname);
 
     json_string = error_json (cinfo, SLSERVER_ID, "ARGUMENTS", "No INFO item specified");
-    errflag = 1;
+    errflag     = 1;
   }
   else
   {
@@ -1825,7 +1832,7 @@ HandleInfo_v4 (ClientInfo *cinfo)
       {
         lprintf (1, "[%s] Refusing INFO CONNECTIONS request from un-trusted client", cinfo->hostname);
         json_string = error_json (cinfo, SLSERVER_ID, "UNAUTHORIZED", "Client is not authorized to request connections");
-        errflag = 1;
+        errflag     = 1;
       }
       else
       {
@@ -1839,7 +1846,7 @@ HandleInfo_v4 (ClientInfo *cinfo)
     else
     {
       json_string = error_json (cinfo, SLSERVER_ID, "ARGUMENTS", "Unrecognized INFO item");
-      errflag = 1;
+      errflag     = 1;
 
       lprintf (0, "[%s] Unrecognized INFO item: %s", cinfo->hostname, item);
     }
@@ -1949,7 +1956,7 @@ SendPacket (uint64_t pktid, char *payload, uint32_t payloadlen,
 {
   ClientInfo *cinfo = (ClientInfo *)vcinfo;
   SLInfo *slinfo    = (SLInfo *)cinfo->extinfo;
-  char header[40]   = {0};
+  char header[300]  = {0};
   size_t headerlen  = 0;
   uint8_t l_staidlen;
 

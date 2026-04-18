@@ -30,13 +30,13 @@
 
 #include <libmseed.h>
 
-#include "yyjson.h"
+#include "dlclient.h"
 #include "generic.h"
 #include "infojson.h"
-#include "slclient.h"
-#include "dlclient.h"
-#include "ring.h"
 #include "mseedscan.h"
+#include "ring.h"
+#include "slclient.h"
+#include "yyjson.h"
 
 /***************************************************************************
  * info_create_root:
@@ -303,7 +303,7 @@ info_add_streams (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matchexpr)
   Stack *ringstreams;
   RingStream *ringstream;
 
-  char string32[32] = {0};
+  char string32[32]    = {0};
   uint32_t streamcount = 0;
 
   pcre2_code *match_code       = NULL;
@@ -311,10 +311,10 @@ info_add_streams (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matchexpr)
 
   /* Save and temporarily clear persistent match/reject when matchexpr overrides.
    * The reader's allowed/forbidden (server access controls) must still apply. */
-  pcre2_code *saved_match              = NULL;
-  pcre2_match_data *saved_match_data   = NULL;
-  pcre2_code *saved_reject             = NULL;
-  pcre2_match_data *saved_reject_data  = NULL;
+  pcre2_code *saved_match             = NULL;
+  pcre2_match_data *saved_match_data  = NULL;
+  pcre2_code *saved_reject            = NULL;
+  pcre2_match_data *saved_reject_data = NULL;
 
   /* Compile match expression if provided */
   if (matchexpr && *matchexpr && UpdatePattern (&match_code, &match_data, matchexpr, "stream match expression"))
@@ -326,10 +326,10 @@ info_add_streams (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matchexpr)
    * so GetStreamsStack only applies server-side allowed/forbidden filters */
   if (match_code && cinfo->reader)
   {
-    saved_match       = cinfo->reader->match;
-    saved_match_data  = cinfo->reader->match_data;
-    saved_reject      = cinfo->reader->reject;
-    saved_reject_data = cinfo->reader->reject_data;
+    saved_match                = cinfo->reader->match;
+    saved_match_data           = cinfo->reader->match_data;
+    saved_reject               = cinfo->reader->reject;
+    saved_reject_data          = cinfo->reader->reject_data;
     cinfo->reader->match       = NULL;
     cinfo->reader->match_data  = NULL;
     cinfo->reader->reject      = NULL;
@@ -758,6 +758,12 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
   pthread_mutex_lock (&param.cthreads_lock);
   for (loopctp = param.cthreads; loopctp != NULL; loopctp = loopctp->next)
   {
+    /* Skip if client thread is not in ACTIVE state */
+    if (loopctp->td->td_state != TDS_ACTIVE)
+    {
+      continue;
+    }
+
     tcinfo = (ClientInfo *)loopctp->td->td_prvtptr;
 
     /* Skip if client does not match provided expression */
@@ -768,12 +774,6 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
       {
         continue;
       }
-
-    /* Skip if client thread is not in ACTIVE state */
-    if (loopctp->td->td_state != TDS_ACTIVE)
-    {
-      continue;
-    }
 
     /* Determine connection type */
     if (tcinfo->type == CLIENT_DATALINK)
@@ -869,7 +869,6 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
 
       snprintf (string32, sizeof (string32), "%u.%u", slinfo->proto_major, slinfo->proto_minor);
       yyjson_mut_obj_add_strcpy (doc, client, "protocol_version", string32);
-
 
       yyjson_mut_obj_add_bool (doc, client, "dialup_mode", slinfo->dialup);
 

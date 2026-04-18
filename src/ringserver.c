@@ -1003,49 +1003,51 @@ ListenThread (void *arg)
       break;
     }
 
-    if ((errno = pthread_create (&ctid, NULL, ClientThread, (void *)tdp)))
+    /* Allocate the tracking entry before starting the thread */
+    ctp = (struct cthread *)malloc (sizeof (struct cthread));
+    if (ctp == NULL)
     {
-      lprintf (0, "Error creating new client thread: %s", strerror (errno));
+      lprintf (0, "Error allocating cthread: %s", strerror (errno));
       close (clientsocket);
       FreeClientInfo (cinfo);
       free (tdp);
       tdp = NULL;
       continue;
     }
+
+    if ((errno = pthread_create (&ctid, NULL, ClientThread, (void *)tdp)))
+    {
+      lprintf (0, "Error creating new client thread: %s", strerror (errno));
+      close (clientsocket);
+      FreeClientInfo (cinfo);
+      free (tdp);
+      free (ctp);
+      tdp = NULL;
+      continue;
+    }
+
+    /* Update thread id, no locking, should be safe */
+    tdp->td_id = ctid;
+
+    ctp->td   = tdp;
+    ctp->prev = NULL;
+
+    /* Add ctp to the beginning of the client threads list (cthreads) */
+    pthread_mutex_lock (&param.cthreads_lock);
+    if (param.cthreads)
+    {
+      ctp->next            = param.cthreads;
+      param.cthreads->prev = ctp;
+    }
     else
     {
-      /* Update thread id, no locking, should be safe */
-      tdp->td_id = ctid;
-
-      ctp = (struct cthread *)malloc (sizeof (struct cthread));
-      if (ctp == NULL)
-      {
-        lprintf (0, "Error malloc'ing cthread, client thread will be untracked: %s",
-                 strerror (errno));
-        pthread_detach (ctid);
-        continue;
-      }
-
-      ctp->td   = tdp;
-      ctp->prev = NULL;
-
-      /* Add ctp to the beginning of the client threads list (cthreads) */
-      pthread_mutex_lock (&param.cthreads_lock);
-      if (param.cthreads)
-      {
-        ctp->next            = param.cthreads;
-        param.cthreads->prev = ctp;
-      }
-      else
-      {
-        ctp->next = NULL;
-      }
-      param.cthreads = ctp;
-      pthread_mutex_unlock (&param.cthreads_lock);
-
-      /* Increment client count */
-      param.clientcount++;
+      ctp->next = NULL;
     }
+    param.cthreads = ctp;
+    pthread_mutex_unlock (&param.cthreads_lock);
+
+    /* Increment client count */
+    param.clientcount++;
   }
 
   /* Set thread closing status */

@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,7 +33,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <poll.h>
 
 #include "clients.h"
 #include "dlclient.h"
@@ -99,7 +99,7 @@ ClientThread (void *arg)
 
   /* Throttle related */
   uint32_t throttle_msec = 0; /* Throttle time in milliseconds */
-  struct timespec timereq;   /* Throttle for nanosleep() */
+  struct timespec timereq;    /* Throttle for nanosleep() */
 
   if (!arg)
     return NULL;
@@ -108,7 +108,7 @@ ClientThread (void *arg)
   cinfo = (ClientInfo *)mytdp->td_prvtptr;
 
   /* Connect linked structures */
-  cinfo->reader     = &reader;
+  cinfo->reader = &reader;
 
   /* Initialize RingReader parameters */
   reader.pktoffset      = -1;
@@ -725,7 +725,7 @@ int
 SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
             int bufcount, int no_wsframe)
 {
-  TLSCTX *tlsctx = cinfo->tlsctx;
+  TLSCTX *tlsctx     = cinfo->tlsctx;
   size_t totalbuflen = 0;
   int written;
   int pollret;
@@ -905,18 +905,18 @@ SendDataMB (ClientInfo *cinfo, void *buffer[], size_t buflen[],
       /* Create a limited, printable buffer for the diagnostic message */
       char pbuffer[100];
       char *cp;
-      size_t maxlength = (buflen[idx] < sizeof (pbuffer)) ? buflen[idx] : sizeof (pbuffer);
+      size_t copylen = (buflen[idx] < sizeof (pbuffer) - 1) ? buflen[idx] : sizeof (pbuffer) - 1;
 
-      strncpy (pbuffer, (char *)buffer[idx], maxlength - 1);
-      pbuffer[maxlength - 1] = '\0';
+      memcpy (pbuffer, buffer[idx], copylen);
+      pbuffer[copylen] = '\0';
 
-      if ((cp = memchr (pbuffer, '\r', maxlength)))
+      if ((cp = memchr (pbuffer, '\r', copylen)))
         *cp = '\0';
 
-      if ((cp = memchr (pbuffer, '\n', maxlength)))
+      if ((cp = memchr (pbuffer, '\n', copylen)))
         *cp = '\0';
 
-      /* Replace unprintable characters with '?', */
+      /* Replace unprintable characters with '?' */
       for (cp = pbuffer; *cp != '\0'; cp++)
       {
         if (*cp < 32 || *cp > 126)
@@ -1024,7 +1024,7 @@ RecvData (ClientInfo *cinfo, void *buffer, size_t requested, int fulfill)
     cinfo->recvconsumed = 0;
   }
 
-  recvptr = cinfo->recvbuf + cinfo->recvlength;
+  recvptr    = cinfo->recvbuf + cinfo->recvlength;
   receivable = cinfo->recvbufsize - cinfo->recvlength;
 
   /* Deadline for total receive time, to prevent slow trickle attacks.
@@ -1364,7 +1364,7 @@ RecvLine (ClientInfo *cinfo)
 
   /* Determine first and last terminator */
   char *firstterminator = (nl && cr) ? (nl < cr) ? nl : cr : (nl) ? nl : cr;
-  char *lastterminator = (nl && cr) ? (nl > cr) ? nl : cr : (nl) ? nl : cr;
+  char *lastterminator  = (nl && cr) ? (nl > cr) ? nl : cr : (nl) ? nl : cr;
 
   /* Ensure the last terminator, if different, directly follows first */
   if (firstterminator != lastterminator &&
@@ -1382,7 +1382,7 @@ RecvLine (ClientInfo *cinfo)
   return (int)(firstterminator - cinfo->recvbuf);
 } /* End of RecvLine() */
 
-/**********************************************************************/ /**
+/***************************************************************************
  * PollSocket:
  *
  * Poll the connected socket for read and/or write ability using poll()
@@ -1446,46 +1446,50 @@ GetStreamNode (RBTree *tree, pthread_mutex_t *plock, char *streamid,
   /* Generate key */
   key = FNVhash64 (streamid);
 
+  /* Hold the lock across the lookup-or-insert. */
+  pthread_mutex_lock (plock);
+
   /* Search for a matching entry */
   if ((rbnode = RBFind (tree, &key)))
   {
     stream = (StreamNode *)rbnode->data;
     *new   = 0;
-  }
-  else
-  {
-    if (streams_count >= MAX_STREAMS_PER_CLIENT)
-    {
-      lprintf (0, "GetStreamNode: Stream count limit reached (%d)", MAX_STREAMS_PER_CLIENT);
-      return 0;
-    }
-
-    if ((newkey = (Key *)malloc (sizeof (Key))) == NULL)
-    {
-      lprintf (0, "GetStreamNode: Error allocating new key");
-      return 0;
-    }
-
-    *newkey = key;
-
-    if ((stream = (StreamNode *)calloc (1, sizeof (StreamNode))) == NULL)
-    {
-      lprintf (0, "GetStreamNode: Error allocating new node");
-      free (newkey);
-      return 0;
-    }
-
-    /* Initialize the new StreamNode, values that are not 0 */
-    strncpy (stream->streamid, streamid, sizeof (stream->streamid) - 1);
-    stream->streamid[sizeof (stream->streamid) - 1] = '\0';
-
-    /* Add the new entry while locking the tree */
-    pthread_mutex_lock (plock);
-    RBTreeInsert (tree, newkey, stream, 0);
     pthread_mutex_unlock (plock);
-
-    *new = 1;
+    return stream;
   }
+
+  if (streams_count >= MAX_STREAMS_PER_CLIENT)
+  {
+    pthread_mutex_unlock (plock);
+    lprintf (0, "GetStreamNode: Stream count limit reached (%d)", MAX_STREAMS_PER_CLIENT);
+    return 0;
+  }
+
+  if ((newkey = (Key *)malloc (sizeof (Key))) == NULL)
+  {
+    pthread_mutex_unlock (plock);
+    lprintf (0, "GetStreamNode: Error allocating new key");
+    return 0;
+  }
+
+  *newkey = key;
+
+  if ((stream = (StreamNode *)calloc (1, sizeof (StreamNode))) == NULL)
+  {
+    pthread_mutex_unlock (plock);
+    lprintf (0, "GetStreamNode: Error allocating new node");
+    free (newkey);
+    return 0;
+  }
+
+  /* Initialize the new StreamNode, values that are not 0 */
+  strncpy (stream->streamid, streamid, sizeof (stream->streamid) - 1);
+  stream->streamid[sizeof (stream->streamid) - 1] = '\0';
+
+  RBTreeInsert (tree, newkey, stream, 0);
+  pthread_mutex_unlock (plock);
+
+  *new = 1;
 
   return stream;
 } /* End of GetStreamNode() */

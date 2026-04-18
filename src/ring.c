@@ -305,7 +305,11 @@ RingInitialize (char *ringfilename, char *streamfilename, int *ringfd)
   }
 
   /* Initialize volatile ring packet buffer parameters */
-  param.streamidx = RBTreeCreate (KeyCompare, free, free);
+  if ((param.streamidx = RBTreeCreate (KeyCompare, free, free)) == NULL)
+  {
+    lprintf (0, "%s(): error allocating stream index tree", __func__);
+    return -1;
+  }
   param.datastart = param.ringbuffer + headersize;
 
   /* Load parameters from stored header */
@@ -871,6 +875,7 @@ RingReadPacket (int64_t offset, RingPacket *packet, char *packetdata)
 {
   RingPacket *pkt;
   nstime_t pkttime;
+  uint32_t maxpayload;
 
   if (!packet)
     return RINGID_ERROR;
@@ -892,6 +897,18 @@ RingReadPacket (int64_t offset, RingPacket *packet, char *packetdata)
 
   /* Copy packet header */
   memcpy (packet, pkt, sizeof (RingPacket));
+
+  /* Clamp datasize to per-slot payload capacity to guard against a
+   * corrupt or truncated ring file. */
+  maxpayload = (param.pktsize > sizeof (RingPacket))
+                   ? param.pktsize - (uint32_t)sizeof (RingPacket)
+                   : 0;
+  if (packet->datasize > maxpayload)
+  {
+    lprintf (0, "%s(): clamping corrupt datasize %" PRIu32 " > max %" PRIu32 " at offset %" PRId64,
+             __func__, packet->datasize, maxpayload, offset);
+    packet->datasize = maxpayload;
+  }
 
   /* Copy packet data if a pointer is supplied */
   if (packetdata)
@@ -1122,9 +1139,23 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
   /* Copy packet header */
   memcpy (packet, pkt, sizeof (RingPacket));
 
+  /* Clamp datasize to per-slot payload capacity to guard against a
+   * corrupt or truncated ring file. */
+  {
+    uint32_t maxpayload = (param.pktsize > sizeof (RingPacket))
+                              ? param.pktsize - (uint32_t)sizeof (RingPacket)
+                              : 0;
+    if (packet->datasize > maxpayload)
+    {
+      lprintf (0, "%s(): clamping corrupt datasize %" PRIu32 " > max %" PRIu32 " at offset %" PRId64,
+               __func__, packet->datasize, maxpayload, offset);
+      packet->datasize = maxpayload;
+    }
+  }
+
   /* Copy packet data if a pointer is supplied */
   if (packetdata)
-    memcpy (packetdata, (uint8_t *)pkt + sizeof (RingPacket), pkt->datasize);
+    memcpy (packetdata, (uint8_t *)pkt + sizeof (RingPacket), packet->datasize);
 
   /* Sanity check that the data was not overwritten during processing */
   if (pkttime != pkt->pkttime)
@@ -1253,6 +1284,10 @@ RingAfter (RingReader *reader, nstime_t reftime, int whence)
   if (!reader)
     return RINGID_ERROR;
 
+  /* Nothing to search if the ring is empty */
+  if (param.earliestoffset < 0 || param.latestoffset < 0)
+    return RINGID_NONE;
+
   /* Start searching with the earliest packet in the ring */
   offset = param.earliestoffset;
 
@@ -1324,9 +1359,9 @@ RingAfter (RingReader *reader, nstime_t reftime, int whence)
     pkt1 = pkt0;
   }
 
-  offset    = pkt1->offset;
-  pktid     = pkt1->pktid;
-  pkttime   = pkt1->pkttime;
+  offset  = pkt1->offset;
+  pktid   = pkt1->pktid;
+  pkttime = pkt1->pkttime;
 
   /* Sanity check that the data was not overwritten during the copy */
   if (pktid != pkt1->pktid)
@@ -1374,10 +1409,10 @@ uint64_t
 RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit,
               int whence)
 {
-  RingPacket *pkt   = NULL;
-  RingPacket *spkt  = NULL;
-  nstime_t pkttime  = NSTUNSET;
-  uint64_t pktid = RINGID_NONE;
+  RingPacket *pkt  = NULL;
+  RingPacket *spkt = NULL;
+  nstime_t pkttime = NSTUNSET;
+  uint64_t pktid   = RINGID_NONE;
   int64_t offset;
   int64_t soffset;
   uint64_t count = 0;
@@ -1385,6 +1420,10 @@ RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit,
 
   if (!reader)
     return RINGID_ERROR;
+
+  /* Nothing to search if the ring is empty */
+  if (param.earliestoffset < 0 || param.latestoffset < 0)
+    return RINGID_NONE;
 
   /* Start searching with the latest packet in the ring */
   offset  = param.latestoffset;
@@ -1602,6 +1641,17 @@ GetStreamsStack (RingReader *reader)
   streams    = StackCreate ();
   newstreams = StackCreate ();
 
+  if (streams == NULL || newstreams == NULL)
+  {
+    lprintf (0, "%s(): error allocating Stack", __func__);
+    if (streams)
+      StackDestroy (streams, 0);
+    if (newstreams)
+      StackDestroy (newstreams, free);
+    pthread_mutex_unlock (&param.streamlock);
+    return 0;
+  }
+
   RBBuildStack (param.streamidx, streams);
 
   /* Loop through streams copying content to new Stack */
@@ -1724,10 +1774,10 @@ FindOffsetForID (uint64_t pktid, nstime_t *pkttime)
       return -1;
     }
 
-    int64_t ringmod = param.maxoffset + config.pktsize;
+    int64_t ringmod                = param.maxoffset + config.pktsize;
     int64_t latestoffset_unwrapped = (latestoffset < earliestoffset) ? latestoffset + ringmod : latestoffset;
 
-    int64_t lowpkt = 0;
+    int64_t lowpkt  = 0;
     int64_t highpkt = (latestoffset_unwrapped - earliestoffset) / param.pktsize;
     int64_t midpkt;
 

@@ -546,8 +546,10 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
       pthread_mutex_unlock (&(cinfo->streams_lock));
 
       /* Flush memory streams to finalise buffers */
-      if (txmem) fclose (txmem);
-      if (rxmem) fclose (rxmem);
+      if (txmem)
+        fclose (txmem);
+      if (rxmem)
+        fclose (rxmem);
 
       /* Emit TX block only if there were bytes */
       if (txfp && txtotalbytes > 0)
@@ -817,6 +819,14 @@ CalcUsageLogInterval (time_t reftime)
 
   /* Take config writer lock */
   pthread_rwlock_wrlock (&config.config_rwlock);
+
+  /* Defensive guard, protect against <= 0 values */
+  if (config.usagelog.interval <= 0)
+  {
+    pthread_rwlock_unlock (&config.config_rwlock);
+    lprintf (0, "%s(): invalid usage log interval: %d", __func__, config.usagelog.interval);
+    return -1;
+  }
 
   /* Calculate the new, rounded epoch time */
   config.usagelog.startint = mktime (&reftm);

@@ -511,7 +511,11 @@ TreeDestHelper (RBTree *tree, RBNode *node)
 void
 RBTreeDestroy (RBTree *tree)
 {
-  TreeDestHelper (tree, tree->root->left);
+  if (!tree)
+    return;
+
+  if (tree->root)
+    TreeDestHelper (tree, tree->root->left);
   free (tree->root);
   free (tree->nil);
   free (tree);
