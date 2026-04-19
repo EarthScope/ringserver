@@ -713,6 +713,8 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
   time_t curtime;
   char *matchedfilename = NULL;
 
+  int group_linked = 0;
+
   searchgroup = datastream->grouproot;
   curtime     = time (NULL);
 
@@ -731,7 +733,8 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
         lprintf (3, "[%s] Found data stream entry for key %s",
                  ident, defkey);
 
-      foundgroup = searchgroup;
+      foundgroup   = searchgroup;
+      group_linked = 1;
 
       break;
     }
@@ -828,16 +831,18 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
     if (datastream->grouproot == NULL)
     {
       datastream->grouproot = foundgroup;
+      group_linked          = 1;
     }
     /* Otherwise add to the end of the chain */
     else if (prevgroup != NULL)
     {
       prevgroup->next = foundgroup;
+      group_linked    = 1;
     }
     else
     {
       lprintf (0, "[%s] stream chain is broken!", ident);
-      return NULL;
+      goto fail;
     }
   }
 
@@ -859,26 +864,23 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
 
     if ((foundgroup->filed = ds_openfile (datastream, filename, ident)) == -1)
     {
-      /* Reset to -1 so the next call retries the open */
+      /* Reset to -1 so the next call retries the open, and so the fail
+       * path does not try to close() it. */
       foundgroup->filed = -1;
-
-      /* Restore positive modtime so ds_closeidle() can reap this entry */
-      if (foundgroup->modtime < 0)
-        foundgroup->modtime *= -1;
 
       /* Do not complain if the call was interrupted (signals are used for shutdown) */
       if (errno != EINTR)
         lprintf (2, "[%s] cannot open data stream file, %s",
                  ident, strerror (errno));
 
-      return NULL;
+      goto fail;
     }
 
     if ((filepos = lseek (foundgroup->filed, (off_t)0, SEEK_END)) < 0)
     {
       lprintf (2, "[%s] cannot seek in data stream file, %s",
                ident, strerror (errno));
-      return NULL;
+      goto fail;
     }
   }
 
@@ -889,6 +891,35 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
              ident);
 
   return foundgroup;
+
+fail:
+  /* Centralized error path.  Close any file descriptor we opened in this
+   * call so it isn't leaked (the group's negative modtime would otherwise
+   * also keep ds_closeidle() from ever reaping it), keep openfilecount in
+   * sync, restore the protective modtime, and free the group memory if
+   * we allocated it but never linked it into the chain. */
+  if (foundgroup != NULL)
+  {
+    if (foundgroup->filed >= 0)
+    {
+      if (close (foundgroup->filed))
+        lprintf (2, "[%s] ds_getstream(), closing data stream file, %s",
+                 ident, strerror (errno));
+      foundgroup->filed = -1;
+      datastream->openfilecount--;
+    }
+
+    if (foundgroup->modtime < 0)
+      foundgroup->modtime *= -1;
+
+    if (!group_linked)
+    {
+      free (foundgroup->defkey);
+      free (foundgroup);
+    }
+  }
+
+  return NULL;
 } /* End of ds_getstream() */
 
 /***************************************************************************
