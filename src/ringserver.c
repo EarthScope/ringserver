@@ -227,6 +227,9 @@ main (int argc, char *argv[])
     tcpprotonumber = pe_tcp->p_proto;
   }
 
+  /* Initialise the shared PCRE2 match context early */
+  (void)GetMatchContext ();
+
   /* Init ring parameters */
   if (config.ringdir || config.volatilering)
   {

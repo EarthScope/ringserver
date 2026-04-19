@@ -2454,10 +2454,11 @@ YesNo (const char *value)
 static int
 InitServerSocket (char *portstr, ListenOptions options)
 {
-  struct addrinfo *addr;
+  struct addrinfo *addr = NULL;
   struct addrinfo hints;
   char *familystr = NULL;
-  int fd;
+  int fd        = -1;
+  int result_fd = -1;
   int optval;
   int gaierror;
 
@@ -2501,7 +2502,7 @@ InitServerSocket (char *portstr, ListenOptions options)
     if (!(addr->ai_family == AF_INET6 && errno == EAFNOSUPPORT))
       lprintf (0, "Error with socket(), %s port %s: %s",
                familystr, portstr, strerror (errno));
-    return -1;
+    goto cleanup;
   }
 
   optval = 1;
@@ -2509,8 +2510,7 @@ InitServerSocket (char *portstr, ListenOptions options)
   {
     lprintf (0, "Error setting SO_REUSEADDR with setsockopt(), %s port %s: %s",
              familystr, portstr, strerror (errno));
-    close (fd);
-    return -1;
+    goto cleanup;
   }
 
   /* Limit IPv6 sockets to IPv6 only, avoid mapped addresses, we handle IPv4 separately */
@@ -2519,29 +2519,37 @@ InitServerSocket (char *portstr, ListenOptions options)
   {
     lprintf (0, "Error setting IPV6_V6ONLY with setsockopt(), %s port %s: %s",
              familystr, portstr, strerror (errno));
-    close (fd);
-    return -1;
+    goto cleanup;
   }
 
   if (bind (fd, addr->ai_addr, addr->ai_addrlen) < 0)
   {
     lprintf (0, "Error with bind(), %s port %s: %s",
              familystr, portstr, strerror (errno));
-    close (fd);
-    return -1;
+    goto cleanup;
   }
 
   if (listen (fd, 10) == -1)
   {
     lprintf (0, "Error with listen(), %s port %s: %s",
              familystr, portstr, strerror (errno));
-    close (fd);
-    return -1;
+    goto cleanup;
   }
 
-  freeaddrinfo (addr);
+  /* Success: transfer fd ownership to caller so cleanup does not close it. */
+  result_fd = fd;
+  fd        = -1;
 
-  return fd;
+cleanup:
+  /* Single error path: always free addrinfo (the previous code leaked it on
+   * every return between getaddrinfo() and the final freeaddrinfo()), and
+   * close the socket if we created one but did not hand it off. */
+  if (addr)
+    freeaddrinfo (addr);
+  if (fd >= 0)
+    close (fd);
+
+  return result_fd;
 } /* End of InitServerSocket() */
 
 /***************************************************************************
@@ -2661,6 +2669,8 @@ AddListenThreads (ListenPortParams *lpp)
     {
       if (AddServerThread (LISTEN_THREAD, lpp))
       {
+        close (lpp->socket);
+        lpp->socket = -1;
         return 0;
       }
 
@@ -2684,6 +2694,8 @@ AddListenThreads (ListenPortParams *lpp)
     {
       if (AddServerThread (LISTEN_THREAD, lpp))
       {
+        close (lpp->socket);
+        lpp->socket = -1;
         return 0;
       }
 

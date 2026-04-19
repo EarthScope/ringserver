@@ -1,12 +1,10 @@
 2026.108:
 	- Significant hardening of HTTP handling of user input.
-	- Add per-call PCRE2 match context with limits for client-supplied regex patterns.
 	- Fix multiple edge case failures, on OOM or esoteric/malicious usage.
+	- Add per-call PCRE2 match context with limits for client-supplied regex patterns.
 	- Fix race condition where ClientInfo could be dereferenced during client cleanup.
 	- Fix sending success-indicating "OK" on internal lookup error.
-	- Fix potential path-traversal bug for HTTP webroot sanitizing.
 	- Add empty ring guards to RingAfter() and RingAfterRev().
-	- Avoid client thread leak on malloc error.
 	- Fail fast on malformed READ command for DataLink to avoid multiple ERRORS.
 	- Fix race condition in GetStreamNode() for duplicates or rebalancing.
 	- Protect against <= 0 values for UsageLogInterval.

@@ -1629,12 +1629,22 @@ InitMatchContext (void)
 {
   global_match_context = pcre2_match_context_create (NULL);
 
-  if (global_match_context)
+  /* The ReDoS mitigations (match/depth/heap limits) are applied to this
+   * shared context; pcre2_match() tolerates a NULL context but silently
+   * disables those limits, which is unacceptable since client-supplied
+   * regexes could then cause unbounded CPU/memory usage.  Treat the
+   * allocation failure as fatal instead of starting in a degraded mode. */
+  if (!global_match_context)
   {
-    pcre2_set_match_limit (global_match_context, 100000);
-    pcre2_set_depth_limit (global_match_context, 1000);
-    pcre2_set_heap_limit (global_match_context, 1024);
+    lprintf (0, "FATAL: %s(): pcre2_match_context_create() failed; "
+                "cannot enforce regex resource limits, aborting startup",
+             __func__);
+    exit (1);
   }
+
+  pcre2_set_match_limit (global_match_context, 100000);
+  pcre2_set_depth_limit (global_match_context, 1000);
+  pcre2_set_heap_limit (global_match_context, 1024);
 } /* End of InitMatchContext() */
 
 pcre2_match_context *

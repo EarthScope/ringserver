@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <spawn.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,6 +36,12 @@
 #include "auth.h"
 #include "logging.h"
 #include "yyjson.h"
+
+/* Upper bound on the compound regex pattern assembled from an auth-helper
+ * "allowed_streams" / "forbidden_streams" array. Stream IDs
+ * are short (FDSN SIDs are well under 100 chars); 64 KiB easily holds
+ * hundreds of entries. */
+#define AUTH_MAX_COMPOUND_PATTERN_SIZE ((size_t)(64 * 1024))
 
 static int ApplyPermissionsJSON (ClientInfo *cinfo, const char *json_string);
 static int ExecuteAuthProgram (char *envp[], uint32_t timeout_seconds,
@@ -243,10 +250,28 @@ ApplyPermissionsJSON (ClientInfo *cinfo, const char *json_string)
   {
     pattern_size = 0;
 
-    /* Calculate total size of compound pattern, for each element + 1 for '|' */
+    /* Calculate total size of compound pattern, for each element + 1 for '|'.
+     * Skip non-string elements (yyjson_get_len() on arrays/objects returns
+     * the child count, which would over-count space and, worse, lead to
+     * strncat(dest, NULL, n) UB in the concat loop below).  Guard the
+     * accumulator against both overflow and an excessive total. */
     yyjson_arr_foreach (streams_array, idx, max, thread_iter)
     {
-      pattern_size += yyjson_get_len (thread_iter) + 1;
+      if (!yyjson_is_str (thread_iter))
+        continue;
+
+      element_size = yyjson_get_len (thread_iter);
+
+      if (element_size > AUTH_MAX_COMPOUND_PATTERN_SIZE ||
+          pattern_size > AUTH_MAX_COMPOUND_PATTERN_SIZE - element_size - 1)
+      {
+        lprintf (0, "[%s] allowed_streams compound pattern exceeds %zu bytes, rejecting",
+                 cinfo->hostname, AUTH_MAX_COMPOUND_PATTERN_SIZE);
+        yyjson_doc_free (json);
+        return -1;
+      }
+
+      pattern_size += element_size + 1;
     }
 
     /* Replace allocation for compound pattern, +1 for terminator */
@@ -261,6 +286,9 @@ ApplyPermissionsJSON (ClientInfo *cinfo, const char *json_string)
     /* Create compound pattern */
     yyjson_arr_foreach (streams_array, idx, max, thread_iter)
     {
+      if (!yyjson_is_str (thread_iter))
+        continue;
+
       element_size = yyjson_get_len (thread_iter);
 
       if (element_size > 0)
@@ -296,10 +324,26 @@ ApplyPermissionsJSON (ClientInfo *cinfo, const char *json_string)
   {
     pattern_size = 0;
 
-    /* Calculate total size of compound pattern, for each element + 1 for '|' */
+    /* Calculate total size of compound pattern, for each element + 1 for '|'.
+     * Skip non-string elements and guard the accumulator; see the matching
+     * comment in the allowed_streams block above. */
     yyjson_arr_foreach (streams_array, idx, max, thread_iter)
     {
-      pattern_size += yyjson_get_len (thread_iter) + 1;
+      if (!yyjson_is_str (thread_iter))
+        continue;
+
+      element_size = yyjson_get_len (thread_iter);
+
+      if (element_size > AUTH_MAX_COMPOUND_PATTERN_SIZE ||
+          pattern_size > AUTH_MAX_COMPOUND_PATTERN_SIZE - element_size - 1)
+      {
+        lprintf (0, "[%s] forbidden_streams compound pattern exceeds %zu bytes, rejecting",
+                 cinfo->hostname, AUTH_MAX_COMPOUND_PATTERN_SIZE);
+        yyjson_doc_free (json);
+        return -1;
+      }
+
+      pattern_size += element_size + 1;
     }
 
     /* Replace allocation for compound pattern, +1 for terminator */
@@ -314,6 +358,9 @@ ApplyPermissionsJSON (ClientInfo *cinfo, const char *json_string)
     /* Create compound pattern */
     yyjson_arr_foreach (streams_array, idx, max, thread_iter)
     {
+      if (!yyjson_is_str (thread_iter))
+        continue;
+
       element_size = yyjson_get_len (thread_iter);
 
       if (element_size > 0)
