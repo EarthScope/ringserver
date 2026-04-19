@@ -226,7 +226,7 @@ LoadBufferV1 (char *ringfile_v1)
     if (pcre_code != NULL &&
         pcre2_match (pcre_code, (PCRE2_SPTR8)packet_v1->streamid,
                      PCRE2_ZERO_TERMINATED, 0, 0,
-                     pcre_data, NULL) > 0)
+                     pcre_data, GetMatchContext ()) > 0)
     {
       char *prechannel = strrchr (packet_v1->streamid, '_');
 

@@ -370,14 +370,28 @@ info_add_streams (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matchexpr)
   }
 
   /* Add streams to array */
+  int match_limit_logged = 0;
   while ((ringstream = (RingStream *)StackPop (ringstreams)))
   {
     /* Skip if stream ID does not match provided expression */
-    if (match_code &&
-        pcre2_match (match_code, (PCRE2_SPTR8)ringstream->streamid, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0)
+    if (match_code)
     {
-      free (ringstream);
-      continue;
+      int match_rc = pcre2_match (match_code, (PCRE2_SPTR8)ringstream->streamid,
+                                  PCRE2_ZERO_TERMINATED, 0, 0, match_data, GetMatchContext ());
+      if (match_rc < 0)
+      {
+        if (!match_limit_logged &&
+            (match_rc == PCRE2_ERROR_MATCHLIMIT ||
+             match_rc == PCRE2_ERROR_DEPTHLIMIT ||
+             match_rc == PCRE2_ERROR_HEAPLIMIT))
+        {
+          lprintf (1, "[%s] PCRE2 match limit reached for stream match expression, treating as no match",
+                   cinfo->hostname);
+          match_limit_logged = 1;
+        }
+        free (ringstream);
+        continue;
+      }
     }
 
     stream = yyjson_mut_arr_add_obj (doc, stream_array);
@@ -515,14 +529,28 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
   }
 
   /* Build Stacks of stations and optionally streams */
+  int match_limit_logged = 0;
   while ((ringstream = (RingStream *)StackPop (ringstreams)))
   {
     /* Skip if stream ID does not match provided expression */
-    if (match_code &&
-        pcre2_match (match_code, (PCRE2_SPTR8)ringstream->streamid, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0)
+    if (match_code)
     {
-      free (ringstream);
-      continue;
+      int match_rc = pcre2_match (match_code, (PCRE2_SPTR8)ringstream->streamid,
+                                  PCRE2_ZERO_TERMINATED, 0, 0, match_data, GetMatchContext ());
+      if (match_rc < 0)
+      {
+        if (!match_limit_logged &&
+            (match_rc == PCRE2_ERROR_MATCHLIMIT ||
+             match_rc == PCRE2_ERROR_DEPTHLIMIT ||
+             match_rc == PCRE2_ERROR_HEAPLIMIT))
+        {
+          lprintf (1, "[%s] PCRE2 match limit reached for stream match expression, treating as no match",
+                   cinfo->hostname);
+          match_limit_logged = 1;
+        }
+        free (ringstream);
+        continue;
+      }
     }
 
     /* Truncate stream ID at type suffix */
@@ -754,6 +782,8 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
 
   nsnow = NSnow ();
 
+  int match_limit_logged = 0;
+
   /* List connections, lock client list while looping */
   pthread_mutex_lock (&param.cthreads_lock);
   for (loopctp = param.cthreads; loopctp != NULL; loopctp = loopctp->next)
@@ -768,12 +798,26 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
 
     /* Skip if client does not match provided expression */
     if (match_code)
-      if (pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->hostname, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0 &&
-          pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->ipstr, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0 &&
-          pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->clientid, PCRE2_ZERO_TERMINATED, 0, 0, match_data, NULL) < 0)
+    {
+      pcre2_match_context *mctx = GetMatchContext ();
+      int rc_host     = pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->hostname, PCRE2_ZERO_TERMINATED, 0, 0, match_data, mctx);
+      int rc_ip       = (rc_host < 0) ? pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->ipstr, PCRE2_ZERO_TERMINATED, 0, 0, match_data, mctx) : 1;
+      int rc_clientid = (rc_ip < 0) ? pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->clientid, PCRE2_ZERO_TERMINATED, 0, 0, match_data, mctx) : 1;
+
+      if (rc_host < 0 && rc_ip < 0 && rc_clientid < 0)
       {
+        if (!match_limit_logged &&
+            (rc_host == PCRE2_ERROR_MATCHLIMIT || rc_host == PCRE2_ERROR_DEPTHLIMIT || rc_host == PCRE2_ERROR_HEAPLIMIT ||
+             rc_ip == PCRE2_ERROR_MATCHLIMIT   || rc_ip == PCRE2_ERROR_DEPTHLIMIT   || rc_ip == PCRE2_ERROR_HEAPLIMIT   ||
+             rc_clientid == PCRE2_ERROR_MATCHLIMIT || rc_clientid == PCRE2_ERROR_DEPTHLIMIT || rc_clientid == PCRE2_ERROR_HEAPLIMIT))
+        {
+          lprintf (1, "[%s] PCRE2 match limit reached for connection match expression, treating as no match",
+                   tcinfo->hostname);
+          match_limit_logged = 1;
+        }
         continue;
       }
+    }
 
     /* Determine connection type */
     if (tcinfo->type == CLIENT_DATALINK)

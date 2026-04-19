@@ -858,7 +858,7 @@ HandleWrite (ClientInfo *cinfo)
   if (dlinfo->legacy_mseed_streamid_match != NULL &&
       pcre2_match (dlinfo->legacy_mseed_streamid_match, (PCRE2_SPTR8)streamid,
                    PCRE2_ZERO_TERMINATED, 0, 0,
-                   dlinfo->legacy_mseed_streamid_data, NULL) > 0)
+                   dlinfo->legacy_mseed_streamid_data, GetMatchContext ()) > 0)
   {
     char *prechannel = strrchr (streamid, '_');
 
@@ -888,7 +888,7 @@ HandleWrite (ClientInfo *cinfo)
   {
     if (pcre2_match (cinfo->reader->allowed, (PCRE2_SPTR8)cinfo->packet.streamid,
                      PCRE2_ZERO_TERMINATED, 0, 0,
-                     cinfo->reader->allowed_data, NULL) < 0)
+                     cinfo->reader->allowed_data, GetMatchContext ()) < 0)
     {
       lprintf (1, "[%s] Error, permission denied for WRITE of stream ID: %s",
                cinfo->hostname, cinfo->packet.streamid);

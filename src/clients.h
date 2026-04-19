@@ -102,7 +102,7 @@ typedef struct ClientInfo
   char        ipstr[100];   /* Client host IP address */
   char        portstr[NI_MAXSERV]; /* Client port */
   char        hostname[200];/* Client hostname, or IP is unresolvable */
-  char        clientid[100];/* Client identifier string */
+  char        clientid[256];/* Client identifier string */
   char        serverport[NI_MAXSERV]; /* Server port */
   ClientState state;        /* Client state flag */
   ClientType  type;         /* Client type flag */

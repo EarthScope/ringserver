@@ -43,6 +43,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1103,25 +1104,25 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
     /* Test allowed expression if available, skip if NOT matched */
     if (reader->allowed)
       if (pcre2_match (reader->allowed, (PCRE2_SPTR8)pkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                       reader->allowed_data, NULL) < 0)
+                       reader->allowed_data, GetMatchContext ()) < 0)
         skip = 1;
 
     /* Test forbidden expression if available, skip if matched */
     if (reader->forbidden && skip == 0)
       if (pcre2_match (reader->forbidden, (PCRE2_SPTR8)pkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                       reader->forbidden_data, NULL) >= 0)
+                       reader->forbidden_data, GetMatchContext ()) >= 0)
         skip = 1;
 
     /* Test match expression if available, skip if NOT matched */
     if (reader->match && skip == 0)
       if (pcre2_match (reader->match, (PCRE2_SPTR8)pkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                       reader->match_data, NULL) < 0)
+                       reader->match_data, GetMatchContext ()) < 0)
         skip = 1;
 
     /* Test reject expression if available, skip if matched */
     if (reader->reject && skip == 0)
       if (pcre2_match (reader->reject, (PCRE2_SPTR8)pkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                       reader->reject_data, NULL) >= 0)
+                       reader->reject_data, GetMatchContext ()) >= 0)
         skip = 1;
 
     /* If skipping this packet determine the next packet in the ring */
@@ -1307,25 +1308,25 @@ RingAfter (RingReader *reader, nstime_t reftime, int whence)
     /* Test allowed expression if available, skip if NOT matched */
     if (reader->allowed && !skip)
       if (pcre2_match (reader->allowed, (PCRE2_SPTR8)pkt1->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                       reader->allowed_data, NULL) < 0)
+                       reader->allowed_data, GetMatchContext ()) < 0)
         skip = 1;
 
     /* Test forbidden expression if available, skip if matched */
     if (reader->forbidden && !skip)
       if (pcre2_match (reader->forbidden, (PCRE2_SPTR8)pkt1->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                       reader->forbidden_data, NULL) >= 0)
+                       reader->forbidden_data, GetMatchContext ()) >= 0)
         skip = 1;
 
     /* Test match expression if available, skip if NOT matched */
     if (reader->match && !skip)
       if (pcre2_match (reader->match, (PCRE2_SPTR8)pkt1->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                       reader->match_data, NULL) < 0)
+                       reader->match_data, GetMatchContext ()) < 0)
         skip = 1;
 
     /* Test reject expression if available, skip if matched */
     if (reader->reject && !skip)
       if (pcre2_match (reader->reject, (PCRE2_SPTR8)pkt1->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                       reader->reject_data, NULL) >= 0)
+                       reader->reject_data, GetMatchContext ()) >= 0)
         skip = 1;
 
     /* Done if this matching packet has a data end time after that specified */
@@ -1440,25 +1441,25 @@ RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit,
     /* Test allowed expression if available, skip if NOT matched */
     if (reader->allowed)
       if (pcre2_match (reader->allowed, (PCRE2_SPTR8)spkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                       reader->allowed_data, NULL) < 0)
+                       reader->allowed_data, GetMatchContext ()) < 0)
         skip = 1;
 
     /* Test forbidden expression if available, skip if matched */
     if (reader->forbidden && !skip)
       if (pcre2_match (reader->forbidden, (PCRE2_SPTR8)spkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                       reader->forbidden_data, NULL) >= 0)
+                       reader->forbidden_data, GetMatchContext ()) >= 0)
         skip = 1;
 
     /* Test match expression if available, skip if NOT matched */
     if (reader->match && !skip)
       if (pcre2_match (reader->match, (PCRE2_SPTR8)spkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                       reader->match_data, NULL) < 0)
+                       reader->match_data, GetMatchContext ()) < 0)
         skip = 1;
 
     /* Test reject expression if available, skip if matched */
     if (reader->reject && !skip)
       if (pcre2_match (reader->reject, (PCRE2_SPTR8)spkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                       reader->reject_data, NULL) >= 0)
+                       reader->reject_data, GetMatchContext ()) >= 0)
         skip = 1;
 
     if (!skip)
@@ -1597,6 +1598,44 @@ UpdatePattern (pcre2_code **code, pcre2_match_data **data,
 } /* End of UpdatePattern() */
 
 /***************************************************************************
+ * GetMatchContext:
+ *
+ * Return a process-wide pcre2_match_context with conservative resource
+ * limits to prevent ReDoS from client-supplied regex patterns.  The
+ * context is initialised exactly once via pthread_once and is never freed
+ * (safe for process-lifetime use).
+ *
+ * Limits chosen:
+ *   match_limit  100000  – bounds interpreted backtrack steps per string
+ *   depth_limit  1000    – bounds recursion depth (catastrophic patterns)
+ *   heap_limit   1024    – KiB of JIT heap per match
+ *
+ * Returns the shared context pointer (never NULL after first call).
+ ***************************************************************************/
+static pcre2_match_context *global_match_context = NULL;
+static pthread_once_t match_context_once         = PTHREAD_ONCE_INIT;
+
+static void
+InitMatchContext (void)
+{
+  global_match_context = pcre2_match_context_create (NULL);
+
+  if (global_match_context)
+  {
+    pcre2_set_match_limit (global_match_context, 100000);
+    pcre2_set_depth_limit (global_match_context, 1000);
+    pcre2_set_heap_limit (global_match_context, 1024);
+  }
+} /* End of InitMatchContext() */
+
+pcre2_match_context *
+GetMatchContext (void)
+{
+  pthread_once (&match_context_once, InitMatchContext);
+  return global_match_context;
+} /* End of GetMatchContext() */
+
+/***************************************************************************
  * StreamStackNodeCmp:
  *
  * Compare two RingStream entries contained in two StackNode entries
@@ -1665,25 +1704,25 @@ GetStreamsStack (RingReader *reader)
       /* Test allowed expression if available, skip if NOT matched */
       if (reader->allowed)
         if (pcre2_match (reader->allowed, (PCRE2_SPTR8)stream->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                         reader->allowed_data, NULL) < 0)
+                         reader->allowed_data, GetMatchContext ()) < 0)
           continue;
 
       /* Test forbidden expression if available, skip if matched */
       if (reader->forbidden)
         if (pcre2_match (reader->forbidden, (PCRE2_SPTR8)stream->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                         reader->forbidden_data, NULL) >= 0)
+                         reader->forbidden_data, GetMatchContext ()) >= 0)
           continue;
 
       /* Test match expression if available, skip if NOT matched */
       if (reader->match)
         if (pcre2_match (reader->match, (PCRE2_SPTR8)stream->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                         reader->match_data, NULL) < 0)
+                         reader->match_data, GetMatchContext ()) < 0)
           continue;
 
       /* Test reject expression if available, skip if matched */
       if (reader->reject)
         if (pcre2_match (reader->reject, (PCRE2_SPTR8)stream->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
-                         reader->reject_data, NULL) >= 0)
+                         reader->reject_data, GetMatchContext ()) >= 0)
           continue;
     }
 

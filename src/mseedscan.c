@@ -488,13 +488,13 @@ ScanFiles (MSScanInfo *mssinfo, const char *targetdir, int level, time_t scantim
     /* Do regex matching if an expression was specified */
     if (mssinfo->fnmatch)
       if (pcre2_match (mssinfo->fnmatch, (PCRE2_SPTR8)ede->d_name, PCRE2_ZERO_TERMINATED, 0, 0,
-                       mssinfo->fnmatch_data, NULL) < 0)
+                       mssinfo->fnmatch_data, GetMatchContext ()) < 0)
         continue;
 
     /* Do regex rejecting if an expression was specified */
     if (mssinfo->fnreject)
       if (pcre2_match (mssinfo->fnreject, (PCRE2_SPTR8)ede->d_name, PCRE2_ZERO_TERMINATED, 0, 0,
-                       mssinfo->fnreject_data, NULL) >= 0)
+                       mssinfo->fnreject_data, GetMatchContext ()) >= 0)
         continue;
 
     /* Sanity check for a regular file */

@@ -77,6 +77,8 @@ static int GenerateStatus (ClientInfo *cinfo, const char *path, char **response,
 static int GenerateConnections (ClientInfo *cinfo, const char *path, const char *query,
                                 char **response, MediaType *type);
 static int SendFileHTTP (ClientInfo *cinfo, char *path);
+static int PathWithinWebroot (const char *webroot, size_t wrlen, const char *path);
+static void LogSanitize (char *dst, size_t dstsize, const char *src);
 static int NegotiateWebSocket (ClientInfo *cinfo, char *version,
                                char *upgradeHeader, char *connectionHeader,
                                char *secWebSocketKeyHeader, char *secWebSocketVersionHeader,
@@ -168,7 +170,6 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
   char *query       = NULL;
   char version[100] = {0};
   int headlen;
-  int fields;
   int nread;
   int rv;
 
@@ -183,24 +184,102 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
   char *value    = NULL;
   int responsebytes;
 
-  /* Parse HTTP request */
-  fields = sscanf (recvbuffer, "%9s %99s %99s", method, path, version);
+  /* Parse HTTP request line, rejecting over-long tokens.
+   * Per RFC 7230 the request line tokens are separated by a single SP. */
+  const char *p = recvbuffer;
+  const char *tok;
+  size_t toklen;
+
+  p += strspn (p, " ");
+  tok = p;
+  p += strcspn (p, " ");
+  toklen = (size_t)(p - tok);
+
+  if (toklen == 0)
+  {
+    char safereq[120];
+    LogSanitize (safereq, sizeof (safereq), recvbuffer);
+    lprintf (0, "[%s] Unrecognized HTTP request '%s'",
+             cinfo->hostname, safereq);
+    return -1;
+  }
+  if (toklen >= sizeof (method))
+  {
+    lprintf (0, "[%s] HTTP method too long (%zu bytes)",
+             cinfo->hostname, toklen);
+    headlen = GenerateHeader (cinfo, 501, UNSET, 0, "UNKNOWN", NULL);
+    if (headlen > 0)
+      SendData (cinfo, cinfo->sendbuf, headlen, 0);
+    return -1;
+  }
+  memcpy (method, tok, toklen);
+  method[toklen] = '\0';
+
+  p += strspn (p, " ");
+  tok = p;
+  p += strcspn (p, " ");
+  toklen = (size_t)(p - tok);
+
+  if (toklen == 0)
+  {
+    char safereq[120];
+    LogSanitize (safereq, sizeof (safereq), recvbuffer);
+    lprintf (0, "[%s] Unrecognized HTTP request '%s'",
+             cinfo->hostname, safereq);
+    return -1;
+  }
+  if (toklen >= sizeof (path))
+  {
+    lprintf (0, "[%s] HTTP request URI too long (%zu bytes)",
+             cinfo->hostname, toklen);
+    headlen = GenerateHeader (cinfo, 414, UNSET, 0, "URI Too Long", NULL);
+    if (headlen > 0)
+      SendData (cinfo, cinfo->sendbuf, headlen, 0);
+    return -1;
+  }
+  memcpy (path, tok, toklen);
+  path[toklen] = '\0';
+
+  p += strspn (p, " ");
+  tok = p;
+  p += strcspn (p, " ");
+  toklen = (size_t)(p - tok);
+
+  /* Require an HTTP version token; HTTP/0.9 requests are not supported */
+  if (toklen == 0)
+  {
+    char safereq[120];
+    LogSanitize (safereq, sizeof (safereq), recvbuffer);
+    lprintf (0, "[%s] Missing HTTP version in request '%s'",
+             cinfo->hostname, safereq);
+    headlen = GenerateHeader (cinfo, 400, UNSET, 0, "Bad Request", NULL);
+    if (headlen > 0)
+      SendData (cinfo, cinfo->sendbuf, headlen, 0);
+    return -1;
+  }
+  if (toklen >= sizeof (version))
+  {
+    lprintf (0, "[%s] HTTP version too long (%zu bytes)",
+             cinfo->hostname, toklen);
+    headlen = GenerateHeader (cinfo, 400, UNSET, 0, "Bad Request", NULL);
+    if (headlen > 0)
+      SendData (cinfo, cinfo->sendbuf, headlen, 0);
+    return -1;
+  }
+  memcpy (version, tok, toklen);
+  version[toklen] = '\0';
 
   /* Decode percent-encoding in path */
   urldecode (path, path);
 
-  if (fields < 2)
+  if (strcmp (method, "GET"))
   {
-    lprintf (0, "[%s] HandleHTTP unrecognized HTTP request '%s'",
-             cinfo->hostname, recvbuffer);
-    return -1;
-  }
-  else if (strcmp (method, "GET"))
-  {
+    char safemethod[sizeof (method)];
+    LogSanitize (safemethod, sizeof (safemethod), method);
     lprintf (0, "[%s] HandleHTTP unrecognized HTTP method '%s'",
-             cinfo->hostname, method);
+             cinfo->hostname, safemethod);
 
-    headlen = GenerateHeader (cinfo, 501, UNSET, 0, method, NULL);
+    headlen = GenerateHeader (cinfo, 501, UNSET, 0, safemethod, NULL);
 
     if (headlen > 0)
     {
@@ -214,47 +293,79 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     return -1;
   }
 
+  /* Copy a header value into a fixed-size destination, rejecting with a
+   * 431 response if the value would be truncated. */
+#define STORE_HEADER_VALUE(dst, value_ptr, header_name)                   \
+  do                                                                      \
+  {                                                                       \
+    size_t _vlen = strlen (value_ptr);                                    \
+    if (_vlen >= sizeof (dst))                                            \
+    {                                                                     \
+      lprintf (0, "[%s] HTTP %s header value too long (%zu bytes)",       \
+               cinfo->hostname, header_name, _vlen);                      \
+      headlen = GenerateHeader (cinfo, 431, UNSET, 0,                     \
+                                "Request Header Fields Too Large", NULL); \
+      if (headlen > 0)                                                    \
+        SendData (cinfo, cinfo->sendbuf, headlen, 0);                     \
+      return -1;                                                          \
+    }                                                                     \
+    memcpy ((dst), value_ptr, _vlen);                                     \
+    (dst)[_vlen] = '\0';                                                  \
+  } while (0)
+
   /* Consume all request headers, the empty line '\r\n' terminates */
+  int header_count = 0;
+  int header_bytes = 0;
   while ((nread = RecvLine (cinfo)) > 0)
   {
+    header_count++;
+    header_bytes += nread;
+
+    if (header_count > 100 || header_bytes > 16384)
+    {
+      lprintf (0, "[%s] HTTP request header limit exceeded (%d headers, %d bytes)",
+               cinfo->hostname, header_count, header_bytes);
+      headlen = GenerateHeader (cinfo, 431, UNSET, 0, "Request Header Fields Too Large", NULL);
+      if (headlen > 0)
+        SendData (cinfo, cinfo->sendbuf, headlen, 0);
+      return -1;
+    }
+
     if (ParseHeader (cinfo->recvbuf, &value))
     {
-      lprintf (0, "Error parsing HTTP header: '%s'", cinfo->recvbuf);
+      char safeheader[120];
+      LogSanitize (safeheader, sizeof (safeheader), cinfo->recvbuf);
+      lprintf (0, "Error parsing HTTP header: '%s'", safeheader);
       return -1;
     }
 
     /* Store values of selected headers */
     if (!strcasecmp (cinfo->recvbuf, "User-Agent"))
     {
-      strncpy (cinfo->clientid, value, sizeof (cinfo->clientid) - 1);
-      cinfo->clientid[sizeof (cinfo->clientid) - 1] = '\0';
+      STORE_HEADER_VALUE (cinfo->clientid, value, "User-Agent");
     }
     else if (!strcasecmp (cinfo->recvbuf, "Upgrade"))
     {
-      strncpy (upgradeHeader, value, sizeof (upgradeHeader) - 1);
-      upgradeHeader[sizeof (upgradeHeader) - 1] = '\0';
+      STORE_HEADER_VALUE (upgradeHeader, value, "Upgrade");
     }
     else if (!strcasecmp (cinfo->recvbuf, "Connection"))
     {
-      strncpy (connectionHeader, value, sizeof (connectionHeader) - 1);
-      connectionHeader[sizeof (connectionHeader) - 1] = '\0';
+      STORE_HEADER_VALUE (connectionHeader, value, "Connection");
     }
     else if (!strcasecmp (cinfo->recvbuf, "Sec-WebSocket-Key"))
     {
-      strncpy (secWebSocketKeyHeader, value, sizeof (secWebSocketKeyHeader) - 1);
-      secWebSocketKeyHeader[sizeof (secWebSocketKeyHeader) - 1] = '\0';
+      STORE_HEADER_VALUE (secWebSocketKeyHeader, value, "Sec-WebSocket-Key");
     }
     else if (!strcasecmp (cinfo->recvbuf, "Sec-WebSocket-Version"))
     {
-      strncpy (secWebSocketVersionHeader, value, sizeof (secWebSocketVersionHeader) - 1);
-      secWebSocketVersionHeader[sizeof (secWebSocketVersionHeader) - 1] = '\0';
+      STORE_HEADER_VALUE (secWebSocketVersionHeader, value, "Sec-WebSocket-Version");
     }
     else if (!strcasecmp (cinfo->recvbuf, "Sec-WebSocket-Protocol"))
     {
-      strncpy (secWebSocketProtocolHeader, value, sizeof (secWebSocketProtocolHeader) - 1);
-      secWebSocketProtocolHeader[sizeof (secWebSocketProtocolHeader) - 1] = '\0';
+      STORE_HEADER_VALUE (secWebSocketProtocolHeader, value, "Sec-WebSocket-Protocol");
     }
   }
+#undef STORE_HEADER_VALUE
 
   /* Error receiving data, -1 = orderly shutdown, -2 = error */
   if (nread < 0)
@@ -262,7 +373,9 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     return -1;
   }
 
-  lprintf (2, "[%s] Received HTTP request %.20s", cinfo->hostname, path);
+  char safepath[sizeof (path)];
+  LogSanitize (safepath, sizeof (safepath), path);
+  lprintf (2, "[%s] Received HTTP request %.20s", cinfo->hostname, safepath);
 
   WriteAccessLog (cinfo, "command", "GET", path, NULL, NULL);
 
@@ -308,7 +421,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     free (response);
 
-    return (rv) ? -1 : 0;
+    return (rv) ? -1 : 1;
   } /* Done with /id request */
   else if (!strcasecmp (path, "/streams") || !strcasecmp (path, "/streams/json") ||
            !strcasecmp (path, "/streamids"))
@@ -345,7 +458,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     free (response);
 
-    return (rv) ? -1 : 0;
+    return (rv) ? -1 : 1;
   } /* Done with /streams or /streamids request */
   else if (!strcasecmp (path, "/status") || !strcasecmp (path, "/status/json"))
   {
@@ -395,7 +508,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     free (response);
 
-    return (rv) ? -1 : 0;
+    return (rv) ? -1 : 1;
   } /* Done with /status request */
   else if (!strcasecmp (path, "/connections") || !strcasecmp (path, "/connections/json"))
   {
@@ -447,7 +560,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     free (response);
 
-    return (rv) ? -1 : 0;
+    return (rv) ? -1 : 1;
   } /* Done with /connections request */
   else if (!strcasecmp (path, "/seedlink"))
   {
@@ -500,6 +613,8 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     /* This is now a SeedLink client */
     cinfo->type = CLIENT_SEEDLINK;
+
+    return (cinfo->socketerr) ? -1 : 0;
   } /* Done with /seedlink request */
   else if (!strcasecmp (path, "/datalink"))
   {
@@ -552,15 +667,18 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
 
     /* This is now a DataLink client */
     cinfo->type = CLIENT_DATALINK;
+
+    return (cinfo->socketerr) ? -1 : 0;
   } /* Done with /datalink request */
   else
   {
-    lprintf (1, "[%s] Received HTTP request for %s", cinfo->hostname, path);
+    LogSanitize (safepath, sizeof (safepath), path);
+    lprintf (1, "[%s] Received HTTP request for %s", cinfo->hostname, safepath);
 
     /* Send file if webroot is configured */
     if ((rv = SendFileHTTP (cinfo, path)) >= 0)
     {
-      lprintf (2, "[%s] Sent %s (%d bytes)", cinfo->hostname, path, rv);
+      lprintf (2, "[%s] Sent %s (%d bytes)", cinfo->hostname, safepath, rv);
     }
     /* If favicon.ico was not found in the webroot, use built-in default */
     else if (!strcasecmp (path, "/favicon.ico"))
@@ -593,7 +711,8 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     }
   } /* Done with file system request */
 
-  return (cinfo->socketerr) ? -1 : 0;
+  /* All HTTP response paths (non-WebSocket) always disconnect */
+  return (cinfo->socketerr) ? -1 : 1;
 } /* End of HandleHTTP() */
 
 /***************************************************************************
@@ -837,9 +956,12 @@ RecvWSFrame (ClientInfo *cinfo, uint64_t *length)
       }
     }
 
-    /* Send Close frame in response, return the same payload */
+    /* Send Close frame in response, return the same payload.
+     * Narrowing *length (uint64_t) into onetwo[1] (uint8_t) is safe
+     * because *length <= 125 is enforced above; control frames are
+     * required by RFC 6455 to use the 7-bit length form. */
     onetwo[0] = 0x88; /* Opcode 0x8 plus the FIN bit */
-    onetwo[1] = *length;
+    onetwo[1] = (uint8_t)*length;
     SendData (cinfo, onetwo, 2, 1);
 
     if (*length > 0)
@@ -935,6 +1057,7 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
                         "HTTP/1.1 200 OK\r\n"
                         "Content-Length: %" PRIu64 "\r\n"
                         "Content-Type: %s\r\n"
+                        "Connection: close\r\n"
                         "%s"
                         "%s"
                         "\r\n",
@@ -993,7 +1116,9 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
                         (config.httpheaders) ? config.httpheaders : "",
                         (header) ? header : "");
   }
-  /* All other statuses with content */
+  /* All other statuses with content.
+   * Status 101 (WebSocket upgrade) must not advertise Connection: close
+   * because the connection continues as a WebSocket. */
   else if (contentlength > 0)
   {
     headlen = snprintf (cinfo->sendbuf, cinfo->sendbufsize,
@@ -1002,11 +1127,13 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
                         "Content-Type: %s\r\n"
                         "%s"
                         "%s"
+                        "%s"
                         "\r\n",
                         status,
                         (message) ? message : "Undefined message",
                         contentlength,
                         MediaTypes[type],
+                        (status == 101) ? "" : "Connection: close\r\n",
                         (config.httpheaders) ? config.httpheaders : "",
                         (header) ? header : "");
   }
@@ -1017,9 +1144,11 @@ GenerateHeader (ClientInfo *cinfo, int status, MediaType type,
                         "HTTP/1.1 %d %s\r\n"
                         "%s"
                         "%s"
+                        "%s"
                         "\r\n",
                         status,
                         (message) ? message : "Undefined message",
+                        (status == 101) ? "" : "Connection: close\r\n",
                         (config.httpheaders) ? config.httpheaders : "",
                         (header) ? header : "");
   }
@@ -1235,15 +1364,24 @@ GenerateStreams (ClientInfo *cinfo, const char *path, const char *query,
     free (json_string);
     root = yyjson_doc_get_root (json);
 
-    if ((stream_array = yyjson_obj_get (root, "stream")) != NULL)
+    if ((stream_array = yyjson_obj_get (root, "stream")) != NULL &&
+        (streamcount = yyjson_arr_size (stream_array)) > 0)
     {
-      streamcount = yyjson_arr_size (stream_array);
-
       /* Allocate stream list buffer with maximum expected:
-       * for /streamids output, maximum per entry is 60 characters + newline
-       * for /streams output, maximum per entry is 60 + 2x32 (time strings) plus a few spaces and newline */
-      streamlistsize = (just_ids) ? 64 : 124;
-      streamlistsize *= streamcount;
+       * for /streamids output, a stream ID (<MAXSTREAMID) + newline
+       * for /streams output, a stream ID + 2 timestamps + separators + newline */
+      size_t per_entry = (just_ids) ? (MAXSTREAMID + 2) : (MAXSTREAMID + 2 * 32 + 8);
+
+      /* Guard against size_t overflow in the per_entry * streamcount product */
+      if (streamcount > SIZE_MAX / per_entry)
+      {
+        lprintf (0, "[%s] Error for HTTP STREAM[ID]S (stream count %zu would overflow response size)",
+                 cinfo->hostname, streamcount);
+        yyjson_doc_free (json);
+        return -1;
+      }
+
+      streamlistsize = per_entry * streamcount;
 
       if (!(*response = (char *)malloc (streamlistsize)))
       {
@@ -1475,6 +1613,16 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
                           DASHNULL (yyjson_get_str (yyjson_obj_get (server, "latest_data_start"))),
                           DASHNULL (yyjson_get_str (yyjson_obj_get (server, "latest_data_end"))));
 
+      if (written < 0 || (size_t)(responsebytes + written) >= responsesize)
+      {
+        lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
+                 cinfo->hostname);
+        free (*response);
+        *response = NULL;
+        yyjson_doc_free (json);
+        return -1;
+      }
+
       writeptr += written;
       responsebytes += written;
 
@@ -1482,6 +1630,17 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
       {
         written = snprintf (writeptr, responsesize - responsebytes,
                             "\nServer threads:\n");
+
+        if (written < 0 || (size_t)(responsebytes + written) >= responsesize)
+        {
+          lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
+                   cinfo->hostname);
+          free (*response);
+          *response = NULL;
+          yyjson_doc_free (json);
+          return -1;
+        }
+
         writeptr += written;
         responsebytes += written;
 
@@ -1626,12 +1785,22 @@ GenerateConnections (ClientInfo *cinfo, const char *path, const char *query,
     free (json_string);
     root = yyjson_doc_get_root (json);
 
-    if ((client_array = yyjson_ptr_get (root, "/connections/client")) != NULL)
+    if ((client_array = yyjson_ptr_get (root, "/connections/client")) != NULL &&
+        (clientcount = yyjson_arr_size (client_array)) > 0)
     {
-      clientcount = yyjson_arr_size (client_array);
+      /* Allocate response buffer with maximum expected: 1024 bytes per client */
+      const size_t per_entry = 1024;
 
-      /* Allocate stream list buffer with maximum expected: 1024 bytes per client */
-      responsesize = clientcount * 1024;
+      /* Guard against size_t overflow in the per_entry * clientcount product */
+      if (clientcount > SIZE_MAX / per_entry)
+      {
+        lprintf (0, "[%s] Error for HTTP CONNECTIONS (client count %zu would overflow response size)",
+                 cinfo->hostname, clientcount);
+        yyjson_doc_free (json);
+        return -1;
+      }
+
+      responsesize = per_entry * clientcount;
 
       if (!(*response = (char *)malloc (responsesize)))
       {
@@ -1743,6 +1912,59 @@ GenerateConnections (ClientInfo *cinfo, const char *path, const char *query,
 } /* End of GenerateConnections() */
 
 /***************************************************************************
+ * PathWithinWebroot:
+ *
+ * Test whether a canonical path is contained within webroot.  The webroot
+ * argument is expected to already be canonicalized (as realpath() returns
+ * it) and without a trailing slash, except in the degenerate case where
+ * webroot itself is "/".
+ *
+ * Returns 1 if path is within webroot, 0 otherwise.
+ ***************************************************************************/
+static int
+PathWithinWebroot (const char *webroot, size_t wrlen, const char *path)
+{
+  if (strncmp (webroot, path, wrlen) != 0)
+    return 0;
+
+  if (path[wrlen] != '\0' &&
+      path[wrlen] != '/' &&
+      webroot[wrlen - 1] != '/')
+    return 0;
+
+  return 1;
+} /* End of PathWithinWebroot() */
+
+/***************************************************************************
+ * LogSanitize:
+ *
+ * Copy src into dst replacing any byte unsafe for plain-text log output
+ * (controls, DEL, non-ASCII) with '?'.  Prevents log injection via CR/LF
+ * and terminal-escape sequences from attacker-controlled strings such as
+ * percent-decoded request paths.  Always NUL-terminates dst when dstsize
+ * is non-zero.
+ ***************************************************************************/
+static void
+LogSanitize (char *dst, size_t dstsize, const char *src)
+{
+  size_t o = 0;
+
+  if (dst == NULL || dstsize == 0)
+    return;
+
+  if (src != NULL)
+  {
+    for (size_t i = 0; src[i] != '\0' && o + 1 < dstsize; i++)
+    {
+      unsigned char c = (unsigned char)src[i];
+      dst[o++]        = (c >= 0x20 && c < 0x7F) ? (char)c : '?';
+    }
+  }
+
+  dst[o] = '\0';
+} /* End of LogSanitize() */
+
+/***************************************************************************
  * SendFileHTTP:
  *
  * Send file specified by path via HTTP.  If path is a directory check
@@ -1755,13 +1977,14 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
 {
   FILE *fp = NULL;
   struct stat filestat;
-  MediaType type  = RAW;
-  char *webpath   = NULL;
-  char *filename  = NULL;
-  char *indexfile = NULL;
-  char *cp        = NULL;
-  char filebuffer[65535];
-  char webroot[PATH_MAX] = {0};
+  MediaType type               = RAW;
+  char *webpath                = NULL;
+  char *filename               = NULL;
+  char *indexfile              = NULL;
+  char *cp                     = NULL;
+  char *filebuffer             = NULL;
+  const size_t filebuffer_size = 16384;
+  char webroot[PATH_MAX]       = {0};
   size_t length;
   size_t wrlen;
   int rv = -1;
@@ -1795,18 +2018,17 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   {
     /* Only print log message if not the special value of favicon.ico */
     if (strcasecmp (path, "/favicon.ico"))
-      lprintf (0, "Error resolving path to requested file: %s/%s", webroot, path);
+    {
+      char safepath[PATH_MAX];
+      LogSanitize (safepath, sizeof (safepath), path);
+      lprintf (0, "Error resolving path to requested file: %s/%s", webroot, safepath);
+    }
     return -1;
   }
 
-  /* Sanity check that file is within web root.
-   * webroot is canonicalized by realpath() at config time so it has no
-   * trailing slash except in the degenerate case webroot == "/". */
+  /* Sanity check that file is within web root */
   wrlen = strlen (webroot);
-  if (strncmp (webroot, filename, wrlen) != 0 ||
-      (filename[wrlen] != '\0' &&
-       filename[wrlen] != '/' &&
-       webroot[wrlen - 1] != '/'))
+  if (!PathWithinWebroot (webroot, wrlen, filename))
   {
     lprintf (0, "Refusing to send file outside of WebRoot: %s", filename);
     goto cleanup;
@@ -1815,15 +2037,33 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   if (stat (filename, &filestat))
     goto cleanup;
 
-  /* If directory and check for index.html */
+  /* If directory, resolve and serve index.html from within */
   if (S_ISDIR (filestat.st_mode))
   {
+    char *resolved_index;
+
     if (asprintf (&indexfile, "%s/index.html", filename) < 0)
       goto cleanup;
 
     free (filename);
-    filename  = indexfile;
+    filename = NULL;
+
+    /* Canonicalize the index path so any symlink pointing outside
+     * WebRoot is caught by the containment check below. */
+    resolved_index = realpath (indexfile, NULL);
+    free (indexfile);
     indexfile = NULL;
+
+    if (resolved_index == NULL)
+      goto cleanup;
+
+    filename = resolved_index;
+
+    if (!PathWithinWebroot (webroot, wrlen, filename))
+    {
+      lprintf (0, "Refusing to send index file outside of WebRoot: %s", filename);
+      goto cleanup;
+    }
 
     if (stat (filename, &filestat))
       goto cleanup;
@@ -1875,7 +2115,16 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   /* Send header and file */
   SendData (cinfo, cinfo->sendbuf, length, 0);
 
-  while ((length = fread (filebuffer, 1, sizeof (filebuffer), fp)) > 0)
+  filebuffer = malloc (filebuffer_size);
+  if (filebuffer == NULL)
+  {
+    lprintf (0, "Error allocating %zu byte file buffer", filebuffer_size);
+    fclose (fp);
+    fp = NULL;
+    goto cleanup;
+  }
+
+  while ((length = fread (filebuffer, 1, filebuffer_size, fp)) > 0)
   {
     if (SendData (cinfo, filebuffer, length, 0))
       break;
@@ -1890,6 +2139,7 @@ cleanup:
   if (fp)
     fclose (fp);
   free (filename);
+  free (filebuffer);
 
   return rv;
 } /* End of SendFileHTTP() */
@@ -1939,6 +2189,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
     if (responsebytes < 0)
     {
       lprintf (0, "Cannot allocate memory for response (wrong protocol)");
+      response      = NULL;
       responsebytes = 0;
     }
 
@@ -1971,6 +2222,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
     if (responsebytes < 0)
     {
       lprintf (0, "Cannot allocate memory for response (wrong Update)");
+      response      = NULL;
       responsebytes = 0;
     }
 
@@ -2003,6 +2255,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
     if (responsebytes < 0)
     {
       lprintf (0, "Cannot allocate memory for response (wrong Connection)");
+      response      = NULL;
       responsebytes = 0;
     }
 
@@ -2035,6 +2288,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
     if (responsebytes < 0)
     {
       lprintf (0, "Cannot allocate memory for response (wrong Sec-WebSocket-Version)");
+      response      = NULL;
       responsebytes = 0;
     }
 
@@ -2057,7 +2311,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
     return -1;
   }
 
-  if (!secWebSocketKeyHeader)
+  if (!secWebSocketKeyHeader || !*secWebSocketKeyHeader)
   {
     responsebytes = asprintf (&response,
                               "The Sec-WebSocket-Key header is required\n");
@@ -2065,6 +2319,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
     if (responsebytes < 0)
     {
       lprintf (0, "Cannot allocate memory for response (missing Sec-WebSocket-Key)");
+      response      = NULL;
       responsebytes = 0;
     }
 
@@ -2122,6 +2377,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   if (responsebytes < 0)
   {
     lprintf (0, "Cannot allocate memory for response (WebSocket upgrade)");
+    response      = NULL;
     responsebytes = 0;
   }
 
@@ -2159,8 +2415,14 @@ apr_base64_encode_binary (char *encoded, const unsigned char *string, int len)
   int i;
   char *p;
 
+  if (len < 0)
+    len = 0;
+
   p = encoded;
-  for (i = 0; i < len - 2; i += 3)
+  /* Written as i + 3 <= len rather than the upstream APR form i < len - 2
+   * so the condition is well-defined for len < 2 and also safe if len is
+   * ever widened to an unsigned type in the future (len - 2 would wrap). */
+  for (i = 0; i + 3 <= len; i += 3)
   {
     *p++ = basis_64[(string[i] >> 2) & 0x3F];
     *p++ = basis_64[((string[i] & 0x3) << 4) |

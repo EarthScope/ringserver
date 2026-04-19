@@ -1,4 +1,6 @@
 2026.108:
+	- Significant hardening of HTTP handling of user input.
+	- Add per-call PCRE2 match context with limits for client-supplied regex patterns.
 	- Fix multiple edge case failures, on OOM or esoteric/malicious usage.
 	- Fix race condition where ClientInfo could be dereferenced during client cleanup.
 	- Fix sending success-indicating "OK" on internal lookup error.
