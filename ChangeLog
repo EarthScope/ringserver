@@ -1,4 +1,10 @@
-2026.108:
+2026.109:
+	- Add TCPKeepAliveIdle, TCPKeepAliveInterval, and TCPKeepAliveCount config options
+	  to enable TCP keepalive probing on accepted client sockets.  Enabled by default
+	  with 60s idle / 30s interval / 4 probes; dead peers are detected within ~3 min.
+	  Set TCPKeepAliveIdle to 0 to disable.  Settable via RS_TCP_KEEPALIVE_IDLE,
+	  RS_TCP_KEEPALIVE_INTERVAL, RS_TCP_KEEPALIVE_COUNT environment variables.
+	  Note: this is a behavior change from previous versions.
 	- Significant hardening of HTTP handling of user input.
 	- Fix multiple edge case failures, on OOM or esoteric/malicious usage.
 	- Add per-call PCRE2 match context with limits for client-supplied regex patterns.
@@ -10,6 +16,7 @@
 	- Protect against <= 0 values for UsageLogInterval.
 	- Avoid negative values in Content-Length HTTP response headers.
 	- Protect ring reads against corrupt/truncated ring buffers.
+	- Document VolatileRing/RS_VOLATILE_RING config option.
 
 2026.083: v4.4.0
 	- Rename transfer logging options to usage logging, old options still supported.

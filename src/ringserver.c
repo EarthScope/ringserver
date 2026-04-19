@@ -25,6 +25,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <netinet/tcp.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -101,9 +102,12 @@ struct config_s config = {
     .pktsize             = sizeof (RingPacket) + 512,
     .maxclients          = 600,
     .maxclientsperip     = 0,
-    .clienttimeout       = 3600,
-    .netiotimeout        = 10,
-    .timewinlimit        = 1.0,
+    .clienttimeout          = 3600,
+    .netiotimeout           = 10,
+    .tcpkeepalive_idle      = 60,
+    .tcpkeepalive_interval  = 30,
+    .tcpkeepalive_count     = 4,
+    .timewinlimit           = 1.0,
     .resolvehosts        = 1,
     .memorymapring       = 1,
     .volatilering        = 0,
@@ -875,6 +879,51 @@ FreeClientInfo (ClientInfo *cinfo)
 }
 
 /***********************************************************************
+ * ConfigureTCPKeepAlive:
+ *
+ * Apply TCP keepalive socket options to an accepted client socket using
+ * the current config.tcpkeepalive_* values.  A value of 0 for
+ * tcpkeepalive_idle disables keepalives entirely and is a no-op.
+ *
+ * TCP_KEEPINTVL and TCP_KEEPCNT are set only when the platform supports
+ * them; the #ifdef guards are compile-time.
+ ***********************************************************************/
+static void
+ConfigureTCPKeepAlive (int sock, const char *peer)
+{
+  uint32_t idle  = config.tcpkeepalive_idle;
+  uint32_t intvl = config.tcpkeepalive_interval;
+  uint32_t cnt   = config.tcpkeepalive_count;
+  int one        = 1;
+
+  if (idle == 0)
+    return;
+
+  if (setsockopt (sock, SOL_SOCKET, SO_KEEPALIVE, &one, sizeof (one)))
+    lprintf (0, "[%s] setsockopt(SO_KEEPALIVE): %s", peer, strerror (errno));
+
+#if defined(TCP_KEEPIDLE)
+  if (setsockopt (sock, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof (idle)))
+    lprintf (0, "[%s] setsockopt(TCP_KEEPIDLE): %s", peer, strerror (errno));
+#elif defined(TCP_KEEPALIVE) /* macOS uses TCP_KEEPALIVE for the idle interval */
+  if (setsockopt (sock, IPPROTO_TCP, TCP_KEEPALIVE, &idle, sizeof (idle)))
+    lprintf (0, "[%s] setsockopt(TCP_KEEPALIVE): %s", peer, strerror (errno));
+#endif
+
+#if defined(TCP_KEEPINTVL)
+  if (intvl > 0 &&
+      setsockopt (sock, IPPROTO_TCP, TCP_KEEPINTVL, &intvl, sizeof (intvl)))
+    lprintf (0, "[%s] setsockopt(TCP_KEEPINTVL): %s", peer, strerror (errno));
+#endif
+
+#if defined(TCP_KEEPCNT)
+  if (cnt > 0 &&
+      setsockopt (sock, IPPROTO_TCP, TCP_KEEPCNT, &cnt, sizeof (cnt)))
+    lprintf (0, "[%s] setsockopt(TCP_KEEPCNT): %s", peer, strerror (errno));
+#endif
+} /* End of ConfigureTCPKeepAlive() */
+
+/***********************************************************************
  * ListenThread:
  *
  * Thread to accept connections and dispatch client threads.
@@ -971,6 +1020,9 @@ ListenThread (void *arg)
     }
 
     lprintf (2, "Incoming connection on port %s from %s:%s", lpp->portstr, ipstr, portstr);
+
+    /* Apply TCP keepalive socket options for dead-peer detection */
+    ConfigureTCPKeepAlive (clientsocket, ipstr);
 
     /* Configure client connection */
     pthread_rwlock_rdlock (&config.config_rwlock);
@@ -1636,6 +1688,10 @@ LogServerParameters (void)
   lprintf (2, "   configuration file: %s", (config.configfile) ? config.configfile : "NONE");
   lprintf (2, "   client timeout: %u seconds", config.clienttimeout);
   lprintf (2, "   network I/O timeout: %u seconds", config.netiotimeout);
+  lprintf (2, "   TCP keepalive idle: %u seconds%s", config.tcpkeepalive_idle,
+           (config.tcpkeepalive_idle == 0) ? " (disabled)" : "");
+  lprintf (2, "   TCP keepalive interval: %u seconds", config.tcpkeepalive_interval);
+  lprintf (2, "   TCP keepalive count: %u", config.tcpkeepalive_count);
   lprintf (2, "   time window limit: %.0f%%", config.timewinlimit * 100);
   lprintf (2, "   resolve hostnames: %s", (config.resolvehosts) ? "yes" : "no");
   lprintf (2, "   auto recovery: %u", config.autorecovery);

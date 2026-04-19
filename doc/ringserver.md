@@ -39,11 +39,11 @@ ringserver [options] [configfile]
 
 <p >Usage logs can optionally be written to track server activity.  Transfer logs (TX/RX) record the number of data packet bytes of each unique stream transferred to or from each client connection.  Access logs record connection events and key commands (connect, disconnect, INFO requests, data streaming starts, and HTTP requests) in JSON Lines format.</p>
 
-<p >The server supports streaming data with multiple protocols: SeedLink, DataLink, HTTP with WebSocket.  The server can listen on multiple network ports, and each port can be configured to support any combination of the protocols. See <b>Multi-protocol support</b> for more information.</p>
+<p >The server supports streaming data with multiple protocols: SeedLink, DataLink, HTTP with WebSocket.  The server can listen on multiple network ports, and each port can be configured to support any combination of the protocols. See <b>Multi-protocol Support</b> for more information.</p>
 
 <p >The server also has limited support for simple HTTP requests.  When support is enabled, server status, stream lists and other details can be accessed with simple HTTP requests. See <b>HTTP Support</b> for more details.</p>
 
-<p >The dalitool(1) and slinktool(1)  programs can be used to query the ringserver for various information via the DataLink and SeedLink interfaces respectively.  The dalitool program was developed in parallel with ringserver and the DataLink protocol and is the recommended query tool for ringserver admins.</p>
+<p >The dalitool(1) and slinktool(1) programs can be used to query the ringserver for various information via the DataLink and SeedLink interfaces respectively.  The dalitool program was developed in parallel with ringserver and the DataLink protocol and is the recommended query tool for ringserver admins.</p>
 
 ## <a id='options'>Options</a>
 
@@ -137,7 +137,7 @@ ringserver [options] [configfile]
 
 <b>-VOLATILE</b>
 
-<p style="padding-left: 30px;">Create a volatile (non-stateful) ring buffer, in other words do not read packet buffer contents from ring files on startup or write them on shutdown.  This is useful in combination with the -MSWRITE option when no stateful buffer is needed.</p>
+<p style="padding-left: 30px;">Create a volatile (non-stateful) ring buffer. Do not read or write packet buffer contents from ring files.  This is useful in combination with the -MSWRITE option when no stateful buffer is needed or scenarios where the buffer is not needed after a restart.</p>
 
 ## <a id='config-file-parameters'>Config File Parameters</a>
 
@@ -466,4 +466,4 @@ EarthScope Data Services
 </pre>
 
 
-(man page 2026/03/21)
+(man page 2026/04/19)

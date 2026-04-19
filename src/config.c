@@ -217,6 +217,20 @@ static const char *reference_config_file_parts[] = {
     "#NetIOTimeout 10\n"
     "\n"
     "\n",
+    "# Specify TCP keepalive options to keep connections alive during idle periods\n"
+    "# and detect dead connections more quickly.  Set TCPKeepAliveIdle to 0 to disable.\n"
+    "# TCPKeepAliveIdle: Seconds of idle time before sending probes.\n"
+    "# TCPKeepAliveInterval: Seconds between probes (ignored where unsupported)\n"
+    "# TCPKeepAliveCount: Number of failed probes before disconnecting (ignored where unsupported)\n"
+    "# These are dynamic parameters, but only apply to new connections.\n"
+    "# Equivalent environment variables: RS_TCP_KEEPALIVE_IDLE,\n"
+    "#   RS_TCP_KEEPALIVE_INTERVAL, RS_TCP_KEEPALIVE_COUNT\n"
+    "\n"
+    "#TCPKeepAliveIdle 60\n"
+    "#TCPKeepAliveInterval 30\n"
+    "#TCPKeepAliveCount 4\n"
+    "\n"
+    "\n",
     "# Control the usage of memory mapping of the ring packet buffer.  If\n"
     "# this parameter is 1 (or not defined) the packet buffer will be\n"
     "# memory-mapped directly from the packet buffer file, otherwise it\n"
@@ -228,6 +242,17 @@ static const char *reference_config_file_parts[] = {
     "# Equivalent environment variable: RS_MEMORY_MAP_RING\n"
     "\n"
     "#MemoryMapRing 1\n"
+    "\n"
+    "\n",
+    "# Operate the ring packet buffer in volatile (non-stateful) mode.\n"
+    "# When enabled, packet and stream buffer contents are not read from\n"
+    "# or written to disk; the buffer exists only in memory for the life\n"
+    "# of the server process.  Useful when in any scenario where buffer\n"
+    "# state is not needed across restarts.  If enabled, RingDirectory is\n"
+    "# not required.\n"
+    "# Equivalent environment variable: RS_VOLATILE_RING\n"
+    "\n"
+    "#VolatileRing 1\n"
     "\n"
     "\n",
     "# Control auto-recovery after corruption detection.  Be default if\n"
@@ -1096,6 +1121,30 @@ ReadEnvironmentVariables (void)
   if ((envvar = getenv ("RS_NETIO_TIMEOUT")) && strcasecmp (envvar, "DISABLE"))
   {
     snprintf (paramstr, sizeof (paramstr), "NetIOTimeout %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_TCP_KEEPALIVE_IDLE")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "TCPKeepAliveIdle %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_TCP_KEEPALIVE_INTERVAL")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "TCPKeepAliveInterval %s", envvar);
+    if (SetParameter (paramstr, 0) <= 0)
+      return -1;
+    count++;
+  }
+
+  if ((envvar = getenv ("RS_TCP_KEEPALIVE_COUNT")) && strcasecmp (envvar, "DISABLE"))
+  {
+    snprintf (paramstr, sizeof (paramstr), "TCPKeepAliveCount %s", envvar);
     if (SetParameter (paramstr, 0) <= 0)
       return -1;
     count++;
@@ -2095,6 +2144,36 @@ SetParameter (const char *paramstring, int dynamiconly)
     }
 
     config.netiotimeout = u32val;
+  }
+  else if (!strcasecmp ("TCPKeepAliveIdle", field[0]) && fieldcount == 2)
+  {
+    if (sscanf (field[1], "%" SCNu32, &u32val) != 1)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    config.tcpkeepalive_idle = u32val;
+  }
+  else if (!strcasecmp ("TCPKeepAliveInterval", field[0]) && fieldcount == 2)
+  {
+    if (sscanf (field[1], "%" SCNu32, &u32val) != 1)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    config.tcpkeepalive_interval = u32val;
+  }
+  else if (!strcasecmp ("TCPKeepAliveCount", field[0]) && fieldcount == 2)
+  {
+    if (sscanf (field[1], "%" SCNu32, &u32val) != 1)
+    {
+      lprintf (0, "Error with %s config parameter: %s", field[0], paramstring);
+      return -1;
+    }
+
+    config.tcpkeepalive_count = u32val;
   }
   else if (!strcasecmp ("ResolveHostnames", field[0]) && fieldcount == 2)
   {

@@ -192,8 +192,11 @@ struct config_s
   uint32_t pktsize;               /* Ring packet size */
   _Atomic uint32_t maxclients;    /* Enforce maximum number of clients */
   _Atomic uint32_t maxclientsperip; /* Enforce maximum number of clients per IP */
-  _Atomic uint32_t clienttimeout;   /* Idle client threshold in seconds, then disconnect */
+  _Atomic uint32_t clienttimeout; /* Idle client threshold in seconds, then disconnect */
   _Atomic uint32_t netiotimeout;  /* Network I/O timeout in seconds, then disconnect */
+  _Atomic uint32_t tcpkeepalive_idle;     /* TCP keepalive idle seconds before probing, 0 disables */
+  _Atomic uint32_t tcpkeepalive_interval; /* TCP keepalive probe interval seconds (platform-dependent) */
+  _Atomic uint32_t tcpkeepalive_count;    /* TCP keepalive probe count before disconnect (platform-dependent) */
   _Atomic float timewinlimit;     /* Time window search limit in percent */
   _Atomic uint8_t resolvehosts;   /* Flag to control resolving of client hostnames */
   uint8_t memorymapring;          /* Flag to control mmap'ing of packet buffer */

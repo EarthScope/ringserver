@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2026/03/21
+.TH RINGSERVER 1 2026/04/19
 .SH NAME
 ringserver \- stream oriented packet ring buffer
 
@@ -57,14 +57,14 @@ The server supports streaming data with multiple protocols: SeedLink,
 DataLink, HTTP with WebSocket.  The server can listen on multiple
 network ports, and each port can be configured to support any combination
 of the protocols.
-See \fBMulti-protocol support\fP for more information.
+See \fBMulti-protocol Support\fP for more information.
 
 The server also has limited support for simple HTTP requests.  When
 support is enabled, server status, stream lists and other details can
 be accessed with simple HTTP requests.
 See \fBHTTP Support\fP for more details.
 
-The dalitool(1) and slinktool(1)  programs can be used to query the
+The dalitool(1) and slinktool(1) programs can be used to query the
 ringserver for various information via the DataLink and SeedLink
 interfaces respectively.  The dalitool program was developed in
 parallel with ringserver and the DataLink protocol and is the
@@ -189,10 +189,10 @@ StateFile suboption is highly recommended.
 See \fBminiSEED Scanning\fP for more details.
 
 .IP "-VOLATILE"
-Create a volatile (non-stateful) ring buffer, in other words do not
-read packet buffer contents from ring files on startup or write them
-on shutdown.  This is useful in combination with the -MSWRITE option
-when no stateful buffer is needed.
+Create a volatile (non-stateful) ring buffer. Do not read or write
+packet buffer contents from ring files.  This is useful in combination
+with the -MSWRITE option when no stateful buffer is needed or scenarios
+where the buffer is not needed after a restart.
 
 .SH "Config file parameters"
 All of the command line parameters have config file and environment
