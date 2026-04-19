@@ -1116,6 +1116,14 @@ HandleNegotiation (ClientInfo *cinfo)
       }
       else
       {
+        /* Send the reply first; only link the selector into the station's
+         * list if the reply succeeds */
+        if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
+        {
+          free (newselector);
+          return -1;
+        }
+
         /* Add selector to the station ID selectors */
         /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
         if (selector[0] == '!' && stationid->selectors != NULL)
@@ -1133,17 +1141,19 @@ HandleNegotiation (ClientInfo *cinfo)
           newselector->next    = stationid->selectors;
           stationid->selectors = newselector;
         }
-
-        if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
-        {
-          free (newselector);
-          return -1;
-        }
       }
     }
     /* Otherwise add selector to global list */
     else if (OKGO)
     {
+      /* Send the reply first; only link the selector into the global list
+       * if the reply succeeds. */
+      if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
+      {
+        free (newselector);
+        return -1;
+      }
+
       /* Add selector to the global selectors */
       /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
       if (selector[0] == '!' && slinfo->selectors != NULL)
@@ -1160,12 +1170,6 @@ HandleNegotiation (ClientInfo *cinfo)
       {
         newselector->next = slinfo->selectors;
         slinfo->selectors = newselector;
-      }
-
-      if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
-      {
-        free (newselector);
-        return -1;
       }
     }
   } /* End of SELECT */

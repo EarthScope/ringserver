@@ -1581,6 +1581,15 @@ UpdatePattern (pcre2_code **code, pcre2_match_data **data,
     }
 
     *data = pcre2_match_data_create_from_pattern (*code, NULL);
+
+    if (*data == NULL)
+    {
+      lprintf (0, "%s(): Error allocating match data for %s expression",
+               __func__, (description ? description : ""));
+      pcre2_code_free (*code);
+      *code = NULL;
+      return -1;
+    }
   }
   /* If no pattern, clear any existing regex */
   else

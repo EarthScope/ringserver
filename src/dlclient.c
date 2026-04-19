@@ -946,6 +946,7 @@ HandleWrite (ClientInfo *cinfo)
 
         SendPacket (cinfo, "ERROR", "Error writing miniSEED to disk", 0, 1, 1);
 
+        msr3_free (&msr);
         return -1;
       }
 

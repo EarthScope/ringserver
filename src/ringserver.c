@@ -895,8 +895,8 @@ ListenThread (void *arg)
 
   struct sockaddr_storage addr_storage;
   struct sockaddr *paddr = (struct sockaddr *)&addr_storage;
-  socklen_t addrlen      = sizeof (addr_storage);
-  int one                = 1;
+  socklen_t addrlen;
+  int one = 1;
 
   uint16_t proxy_dest_port = 0;
 
@@ -917,6 +917,8 @@ ListenThread (void *arg)
   /* Enter connection dispatch loop, spawning a new thread for each incoming connection */
   while (!param.shutdownsig)
   {
+    addrlen = sizeof (addr_storage);
+
     /* Process next connection in queue */
     clientsocket = accept (lpp->socket, paddr, &addrlen);
 

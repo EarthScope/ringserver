@@ -736,6 +736,10 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
   if (match_data)
     pcre2_match_data_free (match_data);
 
+  /* Return NULL on any build error so the caller can report the failure */
+  if (error)
+    return NULL;
+
   return doc;
 }
 
@@ -783,6 +787,7 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
   nsnow = NSnow ();
 
   int match_limit_logged = 0;
+  int error              = 0;
 
   /* List connections, lock client list while looping */
   pthread_mutex_lock (&param.cthreads_lock);
@@ -908,6 +913,7 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
       if (!stack)
       {
         lprintf (0, "[%s] Error allocating memory for station stack", cinfo->hostname);
+        error = 1;
         break;
       }
 
@@ -1009,6 +1015,10 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
     pcre2_code_free (match_code);
   if (match_data)
     pcre2_match_data_free (match_data);
+
+  /* Return NULL on any build error so the caller can report the failure */
+  if (error)
+    return NULL;
 
   return doc;
 }
