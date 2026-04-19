@@ -1,4 +1,4 @@
-2026.109:
+2026.109: v4.4.1
 	- Add TCPKeepAliveIdle, TCPKeepAliveInterval, and TCPKeepAliveCount config options
 	  to enable TCP keepalive probing on accepted client sockets.  Enabled by default
 	  with 60s idle / 30s interval / 4 probes; dead peers are detected within ~3 min.
