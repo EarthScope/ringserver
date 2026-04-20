@@ -1053,7 +1053,7 @@ HandleNegotiation (ClientInfo *cinfo)
       }
       else if (strlen (v3selector) == 3)
       {
-        snprintf (newselector, sizeof (newselector), "%s??_%c_%c_%c",
+        snprintf (newselector, sizeof (newselector), "%s*_%c_%c_%c",
                   negate, v3selector[0], v3selector[1], v3selector[2]);
       }
       else
@@ -1067,7 +1067,8 @@ HandleNegotiation (ClientInfo *cinfo)
         OKGO = 0;
       }
 
-      memcpy (selector, newselector, sizeof (selector));
+      if (OKGO)
+        memcpy (selector, newselector, sizeof (selector));
     }
 
     /* Sanity check, only allowed characters */
@@ -2186,14 +2187,30 @@ GetReqStationID (RBTree *tree, char *staid)
   return stationid;
 } /* End of GetReqStationID() */
 
-/***************************************************************************
- * StationToRegex:
- *
- * Update match and reject regexes for the specified station ID
- * and (comma delimited) selector list.
- *
- * Return 0 on success and -1 on error.
- ***************************************************************************/
+///////////////////////////////////////////////////////////////////////////////
+// StationToRegex:
+//
+// Update match and reject regexes for the specified station ID
+// and (comma delimited) selector list.
+//
+// The match regex is a logical OR of all the selectors in the selector list.
+// The reject regex is a logical AND of all the selectors in the selector list.
+//
+// Station & Selector mapping to Regex patterns:
+// ---------------------------------------------
+// Station ID | Selector    | Regex       | pattern
+// ---------------------------------------------
+// XX_STA     | <NULL>      | matchregex  | FDSN:XX_STA_.*/MSEED3?$
+// XX_*       | <NULL>      | matchregex  | FDSN:XX_.*_.*/MSEED3?$
+// XX_STA     | *_B_H_?     | matchregex  | FDSN:XX_STA_.*_B_H_./MSEED3?$
+// XX_S??     | *_B_H_?     | matchregex  | FDSN:XX_S.._.*_B_H_./MSEED3?$
+// XX_STA     | 00_B_H_*    | matchregex  | FDSN:XX_STA_00_B_H_.*/MSEED3?$
+// XX_STA     | 100_G_SR_D  | matchregex  | FDSN:XX_STA_100_G_SR_D/MSEED3?$
+// XX_STA     | !*_B_H_?    | rejectregex | FDSN:XX_STA_.*_B_H_./MSEED3?$
+// XX_S*      | !*_?_H_?    | rejectregex | FDSN:XX_S.*_.*_._H_./MSEED3?$
+//
+// Return 0 on success and -1 on error.
+///////////////////////////////////////////////////////////////////////////////
 static int
 StationToRegex (const char *staid, Selector *selector,
                 char **matchregex, char **rejectregex)

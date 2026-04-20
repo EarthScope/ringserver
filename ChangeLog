@@ -1,3 +1,7 @@
+2026.110:
+	- Fix SeedLink v3 matching of empty location codes when selectors are used.
+  Thank you to @Ale77m for reporting.
+
 2026.109: v4.4.1
 	- Add TCPKeepAliveIdle, TCPKeepAliveInterval, and TCPKeepAliveCount config options
 	  to enable TCP keepalive probing on accepted client sockets.  Enabled by default
