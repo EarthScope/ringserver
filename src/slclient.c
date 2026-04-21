@@ -69,9 +69,10 @@
 #include "ringserver.h"
 #include "slclient.h"
 
-/* Define list of valid characters for selectors and station & network codes */
+/* Define list of valid characters for selectors, labels and station IDs */
 #define VALIDSELECTCHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_-!"
-#define VALIDSTAIDCHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_"
+#define VALIDLABELCHARS  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_-"
+#define VALIDSTAIDCHARS  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789?*_"
 
 /* Define the number of no-action loops that trigger the throttle */
 #define THROTTLE_TRIGGER 10
@@ -91,7 +92,7 @@ static ReqStationID *GetReqStationID (RBTree *tree, char *staid);
 static int StationToRegex (const char *staid, Selector *selector,
                            char **matchregex, char **rejectregex);
 static int SelectToRegex (const char *staid, const char *select,
-                          char **regex);
+                          const char *label, char **regex);
 
 /***********************************************************************
  * SLHandleCmd:
@@ -402,9 +403,10 @@ SLFindFilter (const SLInfo *slinfo, const char *streamid)
   ReqStationID *reqstaid;
   RBNode *rbnode;
   Stack *stack;
-  char *stationid = NULL;
-  char *selectid  = NULL;
-  char *ptr       = NULL;
+  char *stationid   = NULL;
+  char *selectid    = NULL;
+  char *streamlabel = NULL;
+  char *ptr         = NULL;
 
   if (!slinfo || !streamid)
     return CONVERT_NONE;
@@ -415,8 +417,9 @@ SLFindFilter (const SLInfo *slinfo, const char *streamid)
 
   snprintf (privateid, sizeof (privateid), "%s", streamid);
 
-  /* Decompose FDSN Source ID into SeedLink station and select IDs by
-   * extracting "NET_STA" and "LOC_B_S_SS" from "FDSN:NET_STA_LOC_B_S_SS/MSEED" */
+  /* Decompose FDSN Source ID into SeedLink station, select, and optional label by
+   * extracting "NET_STA", "LOC_B_S_SS", and optional "LABEL" from
+   * "FDSN:NET_STA_LOC_B_S_SS/MSEED[3][/LABEL]" */
   if ((ptr = strchr (privateid, ':')))
   {
     stationid = ptr + 1;
@@ -428,8 +431,15 @@ SLFindFilter (const SLInfo *slinfo, const char *streamid)
         selectid = ptr + 1;
         *ptr     = '\0';
 
+        /* Find the first '/' which separates select ID from format (/MSEED or /MSEED3) */
         if ((ptr = strchr (selectid, '/')))
+        {
           *ptr = '\0';
+
+          /* Find a second '/' which separates format from optional label */
+          if ((ptr = strchr (ptr + 1, '/')))
+            streamlabel = ptr + 1;
+        }
       }
     }
   }
@@ -454,15 +464,19 @@ SLFindFilter (const SLInfo *slinfo, const char *streamid)
 
         while (selector)
         {
-          if (selector->string[0] != '\0')
-          {
-            if (GlobMatch (selectid, selector->string))
-            {
-              StackDestroy (stack, 0);
-              return selector->convert;
-            }
-          }
+          int selectid_matches = (selector->string[0] == '\0') ||
+                                 GlobMatch (selectid, selector->string);
+
+          /* Match label: empty selector label matches only unlabeled streams;
+           * a non-empty selector label must match the stream's label */
+          int label_matches;
+          if (selector->label[0] == '\0')
+            label_matches = (streamlabel == NULL || streamlabel[0] == '\0');
           else
+            label_matches = (streamlabel != NULL && streamlabel[0] != '\0' &&
+                             GlobMatch (streamlabel, selector->label));
+
+          if (selectid_matches && label_matches)
           {
             StackDestroy (stack, 0);
             return selector->convert;
@@ -1007,10 +1021,11 @@ HandleNegotiation (ClientInfo *cinfo)
       OKGO = 0;
     }
 
-    /* For SeedLink v4, parse filter (conversion) */
+    /* For SeedLink v4, parse filter (conversion) or label */
+    char label[SLMAXLABELLEN] = {0};
     if (OKGO && slinfo->proto_major == 4 && (ptr = strrchr (selector, ':')))
     {
-      /* Check for recognized filters */
+      /* Check for recognized conversion filters */
       if (strcmp (ptr + 1, "native") == 0)
       {
         convert = CONVERT_NONE;
@@ -1019,15 +1034,25 @@ HandleNegotiation (ClientInfo *cinfo)
       {
         convert = CONVERT_MSEED3;
       }
-      /* No other filters are supported */
+      /* Otherwise treat as a label selector: validate chars and length */
       else
       {
-        lprintf (0, "[%s] Error, SELECT filter '%s' not supported", cinfo->hostname, ptr + 1);
+        const char *labelptr = ptr + 1;
+        if (strlen (labelptr) == 0 || strlen (labelptr) >= SLMAXLABELLEN ||
+            strspn (labelptr, VALIDLABELCHARS) != strlen (labelptr))
+        {
+          lprintf (0, "[%s] Error, SELECT filter '%s' is not a valid label", cinfo->hostname, labelptr);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Filter not supported"))
-          return -1;
+          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Filter not supported"))
+            return -1;
 
-        OKGO = 0;
+          OKGO = 0;
+        }
+        else
+        {
+          snprintf (label, sizeof (label), "%s", labelptr);
+          convert = CONVERT_NONE;
+        }
       }
 
       *ptr = '\0';
@@ -1098,6 +1123,7 @@ HandleNegotiation (ClientInfo *cinfo)
     if (OKGO)
     {
       memcpy (newselector->string, selector, sizeof (newselector->string));
+      memcpy (newselector->label, label, sizeof (newselector->label));
       newselector->convert = convert;
     }
 
@@ -2209,6 +2235,13 @@ GetReqStationID (RBTree *tree, char *staid)
 // XX_STA     | !*_B_H_?    | rejectregex | FDSN:XX_STA_.*_B_H_./MSEED3?$
 // XX_S*      | !*_?_H_?    | rejectregex | FDSN:XX_S.*_.*_._H_./MSEED3?$
 //
+// Labels are also supported, and are matched against the stream label suffix:
+// Station ID | Selector    | Label | Regex       | pattern
+// ---------------------------------------------
+// XX_STA     | 100_G_SR_D  | 1SEC  | matchregex  | FDSN:XX_STA_100_G_SR_D/MSEED3?/1SEC$
+// XX_STA     | !100_G_SR_D | 1SEC  | rejectregex | FDSN:XX_STA_100_G_SR_D/MSEED3?/1SEC$
+// ---------------------------------------------
+//
 // Return 0 on success and -1 on error.
 ///////////////////////////////////////////////////////////////////////////////
 static int
@@ -2237,7 +2270,7 @@ StationToRegex (const char *staid, Selector *selector,
            station and then reject those in the negated selector */
         if (!matched && staid)
         {
-          if (SelectToRegex (staid, NULL, matchregex))
+          if (SelectToRegex (staid, NULL, NULL, matchregex))
           {
             lprintf (0, "Error with SelectToRegex");
             return -1;
@@ -2246,7 +2279,7 @@ StationToRegex (const char *staid, Selector *selector,
           matched++;
         }
 
-        if (SelectToRegex (staid, &(selector->string[1]), rejectregex))
+        if (SelectToRegex (staid, &(selector->string[1]), selector->label, rejectregex))
         {
           lprintf (0, "Error with SelectToRegex");
           return -1;
@@ -2255,7 +2288,7 @@ StationToRegex (const char *staid, Selector *selector,
       /* Handle regular selector */
       else
       {
-        if (SelectToRegex (staid, selector->string, matchregex))
+        if (SelectToRegex (staid, selector->string, selector->label, matchregex))
         {
           lprintf (0, "Error with SelectToRegex");
           return -1;
@@ -2268,7 +2301,7 @@ StationToRegex (const char *staid, Selector *selector,
   /* Otherwise update regex for station without selectors */
   else
   {
-    if (SelectToRegex (staid, NULL, matchregex))
+    if (SelectToRegex (staid, NULL, NULL, matchregex))
     {
       lprintf (0, "Error with SelectToRegex");
       return -1;
@@ -2302,12 +2335,12 @@ StationToRegex (const char *staid, Selector *selector,
  * Return 0 on success and -1 on error.
  ***************************************************************************/
 static int
-SelectToRegex (const char *staid, const char *select, char **regex)
+SelectToRegex (const char *staid, const char *select, const char *label, char **regex)
 {
   const char *ptr;
   char pattern[256] = {0};
   char *build       = pattern;
-  char *build_end   = pattern + sizeof (pattern) - 10; /* Reserve space for "/MSEED3?$\0" suffix */
+  char *build_end   = pattern + sizeof (pattern) - (SLMAXLABELLEN + 16); /* Reserve space for "/MSEED3?/LABEL$\0" suffix */
   int retval;
 
   if (!regex)
@@ -2396,8 +2429,42 @@ SelectToRegex (const char *staid, const char *select, char **regex)
     *build++ = '*';
   }
 
-  /* Finish with optional /MSEED suffix and optional 3 and a '$' anchor */
-  memcpy (build, "/MSEED3?$", 9);
+  /* Finish with optional /MSEED suffix and optional 3, then optional label, then '$' anchor */
+  if (label && label[0] != '\0')
+  {
+    memcpy (build, "/MSEED3?/", 9);
+    build += 9;
+
+    for (ptr = label; *ptr; ptr++)
+    {
+      if (*ptr == '?')
+      {
+        if (build >= pattern + sizeof (pattern) - 2)
+          return -1;
+        *build++ = '.';
+      }
+      else if (*ptr == '*')
+      {
+        if (build + 1 >= pattern + sizeof (pattern) - 2)
+          return -1;
+        *build++ = '.';
+        *build++ = '*';
+      }
+      else
+      {
+        if (build >= pattern + sizeof (pattern) - 2)
+          return -1;
+        *build++ = *ptr;
+      }
+    }
+
+    *build++ = '$';
+    *build   = '\0';
+  }
+  else
+  {
+    memcpy (build, "/MSEED3?$", 9);
+  }
 
   /* Add new pattern to regex string, expanding as needed up to SLMAXREGEXLEN bytes*/
   if ((retval = AddToString (regex, pattern, "|", 0, SLMAXREGEXLEN)))

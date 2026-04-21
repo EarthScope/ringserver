@@ -49,6 +49,7 @@ extern "C"
 #define SLMAXREGEXLEN 2097152 /* Maximum length of match/reject regex pattern */
 #define SLMAXSELECTLEN 2048   /* Maximum length of per-station/global selector buffer */
 #define SLMAXSTATIONS 10000   /* Maximum number of stations per client */
+#define SLMAXLABELLEN 12      /* Maximum length of a stream ID label selector */
 
 #define SLINFO_ID 1
 #define SLINFO_CAPABILITIES 2
@@ -71,9 +72,10 @@ typedef enum
 
 typedef struct Selector
 {
-  char string[MAXSTREAMID]; /* Full stream ID glob match */
-  Conversion convert;       /* Filter type */
-  struct Selector *next;    /* Next selection */
+  char string[MAXSTREAMID];  /* Full stream ID glob match */
+  char label[SLMAXLABELLEN]; /* Stream ID label suffix to match, empty = no label filter */
+  Conversion convert;        /* Filter type */
+  struct Selector *next;     /* Next selection */
 } Selector;
 
 /* Structure to hold SeedLink specific parameters */

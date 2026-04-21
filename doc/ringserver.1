@@ -1,4 +1,4 @@
-.TH RINGSERVER 1 2026/04/19
+.TH RINGSERVER 1 2026/04/20
 .SH NAME
 ringserver \- stream oriented packet ring buffer
 
@@ -290,6 +290,9 @@ during SeedLink negotiation using the '?' and '*' characters for
 single or multiple character matches respectively.  Not all SeedLink
 clients support wild-carded network and station codes.
 
+SeedLink v4 clients can additionally use filters to selected streams
+with labels.  See \fBOptional stream ID labels\fP for more details.
+
 .SH "Stream IDs"
 
 Each unique data stream is identified by a stream ID.  The stream ID
@@ -301,7 +304,7 @@ the payload type.  For example:
 
 For the SeedLink protocol support, data source IDs must be valid FDSN
 Source IDs (https://docs.fdsn.org/projects/source-identifiers) with
-a suffix of "/MSEED" or "/MSEED3".
+a format suffix of "/MSEED" or "/MSEED3".
 
 The stream ID suffix recommendations are as follows:
 
@@ -313,6 +316,40 @@ The stream ID suffix recommendations are as follows:
 .fi
 
 The maximum length of stream IDs supported by the server is 63 bytes.
+
+.SS "Optional stream ID labels"
+
+A stream ID may carry an optional label suffix, producing IDs of the form:
+
+"FDSN:IU_COLA_00_B_H_Z/MSEED3/1SEC"
+
+Labels are used to partition streams that would otherwise share the same
+FDSN Source ID (for example, multiple variants of the same channel produced
+by different processing paths).  Labels may be up to 11 characters long and
+may contain letters, digits, underscore '_' and hyphen '-'.  The tokens
+\fBnative\fP and \fB3\fP are reserved SeedLink v4 filter keywords and
+cannot be used as label values.
+
+Labeled streams are \fBnot\fP served to SeedLink clients by default: a
+client must explicitly request them using the SeedLink v4 SELECT syntax
+with a \fB:LABEL\fP suffix, for example:
+
+.nf
+  \fBSELECT *_B_H_?:1SEC\fP
+.fi
+
+The '?' and '*' glob wildcards are accepted in the label portion.  A
+SELECT without a \fB:LABEL\fP suffix matches only unlabeled streams for
+the given pattern.
+
+The sole exception is "all-station" mode: a SeedLink client that starts
+data flow without issuing any STATION or SELECT commands receives every
+packet in the ring, including labeled streams, because no stream filter
+is applied.
+
+DataLink clients match stream IDs directly with client-supplied regular
+expressions, so labels are part of the stream ID text and are included
+or excluded by whatever regex the client supplies.
 
 .SH "Multi-protocol Support"
 
