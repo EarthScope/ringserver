@@ -205,7 +205,7 @@ TEST (tracelist, mstl3_readbuffer_recptr)
 /* This test reads miniSEED from a file into a MS3TraceList while using the
  * MSF_PPUPDATETIME flag to set the segment prvtptr to the update time of the
  * record.  The expected value of the segment prvtptr is verified to be within
- * 1 second of the system time.
+ * 10 seconds of the system time.
  */
 TEST (tracelist, ms3_readtracelist_ppupdatetime)
 {
@@ -218,7 +218,7 @@ TEST (tracelist, ms3_readtracelist_ppupdatetime)
 
   char *path = "data/testdata-oneseries-mixedlengths-mixedorder.mseed2";
 
-  timeval = time(NULL);
+  timeval = time (NULL);
 
   /* Set bit flag to set segment prvtptr to nstime_t value of update time */
   flags = MSF_PPUPDATETIME;
@@ -236,10 +236,11 @@ TEST (tracelist, ms3_readtracelist_ppupdatetime)
 
   CHECK (id->first->prvtptr != NULL, "id->first->prvtptr is not populated");
 
-  /* Check that update time is within 1 second of system time */
+  /* Check that update time is within 10 seconds of system time */
   difference = *(nstime_t *)id->first->prvtptr - (nstime_t)timeval * NSTMODULUS;
 
-  CHECK (difference < 1 * NSTMODULUS, "update time at id->first->prvtptr is not within 1 second of system time");
+  CHECK (difference < (nstime_t)10 * (nstime_t)NSTMODULUS,
+         "update time at id->first->prvtptr is not within 10 seconds of system time");
 
   mstl3_free (&mstl, 1);
 }

@@ -3,6 +3,7 @@
   Thank you to @Ale77m for reporting!
 	- Add SeedLink v4 SELECT filter support to match stream labels.
 	- Replace internal GlobMatch() for correctness and safety.
+	- Update libmseed to v3.4.0
 	- Update mbedtls to v3.6.6
 
 2026.109: v4.4.1

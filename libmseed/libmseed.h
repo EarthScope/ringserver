@@ -29,8 +29,8 @@ extern "C"
 {
 #endif
 
-#define LIBMSEED_VERSION "3.2.4"    //!< Library version
-#define LIBMSEED_RELEASE "2026.024" //!< Library release date
+#define LIBMSEED_VERSION "3.4.0"    //!< Library version
+#define LIBMSEED_RELEASE "2026.094" //!< Library release date
 
 /** @defgroup io-functions File and URL I/O */
 /** @defgroup miniseed-record Record Handling */
@@ -79,6 +79,7 @@ extern "C"
 #include <sys/timeb.h>
 #include <sys/types.h>
 #include <windows.h>
+#include <io.h>
 
 /* Re-define print conversion for size_t values */
 #undef PRIsize_t
@@ -115,6 +116,9 @@ typedef unsigned __int64 uint64_t;
 #define vsnprintf _vsnprintf
 #define strtoull _strtoui64
 #define fileno _fileno
+#define dup _dup
+#define dup2 _dup2
+#define close _close
 #define fdopen _fdopen
 #endif
 
@@ -132,6 +136,7 @@ typedef unsigned __int64 uint64_t;
 /* All other platforms */
 #include <inttypes.h>
 #include <sys/time.h>
+#include <unistd.h>
 #endif
 
 #define MINRECLEN 40       //!< Minimum miniSEED record length supported
@@ -843,8 +848,9 @@ extern int64_t msr3_writemseed (MS3Record *msr, const char *mspath, int8_t overw
 extern int64_t mstl3_writemseed (MS3TraceList *mstl, const char *mspath, int8_t overwrite,
                                  int maxreclen, int8_t encoding, uint32_t flags, int8_t verbose);
 extern int libmseed_url_support (void);
+extern MS3FileParam *ms3_msfp_init (int64_t startoffset, int64_t endoffset, int fd);
 extern MS3FileParam *ms3_msfp_init_fd (int fd);
-/* Backwards compatibility alias for ms3_msfp_init_fd() */
+/* Backwards compatibility alias for misnamed ms3_msfp_init_fd() */
 #define ms3_mstl_init_fd(fd) ms3_msfp_init_fd(fd)
 /** @} */
 

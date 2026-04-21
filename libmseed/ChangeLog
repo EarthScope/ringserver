@@ -1,3 +1,15 @@
+2026.094: v3.4.0
+  - Support writing header-only records and add tests for header-only records.
+
+2026.088: v3.3.0
+  - Add `ms3_msfp_init()` to initialized MS3FileParam with start/end offsets.
+  - Avoid closing I/O streams not opened by the library when reading or
+  writing miniSEED, specifically stdin and stdout or a provided descriptor.
+  - Update GitHub Actions dependencies for Node 24 changes.
+
+NOTE Behavior change: I/O streams provided by the caller, such as stdin
+and stdout, are no longer closed by the library.
+
 2026.024: v3.2.4
   - Add ms_rlog_pop() to return messages from the error/warning log registry
   - Fix return value from ms_rlog_emit()

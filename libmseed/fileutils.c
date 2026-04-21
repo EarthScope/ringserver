@@ -62,8 +62,11 @@ libmseed_url_support (void)
  * (file descriptor).
  *
  * The ::MS3FileParam should be used with ms3_readmsr_r() or
- * ms3_readmsr_selection().  Once all data has been read from the
- * stream, it will be closed during the cleanup call of those routines.
+ * ms3_readmsr_selection().
+ *
+ * Note: the specified file descriptor will _not_ be closed during cleanup
+ * of the MS3FileParam.  The caller is responsible for closing the file
+ * descriptor when it is no longer needed.
  *
  * @param[in] fd File descriptor for input reading
  *
@@ -73,6 +76,37 @@ libmseed_url_support (void)
  ***************************************************************************/
 MS3FileParam *
 ms3_msfp_init_fd (int fd)
+{
+  return ms3_msfp_init (0, 0, fd);
+}
+
+/** ************************************************************************
+ * @brief Initialize ::MS3FileParam parameters
+ *
+ * Initialize a ::MS3FileParam for reading from a specified @p startoffset,
+ * @p endoffset and/or @p fd (file descriptor).
+ *
+ * The ::MS3FileParam should be used with ms3_readmsr_r() or
+ * ms3_readmsr_selection().  Once all data has been read from the
+ * stream, it will be closed during the cleanup call of those routines.
+ *
+ * Note: the specified file descriptor will _not_ be closed during cleanup
+ * of the MS3FileParam.  The caller is responsible for closing the file
+ * descriptor when it is no longer needed.
+ *
+ * @param[in] startoffset Start offset in input stream if > 0
+ * @param[in] endoffset End offset in input stream if > 0
+ * @param[in] fd File descriptor for input reading if >= 0
+ *
+ * @returns Allocated ::MS3FileParam on success and NULL on error.
+ *
+ * @see ms3_readmsr_r()
+ * @see ms3_readmsr_selection()
+ *
+ * @ref MessageOnError - this function logs a message on error
+ ***************************************************************************/
+MS3FileParam *
+ms3_msfp_init (int64_t startoffset, int64_t endoffset, int fd)
 {
   MS3FileParam *msfp;
 
@@ -87,14 +121,38 @@ ms3_msfp_init_fd (int fd)
 
   *msfp = (MS3FileParam)MS3FileParam_INITIALIZER;
 
-  msfp->input.type = LMIO_FD;
-  msfp->input.handle = fdopen (fd, "rb");
-
-  if (msfp->input.handle == NULL)
+  /* Set the start and end offsets if provided */
+  if (startoffset > 0)
   {
-    ms_log (2, "%s(): Cannot open file descriptor %d\n", __func__, fd);
-    libmseed_memory.free (msfp);
-    return NULL;
+    msfp->startoffset = startoffset;
+  }
+
+  if (endoffset > 0)
+  {
+    msfp->endoffset = endoffset;
+  }
+
+  /* Initialize the input handle if a file descriptor is provided */
+  if (fd >= 0)
+  {
+    msfp->input.type = LMIO_FD;
+
+    int myfd = dup (fd);
+    if (myfd < 0)
+    {
+      ms_log (2, "%s(): Cannot dup file descriptor %d\n", __func__, fd);
+      libmseed_memory.free (msfp);
+      return NULL;
+    }
+
+    msfp->input.handle = fdopen (myfd, "rb");
+    if (msfp->input.handle == NULL)
+    {
+      ms_log (2, "%s(): Cannot fdopen file descriptor %d\n", __func__, fd);
+      close (myfd);
+      libmseed_memory.free (msfp);
+      return NULL;
+    }
   }
 
   return msfp;
@@ -251,8 +309,22 @@ _ms3_readmsr_impl (MS3FileParam **ppmsfp, MS3Record **ppmsr, const char *mspath,
 
     if (strcmp (mspath, "-") == 0)
     {
+      int myfd = dup (fileno (stdin));
+      if (myfd < 0)
+      {
+        ms_log (2, "Cannot dup stdin\n");
+        msr3_free (ppmsr);
+        return MS_GENERROR;
+      }
+
       msfp->input.type = LMIO_FD;
-      msfp->input.handle = stdin;
+      msfp->input.handle = fdopen (myfd, "rb");
+      if (msfp->input.handle == NULL)
+      {
+        close (myfd);
+        msr3_free (ppmsr);
+        return MS_GENERROR;
+      }
     }
     else
     {
@@ -886,6 +958,9 @@ ms3_url_freeheaders (void)
  * existing file.  In either case, new files will be created if they
  * do not yet exist.
  *
+ * To write a header-only record with no data payload (i.e., no samples), set
+ * @ref MS3Record.numsamples to 0.
+ *
  * @param[in,out] msr ::MS3Record containing data to write
  * @param[in] mspath File for output records
  * @param[in] overwrite Flag to control overwriting versus appending
@@ -949,7 +1024,8 @@ msr3_writemseed (MS3Record *msr, const char *mspath, int8_t overwrite, uint32_t 
   msr3_pack_free (&packer, NULL);
 
   /* Close file and return record count */
-  fclose (ofp);
+  if (ofp != stdout)
+    fclose (ofp);
 
   return packedrecords;
 } /* End of msr3_writemseed() */
@@ -1031,7 +1107,8 @@ mstl3_writemseed (MS3TraceList *mstl, const char *mspath, int8_t overwrite, int 
                               verbose, NULL);
 
   /* Close file and return record count */
-  fclose (ofp);
+  if (ofp != stdout)
+    fclose (ofp);
 
   return packedrecords;
 } /* End of mstl3_writemseed() */
