@@ -33,7 +33,7 @@ extern "C" {
 #include <netinet/tcp.h>
 
 #define PACKAGE   "ringserver"
-#define VERSION   "4.4.1"
+#define VERSION   "4.5.0"
 
 /* Listen thread protocols, defined before including clients.h to avoid circular include */
 typedef enum
