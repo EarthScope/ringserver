@@ -1,6 +1,9 @@
+Unreleased
+	- Add protocol_version to JSON info for DataLink clients.
+
 2026.110: v4.5.0
 	- Fix SeedLink v3 matching of empty location codes when selectors are used.
-  Thank you to @Ale77m for reporting!
+	Thank you to @Ale77m for reporting!
 	- Add SeedLink v4 SELECT filter support to match stream labels.
 	- Replace internal GlobMatch() for correctness and safety.
 	- Update libmseed to v3.4.0

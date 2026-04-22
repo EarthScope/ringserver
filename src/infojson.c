@@ -899,6 +899,15 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
     if (tcinfo->rejectstr)
       yyjson_mut_obj_add_strcpy (doc, client, "reject", tcinfo->rejectstr);
 
+    /* DataLink-specific details */
+    if (tcinfo->type == CLIENT_DATALINK)
+    {
+      char string32[32] = {0};
+
+      snprintf (string32, sizeof (string32), "%u.%u", DLPROTO_MAJOR, DLPROTO_MINOR);
+      yyjson_mut_obj_add_strcpy (doc, client, "protocol_version", string32);
+    }
+
     /* SeedLink-specific stations and selectors */
     if (tcinfo->type == CLIENT_SEEDLINK && tcinfo->extinfo)
     {
