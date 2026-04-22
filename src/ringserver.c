@@ -1101,10 +1101,8 @@ ListenThread (void *arg)
       ctp->next = NULL;
     }
     param.cthreads = ctp;
-    pthread_mutex_unlock (&param.cthreads_lock);
-
-    /* Increment client count */
     param.clientcount++;
+    pthread_mutex_unlock (&param.cthreads_lock);
   }
 
   /* Set thread closing status */
