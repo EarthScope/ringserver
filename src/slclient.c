@@ -1293,7 +1293,7 @@ HandleNegotiation (ClientInfo *cinfo)
     }
 
     /* Convert start time string if specified */
-    if (OKGO && fields == 2)
+    if (OKGO && fields >= 2)
     {
       if ((starttime = ms_mdtimestr2nstime (starttimestr)) == NSTERROR)
       {
@@ -1308,7 +1308,7 @@ HandleNegotiation (ClientInfo *cinfo)
     }
 
     /* Convert end time string if specified */
-    if (OKGO && fields == 3)
+    if (OKGO && fields >= 3)
     {
       if ((endtime = ms_mdtimestr2nstime (endtimestr)) == NSTERROR)
       {
