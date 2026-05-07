@@ -80,7 +80,8 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
                char *hostname)
 {
   DataStreamGroup *foundgroup = NULL;
-  DSstrlist *fnlist, *fnptr;
+  DSstrlist *fnlist = NULL;
+  DSstrlist *fnptr;
   struct tm ctm;
   time_t curtime;
   char *tptr;
@@ -132,6 +133,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
   if (ds_strparse (pathformat, "/", &fnlist) < 0)
   {
     lprintf (0, "[%s] ds_streamproc(): error parsing path format", hostname);
+    ds_strparse (NULL, NULL, &fnlist);
     return -1;
   }
 
@@ -1096,6 +1098,7 @@ ds_strparse (const char *string, const char *delim, DSstrlist **list)
       if (!tmplist)
       {
         lprintf (0, "Error allocating memory in ds_strparse()");
+        ds_strparse (NULL, NULL, list);
         return -1;
       }
       tmplist->next = NULL;
@@ -1105,6 +1108,7 @@ ds_strparse (const char *string, const char *delim, DSstrlist **list)
       {
         lprintf (0, "Error allocating memory in ds_strparse()");
         free (tmplist);
+        ds_strparse (NULL, NULL, list);
         return -1;
       }
       strncpy (tmplist->element, beg, (del - beg));

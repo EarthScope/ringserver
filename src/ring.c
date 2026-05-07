@@ -1554,6 +1554,8 @@ UpdatePattern (pcre2_code **code, pcre2_match_data **data,
     if (*data)
       pcre2_match_data_free (*data);
 
+    *data = NULL;
+
     /* Compile regex */
     *code = pcre2_compile ((PCRE2_SPTR)pattern, PCRE2_ZERO_TERMINATED,
                            PCRE2_COMPILE_OPTIONS, &errcode, &erroffset, NULL);

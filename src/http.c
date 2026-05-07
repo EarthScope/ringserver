@@ -1404,9 +1404,10 @@ GenerateStreams (ClientInfo *cinfo, const char *path, const char *query,
       }
 
       *response = buf;
-      yyjson_doc_free (json);
-      *type = TEXT;
     }
+
+    yyjson_doc_free (json);
+    *type = TEXT;
   }
   else
   {

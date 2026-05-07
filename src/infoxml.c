@@ -95,7 +95,8 @@ info_xml_slv3_id (ClientInfo *cinfo, const char *software)
   if (options)
     mxmlOptionsSetWrapMargin (options, 0);
   xml_string = mxmlSaveAllocString (xmldoc, options);
-  mxmlOptionsDelete (options);
+  if (options)
+    mxmlOptionsDelete (options);
 
   yyjson_doc_free (json);
   mxmlRelease (xmldoc);
@@ -179,7 +180,8 @@ info_xml_slv3_capabilities (ClientInfo *cinfo, const char *software)
   if (options)
     mxmlOptionsSetWrapMargin (options, 0);
   xml_string = mxmlSaveAllocString (xmldoc, options);
-  mxmlOptionsDelete (options);
+  if (options)
+    mxmlOptionsDelete (options);
 
   yyjson_doc_free (json);
   mxmlRelease (xmldoc);
@@ -333,7 +335,8 @@ info_xml_slv3_stations (ClientInfo *cinfo, const char *software, int include_str
   if (options)
     mxmlOptionsSetWrapMargin (options, 0);
   xml_string = mxmlSaveAllocString (xmldoc, options);
-  mxmlOptionsDelete (options);
+  if (options)
+    mxmlOptionsDelete (options);
 
   yyjson_doc_free (json);
   mxmlRelease (xmldoc);
@@ -460,7 +463,8 @@ info_xml_slv3_connections (ClientInfo *cinfo, const char *software)
   if (options)
     mxmlOptionsSetWrapMargin (options, 0);
   xml_string = mxmlSaveAllocString (xmldoc, options);
-  mxmlOptionsDelete (options);
+  if (options)
+    mxmlOptionsDelete (options);
 
   yyjson_doc_free (json);
   mxmlRelease (xmldoc);
@@ -801,7 +805,8 @@ info_xml_dlv1 (ClientInfo *cinfo, const char *software, const char *level,
   if (options)
     mxmlOptionsSetWrapMargin (options, 0);
   xml_string = mxmlSaveAllocString (xmldoc, options);
-  mxmlOptionsDelete (options);
+  if (options)
+    mxmlOptionsDelete (options);
 
   yyjson_doc_free (json);
   mxmlRelease (xmldoc);

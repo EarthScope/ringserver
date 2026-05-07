@@ -321,6 +321,10 @@ info_add_streams (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matchexpr)
   /* Compile match expression if provided */
   if (matchexpr && *matchexpr && UpdatePattern (&match_code, &match_data, matchexpr, "stream match expression"))
   {
+    if (match_code)
+      pcre2_code_free (match_code);
+    if (match_data)
+      pcre2_match_data_free (match_data);
     return NULL;
   }
 
@@ -503,6 +507,10 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
   /* Compile match expression if provided */
   if (matchexpr && *matchexpr && UpdatePattern (&match_code, &match_data, matchexpr, "stream match expression"))
   {
+    if (match_code)
+      pcre2_code_free (match_code);
+    if (match_data)
+      pcre2_match_data_free (match_data);
     return NULL;
   }
 
@@ -775,6 +783,10 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
   /* Compile match expression if provided */
   if (matchexpr && UpdatePattern (&match_code, &match_data, matchexpr, "connection match expression"))
   {
+    if (match_code)
+      pcre2_code_free (match_code);
+    if (match_data)
+      pcre2_match_data_free (match_data);
     return NULL;
   }
 
