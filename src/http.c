@@ -23,6 +23,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <sys/stat.h>
 
@@ -83,6 +84,7 @@ static int NegotiateWebSocket (ClientInfo *cinfo, char *version,
                                char *upgradeHeader, char *connectionHeader,
                                char *secWebSocketKeyHeader, char *secWebSocketVersionHeader,
                                char *secWebSocketProtocolHeader);
+static bool http_header_has_token (const char *value, const char *token);
 static int apr_base64_encode_binary (char *encoded, const unsigned char *string, int len);
 static int sha1digest (uint8_t *digest, char *hexdigest, const uint8_t *data, size_t databytes);
 
@@ -586,10 +588,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     /* Check subprotocol header for acceptable values, rewrite to echo in response */
     if (*secWebSocketProtocolHeader)
     {
-      if (strstr (secWebSocketProtocolHeader, "SeedLink4.0"))
+      if (http_header_has_token (secWebSocketProtocolHeader, "SeedLink4.0"))
         snprintf (secWebSocketProtocolHeader, sizeof (secWebSocketProtocolHeader),
                   "SeedLink4.0");
-      else if (strstr (secWebSocketProtocolHeader, "SeedLink3.1"))
+      else if (http_header_has_token (secWebSocketProtocolHeader, "SeedLink3.1"))
         snprintf (secWebSocketProtocolHeader, sizeof (secWebSocketProtocolHeader),
                   "SeedLink3.1");
       else
@@ -640,10 +642,10 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
     /* Check subprotocol header for acceptable values, rewrite to echo in response */
     if (*secWebSocketProtocolHeader)
     {
-      if (strstr (secWebSocketProtocolHeader, "DataLink1.0"))
+      if (http_header_has_token (secWebSocketProtocolHeader, "DataLink1.1"))
         snprintf (secWebSocketProtocolHeader, sizeof (secWebSocketProtocolHeader),
-                  "DataLink1.0");
-      else if (strstr (secWebSocketProtocolHeader, "DataLink1.1"))
+                  "DataLink1.1");
+      else if (http_header_has_token (secWebSocketProtocolHeader, "DataLink1.0"))
         snprintf (secWebSocketProtocolHeader, sizeof (secWebSocketProtocolHeader),
                   "DataLink1.1");
       else
@@ -1786,8 +1788,8 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
       if ((array = yyjson_obj_get (server, "usage_log")) != NULL)
       {
         yyjson_val *modes = yyjson_obj_get (array, "mode");
-        char modestr[64] = {0};
-        size_t modelen   = 0;
+        char modestr[64]  = {0};
+        size_t modelen    = 0;
 
         if (modes && yyjson_is_arr (modes))
         {
@@ -1839,12 +1841,12 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
         const char *label;
         bool has_pattern;
       } ip_lists[] = {
-        {"allowed_ips", "Allowed IPs", true},
-        {"forbidden_ips", "Forbidden IPs", true},
-        {"accept_ips", "Accept IPs", false},
-        {"deny_ips", "Deny IPs", false},
-        {"write_ips", "Write IPs", false},
-        {"trusted_ips", "Trusted IPs", false},
+          {"allowed_ips", "Allowed IPs", true},
+          {"forbidden_ips", "Forbidden IPs", true},
+          {"accept_ips", "Accept IPs", false},
+          {"deny_ips", "Deny IPs", false},
+          {"write_ips", "Write IPs", false},
+          {"trusted_ips", "Trusted IPs", false},
       };
 
       for (size_t li = 0; li < sizeof (ip_lists) / sizeof (ip_lists[0]); li++)
@@ -2416,7 +2418,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
     return -1;
   }
 
-  if (!upgradeHeader || strcasecmp (upgradeHeader, "websocket"))
+  if (!http_header_has_token (upgradeHeader, "websocket"))
   {
     responsebytes = asprintf (&response,
                               "Upgrade header must be 'websocket' For WebSocket\n"
@@ -2449,7 +2451,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
     return -1;
   }
 
-  if (!connectionHeader || !strcasestr (connectionHeader, "Upgrade"))
+  if (!http_header_has_token (connectionHeader, "Upgrade"))
   {
     responsebytes = asprintf (&response,
                               "The Connection header value must be 'Upgrade'\n"
@@ -2604,6 +2606,48 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
   return 0;
 } /* End of NegotiateWebSocket() */
+
+/***************************************************************************
+ * http_header_has_token:
+ *
+ * Return true if the HTTP header value `value` contains `token` as a
+ * whole token in the comma-separated list, case-insensitively, with
+ * optional whitespace (OWS) around each element tolerated per
+ * RFC 7230 §3.2.6 / §6.1.  Returns false if either argument is NULL
+ * or empty.
+ ***************************************************************************/
+static bool
+http_header_has_token (const char *value, const char *token)
+{
+  if (!value || !token || !*value || !*token)
+    return false;
+
+  size_t tlen   = strlen (token);
+  const char *p = value;
+
+  while (*p)
+  {
+    /* Skip leading OWS and commas */
+    while (*p == ' ' || *p == '\t' || *p == ',')
+      p++;
+
+    const char *start = p;
+
+    /* Advance to end of element */
+    while (*p && *p != ',')
+      p++;
+
+    /* Trim trailing OWS */
+    const char *end = p;
+    while (end > start && (end[-1] == ' ' || end[-1] == '\t'))
+      end--;
+
+    if ((size_t)(end - start) == tlen && strncasecmp (start, token, tlen) == 0)
+      return true;
+  }
+
+  return false;
+}
 
 /* The apr_base64_encode_binary() below was extracted from the Apache
    APR-util release 1.5.4 from file encoding/apr_base64.c.  The
