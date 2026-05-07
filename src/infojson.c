@@ -23,7 +23,9 @@
  * Copyright (C) 2026:
  * @author Chad Trabant, EarthScope Data Services
  **************************************************************************/
+#include <arpa/inet.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -805,15 +807,15 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
     if (match_code)
     {
       pcre2_match_context *mctx = GetMatchContext ();
-      int rc_host     = pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->hostname, PCRE2_ZERO_TERMINATED, 0, 0, match_data, mctx);
-      int rc_ip       = (rc_host < 0) ? pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->ipstr, PCRE2_ZERO_TERMINATED, 0, 0, match_data, mctx) : 1;
-      int rc_clientid = (rc_ip < 0) ? pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->clientid, PCRE2_ZERO_TERMINATED, 0, 0, match_data, mctx) : 1;
+      int rc_host               = pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->hostname, PCRE2_ZERO_TERMINATED, 0, 0, match_data, mctx);
+      int rc_ip                 = (rc_host < 0) ? pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->ipstr, PCRE2_ZERO_TERMINATED, 0, 0, match_data, mctx) : 1;
+      int rc_clientid           = (rc_ip < 0) ? pcre2_match (match_code, (PCRE2_SPTR8)tcinfo->clientid, PCRE2_ZERO_TERMINATED, 0, 0, match_data, mctx) : 1;
 
       if (rc_host < 0 && rc_ip < 0 && rc_clientid < 0)
       {
         if (!match_limit_logged &&
             (rc_host == PCRE2_ERROR_MATCHLIMIT || rc_host == PCRE2_ERROR_DEPTHLIMIT || rc_host == PCRE2_ERROR_HEAPLIMIT ||
-             rc_ip == PCRE2_ERROR_MATCHLIMIT   || rc_ip == PCRE2_ERROR_DEPTHLIMIT   || rc_ip == PCRE2_ERROR_HEAPLIMIT   ||
+             rc_ip == PCRE2_ERROR_MATCHLIMIT || rc_ip == PCRE2_ERROR_DEPTHLIMIT || rc_ip == PCRE2_ERROR_HEAPLIMIT ||
              rc_clientid == PCRE2_ERROR_MATCHLIMIT || rc_clientid == PCRE2_ERROR_DEPTHLIMIT || rc_clientid == PCRE2_ERROR_HEAPLIMIT))
         {
           lprintf (1, "[%s] PCRE2 match limit reached for connection match expression, treating as no match",
@@ -1033,9 +1035,58 @@ info_add_connections (ClientInfo *cinfo, yyjson_mut_doc *doc, const char *matche
 }
 
 /***************************************************************************
+ * add_ipnet_array:
+ *
+ * Add an array of IP network entries to a JSON parent object.
+ * Each entry has "network", "netmask", and "family" fields.
+ * When include_pattern is true, a "pattern" field is added for entries
+ * that carry a limitstr (stream pattern for allowed/forbidden lists).
+ *
+ * Must be called with config.config_rwlock held for reading.
+ *
+ * Returns true on success and false on error.
+ ***************************************************************************/
+static bool
+add_ipnet_array (yyjson_mut_doc *doc, yyjson_mut_val *parent,
+                 const char *key, IPNet *list, bool include_pattern)
+{
+  char network[INET6_ADDRSTRLEN];
+  char netmask[INET6_ADDRSTRLEN];
+
+  yyjson_mut_val *array = yyjson_mut_obj_add_arr (doc, parent, key);
+  if (array == NULL)
+    return false;
+
+  for (IPNet *ipn = list; ipn != NULL; ipn = ipn->next)
+  {
+    inet_ntop (ipn->family, &ipn->network, network, sizeof (network));
+    inet_ntop (ipn->family, &ipn->netmask, netmask, sizeof (netmask));
+
+    yyjson_mut_val *entry = yyjson_mut_arr_add_obj (doc, array);
+    if (entry == NULL)
+      return false;
+
+    if (yyjson_mut_obj_add_strcpy (doc, entry, "network", network) == false ||
+        yyjson_mut_obj_add_strcpy (doc, entry, "netmask", netmask) == false ||
+        yyjson_mut_obj_add_strcpy (doc, entry, "family",
+                                   (ipn->family == AF_INET6) ? "IPv6" : "IPv4") == false)
+      return false;
+
+    if (include_pattern && ipn->limitstr)
+    {
+      if (yyjson_mut_obj_add_strcpy (doc, entry, "pattern", ipn->limitstr) == false)
+        return false;
+    }
+  }
+
+  return true;
+}
+
+/***************************************************************************
  * info_add_status:
  *
- * Add server status to the JSON document.
+ * Add server status (runtime state and configuration parameters) to the
+ * JSON document under a single "server" object.
  *
  * Returns pointer to JSON object added on success and NULL on error.
  ***************************************************************************/
@@ -1048,6 +1099,9 @@ info_add_status (yyjson_mut_doc *doc)
   yyjson_mut_val *server;
   yyjson_mut_val *thread_array;
   yyjson_mut_val *thread;
+  yyjson_mut_val *auth;
+  yyjson_mut_val *ulog;
+  yyjson_mut_val *modes;
 
   struct sthread *loopstp;
 
@@ -1059,6 +1113,8 @@ info_add_status (yyjson_mut_doc *doc)
     return NULL;
   }
 
+  pthread_rwlock_rdlock (&config.config_rwlock);
+
   yyjson_mut_obj_add_uint (doc, server, "ring_version", param.version);
   yyjson_mut_obj_add_uint (doc, server, "ring_size", param.ringsize);
   yyjson_mut_obj_add_uint (doc, server, "packet_size", param.pktsize);
@@ -1066,9 +1122,117 @@ info_add_status (yyjson_mut_doc *doc)
   yyjson_mut_obj_add_bool (doc, server, "memory_mapped", config.memorymapring);
   yyjson_mut_obj_add_bool (doc, server, "volatile_ring", config.volatilering);
   yyjson_mut_obj_add_bool (doc, server, "fdsn_source_identifiers", true);
+
+  if (config.configfile)
+    yyjson_mut_obj_add_strcpy (doc, server, "config_file", config.configfile);
+  yyjson_mut_obj_add_int (doc, server, "verbose", config.verbose);
+
+  if (config.ringdir)
+    yyjson_mut_obj_add_strcpy (doc, server, "ring_directory", config.ringdir);
+  yyjson_mut_obj_add_uint (doc, server, "auto_recovery", config.autorecovery);
+
+  yyjson_mut_obj_add_uint (doc, server, "max_clients", config.maxclients);
+  yyjson_mut_obj_add_uint (doc, server, "max_clients_per_ip", config.maxclientsperip);
+  yyjson_mut_obj_add_uint (doc, server, "client_timeout", config.clienttimeout);
+  yyjson_mut_obj_add_uint (doc, server, "network_io_timeout", config.netiotimeout);
+  yyjson_mut_obj_add_uint (doc, server, "tcp_keepalive_idle", config.tcpkeepalive_idle);
+  yyjson_mut_obj_add_uint (doc, server, "tcp_keepalive_interval", config.tcpkeepalive_interval);
+  yyjson_mut_obj_add_uint (doc, server, "tcp_keepalive_count", config.tcpkeepalive_count);
+  yyjson_mut_obj_add_real (doc, server, "time_window_limit_percent", (double)config.timewinlimit);
+  yyjson_mut_obj_add_bool (doc, server, "resolve_hosts", config.resolvehosts);
+
+  if (config.webroot)
+    yyjson_mut_obj_add_strcpy (doc, server, "web_root", config.webroot);
+  if (config.httpheaders)
+    yyjson_mut_obj_add_strcpy (doc, server, "http_headers", config.httpheaders);
+
+  if (config.mseedarchive)
+  {
+    yyjson_mut_obj_add_strcpy (doc, server, "mseed_archive", config.mseedarchive);
+    yyjson_mut_obj_add_int (doc, server, "mseed_idle_timeout", config.mseedidleto);
+  }
+
+  if (config.tlscertfile)
+    yyjson_mut_obj_add_strcpy (doc, server, "tls_certificate_file", "<SET>");
+  if (config.tlskeyfile)
+    yyjson_mut_obj_add_strcpy (doc, server, "tls_key_file", "<SET>");
+
+  yyjson_mut_obj_add_bool (doc, server, "tls_verify_client_cert", config.tlsverifyclientcert);
+
+  /* Add auth object */
+  if ((auth = yyjson_mut_obj_add_obj (doc, server, "auth")) == NULL)
+  {
+    pthread_rwlock_unlock (&config.config_rwlock);
+    return NULL;
+  }
+  else
+  {
+    if (config.auth.program)
+    {
+      yyjson_mut_obj_add_strcpy (doc, auth, "program", "<SET>");
+      yyjson_mut_obj_add_uint (doc, auth, "timeout_sec", config.auth.timeout_sec);
+    }
+
+    yyjson_mut_obj_add_bool (doc, auth, "required", config.auth.required);
+  }
+
+  /* Add usage log object only when usage logging is enabled, which is
+   * controlled by the basedir being set (see logging.c gating). */
+  if (config.usagelog.basedir)
+  {
+    if ((ulog = yyjson_mut_obj_add_obj (doc, server, "usage_log")) == NULL ||
+        (modes = yyjson_mut_obj_add_arr (doc, ulog, "mode")) == NULL)
+    {
+      pthread_rwlock_unlock (&config.config_rwlock);
+      return NULL;
+    }
+
+    if (config.usagelog.mode & USAGELOG_JSONL)
+      yyjson_mut_arr_add_strcpy (doc, modes, "JSONL");
+    if (config.usagelog.mode & USAGELOG_RX)
+      yyjson_mut_arr_add_strcpy (doc, modes, "RX");
+    if (config.usagelog.mode & USAGELOG_TX)
+      yyjson_mut_arr_add_strcpy (doc, modes, "TX");
+    if (config.usagelog.mode & USAGELOG_ACCESS)
+      yyjson_mut_arr_add_strcpy (doc, modes, "ACCESS");
+
+    yyjson_mut_obj_add_strcpy (doc, ulog, "base_directory", config.usagelog.basedir);
+
+    if (config.usagelog.prefix)
+      yyjson_mut_obj_add_strcpy (doc, ulog, "prefix", config.usagelog.prefix);
+
+    yyjson_mut_obj_add_int (doc, ulog, "interval", config.usagelog.interval);
+
+    if (config.usagelog.startint > 0)
+    {
+      ms_nstime2timestr_n (MS_EPOCH2NSTIME (config.usagelog.startint),
+                           timestr, sizeof (timestr), ISOMONTHDAY_Z, NONE);
+      yyjson_mut_obj_add_strcpy (doc, ulog, "start_interval", timestr);
+    }
+
+    if (config.usagelog.endint > 0)
+    {
+      ms_nstime2timestr_n (MS_EPOCH2NSTIME (config.usagelog.endint),
+                           timestr, sizeof (timestr), ISOMONTHDAY_Z, NONE);
+      yyjson_mut_obj_add_strcpy (doc, ulog, "end_interval", timestr);
+    }
+  }
+
+  if (!add_ipnet_array (doc, server, "allowed_ips", config.allowedips, true) ||
+      !add_ipnet_array (doc, server, "forbidden_ips", config.forbiddenips, true) ||
+      !add_ipnet_array (doc, server, "accept_ips", config.acceptips, false) ||
+      !add_ipnet_array (doc, server, "deny_ips", config.denyips, false) ||
+      !add_ipnet_array (doc, server, "write_ips", config.writeips, false) ||
+      !add_ipnet_array (doc, server, "trusted_ips", config.trustedips, false))
+  {
+    pthread_rwlock_unlock (&config.config_rwlock);
+    return NULL;
+  }
+
+  pthread_rwlock_unlock (&config.config_rwlock);
+
   yyjson_mut_obj_add_int (doc, server, "connection_count", param.clientcount);
   yyjson_mut_obj_add_uint (doc, server, "stream_count", param.streamcount);
-
   yyjson_mut_obj_add_real (doc, server, "transmit_packet_rate", param.txpacketrate);
   yyjson_mut_obj_add_real (doc, server, "transmit_byte_rate", param.txbyterate);
   yyjson_mut_obj_add_real (doc, server, "receive_packet_rate", param.rxpacketrate);

@@ -1553,7 +1553,7 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
 
       if (!(*response = (char *)malloc (responsesize)))
       {
-        lprintf (0, "[%s] Error for HTTP CONNECTIONS (cannot allocate response buffer of size %zu)",
+        lprintf (0, "[%s] Error for HTTP STATUS (cannot allocate response buffer of size %zu)",
                  cinfo->hostname, responsesize);
         yyjson_doc_free (json);
         return -1;
@@ -1691,6 +1691,210 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
           {
             lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
                      cinfo->hostname);
+            yyjson_doc_free (json);
+            return -1;
+          }
+
+          writeptr += written;
+          responsebytes += written;
+        }
+      }
+
+      /* Configuration parameters carried in the same "server" object */
+      written = snprintf (writeptr, responsesize - responsebytes,
+                          "\nConfiguration:\n"
+                          "  Config file: %s\n"
+                          "  Verbosity: %d\n"
+                          "  Ring directory: %s\n"
+                          "  Auto recovery: %u\n"
+                          "  Max clients: %u\n"
+                          "  Max clients per IP: %u\n"
+                          "  Client timeout: %u s\n"
+                          "  Network I/O timeout: %u s\n"
+                          "  TCP keepalive idle: %u s\n"
+                          "  TCP keepalive interval: %u s\n"
+                          "  TCP keepalive count: %u\n"
+                          "  Time window limit: %.1f%%\n"
+                          "  Resolve hosts: %s\n"
+                          "  Web root: %s\n"
+                          "  HTTP headers: %s\n"
+                          "  miniSEED archive: %s\n"
+                          "  miniSEED idle timeout: %d s\n"
+                          "  TLS certificate file: %s\n"
+                          "  TLS key file: %s\n"
+                          "  TLS verify client cert: %s\n",
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "config_file"))),
+                          yyjson_get_int (yyjson_obj_get (server, "verbose")),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "ring_directory"))),
+                          (unsigned)yyjson_get_uint (yyjson_obj_get (server, "auto_recovery")),
+                          (unsigned)yyjson_get_uint (yyjson_obj_get (server, "max_clients")),
+                          (unsigned)yyjson_get_uint (yyjson_obj_get (server, "max_clients_per_ip")),
+                          (unsigned)yyjson_get_uint (yyjson_obj_get (server, "client_timeout")),
+                          (unsigned)yyjson_get_uint (yyjson_obj_get (server, "network_io_timeout")),
+                          (unsigned)yyjson_get_uint (yyjson_obj_get (server, "tcp_keepalive_idle")),
+                          (unsigned)yyjson_get_uint (yyjson_obj_get (server, "tcp_keepalive_interval")),
+                          (unsigned)yyjson_get_uint (yyjson_obj_get (server, "tcp_keepalive_count")),
+                          yyjson_get_real (yyjson_obj_get (server, "time_window_limit_percent")),
+                          (yyjson_get_bool (yyjson_obj_get (server, "resolve_hosts"))) ? "TRUE" : "FALSE",
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "web_root"))),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "http_headers"))),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "mseed_archive"))),
+                          yyjson_get_int (yyjson_obj_get (server, "mseed_idle_timeout")),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "tls_certificate_file"))),
+                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "tls_key_file"))),
+                          (yyjson_get_bool (yyjson_obj_get (server, "tls_verify_client_cert"))) ? "TRUE" : "FALSE");
+
+      if (written < 0 || (size_t)(responsebytes + written) >= responsesize)
+      {
+        lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
+                 cinfo->hostname);
+        free (*response);
+        *response = NULL;
+        yyjson_doc_free (json);
+        return -1;
+      }
+
+      writeptr += written;
+      responsebytes += written;
+
+      /* Authentication */
+      if ((array = yyjson_obj_get (server, "auth")) != NULL)
+      {
+        written = snprintf (writeptr, responsesize - responsebytes,
+                            "  Auth program: %s\n"
+                            "  Auth timeout: %u s\n"
+                            "  Auth required: %s\n",
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (array, "program"))),
+                            (unsigned)yyjson_get_uint (yyjson_obj_get (array, "timeout_sec")),
+                            (yyjson_get_bool (yyjson_obj_get (array, "required"))) ? "TRUE" : "FALSE");
+
+        if (written < 0 || (size_t)(responsebytes + written) >= responsesize)
+        {
+          lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
+                   cinfo->hostname);
+          free (*response);
+          *response = NULL;
+          yyjson_doc_free (json);
+          return -1;
+        }
+
+        writeptr += written;
+        responsebytes += written;
+      }
+
+      /* Usage log */
+      if ((array = yyjson_obj_get (server, "usage_log")) != NULL)
+      {
+        yyjson_val *modes = yyjson_obj_get (array, "mode");
+        char modestr[64] = {0};
+        size_t modelen   = 0;
+
+        if (modes && yyjson_is_arr (modes))
+        {
+          yyjson_val *m_iter = NULL;
+          size_t midx, mmax;
+          yyjson_arr_foreach (modes, midx, mmax, m_iter)
+          {
+            const char *m = yyjson_get_str (m_iter);
+            if (m)
+              modelen += snprintf (modestr + modelen, sizeof (modestr) - modelen,
+                                   "%s%s", (modelen) ? "," : "", m);
+            if (modelen >= sizeof (modestr))
+              break;
+          }
+        }
+
+        written = snprintf (writeptr, responsesize - responsebytes,
+                            "  Usage log modes: %s\n"
+                            "  Usage log directory: %s\n"
+                            "  Usage log prefix: %s\n"
+                            "  Usage log interval: %d s\n"
+                            "  Usage log start: %s\n"
+                            "  Usage log end: %s\n",
+                            (modelen > 0) ? modestr : "NONE",
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (array, "base_directory"))),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (array, "prefix"))),
+                            yyjson_get_int (yyjson_obj_get (array, "interval")),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (array, "start_interval"))),
+                            DASHNULL (yyjson_get_str (yyjson_obj_get (array, "end_interval"))));
+
+        if (written < 0 || (size_t)(responsebytes + written) >= responsesize)
+        {
+          lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
+                   cinfo->hostname);
+          free (*response);
+          *response = NULL;
+          yyjson_doc_free (json);
+          return -1;
+        }
+
+        writeptr += written;
+        responsebytes += written;
+      }
+
+      /* IP access lists */
+      static const struct
+      {
+        const char *json_key;
+        const char *label;
+        bool has_pattern;
+      } ip_lists[] = {
+        {"allowed_ips", "Allowed IPs", true},
+        {"forbidden_ips", "Forbidden IPs", true},
+        {"accept_ips", "Accept IPs", false},
+        {"deny_ips", "Deny IPs", false},
+        {"write_ips", "Write IPs", false},
+        {"trusted_ips", "Trusted IPs", false},
+      };
+
+      for (size_t li = 0; li < sizeof (ip_lists) / sizeof (ip_lists[0]); li++)
+      {
+        yyjson_val *iplist = yyjson_obj_get (server, ip_lists[li].json_key);
+        if (iplist == NULL || !yyjson_is_arr (iplist) || yyjson_arr_size (iplist) == 0)
+          continue;
+
+        written = snprintf (writeptr, responsesize - responsebytes,
+                            "  %s:\n", ip_lists[li].label);
+
+        if (written < 0 || (size_t)(responsebytes + written) >= responsesize)
+        {
+          lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
+                   cinfo->hostname);
+          free (*response);
+          *response = NULL;
+          yyjson_doc_free (json);
+          return -1;
+        }
+
+        writeptr += written;
+        responsebytes += written;
+
+        yyjson_val *entry_iter = NULL;
+        size_t eidx, emax;
+        yyjson_arr_foreach (iplist, eidx, emax, entry_iter)
+        {
+          yyjson_val *pv = yyjson_obj_get (entry_iter, "pattern");
+
+          if (ip_lists[li].has_pattern && pv)
+            written = snprintf (writeptr, responsesize - responsebytes,
+                                "    %s/%s (%s)  pattern: %s\n",
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "network"))),
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "netmask"))),
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "family"))),
+                                DASHNULL (yyjson_get_str (pv)));
+          else
+            written = snprintf (writeptr, responsesize - responsebytes,
+                                "    %s/%s (%s)\n",
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "network"))),
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "netmask"))),
+                                DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "family"))));
+
+          if (written < 0 || (size_t)(responsebytes + written) >= responsesize)
+          {
+            lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
+                     cinfo->hostname);
+            free (*response);
+            *response = NULL;
             yyjson_doc_free (json);
             return -1;
           }

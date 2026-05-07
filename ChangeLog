@@ -1,4 +1,5 @@
 Unreleased
+	- Add more of the config options to the server status info response.
 	- Add protocol_version to JSON info for DataLink clients.
 
 2026.110: v4.5.0
