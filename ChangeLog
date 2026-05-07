@@ -3,6 +3,8 @@ Unreleased
 	  causing streams to begin at the next new packet instead of the requested time.
 	- Fix SeedLink v4 DATA command silently dropping the start time when an end
 	  time is also supplied (DATA seq start end).
+	- Fix SeedLink v4 SELECT to accept multiple space-separated patterns per
+	  command, as allowed by the protocol specification.
 	- Add more of the config options to the server status info response.
 	- Add protocol_version to JSON info for DataLink clients.
 

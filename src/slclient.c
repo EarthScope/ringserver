@@ -698,6 +698,21 @@ SLFree (ClientInfo *cinfo)
 } /* End of SLFree() */
 
 /***************************************************************************
+ * FreeSelectorList:
+ *
+ * Free every node in a linked list of Selector structures.
+ ***************************************************************************/
+static inline void
+FreeSelectorList (Selector *head)
+{
+  for (Selector *next, *node = head; node; node = next)
+  {
+    next = node->next;
+    free (node);
+  }
+}
+
+/***************************************************************************
  * HandleNegotiation:
  *
  * Handle negotiation command implementing server-side SeedLink
@@ -715,12 +730,11 @@ HandleNegotiation (ClientInfo *cinfo)
   ReqStationID *stationid;
   int fields = 0;
 
-  nstime_t starttime         = NSTUNSET;
-  nstime_t endtime           = NSTUNSET;
-  char starttimestr[51]      = {0};
-  char endtimestr[51]        = {0};
-  char selector[MAXSTREAMID] = {0};
-  uint64_t startpacket       = RINGID_NONE;
+  nstime_t starttime    = NSTUNSET;
+  nstime_t endtime      = NSTUNSET;
+  char starttimestr[51] = {0};
+  char endtimestr[51]   = {0};
+  uint64_t startpacket  = RINGID_NONE;
   Conversion convert;
 
   char *ptr;
@@ -1003,200 +1017,304 @@ HandleNegotiation (ClientInfo *cinfo)
     }
   } /* End of STATION */
 
-  /* SELECT (v3.x and v4.0) - Refine selection of channels for STATION */
+  /* SELECT (v3.x and v4.0) - Refine selection of channels for STATION
+   *
+   * SeedLink v4 supports multiple space-separated patterns per command, e.g.
+   *   SELECT *.*O:native *:3
+   * Each pattern is parsed and validated independently.  All patterns must
+   * validate before any are linked into the station/global selector list,
+   * so a SELECT command is atomic with respect to its effect.
+   *
+   * SeedLink v3 retains its single-pattern behavior (LLCCC/CCC).
+   */
   else if (!strncasecmp (cinfo->recvbuf, "SELECT", 6))
   {
-    OKGO    = 1;
-    convert = CONVERT_NONE;
+    /* Two sub-lists preserve request order while supporting the
+     * pre-existing rule: non-negated selectors are prepended to the
+     * destination list, negated selectors are appended.  Within a single
+     * SELECT command the first requested pattern is matched first, per
+     * the v4 specification. */
+    Selector *poshead      = NULL; /* Non-negated patterns, request order */
+    Selector *postail      = NULL;
+    Selector *neghead      = NULL; /* Negated patterns, request order */
+    Selector *negtail      = NULL;
+    int parsedcount        = 0;
+    char *cursor           = cinfo->recvbuf + 6;
+    char errreplymsg[80]   = {0};
+    ErrorCode errreplycode = ERROR_NONE;
 
-    /* Parse pattern from request */
-    fields = sscanf (cinfo->recvbuf, "%*s %63s %c", selector, &junk);
+    OKGO = 1;
 
-    /* Make sure we got a single pattern */
-    if (fields != 1)
+    /* Iterate over space-separated patterns following SELECT */
+    while (OKGO)
     {
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "SELECT requires a single argument"))
-        return -1;
+      char selectortok[MAXSTREAMID] = {0};
+      char label[SLMAXLABELLEN]     = {0};
+      Selector *newselector;
 
-      OKGO = 0;
-    }
+      convert = CONVERT_NONE;
 
-    /* For SeedLink v4, parse filter (conversion) or label */
-    char label[SLMAXLABELLEN] = {0};
-    if (OKGO && slinfo->proto_major == 4 && (ptr = strrchr (selector, ':')))
-    {
-      /* Check for recognized conversion filters */
-      if (strcmp (ptr + 1, "native") == 0)
+      /* Skip leading whitespace */
+      while (*cursor == ' ' || *cursor == '\t')
+        cursor++;
+
+      /* Stop at end-of-line/string */
+      if (*cursor == '\0' || *cursor == '\r' || *cursor == '\n')
+        break;
+
+      /* For v3 only one pattern is allowed; if we already parsed one and
+       * encounter more non-whitespace, treat as too-many-arguments. */
+      if (slinfo->proto_major == 3 && parsedcount >= 1)
       {
-        convert = CONVERT_NONE;
+        snprintf (errreplymsg, sizeof (errreplymsg), "SELECT requires a single argument");
+        errreplycode = ERROR_ARGUMENTS;
+        OKGO         = 0;
+        break;
       }
-      else if (strcmp (ptr + 1, "3") == 0)
+
+      /* Read one whitespace-delimited token into selectortok (max 63 chars) */
       {
-        convert = CONVERT_MSEED3;
-      }
-      /* Otherwise treat as a label selector: validate chars and length */
-      else
-      {
-        const char *labelptr = ptr + 1;
-        if (strlen (labelptr) == 0 || strlen (labelptr) >= SLMAXLABELLEN ||
-            strspn (labelptr, VALIDLABELCHARS) != strlen (labelptr))
+        size_t tokenlen = 0;
+        while (*cursor != '\0' && *cursor != ' ' && *cursor != '\t' &&
+               *cursor != '\r' && *cursor != '\n')
         {
-          lprintf (0, "[%s] Error, SELECT filter '%s' is not a valid label", cinfo->hostname, labelptr);
-
-          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Filter not supported"))
-            return -1;
-
-          OKGO = 0;
+          if (tokenlen >= sizeof (selectortok) - 1)
+          {
+            snprintf (errreplymsg, sizeof (errreplymsg), "Selector pattern too long");
+            errreplycode = ERROR_ARGUMENTS;
+            OKGO         = 0;
+            break;
+          }
+          selectortok[tokenlen++] = *cursor++;
         }
+        selectortok[tokenlen] = '\0';
+
+        if (!OKGO)
+          break;
+      }
+
+      /* For SeedLink v4, parse filter (conversion) or label */
+      if (slinfo->proto_major == 4 && (ptr = strrchr (selectortok, ':')))
+      {
+        if (strcmp (ptr + 1, "native") == 0)
+        {
+          convert = CONVERT_NONE;
+        }
+        else if (strcmp (ptr + 1, "3") == 0)
+        {
+          convert = CONVERT_MSEED3;
+        }
+        /* Otherwise treat as a label selector: validate chars and length */
         else
         {
+          const char *labelptr = ptr + 1;
+          if (strlen (labelptr) == 0 || strlen (labelptr) >= SLMAXLABELLEN ||
+              strspn (labelptr, VALIDLABELCHARS) != strlen (labelptr))
+          {
+            lprintf (0, "[%s] Error, SELECT filter '%s' is not a valid label",
+                     cinfo->hostname, labelptr);
+
+            snprintf (errreplymsg, sizeof (errreplymsg), "Filter not supported");
+            errreplycode = ERROR_ARGUMENTS;
+            OKGO         = 0;
+            break;
+          }
+
           snprintf (label, sizeof (label), "%s", labelptr);
           convert = CONVERT_NONE;
         }
+
+        *ptr = '\0';
       }
 
-      *ptr = '\0';
-    }
+      /* Truncate pattern at a '.', subtypes are accepted but not supported */
+      if ((ptr = strrchr (selectortok, '.')))
+        *ptr = '\0';
 
-    /* Truncate pattern at a '.', subtypes are accepted but not supported */
-    if (OKGO && (ptr = strrchr (selector, '.')))
-    {
-      *ptr = '\0';
-    }
-
-    /* Convert v3 style LLCCC selectors to v4 style (FDSN Source ID) for consistency */
-    if (OKGO && slinfo->proto_major == 3)
-    {
-      char newselector[sizeof (selector)];
-      char *negate     = (selector[0] == '!') ? "!" : "";
-      char *v3selector = (selector[0] == '!') ? selector + 1 : selector;
-
-      if (strlen (v3selector) == 5)
+      /* Convert v3 style LLCCC selectors to v4 style (FDSN Source ID) for consistency */
+      if (slinfo->proto_major == 3)
       {
-        snprintf (newselector, sizeof (newselector), "%s%c%c_%c_%c_%c",
-                  negate, v3selector[0], v3selector[1], v3selector[2], v3selector[3], v3selector[4]);
+        char newselectorstr[sizeof (selectortok)];
+        char *negate     = (selectortok[0] == '!') ? "!" : "";
+        char *v3selector = (selectortok[0] == '!') ? selectortok + 1 : selectortok;
+
+        if (strlen (v3selector) == 5)
+        {
+          snprintf (newselectorstr, sizeof (newselectorstr), "%s%c%c_%c_%c_%c",
+                    negate, v3selector[0], v3selector[1], v3selector[2],
+                    v3selector[3], v3selector[4]);
+        }
+        else if (strlen (v3selector) == 3)
+        {
+          snprintf (newselectorstr, sizeof (newselectorstr), "%s*_%c_%c_%c",
+                    negate, v3selector[0], v3selector[1], v3selector[2]);
+        }
+        else
+        {
+          lprintf (0, "[%s] Error, SELECT pattern '%s' is not a valid SeedLink v3 LLCCC or CCC pattern",
+                   cinfo->hostname, selectortok);
+
+          snprintf (errreplymsg, sizeof (errreplymsg), "Invalid selector pattern");
+          errreplycode = ERROR_ARGUMENTS;
+          OKGO         = 0;
+          break;
+        }
+
+        memcpy (selectortok, newselectorstr, sizeof (selectortok));
       }
-      else if (strlen (v3selector) == 3)
+
+      /* Sanity check, only allowed characters */
+      if (strspn (selectortok, VALIDSELECTCHARS) != strlen (selectortok))
       {
-        snprintf (newselector, sizeof (newselector), "%s*_%c_%c_%c",
-                  negate, v3selector[0], v3selector[1], v3selector[2]);
+        lprintf (0, "[%s] Error, select pattern contains illegal characters: '%s'",
+                 cinfo->hostname, selectortok);
+
+        snprintf (errreplymsg, sizeof (errreplymsg), "Selector contains illegal characters");
+        errreplycode = ERROR_ARGUMENTS;
+        OKGO         = 0;
+        break;
+      }
+
+      /* Allocate and populate new stream selection list node */
+      if ((newselector = (Selector *)calloc (1, sizeof (Selector))) == NULL)
+      {
+        lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
+
+        snprintf (errreplymsg, sizeof (errreplymsg), "Error allocating memory()");
+        errreplycode = ERROR_INTERNAL;
+        OKGO         = 0;
+        break;
+      }
+
+      memcpy (newselector->string, selectortok, sizeof (newselector->string));
+      memcpy (newselector->label, label, sizeof (newselector->label));
+      newselector->convert = convert;
+      newselector->next    = NULL;
+
+      /* Append to negated or non-negated sub-list, preserving request order */
+      if (selectortok[0] == '!')
+      {
+        if (negtail == NULL)
+          neghead = newselector;
+        else
+          negtail->next = newselector;
+        negtail = newselector;
       }
       else
       {
-        lprintf (0, "[%s] Error, SELECT pattern '%s' is not a valid SeedLink v3 LLCCC or CCC pattern",
-                 cinfo->hostname, selector);
-
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Invalid selector pattern"))
-          return -1;
-
-        OKGO = 0;
+        if (postail == NULL)
+          poshead = newselector;
+        else
+          postail->next = newselector;
+        postail = newselector;
       }
-
-      if (OKGO)
-        memcpy (selector, newselector, sizeof (selector));
+      parsedcount++;
     }
 
-    /* Sanity check, only allowed characters */
-    if (OKGO && strspn (selector, VALIDSELECTCHARS) != strlen (selector))
+    /* Empty SELECT is not allowed */
+    if (OKGO && parsedcount == 0)
     {
-      lprintf (0, "[%s] Error, select pattern contains illegal characters: '%s'",
-               cinfo->hostname, selector);
+      snprintf (errreplymsg, sizeof (errreplymsg),
+                (slinfo->proto_major == 4) ? "empty SELECT is not allowed in v4"
+                                           : "SELECT requires a single argument");
+      errreplycode = ERROR_ARGUMENTS;
+      OKGO         = 0;
+    }
 
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Selector contains illegal characters"))
+    /* If parsing failed, free any locally-parsed selectors and report error */
+    if (!OKGO)
+    {
+      FreeSelectorList (poshead);
+      FreeSelectorList (neghead);
+
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", errreplycode, errreplymsg))
         return -1;
-
-      OKGO = 0;
     }
-
-    /* Allocate and populate new stream selection list node */
-    Selector *newselector = NULL;
-    if ((newselector = (Selector *)calloc (1, sizeof (Selector))) == NULL)
+    /* If modifying a STATION find the station ID up front, before sending OK */
+    else if (cinfo->state == STATE_STATION)
     {
-      lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
-
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error allocating memory()"))
-        return -1;
-
-      OKGO = 0;
-    }
-
-    if (OKGO)
-    {
-      memcpy (newselector->string, selector, sizeof (newselector->string));
-      memcpy (newselector->label, label, sizeof (newselector->label));
-      newselector->convert = convert;
-    }
-
-    /* If modifying a STATION add selector to it's entry */
-    if (OKGO && cinfo->state == STATE_STATION)
-    {
-      /* Find the appropriate station ID */
       if (!(stationid = GetReqStationID (slinfo->stations, slinfo->reqstaid)))
       {
         lprintf (0, "[%s] Error in GetReqStationID() for command SELECT", cinfo->hostname);
 
-        free (newselector);
-        newselector = NULL;
+        FreeSelectorList (poshead);
+        FreeSelectorList (neghead);
 
         if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetReqStationID()"))
           return -1;
       }
       else
       {
-        /* Send the reply first; only link the selector into the station's
-         * list if the reply succeeds */
+        /* Send the reply first; only link the selectors into the station's
+         * list if the reply succeeds. */
         if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
         {
-          free (newselector);
+          FreeSelectorList (poshead);
+          FreeSelectorList (neghead);
           return -1;
         }
 
-        /* Add selector to the station ID selectors */
-        /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
-        if (selector[0] == '!' && stationid->selectors != NULL)
+        /* Prepend non-negated patterns as a unit to preserve request order
+         * within this SELECT command (first requested pattern is matched
+         * first by SLFindFilter).  This matches the pre-existing rule that
+         * non-negated patterns are added to the front of the list. */
+        if (poshead != NULL)
         {
-          Selector *last = stationid->selectors;
-
-          while (last->next != NULL)
-            last = last->next;
-
-          last->next        = newselector;
-          newselector->next = NULL;
+          postail->next        = stationid->selectors;
+          stationid->selectors = poshead;
         }
-        else
+
+        /* Append negated patterns as a unit to the end of the list,
+         * preserving request order. */
+        if (neghead != NULL)
         {
-          newselector->next    = stationid->selectors;
-          stationid->selectors = newselector;
+          if (stationid->selectors == NULL)
+          {
+            stationid->selectors = neghead;
+          }
+          else
+          {
+            Selector *last = stationid->selectors;
+            while (last->next != NULL)
+              last = last->next;
+            last->next = neghead;
+          }
         }
       }
     }
-    /* Otherwise add selector to global list */
-    else if (OKGO)
+    /* Otherwise add selectors to global list */
+    else
     {
-      /* Send the reply first; only link the selector into the global list
+      /* Send the reply first; only link the selectors into the global list
        * if the reply succeeds. */
       if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
       {
-        free (newselector);
+        FreeSelectorList (poshead);
+        FreeSelectorList (neghead);
         return -1;
       }
 
-      /* Add selector to the global selectors */
-      /* If selector is negated (!) add it to end of the selectors otherwise add it to the beginning */
-      if (selector[0] == '!' && slinfo->selectors != NULL)
+      /* Prepend non-negated patterns as a unit (request order preserved). */
+      if (poshead != NULL)
       {
-        Selector *last = slinfo->selectors;
-
-        while (last->next != NULL)
-          last = last->next;
-
-        last->next        = newselector;
-        newselector->next = NULL;
+        postail->next     = slinfo->selectors;
+        slinfo->selectors = poshead;
       }
-      else
+
+      /* Append negated patterns as a unit. */
+      if (neghead != NULL)
       {
-        newselector->next = slinfo->selectors;
-        slinfo->selectors = newselector;
+        if (slinfo->selectors == NULL)
+        {
+          slinfo->selectors = neghead;
+        }
+        else
+        {
+          Selector *last = slinfo->selectors;
+          while (last->next != NULL)
+            last = last->next;
+          last->next = neghead;
+        }
       }
     }
   } /* End of SELECT */
