@@ -1,4 +1,6 @@
 Unreleased
+	- Fix SeedLink per-station DATA/FETCH/TIME ignoring requested start time,
+	  causing streams to begin at the next new packet instead of the requested time.
 	- Add more of the config options to the server status info response.
 	- Add protocol_version to JSON info for DataLink clients.
 

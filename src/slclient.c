@@ -237,7 +237,7 @@ SLHandleCmd (ClientInfo *cinfo)
         /* Set or expand the global starttime */
         if (stationid->starttime != NSTUNSET)
         {
-          if (!cinfo->starttime)
+          if (cinfo->starttime == NSTUNSET)
             cinfo->starttime = stationid->starttime;
           else if (cinfo->starttime > stationid->starttime)
             cinfo->starttime = stationid->starttime;
@@ -246,7 +246,7 @@ SLHandleCmd (ClientInfo *cinfo)
         /* Set or expand the global endtime */
         if (stationid->endtime != NSTUNSET)
         {
-          if (!cinfo->endtime)
+          if (cinfo->endtime == NSTUNSET)
             cinfo->endtime = stationid->endtime;
           else if (cinfo->endtime < stationid->endtime)
             cinfo->endtime = stationid->endtime;
