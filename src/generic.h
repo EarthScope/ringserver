@@ -26,6 +26,7 @@
 extern "C" {
 #endif
 
+#include <stdio.h>
 #include <libmseed.h>
 
 /* Key for B-trees */
@@ -40,6 +41,9 @@ extern int KeyCompare (const void *a, const void *b);
 extern int IsAllDigits (const char *string);
 extern int HumanSizeString (uint64_t bytes, char *sizestring, size_t sizestringlen);
 extern int GlobMatch (const char *string, const char *pattern);
+extern int FinalizeMemStream (FILE *stream, char **buf, size_t *len);
+extern int AllocPrintf (char **strp, const char *fmt, ...)
+    __attribute__ ((format (printf, 2, 3)));
 
 #ifdef __cplusplus
 }

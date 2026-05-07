@@ -22,7 +22,9 @@
  **************************************************************************/
 
 #include <errno.h>
+#include <limits.h>
 #include <pthread.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -547,4 +549,98 @@ _match_charclass (const char **pp, unsigned char c)
   *pp = p + 1; /* skip ']' */
 
   return negate ? !matched : matched;
+}
+
+/***************************************************************************
+ * FinalizeMemStream:
+ *
+ * Finalize a stream created by open_memstream().  Checks ferror() before
+ * and the return value of fclose() to catch write failures on both glibc
+ * and macOS libc.  Validates that the resulting byte count fits in an int
+ * (required because HTTP response lengths are returned as int throughout
+ * http.c).
+ *
+ * On success returns the byte count as int and transfers ownership of *buf
+ * to the caller (caller must free it).
+ *
+ * On any failure fclose()s the stream (if not NULL), frees *buf, sets
+ * *buf to NULL, and returns -1.
+ ***************************************************************************/
+int
+FinalizeMemStream (FILE *stream, char **buf, size_t *len)
+{
+  if (stream == NULL)
+  {
+    free (*buf);
+    *buf = NULL;
+    return -1;
+  }
+
+  if (ferror (stream))
+  {
+    fclose (stream);
+    free (*buf);
+    *buf = NULL;
+    return -1;
+  }
+
+  if (fclose (stream) != 0)
+  {
+    free (*buf);
+    *buf = NULL;
+    return -1;
+  }
+
+  if (*len > INT_MAX)
+  {
+    free (*buf);
+    *buf = NULL;
+    return -1;
+  }
+
+  return (int)*len;
+}
+
+/***************************************************************************
+ * AllocPrintf:
+ *
+ * Allocate a buffer and printf-format into it using two vsnprintf passes:
+ * the first measures the required length, the second fills the buffer.
+ *
+ * On success returns the length and sets *strp to a malloc'd,
+ * NUL-terminated string (caller must free).
+ *
+ * On failure returns -1 and sets *strp to NULL.  Drop-in replacement for
+ * the non-standard asprintf().
+ ***************************************************************************/
+int
+AllocPrintf (char **strp, const char *fmt, ...)
+{
+  va_list ap, ap2;
+  int len;
+
+  *strp = NULL;
+
+  va_start (ap, fmt);
+  va_copy (ap2, ap);
+  len = vsnprintf (NULL, 0, fmt, ap);
+  va_end (ap);
+
+  if (len < 0)
+  {
+    va_end (ap2);
+    return -1;
+  }
+
+  *strp = (char *)malloc ((size_t)len + 1);
+  if (*strp == NULL)
+  {
+    va_end (ap2);
+    return -1;
+  }
+
+  vsnprintf (*strp, (size_t)len + 1, fmt, ap2);
+  va_end (ap2);
+
+  return len;
 }

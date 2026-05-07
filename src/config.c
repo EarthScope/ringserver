@@ -2424,7 +2424,7 @@ SetParameter (const char *paramstring, int dynamiconly)
     char *combined_value = NULL;
 
     /* Append multiple headers to composite string */
-    if (asprintf (&combined_value, "%s%s\r\n", (config.httpheaders) ? config.httpheaders : "", field[1]) < 0)
+    if (AllocPrintf (&combined_value, "%s%s\r\n", (config.httpheaders) ? config.httpheaders : "", field[1]) < 0)
     {
       lprintf (0, "Error allocating memory");
       return -1;

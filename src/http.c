@@ -1266,7 +1266,7 @@ GenerateID (ClientInfo *cinfo, const char *path, char **response, MediaType *typ
         seedlink_protocols[written - 1] = '\0'; /* Remove trailing comma */
     }
 
-    responsebytes = asprintf (response,
+    responsebytes = AllocPrintf (response,
                               "%s\n"
                               "Organization: %s\n"
                               "Server start: %s\n"
@@ -1309,13 +1309,10 @@ GenerateStreams (ClientInfo *cinfo, const char *path, const char *query,
                  char **response, MediaType *type)
 {
   size_t streamcount;
-  size_t streamlistsize;
   char matchstr[64] = {0};
   int matchlen      = 0;
 
   char *cp;
-  char *writeptr    = NULL;
-  int written       = 0;
   int responsebytes = 0;
 
   char *json_string;
@@ -1369,65 +1366,44 @@ GenerateStreams (ClientInfo *cinfo, const char *path, const char *query,
     if ((stream_array = yyjson_obj_get (root, "stream")) != NULL &&
         (streamcount = yyjson_arr_size (stream_array)) > 0)
     {
-      /* Allocate stream list buffer with maximum expected:
-       * for /streamids output, a stream ID (<MAXSTREAMID) + newline
-       * for /streams output, a stream ID + 2 timestamps + separators + newline */
-      size_t per_entry = (just_ids) ? (MAXSTREAMID + 2) : (MAXSTREAMID + 2 * 32 + 8);
+      char *buf   = NULL;
+      size_t len  = 0;
+      FILE *mem   = open_memstream (&buf, &len);
 
-      /* Guard against size_t overflow in the per_entry * streamcount product */
-      if (streamcount > SIZE_MAX / per_entry)
+      if (!mem)
       {
-        lprintf (0, "[%s] Error for HTTP STREAM[ID]S (stream count %zu would overflow response size)",
-                 cinfo->hostname, streamcount);
+        lprintf (0, "[%s] Error for HTTP STREAM[ID]S (open_memstream failed)",
+                 cinfo->hostname);
         yyjson_doc_free (json);
         return -1;
       }
-
-      streamlistsize = per_entry * streamcount;
-
-      if (!(*response = (char *)malloc (streamlistsize)))
-      {
-        lprintf (0, "[%s] Error for HTTP STREAM[ID]S (cannot allocate response buffer of size %zu)",
-                 cinfo->hostname, streamlistsize);
-        yyjson_doc_free (json);
-        return -1;
-      }
-
-      writeptr = *response;
-
-      responsebytes = 0;
 
       yyjson_arr_foreach (stream_array, idx, max, stream_iter)
       {
         if (just_ids)
         {
-          written = snprintf (writeptr, streamlistsize - responsebytes, "%s\n",
-                              DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "id"))));
+          fprintf (mem, "%s\n",
+                   DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "id"))));
         }
         else
         {
-          written = snprintf (writeptr, streamlistsize - responsebytes, "%s %s %s\n",
-                              DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "id"))),
-                              DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "start_time"))),
-                              DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "end_time"))));
+          fprintf (mem, "%s %s %s\n",
+                   DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "id"))),
+                   DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "start_time"))),
+                   DASHNULL (yyjson_get_str (yyjson_obj_get (stream_iter, "end_time"))));
         }
-
-        if ((responsebytes + written) >= streamlistsize)
-        {
-          lprintf (0, "[%s] Error for HTTP STREAM[ID]S (response buffer overflow)",
-                   cinfo->hostname);
-          yyjson_doc_free (json);
-          free (*response);
-          return -1;
-        }
-
-        writeptr += written;
-        responsebytes += written;
       }
 
-      /* Add a final terminator to stream list buffer */
-      *writeptr = '\0';
+      responsebytes = FinalizeMemStream (mem, &buf, &len);
+      if (responsebytes < 0)
+      {
+        lprintf (0, "[%s] Error for HTTP STREAM[ID]S (response finalisation failed)",
+                 cinfo->hostname);
+        yyjson_doc_free (json);
+        return -1;
+      }
 
+      *response = buf;
       yyjson_doc_free (json);
       *type = TEXT;
     }
@@ -1452,9 +1428,6 @@ GenerateStreams (ClientInfo *cinfo, const char *path, const char *query,
 static int
 GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType *type)
 {
-  size_t responsesize;
-  char *writeptr    = NULL;
-  int written       = 0;
   int responsebytes = 0;
 
   char *json_string;
@@ -1551,100 +1524,71 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
 
     if ((server = yyjson_obj_get (root, "server")) != NULL)
     {
-      responsesize = 2048;
+      char *buf  = NULL;
+      size_t len = 0;
+      FILE *mem  = open_memstream (&buf, &len);
 
-      if (!(*response = (char *)malloc (responsesize)))
+      if (!mem)
       {
-        lprintf (0, "[%s] Error for HTTP STATUS (cannot allocate response buffer of size %zu)",
-                 cinfo->hostname, responsesize);
-        yyjson_doc_free (json);
-        return -1;
-      }
-
-      writeptr = *response;
-
-      responsebytes = 0;
-
-      written = snprintf (writeptr, responsesize - responsebytes,
-                          "%s\n"
-                          "Organization: %s\n"
-                          "Server start time: %s\n"
-                          "DataLink protocols: %s\n"
-                          "SeedLink protocols: %s\n"
-                          "Ring version: %" PRIu64 "\n"
-                          "Ring size: %" PRIu64 "\n"
-                          "Packet size: %d\n"
-                          "Max packets: %d\n"
-                          "Memory mapped ring: %s\n"
-                          "Volatile ring: %s\n"
-                          "FDSN Source Identifiers: %s\n"
-                          "Total connections: %d\n"
-                          "Total streams: %d\n"
-                          "TX packet rate: %.1f\n"
-                          "TX byte rate: %.1f\n"
-                          "RX packet rate: %.1f\n"
-                          "RX byte rate: %.1f\n"
-                          "Earliest packet: %" PRIu64 "\n"
-                          "  Create: %s  Data start: %s  Data end: %s\n"
-                          "Latest packet: %" PRIu64 "\n"
-                          "  Create: %s  Data start: %s  Data end: %s\n",
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (root, "software"))),
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (root, "organization"))),
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (root, "server_start"))),
-                          (datalink_protocols[0] != '\0') ? datalink_protocols : "NONE",
-                          (seedlink_protocols[0] != '\0') ? seedlink_protocols : "NONE",
-                          yyjson_get_uint (yyjson_obj_get (server, "ring_version")),
-                          yyjson_get_uint (yyjson_obj_get (server, "ring_size")),
-                          yyjson_get_int (yyjson_obj_get (server, "packet_size")),
-                          yyjson_get_int (yyjson_obj_get (server, "maximum_packets")),
-                          (yyjson_get_bool (yyjson_obj_get (server, "memory_mapped"))) ? "TRUE" : "FALSE",
-                          (yyjson_get_bool (yyjson_obj_get (server, "volatile_ring"))) ? "TRUE" : "FALSE",
-                          (yyjson_get_bool (yyjson_obj_get (server, "fdsn_source_identifiers"))) ? "TRUE" : "FALSE",
-                          yyjson_get_int (yyjson_obj_get (server, "connection_count")),
-                          yyjson_get_int (yyjson_obj_get (server, "stream_count")),
-                          yyjson_get_real (yyjson_obj_get (server, "transmit_packet_rate")),
-                          yyjson_get_real (yyjson_obj_get (server, "transmit_byte_rate")),
-                          yyjson_get_real (yyjson_obj_get (server, "receive_packet_rate")),
-                          yyjson_get_real (yyjson_obj_get (server, "receive_byte_rate")),
-                          yyjson_get_uint (yyjson_obj_get (server, "earliest_packet_id")),
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "earliest_packet_time"))),
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "earliest_data_start"))),
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "earliest_data_end"))),
-                          yyjson_get_uint (yyjson_obj_get (server, "latest_packet_id")),
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "latest_packet_time"))),
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "latest_data_start"))),
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "latest_data_end"))));
-
-      if (written < 0 || (size_t)(responsebytes + written) >= responsesize)
-      {
-        lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
+        lprintf (0, "[%s] Error for HTTP STATUS (open_memstream failed)",
                  cinfo->hostname);
-        free (*response);
-        *response = NULL;
         yyjson_doc_free (json);
         return -1;
       }
 
-      writeptr += written;
-      responsebytes += written;
+      fprintf (mem,
+               "%s\n"
+               "Organization: %s\n"
+               "Server start time: %s\n"
+               "DataLink protocols: %s\n"
+               "SeedLink protocols: %s\n"
+               "Ring version: %" PRIu64 "\n"
+               "Ring size: %" PRIu64 "\n"
+               "Packet size: %d\n"
+               "Max packets: %d\n"
+               "Memory mapped ring: %s\n"
+               "Volatile ring: %s\n"
+               "FDSN Source Identifiers: %s\n"
+               "Total connections: %d\n"
+               "Total streams: %d\n"
+               "TX packet rate: %.1f\n"
+               "TX byte rate: %.1f\n"
+               "RX packet rate: %.1f\n"
+               "RX byte rate: %.1f\n"
+               "Earliest packet: %" PRIu64 "\n"
+               "  Create: %s  Data start: %s  Data end: %s\n"
+               "Latest packet: %" PRIu64 "\n"
+               "  Create: %s  Data start: %s  Data end: %s\n",
+               DASHNULL (yyjson_get_str (yyjson_obj_get (root, "software"))),
+               DASHNULL (yyjson_get_str (yyjson_obj_get (root, "organization"))),
+               DASHNULL (yyjson_get_str (yyjson_obj_get (root, "server_start"))),
+               (datalink_protocols[0] != '\0') ? datalink_protocols : "NONE",
+               (seedlink_protocols[0] != '\0') ? seedlink_protocols : "NONE",
+               yyjson_get_uint (yyjson_obj_get (server, "ring_version")),
+               yyjson_get_uint (yyjson_obj_get (server, "ring_size")),
+               yyjson_get_int (yyjson_obj_get (server, "packet_size")),
+               yyjson_get_int (yyjson_obj_get (server, "maximum_packets")),
+               (yyjson_get_bool (yyjson_obj_get (server, "memory_mapped"))) ? "TRUE" : "FALSE",
+               (yyjson_get_bool (yyjson_obj_get (server, "volatile_ring"))) ? "TRUE" : "FALSE",
+               (yyjson_get_bool (yyjson_obj_get (server, "fdsn_source_identifiers"))) ? "TRUE" : "FALSE",
+               yyjson_get_int (yyjson_obj_get (server, "connection_count")),
+               yyjson_get_int (yyjson_obj_get (server, "stream_count")),
+               yyjson_get_real (yyjson_obj_get (server, "transmit_packet_rate")),
+               yyjson_get_real (yyjson_obj_get (server, "transmit_byte_rate")),
+               yyjson_get_real (yyjson_obj_get (server, "receive_packet_rate")),
+               yyjson_get_real (yyjson_obj_get (server, "receive_byte_rate")),
+               yyjson_get_uint (yyjson_obj_get (server, "earliest_packet_id")),
+               DASHNULL (yyjson_get_str (yyjson_obj_get (server, "earliest_packet_time"))),
+               DASHNULL (yyjson_get_str (yyjson_obj_get (server, "earliest_data_start"))),
+               DASHNULL (yyjson_get_str (yyjson_obj_get (server, "earliest_data_end"))),
+               yyjson_get_uint (yyjson_obj_get (server, "latest_packet_id")),
+               DASHNULL (yyjson_get_str (yyjson_obj_get (server, "latest_packet_time"))),
+               DASHNULL (yyjson_get_str (yyjson_obj_get (server, "latest_data_start"))),
+               DASHNULL (yyjson_get_str (yyjson_obj_get (server, "latest_data_end"))));
 
       if ((array = yyjson_obj_get (server, "thread")) != NULL)
       {
-        written = snprintf (writeptr, responsesize - responsebytes,
-                            "\nServer threads:\n");
-
-        if (written < 0 || (size_t)(responsebytes + written) >= responsesize)
-        {
-          lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
-                   cinfo->hostname);
-          free (*response);
-          *response = NULL;
-          yyjson_doc_free (json);
-          return -1;
-        }
-
-        writeptr += written;
-        responsebytes += written;
+        fprintf (mem, "\nServer threads:\n");
 
         yyjson_arr_foreach (array, idx, max, array_iter)
         {
@@ -1652,186 +1596,137 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
 
           if (thread_type && !strcasecmp (thread_type, "Listener"))
           {
-            written = snprintf (writeptr, responsesize - responsebytes,
-                                "  Thread type: %s\n"
-                                "    Protocol: %s\n"
-                                "    Port: %s\n",
-                                thread_type,
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "protocol"))),
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "port"))));
+            fprintf (mem,
+                     "  Thread type: %s\n"
+                     "    Protocol: %s\n"
+                     "    Port: %s\n",
+                     thread_type,
+                     DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "protocol"))),
+                     DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "port"))));
           }
           else if (thread_type && !strcasecmp (thread_type, "miniSEED scanner"))
           {
-            written = snprintf (writeptr, responsesize - responsebytes,
-                                "  Thread type: %s\n"
-                                "    Directory: %s\n"
-                                "    Max recursion: %d\n"
-                                "    State file: %s\n"
-                                "    Match: %s\n"
-                                "    Reject: %s\n"
-                                "    Scan time: %g\n"
-                                "    Packet rate: %g\n"
-                                "    Byte rate: %g\n",
-                                thread_type,
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "directory"))),
-                                yyjson_get_int (yyjson_obj_get (array_iter, "max_recursion")),
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "state_file"))),
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "match"))),
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "reject"))),
-                                yyjson_get_real (yyjson_obj_get (array_iter, "scan_time")),
-                                yyjson_get_real (yyjson_obj_get (array_iter, "packet_rate")),
-                                yyjson_get_real (yyjson_obj_get (array_iter, "byte_rate")));
+            fprintf (mem,
+                     "  Thread type: %s\n"
+                     "    Directory: %s\n"
+                     "    Max recursion: %d\n"
+                     "    State file: %s\n"
+                     "    Match: %s\n"
+                     "    Reject: %s\n"
+                     "    Scan time: %g\n"
+                     "    Packet rate: %g\n"
+                     "    Byte rate: %g\n",
+                     thread_type,
+                     DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "directory"))),
+                     yyjson_get_int (yyjson_obj_get (array_iter, "max_recursion")),
+                     DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "state_file"))),
+                     DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "match"))),
+                     DASHNULL (yyjson_get_str (yyjson_obj_get (array_iter, "reject"))),
+                     yyjson_get_real (yyjson_obj_get (array_iter, "scan_time")),
+                     yyjson_get_real (yyjson_obj_get (array_iter, "packet_rate")),
+                     yyjson_get_real (yyjson_obj_get (array_iter, "byte_rate")));
           }
           else
           {
-            written = snprintf (writeptr, responsesize - responsebytes,
-                                "  Thread type: %s\n",
-                                thread_type);
+            fprintf (mem, "  Thread type: %s\n", thread_type);
           }
-
-          if ((responsebytes + written) >= responsesize)
-          {
-            lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
-                     cinfo->hostname);
-            yyjson_doc_free (json);
-            return -1;
-          }
-
-          writeptr += written;
-          responsebytes += written;
         }
       }
 
       /* Configuration parameters carried in the same "server" object */
-      written = snprintf (writeptr, responsesize - responsebytes,
-                          "\nConfiguration:\n"
-                          "  Config file: %s\n"
-                          "  Verbosity: %d\n"
-                          "  Ring directory: %s\n"
-                          "  Auto recovery: %u\n"
-                          "  Max clients: %u\n"
-                          "  Max clients per IP: %u\n"
-                          "  Client timeout: %u s\n"
-                          "  Network I/O timeout: %u s\n"
-                          "  TCP keepalive idle: %u s\n"
-                          "  TCP keepalive interval: %u s\n"
-                          "  TCP keepalive count: %u\n"
-                          "  Time window limit: %.1f%%\n"
-                          "  Resolve hosts: %s\n"
-                          "  Web root: %s\n"
-                          "  HTTP headers: %s\n"
-                          "  miniSEED archive: %s\n"
-                          "  miniSEED idle timeout: %d s\n"
-                          "  TLS certificate file: %s\n"
-                          "  TLS key file: %s\n"
-                          "  TLS verify client cert: %s\n",
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "config_file"))),
-                          yyjson_get_int (yyjson_obj_get (server, "verbose")),
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "ring_directory"))),
-                          (unsigned)yyjson_get_uint (yyjson_obj_get (server, "auto_recovery")),
-                          (unsigned)yyjson_get_uint (yyjson_obj_get (server, "max_clients")),
-                          (unsigned)yyjson_get_uint (yyjson_obj_get (server, "max_clients_per_ip")),
-                          (unsigned)yyjson_get_uint (yyjson_obj_get (server, "client_timeout")),
-                          (unsigned)yyjson_get_uint (yyjson_obj_get (server, "network_io_timeout")),
-                          (unsigned)yyjson_get_uint (yyjson_obj_get (server, "tcp_keepalive_idle")),
-                          (unsigned)yyjson_get_uint (yyjson_obj_get (server, "tcp_keepalive_interval")),
-                          (unsigned)yyjson_get_uint (yyjson_obj_get (server, "tcp_keepalive_count")),
-                          yyjson_get_real (yyjson_obj_get (server, "time_window_limit_percent")),
-                          (yyjson_get_bool (yyjson_obj_get (server, "resolve_hosts"))) ? "TRUE" : "FALSE",
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "web_root"))),
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "http_headers"))),
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "mseed_archive"))),
-                          yyjson_get_int (yyjson_obj_get (server, "mseed_idle_timeout")),
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "tls_certificate_file"))),
-                          DASHNULL (yyjson_get_str (yyjson_obj_get (server, "tls_key_file"))),
-                          (yyjson_get_bool (yyjson_obj_get (server, "tls_verify_client_cert"))) ? "TRUE" : "FALSE");
+      fprintf (mem,
+               "\nConfiguration:\n"
+               "  Config file: %s\n"
+               "  Verbosity: %d\n"
+               "  Ring directory: %s\n"
+               "  Auto recovery: %u\n"
+               "  Max clients: %u\n"
+               "  Max clients per IP: %u\n"
+               "  Client timeout: %u s\n"
+               "  Network I/O timeout: %u s\n"
+               "  TCP keepalive idle: %u s\n"
+               "  TCP keepalive interval: %u s\n"
+               "  TCP keepalive count: %u\n"
+               "  Time window limit: %.1f%%\n"
+               "  Resolve hosts: %s\n",
+               DASHNULL (yyjson_get_str (yyjson_obj_get (server, "config_file"))),
+               yyjson_get_int (yyjson_obj_get (server, "verbose")),
+               DASHNULL (yyjson_get_str (yyjson_obj_get (server, "ring_directory"))),
+               (unsigned)yyjson_get_uint (yyjson_obj_get (server, "auto_recovery")),
+               (unsigned)yyjson_get_uint (yyjson_obj_get (server, "max_clients")),
+               (unsigned)yyjson_get_uint (yyjson_obj_get (server, "max_clients_per_ip")),
+               (unsigned)yyjson_get_uint (yyjson_obj_get (server, "client_timeout")),
+               (unsigned)yyjson_get_uint (yyjson_obj_get (server, "network_io_timeout")),
+               (unsigned)yyjson_get_uint (yyjson_obj_get (server, "tcp_keepalive_idle")),
+               (unsigned)yyjson_get_uint (yyjson_obj_get (server, "tcp_keepalive_interval")),
+               (unsigned)yyjson_get_uint (yyjson_obj_get (server, "tcp_keepalive_count")),
+               yyjson_get_real (yyjson_obj_get (server, "time_window_limit_percent")),
+               (yyjson_get_bool (yyjson_obj_get (server, "resolve_hosts"))) ? "TRUE" : "FALSE");
 
-      if (written < 0 || (size_t)(responsebytes + written) >= responsesize)
+      /* Optional fields present only when configured */
       {
-        lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
-                 cinfo->hostname);
-        free (*response);
-        *response = NULL;
-        yyjson_doc_free (json);
-        return -1;
+        yyjson_val *v;
+        if ((v = yyjson_obj_get (server, "web_root")) != NULL)
+          fprintf (mem, "  Web root: %s\n", DASHNULL (yyjson_get_str (v)));
+        if ((v = yyjson_obj_get (server, "http_headers")) != NULL)
+          fprintf (mem, "  HTTP headers: %s\n", DASHNULL (yyjson_get_str (v)));
+        if ((v = yyjson_obj_get (server, "mseed_archive")) != NULL)
+          fprintf (mem, "  miniSEED archive: %s\n", DASHNULL (yyjson_get_str (v)));
+        if ((v = yyjson_obj_get (server, "mseed_idle_timeout")) != NULL)
+          fprintf (mem, "  miniSEED idle timeout: %d s\n", yyjson_get_int (v));
+        if ((v = yyjson_obj_get (server, "tls_certificate_file")) != NULL)
+          fprintf (mem, "  TLS certificate file: %s\n", DASHNULL (yyjson_get_str (v)));
+        if ((v = yyjson_obj_get (server, "tls_key_file")) != NULL)
+          fprintf (mem, "  TLS key file: %s\n", DASHNULL (yyjson_get_str (v)));
       }
 
-      writeptr += written;
-      responsebytes += written;
+      fprintf (mem, "  TLS verify client cert: %s\n",
+               (yyjson_get_bool (yyjson_obj_get (server, "tls_verify_client_cert"))) ? "TRUE" : "FALSE");
 
       /* Authentication */
       if ((array = yyjson_obj_get (server, "auth")) != NULL)
       {
-        written = snprintf (writeptr, responsesize - responsebytes,
-                            "  Auth program: %s\n"
-                            "  Auth timeout: %u s\n"
-                            "  Auth required: %s\n",
-                            DASHNULL (yyjson_get_str (yyjson_obj_get (array, "program"))),
-                            (unsigned)yyjson_get_uint (yyjson_obj_get (array, "timeout_sec")),
-                            (yyjson_get_bool (yyjson_obj_get (array, "required"))) ? "TRUE" : "FALSE");
-
-        if (written < 0 || (size_t)(responsebytes + written) >= responsesize)
-        {
-          lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
-                   cinfo->hostname);
-          free (*response);
-          *response = NULL;
-          yyjson_doc_free (json);
-          return -1;
-        }
-
-        writeptr += written;
-        responsebytes += written;
+        yyjson_val *v;
+        if ((v = yyjson_obj_get (array, "program")) != NULL)
+          fprintf (mem, "  Auth program: %s\n", DASHNULL (yyjson_get_str (v)));
+        if ((v = yyjson_obj_get (array, "timeout_sec")) != NULL)
+          fprintf (mem, "  Auth timeout: %u s\n", (unsigned)yyjson_get_uint (v));
+        fprintf (mem, "  Auth required: %s\n",
+                 (yyjson_get_bool (yyjson_obj_get (array, "required"))) ? "TRUE" : "FALSE");
       }
 
       /* Usage log */
       if ((array = yyjson_obj_get (server, "usage_log")) != NULL)
       {
         yyjson_val *modes = yyjson_obj_get (array, "mode");
-        char modestr[64]  = {0};
-        size_t modelen    = 0;
 
-        if (modes && yyjson_is_arr (modes))
+        fprintf (mem, "  Usage log modes:");
+        if (modes && yyjson_is_arr (modes) && yyjson_arr_size (modes) > 0)
         {
           yyjson_val *m_iter = NULL;
           size_t midx, mmax;
           yyjson_arr_foreach (modes, midx, mmax, m_iter)
           {
-            const char *m = yyjson_get_str (m_iter);
-            if (m)
-              modelen += snprintf (modestr + modelen, sizeof (modestr) - modelen,
-                                   "%s%s", (modelen) ? "," : "", m);
-            if (modelen >= sizeof (modestr))
-              break;
+            fprintf (mem, " %s", DASHNULL (yyjson_get_str (m_iter)));
           }
         }
-
-        written = snprintf (writeptr, responsesize - responsebytes,
-                            "  Usage log modes: %s\n"
-                            "  Usage log directory: %s\n"
-                            "  Usage log prefix: %s\n"
-                            "  Usage log interval: %d s\n"
-                            "  Usage log start: %s\n"
-                            "  Usage log end: %s\n",
-                            (modelen > 0) ? modestr : "NONE",
-                            DASHNULL (yyjson_get_str (yyjson_obj_get (array, "base_directory"))),
-                            DASHNULL (yyjson_get_str (yyjson_obj_get (array, "prefix"))),
-                            yyjson_get_int (yyjson_obj_get (array, "interval")),
-                            DASHNULL (yyjson_get_str (yyjson_obj_get (array, "start_interval"))),
-                            DASHNULL (yyjson_get_str (yyjson_obj_get (array, "end_interval"))));
-
-        if (written < 0 || (size_t)(responsebytes + written) >= responsesize)
+        else
         {
-          lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
-                   cinfo->hostname);
-          free (*response);
-          *response = NULL;
-          yyjson_doc_free (json);
-          return -1;
+          fprintf (mem, " NONE");
         }
+        fputc ('\n', mem);
 
-        writeptr += written;
-        responsebytes += written;
+        yyjson_val *v;
+        if ((v = yyjson_obj_get (array, "base_directory")) != NULL)
+          fprintf (mem, "  Usage log directory: %s\n", DASHNULL (yyjson_get_str (v)));
+        if ((v = yyjson_obj_get (array, "prefix")) != NULL)
+          fprintf (mem, "  Usage log prefix: %s\n", DASHNULL (yyjson_get_str (v)));
+        fprintf (mem, "  Usage log interval: %d s\n",
+                 yyjson_get_int (yyjson_obj_get (array, "interval")));
+        if ((v = yyjson_obj_get (array, "start_interval")) != NULL)
+          fprintf (mem, "  Usage log start: %s\n", DASHNULL (yyjson_get_str (v)));
+        if ((v = yyjson_obj_get (array, "end_interval")) != NULL)
+          fprintf (mem, "  Usage log end: %s\n", DASHNULL (yyjson_get_str (v)));
       }
 
       /* IP access lists */
@@ -1855,21 +1750,7 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
         if (iplist == NULL || !yyjson_is_arr (iplist) || yyjson_arr_size (iplist) == 0)
           continue;
 
-        written = snprintf (writeptr, responsesize - responsebytes,
-                            "  %s:\n", ip_lists[li].label);
-
-        if (written < 0 || (size_t)(responsebytes + written) >= responsesize)
-        {
-          lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
-                   cinfo->hostname);
-          free (*response);
-          *response = NULL;
-          yyjson_doc_free (json);
-          return -1;
-        }
-
-        writeptr += written;
-        responsebytes += written;
+        fprintf (mem, "  %s:\n", ip_lists[li].label);
 
         yyjson_val *entry_iter = NULL;
         size_t eidx, emax;
@@ -1878,33 +1759,29 @@ GenerateStatus (ClientInfo *cinfo, const char *path, char **response, MediaType 
           yyjson_val *pv = yyjson_obj_get (entry_iter, "pattern");
 
           if (ip_lists[li].has_pattern && pv)
-            written = snprintf (writeptr, responsesize - responsebytes,
-                                "    %s/%s (%s)  pattern: %s\n",
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "network"))),
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "netmask"))),
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "family"))),
-                                DASHNULL (yyjson_get_str (pv)));
+            fprintf (mem, "    %s/%s (%s)  pattern: %s\n",
+                     DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "network"))),
+                     DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "netmask"))),
+                     DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "family"))),
+                     DASHNULL (yyjson_get_str (pv)));
           else
-            written = snprintf (writeptr, responsesize - responsebytes,
-                                "    %s/%s (%s)\n",
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "network"))),
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "netmask"))),
-                                DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "family"))));
-
-          if (written < 0 || (size_t)(responsebytes + written) >= responsesize)
-          {
-            lprintf (0, "[%s] Error for HTTP STATUS (response buffer overflow)",
-                     cinfo->hostname);
-            free (*response);
-            *response = NULL;
-            yyjson_doc_free (json);
-            return -1;
-          }
-
-          writeptr += written;
-          responsebytes += written;
+            fprintf (mem, "    %s/%s (%s)\n",
+                     DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "network"))),
+                     DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "netmask"))),
+                     DASHNULL (yyjson_get_str (yyjson_obj_get (entry_iter, "family"))));
         }
       }
+
+      responsebytes = FinalizeMemStream (mem, &buf, &len);
+      if (responsebytes < 0)
+      {
+        lprintf (0, "[%s] Error for HTTP STATUS (response finalisation failed)",
+                 cinfo->hostname);
+        yyjson_doc_free (json);
+        return -1;
+      }
+
+      *response = buf;
     }
 
     yyjson_doc_free (json);
@@ -1937,13 +1814,10 @@ GenerateConnections (ClientInfo *cinfo, const char *path, const char *query,
                      char **response, MediaType *type)
 {
   size_t clientcount = 0;
-  size_t responsesize;
   char matchstr[50];
-  int matchlen = 0;
+  int matchlen      = 0;
 
   char *cp;
-  char *writeptr    = NULL;
-  int written       = 0;
   int responsebytes = 0;
 
   char *json_string;
@@ -1994,31 +1868,17 @@ GenerateConnections (ClientInfo *cinfo, const char *path, const char *query,
     if ((client_array = yyjson_ptr_get (root, "/connections/client")) != NULL &&
         (clientcount = yyjson_arr_size (client_array)) > 0)
     {
-      /* Allocate response buffer with maximum expected: 1024 bytes per client */
-      const size_t per_entry = 1024;
+      char *buf  = NULL;
+      size_t len = 0;
+      FILE *mem  = open_memstream (&buf, &len);
 
-      /* Guard against size_t overflow in the per_entry * clientcount product */
-      if (clientcount > SIZE_MAX / per_entry)
+      if (!mem)
       {
-        lprintf (0, "[%s] Error for HTTP CONNECTIONS (client count %zu would overflow response size)",
-                 cinfo->hostname, clientcount);
+        lprintf (0, "[%s] Error for HTTP CONNECTIONS (open_memstream failed)",
+                 cinfo->hostname);
         yyjson_doc_free (json);
         return -1;
       }
-
-      responsesize = per_entry * clientcount;
-
-      if (!(*response = (char *)malloc (responsesize)))
-      {
-        lprintf (0, "[%s] Error for HTTP CONNECTIONS (cannot allocate response buffer of size %zu)",
-                 cinfo->hostname, responsesize);
-        yyjson_doc_free (json);
-        return -1;
-      }
-
-      writeptr = *response;
-
-      responsebytes = 0;
 
       yyjson_arr_foreach (client_array, idx, max, client_iter)
       {
@@ -2030,79 +1890,67 @@ GenerateConnections (ClientInfo *cinfo, const char *path, const char *query,
         else
           packet_id_str[0] = '-';
 
-        written = snprintf (writeptr, responsesize - responsebytes,
-                            "%s [%s:%s] using %s on port %s, connected at %s\n"
-                            "  %s\n"
-                            "  authenticated: %s, trusted: %s, write permission: %s\n"
-                            "  Packet %s (created %s)  Lag %d%%, %.1f seconds\n"
-                            "  TX %" PRIu64 " packets, %.1f packets/sec, %" PRIu64 " bytes, %.1f bytes/sec\n"
-                            "  RX %" PRIu64 " packets, %.1f packets/sec, %" PRIu64 " bytes, %.1f bytes/sec\n"
-                            "  Stream count: %d\n",
-                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "host"))),
-                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "ip_address"))),
-                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "client_port"))),
-                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "type"))),
-                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "server_port"))),
-                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "connect_time"))),
-                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "client_id"))),
-                            (yyjson_get_bool (yyjson_obj_get (client_iter, "authenticated"))) ? "TRUE" : "FALSE",
-                            (yyjson_get_bool (yyjson_obj_get (client_iter, "trust_permission"))) ? "TRUE" : "FALSE",
-                            (yyjson_get_bool (yyjson_obj_get (client_iter, "write_permission"))) ? "TRUE" : "FALSE",
-                            packet_id_str,
-                            DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "packet_creation_time"))),
-                            yyjson_get_int (yyjson_obj_get (client_iter, "lag_percent")),
-                            yyjson_get_real (yyjson_obj_get (client_iter, "lag_seconds")),
-                            yyjson_get_uint (yyjson_obj_get (client_iter, "transmit_packets")),
-                            yyjson_get_real (yyjson_obj_get (client_iter, "transmit_packet_rate")),
-                            yyjson_get_uint (yyjson_obj_get (client_iter, "transmit_bytes")),
-                            yyjson_get_real (yyjson_obj_get (client_iter, "transmit_byte_rate")),
-                            yyjson_get_uint (yyjson_obj_get (client_iter, "receive_packets")),
-                            yyjson_get_real (yyjson_obj_get (client_iter, "receive_packet_rate")),
-                            yyjson_get_uint (yyjson_obj_get (client_iter, "receive_bytes")),
-                            yyjson_get_real (yyjson_obj_get (client_iter, "receive_byte_rate")),
-                            yyjson_get_int (yyjson_obj_get (client_iter, "stream_count")));
+        fprintf (mem,
+                 "%s [%s:%s] using %s on port %s, connected at %s\n"
+                 "  %s\n"
+                 "  authenticated: %s, trusted: %s, write permission: %s\n"
+                 "  Packet %s (created %s)  Lag %d%%, %.1f seconds\n"
+                 "  TX %" PRIu64 " packets, %.1f packets/sec, %" PRIu64 " bytes, %.1f bytes/sec\n"
+                 "  RX %" PRIu64 " packets, %.1f packets/sec, %" PRIu64 " bytes, %.1f bytes/sec\n"
+                 "  Stream count: %d\n",
+                 DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "host"))),
+                 DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "ip_address"))),
+                 DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "client_port"))),
+                 DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "type"))),
+                 DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "server_port"))),
+                 DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "connect_time"))),
+                 DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "client_id"))),
+                 (yyjson_get_bool (yyjson_obj_get (client_iter, "authenticated"))) ? "TRUE" : "FALSE",
+                 (yyjson_get_bool (yyjson_obj_get (client_iter, "trust_permission"))) ? "TRUE" : "FALSE",
+                 (yyjson_get_bool (yyjson_obj_get (client_iter, "write_permission"))) ? "TRUE" : "FALSE",
+                 packet_id_str,
+                 DASHNULL (yyjson_get_str (yyjson_obj_get (client_iter, "packet_creation_time"))),
+                 yyjson_get_int (yyjson_obj_get (client_iter, "lag_percent")),
+                 yyjson_get_real (yyjson_obj_get (client_iter, "lag_seconds")),
+                 yyjson_get_uint (yyjson_obj_get (client_iter, "transmit_packets")),
+                 yyjson_get_real (yyjson_obj_get (client_iter, "transmit_packet_rate")),
+                 yyjson_get_uint (yyjson_obj_get (client_iter, "transmit_bytes")),
+                 yyjson_get_real (yyjson_obj_get (client_iter, "transmit_byte_rate")),
+                 yyjson_get_uint (yyjson_obj_get (client_iter, "receive_packets")),
+                 yyjson_get_real (yyjson_obj_get (client_iter, "receive_packet_rate")),
+                 yyjson_get_uint (yyjson_obj_get (client_iter, "receive_bytes")),
+                 yyjson_get_real (yyjson_obj_get (client_iter, "receive_byte_rate")),
+                 yyjson_get_int (yyjson_obj_get (client_iter, "stream_count")));
 
-        yyjson_val *match = yyjson_obj_get (client_iter, "match");
-        if (match && (responsebytes + written) < responsesize)
+        yyjson_val *matchval = yyjson_obj_get (client_iter, "match");
+        if (matchval)
         {
-          const char *matchstr = DASHNULL (yyjson_get_str (match));
-          size_t length        = strlen (matchstr);
-
-          written += snprintf (writeptr + written, responsesize - responsebytes - written,
-                               "  Match: %.100s%s\n",
-                               matchstr, (length > 100) ? "..." : "");
+          const char *mstr = DASHNULL (yyjson_get_str (matchval));
+          size_t mlen      = strlen (mstr);
+          fprintf (mem, "  Match: %.100s%s\n", mstr, (mlen > 100) ? "..." : "");
         }
 
-        yyjson_val *reject = yyjson_obj_get (client_iter, "reject");
-        if (reject && (responsebytes + written) < responsesize)
+        yyjson_val *rejectval = yyjson_obj_get (client_iter, "reject");
+        if (rejectval)
         {
-          const char *rejectstr = DASHNULL (yyjson_get_str (reject));
-          size_t length         = strlen (rejectstr);
-
-          written += snprintf (writeptr + written, responsesize - responsebytes - written,
-                               "  Reject: %.100s%s\n",
-                               rejectstr, (length > 100) ? "..." : "");
+          const char *rstr = DASHNULL (yyjson_get_str (rejectval));
+          size_t rlen      = strlen (rstr);
+          fprintf (mem, "  Reject: %.100s%s\n", rstr, (rlen > 100) ? "..." : "");
         }
 
-        if ((responsebytes + written) < responsesize)
-        {
-          writeptr[written++] = '\n';
-        }
-
-        if ((responsebytes + written) >= responsesize)
-        {
-          lprintf (0, "[%s] Error for HTTP STREAM[ID]S (response buffer overflow)",
-                   cinfo->hostname);
-          yyjson_doc_free (json);
-          return -1;
-        }
-
-        writeptr += written;
-        responsebytes += written;
+        fputc ('\n', mem);
       }
 
-      /* Add a final terminator to stream list buffer */
-      *writeptr = '\0';
+      responsebytes = FinalizeMemStream (mem, &buf, &len);
+      if (responsebytes < 0)
+      {
+        lprintf (0, "[%s] Error for HTTP CONNECTIONS (response finalisation failed)",
+                 cinfo->hostname);
+        yyjson_doc_free (json);
+        return -1;
+      }
+
+      *response = buf;
     }
 
     yyjson_doc_free (json);
@@ -2213,7 +2061,7 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   }
 
   /* Build path using web root and resolve absolute */
-  if (asprintf (&webpath, "%s/%s", webroot, path) < 0)
+  if (AllocPrintf (&webpath, "%s/%s", webroot, path) < 0)
     return -1;
 
   filename = realpath (webpath, NULL);
@@ -2248,7 +2096,7 @@ SendFileHTTP (ClientInfo *cinfo, char *path)
   {
     char *resolved_index;
 
-    if (asprintf (&indexfile, "%s/index.html", filename) < 0)
+    if (AllocPrintf (&indexfile, "%s/index.html", filename) < 0)
       goto cleanup;
 
     free (filename);
@@ -2387,7 +2235,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
   if (!version || strcasecmp (version, "HTTP/1.1"))
   {
-    responsebytes = asprintf (&response,
+    responsebytes = AllocPrintf (&response,
                               "HTTP Version Must Be 1.1 For WebSocket\n"
                               "Received: '%s'\n",
                               (version) ? version : "");
@@ -2420,7 +2268,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
   if (!http_header_has_token (upgradeHeader, "websocket"))
   {
-    responsebytes = asprintf (&response,
+    responsebytes = AllocPrintf (&response,
                               "Upgrade header must be 'websocket' For WebSocket\n"
                               "Received: '%s'\n",
                               (upgradeHeader) ? upgradeHeader : "");
@@ -2453,7 +2301,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
   if (!http_header_has_token (connectionHeader, "Upgrade"))
   {
-    responsebytes = asprintf (&response,
+    responsebytes = AllocPrintf (&response,
                               "The Connection header value must be 'Upgrade'\n"
                               "Received: '%s'\n",
                               (connectionHeader) ? connectionHeader : "");
@@ -2486,7 +2334,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
   if (!secWebSocketVersionHeader || strcasecmp (secWebSocketVersionHeader, "13"))
   {
-    responsebytes = asprintf (&response,
+    responsebytes = AllocPrintf (&response,
                               "The Sec-WebSocket-Version header must be '13'\n"
                               "Received: '%s'\n",
                               (secWebSocketVersionHeader) ? secWebSocketVersionHeader : "");
@@ -2519,7 +2367,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
 
   if (!secWebSocketKeyHeader || !*secWebSocketKeyHeader)
   {
-    responsebytes = asprintf (&response,
+    responsebytes = AllocPrintf (&response,
                               "The Sec-WebSocket-Key header is required\n");
 
     if (responsebytes < 0)
@@ -2573,7 +2421,7 @@ NegotiateWebSocket (ClientInfo *cinfo, char *version,
   }
 
   /* Generate response completing the upgrade to WebSocket connection */
-  responsebytes = asprintf (&response,
+  responsebytes = AllocPrintf (&response,
                             "Upgrade: websocket\r\n"
                             "Connection: Upgrade\r\n"
                             "%s"

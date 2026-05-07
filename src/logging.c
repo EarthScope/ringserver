@@ -493,6 +493,19 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
       size_t rxsize = 0;
       FILE *txmem   = (txfp) ? open_memstream (&txbuf, &txsize) : NULL;
       FILE *rxmem   = (rxfp) ? open_memstream (&rxbuf, &rxsize) : NULL;
+      int txok      = (!txfp || txmem != NULL);
+      int rxok      = (!rxfp || rxmem != NULL);
+
+      if (txfp && !txmem)
+      {
+        lprintf (0, "Error creating in-memory TX transfer log buffer: %s", strerror (errno));
+        rv = -1;
+      }
+      if (rxfp && !rxmem)
+      {
+        lprintf (0, "Error creating in-memory RX transfer log buffer: %s", strerror (errno));
+        rv = -1;
+      }
 
       /* Lock stream tree and create list (Stack) of streams */
       pthread_mutex_lock (&(cinfo->streams_lock));
@@ -545,14 +558,36 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
       /* Unlock stream tree */
       pthread_mutex_unlock (&(cinfo->streams_lock));
 
-      /* Flush memory streams to finalise buffers */
-      if (txmem)
-        fclose (txmem);
-      if (rxmem)
-        fclose (rxmem);
+      /* Finalise memory streams; detect write errors and transfer buffer ownership */
+      if (txfp)
+      {
+        if (FinalizeMemStream (txmem, &txbuf, &txsize) < 0)
+        {
+          if (txok)
+          {
+            lprintf (0, "Error finalising TX transfer log buffer for %s [%s]",
+                     cinfo->hostname, cinfo->ipstr);
+            rv = -1;
+          }
+          txok = 0;
+        }
+      }
+      if (rxfp)
+      {
+        if (FinalizeMemStream (rxmem, &rxbuf, &rxsize) < 0)
+        {
+          if (rxok)
+          {
+            lprintf (0, "Error finalising RX transfer log buffer for %s [%s]",
+                     cinfo->hostname, cinfo->ipstr);
+            rv = -1;
+          }
+          rxok = 0;
+        }
+      }
 
-      /* Emit TX block only if there were bytes */
-      if (txfp && txtotalbytes > 0)
+      /* Emit TX block only if there were bytes and the buffer is valid */
+      if (txok && txfp && txtotalbytes > 0)
       {
         fprintf (txfp, "START CLIENT %s [%s] (%s|%s) @ %s (connected %s) TX\n",
                  cinfo->hostname, cinfo->ipstr, modestr,
@@ -564,8 +599,8 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
                  cinfo->hostname, cinfo->ipstr, txtotalbytes);
       }
 
-      /* Emit RX block only if there were bytes */
-      if (rxfp && rxtotalbytes > 0)
+      /* Emit RX block only if there were bytes and the buffer is valid */
+      if (rxok && rxfp && rxtotalbytes > 0)
       {
         fprintf (rxfp, "START CLIENT %s [%s] (%s|%s) @ %s (connected %s) RX\n",
                  cinfo->hostname, cinfo->ipstr, modestr,
