@@ -9,6 +9,7 @@ Unreleased
 	- Add protocol_version to JSON info for DataLink clients.
 	- Implement a shared command tokenizer for SeedLink and DataLink
 	  command parsing, for consistent handling of logic and errors.
+	- Fix SeedLink BYE not being honored during the data transfer phase.
 
 2026.110: v4.5.0
 	- Fix SeedLink v3 matching of empty location codes when selectors are used.

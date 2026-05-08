@@ -152,8 +152,14 @@ SLHandleCmd (ClientInfo *cinfo)
     return 1;
   }
 
-  /* Determine if this is an INFO request and handle */
-  if (cmdtoken_eq_nocase (&cmd, 0, "INFO"))
+  /* INFO and BYE are accepted in any state per the SeedLink specification */
+  if (cmdtoken_eq_nocase (&cmd, 0, "BYE"))
+  {
+    lprintf (2, "[%s] Received BYE, closing connection", cinfo->hostname);
+    return -1;
+  }
+
+  else if (cmdtoken_eq_nocase (&cmd, 0, "INFO"))
   {
     if (slinfo->proto_major == 4)
     {
@@ -1656,12 +1662,6 @@ HandleNegotiation (ClientInfo *cinfo, CmdToken *cmd)
   {
     /* Trigger ring configuration and data flow */
     cinfo->state = STATE_RINGCONFIG;
-  }
-
-  /* BYE (v3.x and v4.0) - End connection */
-  else if (cmdtoken_eq_nocase (cmd, 0, "BYE"))
-  {
-    return -1;
   }
 
   /* Unrecognized command */
