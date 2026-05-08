@@ -13,7 +13,7 @@ OBJS = $(SRCS:.c=.o)
 
 MBEDTLS_OBJS = $(wildcard ../mbedtls/library/*.o)
 
-FEATURE_DEFS = -D_POSIX_C_SOURCE=200809L -D_DARWIN_C_SOURCE \
+FEATURE_DEFS = -D_POSIX_C_SOURCE=200112L -D_DARWIN_C_SOURCE \
                -D_REENTRANT -D_POSIX_PTHREAD_SEMANTICS
 
 INCLUDES = -I../libmseed -I../mxml -I../pcre2/src -I../mbedtls/include
