@@ -698,7 +698,12 @@ info_add_stations (ClientInfo *cinfo, yyjson_mut_doc *doc, int include_streams,
       snprintf (string96, sizeof (string96), "Station ID %s", station_details->id);
       yyjson_mut_obj_add_strcpy (doc, station, "description", string96);
       yyjson_mut_obj_add_uint (doc, station, "start_seq", station_details->earliestid);
-      yyjson_mut_obj_add_uint (doc, station, "end_seq", station_details->latestid);
+      /* end_seq is the next sequence number, i.e. latest available + 1, per the SeedLink v4 INFO schema.
+       * Guard against unset/sentinel values (RINGID_NONE etc.) by emitting 0 when out of valid range. */
+      yyjson_mut_obj_add_uint (doc, station, "end_seq",
+                               (station_details->latestid <= RINGID_MAXIMUM)
+                                   ? station_details->latestid + 1
+                                   : 0);
 
       if (station_details->streams)
       {
