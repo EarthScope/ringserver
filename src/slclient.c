@@ -990,7 +990,7 @@ HandleNegotiation (ClientInfo *cinfo, CmdToken *cmd)
     {
       lprintf (0, "[%s] Unrecognized AUTH sub-command: %s", cinfo->hostname, cmd->argv[1]);
 
-      if (SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Unrecognized AUTH sub-command"))
+      if (SendReply (cinfo, "ERROR", ERROR_UNSUPPORTED, "Unrecognized AUTH sub-command"))
         return -1;
 
       OKGO = 0;

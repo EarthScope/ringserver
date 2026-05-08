@@ -199,7 +199,9 @@ info_add_capabilities (yyjson_mut_doc *doc)
 
   free (string);
 
-  /* Add AUTH capabilities if enabled in the server */
+  /* Add AUTH capability if enabled in the server.  The server delegates
+   * authentication to an external program and does not know which AUTH
+   * types it accepts, so advertise the bare "AUTH" capability. */
   pthread_rwlock_rdlock (&config.config_rwlock);
   if (config.auth.program)
   {

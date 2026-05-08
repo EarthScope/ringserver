@@ -10,6 +10,9 @@ Unreleased
 	- Implement a shared command tokenizer for SeedLink and DataLink
 	  command parsing, for consistent handling of logic and errors.
 	- Fix SeedLink BYE not being honored during the data transfer phase.
+	- Fix end_seq to be last sequence + 1 per the SeedLink v4 spec.
+	- Fix SeedLink v4 AUTH to reply ERROR UNSUPPORTED instead of ERROR ARGUMENTS
+	  for an unrecognized auth type, matching the spec.
 
 2026.110: v4.5.0
 	- Fix SeedLink v3 matching of empty location codes when selectors are used.
