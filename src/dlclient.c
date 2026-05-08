@@ -885,10 +885,13 @@ HandleWrite (ClientInfo *cinfo, CmdToken *cmd)
   }
   cinfo->packet.datasize = datasize;
 
-  /* Optional packet ID (only honored when flags contain 'I') */
+  /* Optional packet ID (only honored when flags contain 'I').  Parse into
+   * an aligned local and assign, since cinfo->packet is a packed struct. */
   if (cmd->argc == 7 && strchr (flags, 'I') != NULL)
   {
-    if (cmdtoken_u64 (cmd, 6, &cinfo->packet.pktid, 10) < 0)
+    uint64_t pktid = 0;
+
+    if (cmdtoken_u64 (cmd, 6, &pktid, 10) < 0)
     {
       lprintf (1, "[%s] Error parsing WRITE packet ID: %.100s",
                cinfo->hostname, cinfo->dlcommand);
@@ -897,6 +900,8 @@ HandleWrite (ClientInfo *cinfo, CmdToken *cmd)
 
       return -1;
     }
+
+    cinfo->packet.pktid = pktid;
   }
   else
   {

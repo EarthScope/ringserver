@@ -803,7 +803,7 @@ HandleNegotiation (ClientInfo *cinfo, CmdToken *cmd)
 {
   SLInfo *slinfo;
   char sendbuffer[400];
-  ReqStationID *stationid;
+  ReqStationID *stationid = NULL;
 
   nstime_t starttime   = NSTUNSET;
   nstime_t endtime     = NSTUNSET;
