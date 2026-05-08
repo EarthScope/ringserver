@@ -59,6 +59,7 @@
 
 #include "auth.h"
 #include "clients.h"
+#include "cmdtoken.h"
 #include "generic.h"
 #include "http.h"
 #include "infojson.h"
@@ -77,9 +78,9 @@
 /* Define the number of no-action loops that trigger the throttle */
 #define THROTTLE_TRIGGER 10
 
-static int HandleNegotiation (ClientInfo *cinfo);
-static int HandleInfo_v3 (ClientInfo *cinfo);
-static int HandleInfo_v4 (ClientInfo *cinfo);
+static int HandleNegotiation (ClientInfo *cinfo, CmdToken *cmd);
+static int HandleInfo_v3 (ClientInfo *cinfo, CmdToken *cmd);
+static int HandleInfo_v4 (ClientInfo *cinfo, CmdToken *cmd);
 static int SendReply (ClientInfo *cinfo, char *reply, ErrorCode code, char *extreply);
 static int SendPacket (uint64_t pktid, char *payload, uint32_t payloadlen,
                        const char *staid, char format, char subformat, void *vcinfo);
@@ -143,19 +144,27 @@ SLHandleCmd (ClientInfo *cinfo)
 
   slinfo = (SLInfo *)cinfo->extinfo;
 
+  /* Tokenize the command buffer once; all handlers receive the same CmdToken */
+  CmdToken cmd;
+  if (cmdtoken_parse (&cmd, cinfo->recvbuf) < 0 || cmd.argc == 0)
+  {
+    lprintf (1, "[%s] Error tokenizing command buffer", cinfo->hostname);
+    return 1;
+  }
+
   /* Determine if this is an INFO request and handle */
-  if (!strncasecmp (cinfo->recvbuf, "INFO", 4))
+  if (cmdtoken_eq_nocase (&cmd, 0, "INFO"))
   {
     if (slinfo->proto_major == 4)
     {
-      if (HandleInfo_v4 (cinfo))
+      if (HandleInfo_v4 (cinfo, &cmd))
       {
         return -1;
       }
     }
     else
     {
-      if (HandleInfo_v3 (cinfo))
+      if (HandleInfo_v3 (cinfo, &cmd))
       {
         return -1;
       }
@@ -166,7 +175,7 @@ SLHandleCmd (ClientInfo *cinfo)
   else if (cinfo->state == STATE_COMMAND ||
            cinfo->state == STATE_STATION)
   {
-    int rv = HandleNegotiation (cinfo);
+    int rv = HandleNegotiation (cinfo, &cmd);
     if (rv < 0)
       return -1;
     if (rv > 0)
@@ -698,6 +707,22 @@ SLFree (ClientInfo *cinfo)
 } /* End of SLFree() */
 
 /***************************************************************************
+ * sl_arg_error:
+ *
+ * Send an ERROR ARGUMENTS reply to a SeedLink client, respecting batch
+ * mode.  Returns -1 if the reply itself failed (socket error), 0 otherwise.
+ * Callers should set OKGO=0 after this call.
+ ***************************************************************************/
+static int
+sl_arg_error (ClientInfo *cinfo, const char *msg)
+{
+  SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
+  if (!slinfo->batch)
+    return SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, (char *)msg);
+  return 0;
+}
+
+/***************************************************************************
  * FreeSelectorList:
  *
  * Free every node in a linked list of Selector structures.
@@ -713,6 +738,51 @@ FreeSelectorList (Selector *head)
 }
 
 /***************************************************************************
+ * LinkSelectorLists:
+ *
+ * Splice a SELECT command's parsed positive (non-negated) and negative
+ * (negated) sub-lists into the destination selector list at *destlist.
+ *
+ * Non-negated patterns are prepended as a unit so that the first pattern
+ * requested in a single SELECT command is matched first by SLFindFilter,
+ * matching the v4 specification's "first match takes effect" rule for
+ * filtered selectors.
+ *
+ * Negated patterns are appended as a unit at the end of the list.
+ *
+ * 'postail' must point to the last node of the 'poshead' list when
+ * 'poshead' is non-NULL.  Either list may be NULL.
+ ***************************************************************************/
+static void
+LinkSelectorLists (Selector **destlist, Selector *poshead, Selector *postail,
+                   Selector *neghead)
+{
+  if (!destlist)
+    return;
+
+  if (poshead != NULL)
+  {
+    postail->next = *destlist;
+    *destlist     = poshead;
+  }
+
+  if (neghead != NULL)
+  {
+    if (*destlist == NULL)
+    {
+      *destlist = neghead;
+    }
+    else
+    {
+      Selector *last = *destlist;
+      while (last->next != NULL)
+        last = last->next;
+      last->next = neghead;
+    }
+  }
+}
+
+/***************************************************************************
  * HandleNegotiation:
  *
  * Handle negotiation command implementing server-side SeedLink
@@ -723,31 +793,27 @@ FreeSelectorList (Selector *head)
  * and -1 on fatal error which should disconnect.
  ***************************************************************************/
 static int
-HandleNegotiation (ClientInfo *cinfo)
+HandleNegotiation (ClientInfo *cinfo, CmdToken *cmd)
 {
   SLInfo *slinfo;
   char sendbuffer[400];
   ReqStationID *stationid;
-  int fields = 0;
 
-  nstime_t starttime    = NSTUNSET;
-  nstime_t endtime      = NSTUNSET;
-  char starttimestr[51] = {0};
-  char endtimestr[51]   = {0};
-  uint64_t startpacket  = RINGID_NONE;
+  nstime_t starttime   = NSTUNSET;
+  nstime_t endtime     = NSTUNSET;
+  uint64_t startpacket = RINGID_NONE;
   Conversion convert;
 
   char *ptr;
   char OKGO = 1;
-  char junk;
 
-  if (!cinfo || !cinfo->extinfo)
+  if (!cinfo || !cinfo->extinfo || !cmd)
     return -1;
 
   slinfo = (SLInfo *)cinfo->extinfo;
 
   /* HELLO (v3.x and v4.0) - Return server version and ID */
-  if (!strncasecmp (cinfo->recvbuf, "HELLO", 5))
+  if (cmdtoken_eq_nocase (cmd, 0, "HELLO"))
   {
     int bytes;
 
@@ -768,19 +834,30 @@ HandleNegotiation (ClientInfo *cinfo)
   }
 
   /* SLPROTO (v4.0) - Parse requested protocol version */
-  else if (!strncasecmp (cinfo->recvbuf, "SLPROTO", 7))
+  else if (cmdtoken_eq_nocase (cmd, 0, "SLPROTO"))
   {
     uint8_t proto_major = 0;
     uint8_t proto_minor = 0;
 
-    fields = sscanf (cinfo->recvbuf, "%*s %" SCNu8 ".%" SCNu8,
-                     &proto_major, &proto_minor);
+    if (cmd->argc != 2 || cmd->overflow)
+    {
+      lprintf (2, "[%s] Received %s, protocol rejected (argument error)", cinfo->hostname, cinfo->recvbuf);
 
-    if ((proto_major == 3) ||
-        (proto_major == 4 && proto_minor == 0))
+      if (!slinfo->batch && SendReply (cinfo, "ERROR UNSUPPORTED unsupported protocol version", ERROR_NONE, NULL))
+        return -1;
+    }
+    else if (sscanf (cmd->argv[1], "%" SCNu8 ".%" SCNu8, &proto_major, &proto_minor) < 2)
+    {
+      lprintf (2, "[%s] Received %s, protocol rejected (bad version format)", cinfo->hostname, cinfo->recvbuf);
+
+      if (!slinfo->batch && SendReply (cinfo, "ERROR UNSUPPORTED unsupported protocol version", ERROR_NONE, NULL))
+        return -1;
+    }
+    else if ((proto_major == 3) || (proto_major == 4 && proto_minor == 0))
     {
       if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
         return -1;
+
 
       slinfo->proto_major = proto_major;
       slinfo->proto_minor = proto_minor;
@@ -797,13 +874,13 @@ HandleNegotiation (ClientInfo *cinfo)
   }
 
   /* USERAGENT (v4.0) - Parse user agent command */
-  else if (!strncasecmp (cinfo->recvbuf, "USERAGENT", 9))
+  else if (cmdtoken_eq_nocase (cmd, 0, "USERAGENT"))
   {
-    ptr = cinfo->recvbuf + 9;
-    while (isspace ((int)*ptr))
-      ptr++;
+    const char *useragent = cmdtoken_rest_after (cmd, 1);
 
-    strncpy (cinfo->clientid, ptr, sizeof (cinfo->clientid) - 1);
+    if (useragent)
+      strncpy (cinfo->clientid, useragent, sizeof (cinfo->clientid) - 1);
+
     cinfo->clientid[sizeof (cinfo->clientid) - 1] = '\0';
 
     lprintf (2, "[%s] Received USERAGENT (%s)", cinfo->hostname, cinfo->clientid);
@@ -813,18 +890,24 @@ HandleNegotiation (ClientInfo *cinfo)
   }
 
   /* CAPABILITIES (v3.x) - Parse capabilities flags */
-  else if (!strncasecmp (cinfo->recvbuf, "CAPABILITIES", 12))
+  else if (cmdtoken_eq_nocase (cmd, 0, "CAPABILITIES"))
   {
-    /* Extended reply capability */
-    if (strstr (cinfo->recvbuf, "EXTREPLY"))
-      slinfo->extreply = 1;
+    /* Extended reply capability: scan all arguments for EXTREPLY (case-insensitive) */
+    for (int i = 1; i < cmd->argc; i++)
+    {
+      if (cmdtoken_eq_nocase (cmd, i, "EXTREPLY"))
+      {
+        slinfo->extreply = 1;
+        break;
+      }
+    }
 
     if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
       return -1;
   }
 
   /* CAT (v3.x) - Return text list of stations */
-  else if (!strncasecmp (cinfo->recvbuf, "CAT", 3))
+  else if (cmdtoken_eq_nocase (cmd, 0, "CAT"))
   {
     snprintf (sendbuffer, sizeof (sendbuffer),
               "CAT command not implemented\r\n");
@@ -834,7 +917,7 @@ HandleNegotiation (ClientInfo *cinfo)
   }
 
   /* BATCH (v3.x) - Batch mode for subsequent commands */
-  else if (!strncasecmp (cinfo->recvbuf, "BATCH", 5))
+  else if (cmdtoken_eq_nocase (cmd, 0, "BATCH"))
   {
     slinfo->batch = 1;
 
@@ -843,29 +926,29 @@ HandleNegotiation (ClientInfo *cinfo)
   }
 
   /* AUTH (v4.0) - Parse auth command */
-  else if (!strncasecmp (cinfo->recvbuf, "AUTH", 4))
+  else if (cmdtoken_eq_nocase (cmd, 0, "AUTH"))
   {
     char username[128] = {0};
     char password[128] = {0};
     char *jwtoken      = NULL;
 
-    ptr = cinfo->recvbuf + 4;
-    while (isspace ((int)*ptr))
-      ptr++;
-
     OKGO = 1;
-    if (!strncasecmp (ptr, "USERPASS", 8))
+
+    if (cmd->argc < 2)
+    {
+      lprintf (0, "[%s] Error parsing AUTH: no sub-command", cinfo->hostname);
+
+      if (SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "AUTH requires a sub-command (USERPASS or JWT)"))
+        return -1;
+
+      OKGO = 0;
+    }
+    /* AUTH USERPASS username password (case-sensitive sub-keyword) */
+    else if (cmdtoken_eq (cmd, 1, "USERPASS"))
     {
       lprintf (2, "[%s] Received AUTH USERPASS", cinfo->hostname);
 
-      ptr += 8;
-      while (isspace ((int)*ptr))
-        ptr++;
-
-      /* Parse user and password */
-      fields = sscanf (ptr, "%127s %127s %c", username, password, &junk);
-
-      if (fields != 2)
+      if (cmd->argc != 4 || cmd->overflow)
       {
         lprintf (0, "[%s] Error parsing AUTH USERPASS", cinfo->hostname);
 
@@ -874,16 +957,20 @@ HandleNegotiation (ClientInfo *cinfo)
 
         OKGO = 0;
       }
+      else
+      {
+        strncpy (username, cmd->argv[2], sizeof (username) - 1);
+        strncpy (password, cmd->argv[3], sizeof (password) - 1);
+      }
     }
-    else if (!strncasecmp (ptr, "JWT", 3))
+    /* AUTH JWT token (case-sensitive sub-keyword) */
+    else if (cmdtoken_eq (cmd, 1, "JWT"))
     {
       lprintf (2, "[%s] Received AUTH JWT", cinfo->hostname);
 
-      jwtoken = ptr + 3;
-      while (isspace ((int)*jwtoken))
-        jwtoken++;
+      jwtoken = (char *)cmdtoken_rest_after (cmd, 2);
 
-      if (jwtoken[0] == '\0')
+      if (!jwtoken || jwtoken[0] == '\0')
       {
         lprintf (0, "[%s] Error parsing AUTH JWT", cinfo->hostname);
 
@@ -892,6 +979,15 @@ HandleNegotiation (ClientInfo *cinfo)
 
         OKGO = 0;
       }
+    }
+    else
+    {
+      lprintf (0, "[%s] Unrecognized AUTH sub-command: %s", cinfo->hostname, cmd->argv[1]);
+
+      if (SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Unrecognized AUTH sub-command"))
+        return -1;
+
+      OKGO = 0;
     }
 
     if (OKGO && PerformAuth (cinfo, username, password, jwtoken))
@@ -923,7 +1019,7 @@ HandleNegotiation (ClientInfo *cinfo)
   } /* End of AUTH */
 
   /* STATION (v3.x and v4.0) - Select specified station */
-  else if (!strncasecmp (cinfo->recvbuf, "STATION", 7))
+  else if (cmdtoken_eq_nocase (cmd, 0, "STATION"))
   {
     OKGO = 1;
 
@@ -933,17 +1029,17 @@ HandleNegotiation (ClientInfo *cinfo)
     if (slinfo->proto_major == 4)
     {
       /* STATION stationID */
-      fields = sscanf (cinfo->recvbuf, "%*s %20s %c", slinfo->reqstaid, &junk);
-
-      slinfo->reqstaid[sizeof (slinfo->reqstaid) - 1] = '\0';
-
-      /* Make sure we got a station ID */
-      if (fields != 1)
+      if (cmd->argc != 2 || cmd->overflow)
       {
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "STATION requires 1 argument"))
+        if (sl_arg_error (cinfo, "STATION requires 1 argument"))
           return -1;
 
         OKGO = 0;
+      }
+      else
+      {
+        strncpy (slinfo->reqstaid, cmd->argv[1], sizeof (slinfo->reqstaid) - 1);
+        slinfo->reqstaid[sizeof (slinfo->reqstaid) - 1] = '\0';
       }
     }
     else /* Protocol 3.x */
@@ -951,26 +1047,34 @@ HandleNegotiation (ClientInfo *cinfo)
       char reqnet[10] = {0};
       char reqsta[10] = {0};
 
-      /* STATION STA NET */
-      fields = sscanf (cinfo->recvbuf, "%*s %9s %9s %c", reqsta, reqnet, &junk);
-
-      /* Make sure we got a station code and optionally a network code */
-      if (fields < 1 || fields > 2)
+      /* STATION STA [NET] */
+      if (cmd->argc < 2 || cmd->argc > 3 || cmd->overflow)
       {
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "STATION requires 1 or 2 arguments"))
+        if (sl_arg_error (cinfo, "STATION requires 1 or 2 arguments"))
           return -1;
 
         OKGO = 0;
       }
-      /* Use wildcard network if not specified */
-      else if (fields == 1)
+      else
       {
-        reqnet[0] = '*';
-        reqnet[1] = '\0';
-      }
+        strncpy (reqsta, cmd->argv[1], sizeof (reqsta) - 1);
+        reqsta[sizeof (reqsta) - 1] = '\0';
 
-      /* Combine network and station codes into station ID */
-      snprintf (slinfo->reqstaid, sizeof (slinfo->reqstaid), "%s_%s", reqnet, reqsta);
+        if (cmd->argc == 3)
+        {
+          strncpy (reqnet, cmd->argv[2], sizeof (reqnet) - 1);
+          reqnet[sizeof (reqnet) - 1] = '\0';
+        }
+        else
+        {
+          /* Use wildcard network if not specified */
+          reqnet[0] = '*';
+          reqnet[1] = '\0';
+        }
+
+        /* Combine network and station codes into station ID */
+        snprintf (slinfo->reqstaid, sizeof (slinfo->reqstaid), "%s_%s", reqnet, reqsta);
+      }
     }
 
     /* Limit the number of stations per client */
@@ -1027,26 +1131,40 @@ HandleNegotiation (ClientInfo *cinfo)
    *
    * SeedLink v3 retains its single-pattern behavior (LLCCC/CCC).
    */
-  else if (!strncasecmp (cinfo->recvbuf, "SELECT", 6))
+  else if (cmdtoken_eq_nocase (cmd, 0, "SELECT"))
   {
     /* Two sub-lists preserve request order while supporting the
      * pre-existing rule: non-negated selectors are prepended to the
      * destination list, negated selectors are appended.  Within a single
      * SELECT command the first requested pattern is matched first, per
      * the v4 specification. */
-    Selector *poshead      = NULL; /* Non-negated patterns, request order */
-    Selector *postail      = NULL;
-    Selector *neghead      = NULL; /* Negated patterns, request order */
-    Selector *negtail      = NULL;
-    int parsedcount        = 0;
-    char *cursor           = cinfo->recvbuf + 6;
-    char errreplymsg[80]   = {0};
-    ErrorCode errreplycode = ERROR_NONE;
+    Selector *poshead = NULL; /* Non-negated patterns, request order */
+    Selector *postail = NULL;
+    Selector *neghead = NULL; /* Negated patterns, request order */
+    Selector *negtail = NULL;
+    char errmsg[80]   = {0};
+    int alloc_failed  = 0;
 
-    OKGO = 1;
+    /* Empty SELECT is not allowed */
+    if (cmd->argc < 2)
+    {
+      snprintf (errmsg, sizeof (errmsg),
+                (slinfo->proto_major == 4) ? "empty SELECT is not allowed in v4"
+                                           : "SELECT requires a single argument");
+    }
+    /* v3 allows exactly one pattern */
+    else if (slinfo->proto_major == 3 && (cmd->argc > 2 || cmd->overflow))
+    {
+      snprintf (errmsg, sizeof (errmsg), "SELECT requires a single argument");
+    }
+    /* Tokenizer overflow means too many patterns in v4 */
+    else if (cmd->overflow)
+    {
+      snprintf (errmsg, sizeof (errmsg), "Too many SELECT patterns");
+    }
 
-    /* Iterate over space-separated patterns following SELECT */
-    while (OKGO)
+    /* Iterate over all parsed pattern tokens, stopping on first error */
+    for (int i = 1; errmsg[0] == '\0' && i < cmd->argc; i++)
     {
       char selectortok[MAXSTREAMID] = {0};
       char label[SLMAXLABELLEN]     = {0};
@@ -1054,44 +1172,15 @@ HandleNegotiation (ClientInfo *cinfo)
 
       convert = CONVERT_NONE;
 
-      /* Skip leading whitespace */
-      while (*cursor == ' ' || *cursor == '\t')
-        cursor++;
-
-      /* Stop at end-of-line/string */
-      if (*cursor == '\0' || *cursor == '\r' || *cursor == '\n')
-        break;
-
-      /* For v3 only one pattern is allowed; if we already parsed one and
-       * encounter more non-whitespace, treat as too-many-arguments. */
-      if (slinfo->proto_major == 3 && parsedcount >= 1)
+      /* Check token length */
+      if (strlen (cmd->argv[i]) >= sizeof (selectortok))
       {
-        snprintf (errreplymsg, sizeof (errreplymsg), "SELECT requires a single argument");
-        errreplycode = ERROR_ARGUMENTS;
-        OKGO         = 0;
+        snprintf (errmsg, sizeof (errmsg), "Selector pattern too long");
         break;
       }
 
-      /* Read one whitespace-delimited token into selectortok (max 63 chars) */
-      {
-        size_t tokenlen = 0;
-        while (*cursor != '\0' && *cursor != ' ' && *cursor != '\t' &&
-               *cursor != '\r' && *cursor != '\n')
-        {
-          if (tokenlen >= sizeof (selectortok) - 1)
-          {
-            snprintf (errreplymsg, sizeof (errreplymsg), "Selector pattern too long");
-            errreplycode = ERROR_ARGUMENTS;
-            OKGO         = 0;
-            break;
-          }
-          selectortok[tokenlen++] = *cursor++;
-        }
-        selectortok[tokenlen] = '\0';
-
-        if (!OKGO)
-          break;
-      }
+      strncpy (selectortok, cmd->argv[i], sizeof (selectortok) - 1);
+      selectortok[sizeof (selectortok) - 1] = '\0';
 
       /* For SeedLink v4, parse filter (conversion) or label */
       if (slinfo->proto_major == 4 && (ptr = strrchr (selectortok, ':')))
@@ -1114,9 +1203,7 @@ HandleNegotiation (ClientInfo *cinfo)
             lprintf (0, "[%s] Error, SELECT filter '%s' is not a valid label",
                      cinfo->hostname, labelptr);
 
-            snprintf (errreplymsg, sizeof (errreplymsg), "Filter not supported");
-            errreplycode = ERROR_ARGUMENTS;
-            OKGO         = 0;
+            snprintf (errmsg, sizeof (errmsg), "Filter not supported");
             break;
           }
 
@@ -1154,9 +1241,7 @@ HandleNegotiation (ClientInfo *cinfo)
           lprintf (0, "[%s] Error, SELECT pattern '%s' is not a valid SeedLink v3 LLCCC or CCC pattern",
                    cinfo->hostname, selectortok);
 
-          snprintf (errreplymsg, sizeof (errreplymsg), "Invalid selector pattern");
-          errreplycode = ERROR_ARGUMENTS;
-          OKGO         = 0;
+          snprintf (errmsg, sizeof (errmsg), "Invalid selector pattern");
           break;
         }
 
@@ -1169,9 +1254,7 @@ HandleNegotiation (ClientInfo *cinfo)
         lprintf (0, "[%s] Error, select pattern contains illegal characters: '%s'",
                  cinfo->hostname, selectortok);
 
-        snprintf (errreplymsg, sizeof (errreplymsg), "Selector contains illegal characters");
-        errreplycode = ERROR_ARGUMENTS;
-        OKGO         = 0;
+        snprintf (errmsg, sizeof (errmsg), "Selector contains illegal characters");
         break;
       }
 
@@ -1179,10 +1262,8 @@ HandleNegotiation (ClientInfo *cinfo)
       if ((newselector = (Selector *)calloc (1, sizeof (Selector))) == NULL)
       {
         lprintf (0, "[%s] Error allocating memory", cinfo->hostname);
-
-        snprintf (errreplymsg, sizeof (errreplymsg), "Error allocating memory()");
-        errreplycode = ERROR_INTERNAL;
-        OKGO         = 0;
+        snprintf (errmsg, sizeof (errmsg), "Error allocating memory()");
+        alloc_failed = 1;
         break;
       }
 
@@ -1208,85 +1289,38 @@ HandleNegotiation (ClientInfo *cinfo)
           postail->next = newselector;
         postail = newselector;
       }
-      parsedcount++;
-    }
-
-    /* Empty SELECT is not allowed */
-    if (OKGO && parsedcount == 0)
-    {
-      snprintf (errreplymsg, sizeof (errreplymsg),
-                (slinfo->proto_major == 4) ? "empty SELECT is not allowed in v4"
-                                           : "SELECT requires a single argument");
-      errreplycode = ERROR_ARGUMENTS;
-      OKGO         = 0;
-    }
+    } /* End of pattern loop */
 
     /* If parsing failed, free any locally-parsed selectors and report error */
-    if (!OKGO)
+    if (errmsg[0] != '\0')
     {
       FreeSelectorList (poshead);
       FreeSelectorList (neghead);
 
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", errreplycode, errreplymsg))
+      if (alloc_failed)
+      {
+        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, errmsg))
+          return -1;
+      }
+      else if (sl_arg_error (cinfo, errmsg))
         return -1;
     }
-    /* If modifying a STATION find the station ID up front, before sending OK */
-    else if (cinfo->state == STATE_STATION)
+    /* If modifying a STATION find the station ID before sending OK */
+    else if (cinfo->state == STATE_STATION &&
+             !(stationid = GetReqStationID (slinfo->stations, slinfo->reqstaid)))
     {
-      if (!(stationid = GetReqStationID (slinfo->stations, slinfo->reqstaid)))
-      {
-        lprintf (0, "[%s] Error in GetReqStationID() for command SELECT", cinfo->hostname);
+      lprintf (0, "[%s] Error in GetReqStationID() for command SELECT", cinfo->hostname);
 
-        FreeSelectorList (poshead);
-        FreeSelectorList (neghead);
+      FreeSelectorList (poshead);
+      FreeSelectorList (neghead);
 
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetReqStationID()"))
-          return -1;
-      }
-      else
-      {
-        /* Send the reply first; only link the selectors into the station's
-         * list if the reply succeeds. */
-        if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
-        {
-          FreeSelectorList (poshead);
-          FreeSelectorList (neghead);
-          return -1;
-        }
-
-        /* Prepend non-negated patterns as a unit to preserve request order
-         * within this SELECT command (first requested pattern is matched
-         * first by SLFindFilter).  This matches the pre-existing rule that
-         * non-negated patterns are added to the front of the list. */
-        if (poshead != NULL)
-        {
-          postail->next        = stationid->selectors;
-          stationid->selectors = poshead;
-        }
-
-        /* Append negated patterns as a unit to the end of the list,
-         * preserving request order. */
-        if (neghead != NULL)
-        {
-          if (stationid->selectors == NULL)
-          {
-            stationid->selectors = neghead;
-          }
-          else
-          {
-            Selector *last = stationid->selectors;
-            while (last->next != NULL)
-              last = last->next;
-            last->next = neghead;
-          }
-        }
-      }
+      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_INTERNAL, "Error in GetReqStationID()"))
+        return -1;
     }
-    /* Otherwise add selectors to global list */
     else
     {
-      /* Send the reply first; only link the selectors into the global list
-       * if the reply succeeds. */
+      /* Send the reply first; only link the selectors into the destination
+       * list if the reply succeeds. */
       if (!slinfo->batch && SendReply (cinfo, "OK", ERROR_NONE, NULL))
       {
         FreeSelectorList (poshead);
@@ -1294,102 +1328,151 @@ HandleNegotiation (ClientInfo *cinfo)
         return -1;
       }
 
-      /* Prepend non-negated patterns as a unit (request order preserved). */
-      if (poshead != NULL)
-      {
-        postail->next     = slinfo->selectors;
-        slinfo->selectors = poshead;
-      }
-
-      /* Append negated patterns as a unit. */
-      if (neghead != NULL)
-      {
-        if (slinfo->selectors == NULL)
-        {
-          slinfo->selectors = neghead;
-        }
-        else
-        {
-          Selector *last = slinfo->selectors;
-          while (last->next != NULL)
-            last = last->next;
-          last->next = neghead;
-        }
-      }
+      /* Splice into the per-station or global selector list */
+      LinkSelectorLists ((cinfo->state == STATE_STATION) ? &stationid->selectors
+                                                         : &slinfo->selectors,
+                         poshead, postail, neghead);
     }
   } /* End of SELECT */
 
-  /* DATA (v3.x and 4.0) or FETCH (v3.x) - Request data from a specific packet */
-  else if (!strncasecmp (cinfo->recvbuf, "DATA", 4) ||
-           (!strncasecmp (cinfo->recvbuf, "FETCH", 5) && slinfo->proto_major == 3))
+  /* DATA (v3.x and v4.0) or FETCH (v3.x) - Request data from a specific packet */
+  else if (cmdtoken_eq_nocase (cmd, 0, "DATA") ||
+           (cmdtoken_eq_nocase (cmd, 0, "FETCH") && slinfo->proto_major == 3))
   {
-    /* Parse packet sequence, start and end times from request */
-    starttimestr[0] = '\0';
-    endtimestr[0]   = '\0';
+    OKGO = 1;
 
     if (slinfo->proto_major == 4)
     {
-      char seqstr[21] = {0};
-
       /* DATA [seq_decimal [start [end]]] */
-      fields = sscanf (cinfo->recvbuf, "%*s %20s %50s %50s %c",
-                       seqstr, starttimestr, endtimestr, &junk);
-
-      if (fields >= 1)
+      if (cmd->argc > 4 || cmd->overflow)
       {
-        if (strcmp (seqstr, "ALL") == 0)
+        if (sl_arg_error (cinfo, "Too many arguments for DATA"))
+          return -1;
+
+        OKGO = 0;
+      }
+
+      if (OKGO && cmd->argc >= 2)
+      {
+        if (cmdtoken_eq (cmd, 1, "ALL"))
         {
           startpacket = RINGID_EARLIEST;
         }
         else
         {
-          char *endptr = NULL;
-          startpacket  = (uint64_t)strtoull (seqstr, &endptr, 10);
+          uint64_t seq = 0;
 
-          if (*endptr != '\0')
+          if (cmdtoken_u64 (cmd, 1, &seq, 10) < 0)
           {
             lprintf (0, "[%s] Error parsing sequence number for DATA: %s",
-                     cinfo->hostname, seqstr);
+                     cinfo->hostname, cmd->argv[1]);
 
             if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Invalid sequence number"))
               return -1;
 
             OKGO = 0;
           }
+          else
+          {
+            startpacket = seq;
+          }
         }
       }
-      else
+      else if (OKGO)
       {
         startpacket = RINGID_NEXT;
+      }
+
+      /* Convert start time string if specified */
+      if (OKGO && cmd->argc >= 3)
+      {
+        if ((starttime = ms_mdtimestr2nstime (cmd->argv[2])) == NSTERROR)
+        {
+          lprintf (0, "[%s] Error parsing time in DATA: %s",
+                   cinfo->hostname, cmd->argv[2]);
+
+          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Error parsing start time"))
+            return -1;
+
+          OKGO = 0;
+        }
+      }
+
+      /* Convert end time string if specified */
+      if (OKGO && cmd->argc >= 4)
+      {
+        if ((endtime = ms_mdtimestr2nstime (cmd->argv[3])) == NSTERROR)
+        {
+          lprintf (0, "[%s] Error parsing time in DATA: %s",
+                   cinfo->hostname, cmd->argv[3]);
+
+          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Error parsing end time"))
+            return -1;
+
+          OKGO = 0;
+        }
       }
     }
     else /* Protocol 3.x */
     {
-      uint32_t seq = 0;
-
       /* DATA|FETCH [seq_hex [start]] */
-      fields = sscanf (cinfo->recvbuf, "%*s %" SCNx32 " %50s %c",
-                       &seq, starttimestr, &junk);
-
-      if (fields >= 1)
+      if (cmd->argc > 3 || cmd->overflow)
       {
-        RingPacket lookup;
-        uint64_t latestid = RingReadPacket (param.latestoffset, &lookup, NULL);
+        if (sl_arg_error (cinfo, "Too many arguments for DATA/FETCH"))
+          return -1;
 
-        if (latestid <= RINGID_MAXIMUM)
+        OKGO = 0;
+      }
+
+      if (OKGO && cmd->argc >= 2)
+      {
+        uint32_t seq = 0;
+
+        if (cmdtoken_u32 (cmd, 1, &seq, 16) < 0)
         {
-          /* To map the 24-bit SeedLink v3 sequence into the 64-bit packet ID range
-           * combine the highest 40-bits of latest ID with lowest 24-bits of requested sequence */
-          startpacket = (latestid & 0xFFFFFFFFFF000000) | (seq & 0xFFFFFF);
+          lprintf (0, "[%s] Error parsing sequence number for DATA/FETCH: %s",
+                   cinfo->hostname, cmd->argv[1]);
+
+          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Invalid sequence number"))
+            return -1;
+
+          OKGO = 0;
         }
         else
         {
-          startpacket = (seq & 0xFFFFFF);
+          RingPacket lookup;
+          uint64_t latestid = RingReadPacket (param.latestoffset, &lookup, NULL);
+
+          if (latestid <= RINGID_MAXIMUM)
+          {
+            /* To map the 24-bit SeedLink v3 sequence into the 64-bit packet ID range
+             * combine the highest 40-bits of latest ID with lowest 24-bits of requested sequence */
+            startpacket = (latestid & 0xFFFFFFFFFF000000) | (seq & 0xFFFFFF);
+          }
+          else
+          {
+            startpacket = (seq & 0xFFFFFF);
+          }
         }
       }
-      else
+      else if (OKGO)
       {
         startpacket = RINGID_NEXT;
+      }
+
+      /* Convert start time string if specified */
+      if (OKGO && cmd->argc >= 3)
+      {
+        if ((starttime = ms_mdtimestr2nstime (cmd->argv[2])) == NSTERROR)
+        {
+          lprintf (0, "[%s] Error parsing time in DATA/FETCH: %s",
+                   cinfo->hostname, cmd->argv[2]);
+
+          if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Error parsing start time"))
+            return -1;
+
+          OKGO = 0;
+        }
       }
     }
 
@@ -1400,50 +1483,10 @@ HandleNegotiation (ClientInfo *cinfo)
     if (startpacket <= RINGID_MAXIMUM && startpacket > 0)
       startpacket = startpacket - 1;
 
-    /* Make sure we got no extra arguments */
-    if ((slinfo->proto_major == 4 && fields > 3) ||
-        (slinfo->proto_major == 3 && fields > 2))
-    {
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Too many arguments for DATA/FETCH"))
-        return -1;
-
-      OKGO = 0;
-    }
-
-    /* Convert start time string if specified */
-    if (OKGO && fields >= 2)
-    {
-      if ((starttime = ms_mdtimestr2nstime (starttimestr)) == NSTERROR)
-      {
-        lprintf (0, "[%s] Error parsing time in DATA|FETCH: %s",
-                 cinfo->hostname, starttimestr);
-
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Error parsing start time"))
-          return -1;
-
-        OKGO = 0;
-      }
-    }
-
-    /* Convert end time string if specified */
-    if (OKGO && fields >= 3)
-    {
-      if ((endtime = ms_mdtimestr2nstime (endtimestr)) == NSTERROR)
-      {
-        lprintf (0, "[%s] Error parsing time in DATA|FETCH: %s",
-                 cinfo->hostname, endtimestr);
-
-        if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Error parsing end time"))
-          return -1;
-
-        OKGO = 0;
-      }
-    }
-
     /* If configuring a specific station selection */
     if (OKGO && cinfo->state == STATE_STATION)
     {
-      if (fields >= 1)
+      if (cmd->argc >= 2)
       {
         /* Find the appropriate station ID and store the requested ID and time */
         if (!(stationid = GetReqStationID (slinfo->stations, slinfo->reqstaid)))
@@ -1471,7 +1514,7 @@ HandleNegotiation (ClientInfo *cinfo)
           return -1;
 
         /* If any stations use FETCH the connection is dial-up */
-        if (!strncasecmp (cinfo->recvbuf, "FETCH", 5))
+        if (cmdtoken_eq_nocase (cmd, 0, "FETCH"))
           slinfo->dialup = 1;
       }
 
@@ -1489,7 +1532,7 @@ HandleNegotiation (ClientInfo *cinfo)
       }
 
       /* If FETCH the connection is dial-up */
-      if (!strncasecmp (cinfo->recvbuf, "FETCH", 5))
+      if (cmdtoken_eq_nocase (cmd, 0, "FETCH"))
         slinfo->dialup = 1;
 
       /* Trigger ring configuration and data flow */
@@ -1498,34 +1541,26 @@ HandleNegotiation (ClientInfo *cinfo)
   } /* End of DATA|FETCH */
 
   /* TIME (v3.x) - Request data in time window */
-  else if (!strncasecmp (cinfo->recvbuf, "TIME", 4) && slinfo->proto_major == 3)
+  else if (cmdtoken_eq_nocase (cmd, 0, "TIME") && slinfo->proto_major == 3)
   {
     OKGO = 1;
 
-    /* Parse start and end time from request */
-    starttimestr[0] = '\0';
-    endtimestr[0]   = '\0';
-
-    /* TIME [start_time [end_time]] */
-    fields = sscanf (cinfo->recvbuf, "%*s %50s %50s %c",
-                     starttimestr, endtimestr, &junk);
-
-    /* Make sure we got start time and optionally end time */
-    if (fields <= 0 || fields > 2)
+    /* TIME start_time [end_time] */
+    if (cmd->argc < 2 || cmd->argc > 3 || cmd->overflow)
     {
-      if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "TIME command requires 1 or 2 arguments"))
+      if (sl_arg_error (cinfo, "TIME command requires 1 or 2 arguments"))
         return -1;
 
       OKGO = 0;
     }
 
     /* Convert start time string */
-    if (OKGO && fields >= 1)
+    if (OKGO)
     {
-      if ((starttime = ms_mdtimestr2nstime (starttimestr)) == NSTERROR)
+      if ((starttime = ms_mdtimestr2nstime (cmd->argv[1])) == NSTERROR)
       {
         lprintf (0, "[%s] Error parsing start time for TIME: %s",
-                 cinfo->hostname, starttimestr);
+                 cinfo->hostname, cmd->argv[1]);
 
         if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Error parsing start time"))
           return -1;
@@ -1537,7 +1572,7 @@ HandleNegotiation (ClientInfo *cinfo)
       if (OKGO && (time_t)MS_NSTIME2EPOCH (starttime) > time (NULL))
       {
         lprintf (0, "[%s] Start cannot be in future for TIME: %s",
-                 cinfo->hostname, starttimestr);
+                 cinfo->hostname, cmd->argv[1]);
 
         if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Start time cannot be in the future"))
           return -1;
@@ -1547,12 +1582,12 @@ HandleNegotiation (ClientInfo *cinfo)
     }
 
     /* Convert end time string if supplied */
-    if (OKGO && fields == 2)
+    if (OKGO && cmd->argc == 3)
     {
-      if ((endtime = ms_mdtimestr2nstime (endtimestr)) == NSTERROR)
+      if ((endtime = ms_mdtimestr2nstime (cmd->argv[2])) == NSTERROR)
       {
         lprintf (0, "[%s] Error parsing end time for TIME: %s",
-                 cinfo->hostname, endtimestr);
+                 cinfo->hostname, cmd->argv[2]);
 
         if (!slinfo->batch && SendReply (cinfo, "ERROR", ERROR_ARGUMENTS, "Error parsing end time"))
           return -1;
@@ -1564,7 +1599,7 @@ HandleNegotiation (ClientInfo *cinfo)
     /* If configuring a specific station selection */
     if (OKGO && cinfo->state == STATE_STATION)
     {
-      if (fields >= 1)
+      if (cmd->argc >= 2)
       {
         /* Find the appropriate station ID and store the requested times */
         if (!(stationid = GetReqStationID (slinfo->stations, slinfo->reqstaid)))
@@ -1596,7 +1631,7 @@ HandleNegotiation (ClientInfo *cinfo)
     else if (OKGO)
     {
       /* If no stations yet we are in all-station mode */
-      if (slinfo->stationcount == 0 && fields >= 1)
+      if (slinfo->stationcount == 0 && cmd->argc >= 2)
       {
         cinfo->starttime = starttime;
         cinfo->endtime   = endtime;
@@ -1607,8 +1642,8 @@ HandleNegotiation (ClientInfo *cinfo)
     }
   } /* End of TIME */
 
-  /* END (v4.0) - Stop negotiating, send data, dial-up mode */
-  else if (!strncasecmp (cinfo->recvbuf, "ENDFETCH", 9))
+  /* ENDFETCH (v3.x) - Stop negotiating, send data, dial-up mode */
+  else if (cmdtoken_eq_nocase (cmd, 0, "ENDFETCH"))
   {
     slinfo->dialup = 1;
 
@@ -1617,14 +1652,14 @@ HandleNegotiation (ClientInfo *cinfo)
   }
 
   /* END (v3.x and v4.0) - Stop negotiating, send data */
-  else if (!strncasecmp (cinfo->recvbuf, "END", 3))
+  else if (cmdtoken_eq_nocase (cmd, 0, "END"))
   {
     /* Trigger ring configuration and data flow */
     cinfo->state = STATE_RINGCONFIG;
   }
 
   /* BYE (v3.x and v4.0) - End connection */
-  else if (!strncasecmp (cinfo->recvbuf, "BYE", 3))
+  else if (cmdtoken_eq_nocase (cmd, 0, "BYE"))
   {
     return -1;
   }
@@ -1657,13 +1692,13 @@ HandleNegotiation (ClientInfo *cinfo)
  * Returns 0 on success and -1 on error which should disconnect.
  ***************************************************************************/
 static int
-HandleInfo_v3 (ClientInfo *cinfo)
+HandleInfo_v3 (ClientInfo *cinfo, CmdToken *cmd)
 {
   SLInfo *slinfo = (SLInfo *)cinfo->extinfo;
   char *xmlstr   = NULL;
   int xmllength;
-  char *level  = NULL;
-  char errflag = 0;
+  const char *level = NULL;
+  char errflag      = 0;
 
   char *record = NULL;
   int8_t swapflag;
@@ -1675,26 +1710,13 @@ HandleInfo_v3 (ClientInfo *cinfo)
   uint8_t sec   = 0;
   uint32_t nsec = 0;
 
-  if (!strncasecmp (cinfo->recvbuf, "INFO", 4))
+  if (cmd->argc < 2 || !cmd->argv[1] || cmd->argv[1][0] == '\0')
   {
-    /* Set level pointer to start of level identifier */
-    level = cinfo->recvbuf + 4;
-
-    /* Skip any spaces between INFO and level identifier */
-    while (*level == ' ')
-      level++;
-
-    if (*level == '\0' || *level == '\r' || *level == '\n')
-    {
-      lprintf (0, "[%s] HandleInfo: INFO requested without a level", cinfo->hostname);
-      return -1;
-    }
-  }
-  else
-  {
-    lprintf (0, "[%s] HandleInfo cannot detect INFO", cinfo->hostname);
+    lprintf (0, "[%s] HandleInfo: INFO requested without a level", cinfo->hostname);
     return -1;
   }
+
+  level = cmd->argv[1];
 
   /* Allocate miniSEED record buffer */
   if ((record = calloc (1, SLINFORECSIZE)) == NULL)
@@ -1706,20 +1728,20 @@ HandleInfo_v3 (ClientInfo *cinfo)
   WriteAccessLog (cinfo, "command", "INFO", level, NULL, NULL);
 
   /* Parse INFO request to determine level */
-  if (!strncasecmp (level, "ID", 2))
+  if (cmdtoken_eq_nocase (cmd, 1, "ID"))
   {
     /* This is used to "ping" the server so only report at high verbosity */
     lprintf (2, "[%s] Received INFO ID request", cinfo->hostname);
 
     xmlstr = info_xml_slv3_id (cinfo, SLSERVER_ID);
   }
-  else if (!strncasecmp (level, "CAPABILITIES", 12))
+  else if (cmdtoken_eq_nocase (cmd, 1, "CAPABILITIES"))
   {
     lprintf (1, "[%s] Received INFO CAPABILITIES request", cinfo->hostname);
 
     xmlstr = info_xml_slv3_capabilities (cinfo, SLSERVER_ID);
   }
-  else if (!strncasecmp (level, "STATIONS", 8))
+  else if (cmdtoken_eq_nocase (cmd, 1, "STATIONS"))
   {
     if (cinfo->state == STATE_STREAM)
     {
@@ -1733,7 +1755,7 @@ HandleInfo_v3 (ClientInfo *cinfo)
       xmlstr = info_xml_slv3_stations (cinfo, SLSERVER_ID, 0);
     }
   }
-  else if (!strncasecmp (level, "STREAMS", 7))
+  else if (cmdtoken_eq_nocase (cmd, 1, "STREAMS"))
   {
     if (cinfo->state == STATE_STREAM)
     {
@@ -1747,7 +1769,7 @@ HandleInfo_v3 (ClientInfo *cinfo)
       xmlstr = info_xml_slv3_stations (cinfo, SLSERVER_ID, 1);
     }
   }
-  else if (!strncasecmp (level, "CONNECTIONS", 11))
+  else if (cmdtoken_eq_nocase (cmd, 1, "CONNECTIONS"))
   {
     if (!(cinfo->permissions & TRUST_PERMISSION))
     {
@@ -1887,64 +1909,70 @@ HandleInfo_v3 (ClientInfo *cinfo)
  * Returns 0 on success and -1 on error which should disconnect.
  ***************************************************************************/
 static int
-HandleInfo_v4 (ClientInfo *cinfo)
+HandleInfo_v4 (ClientInfo *cinfo, CmdToken *cmd)
 {
   char *json_string = NULL;
-  char item[64]     = {0};
-  char station[64]  = {0};
+  const char *item    = NULL;
+  const char *station = NULL;
   char *matchregex  = NULL;
   char *rejectregex = NULL;
-  char junk;
-  int fields;
   int errflag = 0;
 
   Selector selector = {.string = {0}, .convert = CONVERT_NONE, .next = NULL};
 
-  if (strncasecmp (cinfo->recvbuf, "INFO", 4) != 0)
-  {
-    lprintf (0, "[%s] %s() cannot detect INFO", cinfo->hostname, __func__);
-    return -1;
-  }
-
-  /* Parse INFO item and optional station and stream patterns */
-  fields = sscanf (cinfo->recvbuf, "%*s %63s %63s %63s %c", item, station, selector.string, &junk);
-
-  if (fields == 0)
+  if (cmd->argc < 2)
   {
     lprintf (0, "[%s] INFO requested without a level", cinfo->hostname);
 
     json_string = error_json (cinfo, SLSERVER_ID, "ARGUMENTS", "No INFO item specified");
     errflag     = 1;
   }
+  else if (cmd->argc > 4 || cmd->overflow)
+  {
+    lprintf (0, "[%s] INFO request has too many arguments", cinfo->hostname);
+
+    json_string = error_json (cinfo, SLSERVER_ID, "ARGUMENTS", "INFO request has too many arguments");
+    errflag     = 1;
+  }
   else
   {
+    item    = cmd->argv[1];
+    station = (cmd->argc >= 3) ? cmd->argv[2] : NULL;
+
+    /* Copy optional stream selector pattern if provided */
+    if (cmd->argc >= 4)
+    {
+      strncpy (selector.string, cmd->argv[3], sizeof (selector.string) - 1);
+      selector.string[sizeof (selector.string) - 1] = '\0';
+    }
+
     WriteAccessLog (cinfo, "command", "INFO", item, NULL, NULL);
 
-    if (!strncasecmp (item, "ID", 2))
+    if (cmdtoken_eq_nocase (cmd, 1, "ID"))
     {
       /* This is used to "ping" the server so only report at high verbosity */
       lprintf (2, "[%s] Received INFO ID request", cinfo->hostname);
 
       json_string = info_json (cinfo, SLSERVER_ID, INFO_ID, NULL);
     }
-    else if (!strncasecmp (item, "CAPABILITIES", 12))
+    else if (cmdtoken_eq_nocase (cmd, 1, "CAPABILITIES"))
     {
       lprintf (1, "[%s] Received INFO CAPABILITIES request", cinfo->hostname);
 
       json_string = info_json (cinfo, SLSERVER_ID, INFO_CAPABILITIES, NULL);
     }
-    else if (!strncasecmp (item, "FORMATS", 7))
+    else if (cmdtoken_eq_nocase (cmd, 1, "FORMATS"))
     {
       lprintf (1, "[%s] Received INFO FORMATS request", cinfo->hostname);
 
       json_string = info_json (cinfo, SLSERVER_ID, INFO_FORMATS | INFO_FILTERS, NULL);
     }
-    else if (!strncasecmp (item, "STATIONS", 8))
+    else if (cmdtoken_eq_nocase (cmd, 1, "STATIONS"))
     {
       lprintf (1, "[%s] Received INFO STATIONS request", cinfo->hostname);
 
       /* Configure regex for matching included station and stream patterns */
-      if (station[0] != '\0')
+      if (station != NULL)
       {
         if (StationToRegex (station, (selector.string[0] != '\0') ? &selector : NULL,
                             &matchregex, &rejectregex))
@@ -1957,12 +1985,12 @@ HandleInfo_v4 (ClientInfo *cinfo)
 
       json_string = info_json (cinfo, SLSERVER_ID, INFO_STATIONS, matchregex);
     }
-    else if (!strncasecmp (item, "STREAMS", 7))
+    else if (cmdtoken_eq_nocase (cmd, 1, "STREAMS"))
     {
       lprintf (1, "[%s] Received INFO STREAMS request", cinfo->hostname);
 
       /* Configure regex for matching included station and stream patterns */
-      if (station[0] != '\0')
+      if (station != NULL)
       {
         if (StationToRegex (station, (selector.string[0] != '\0') ? &selector : NULL,
                             &matchregex, &rejectregex))
@@ -1975,7 +2003,7 @@ HandleInfo_v4 (ClientInfo *cinfo)
 
       json_string = info_json (cinfo, SLSERVER_ID, INFO_STATION_STREAMS, matchregex);
     }
-    else if (!strncasecmp (item, "CONNECTIONS", 11))
+    else if (cmdtoken_eq_nocase (cmd, 1, "CONNECTIONS"))
     {
       if (!(cinfo->permissions & TRUST_PERMISSION))
       {
@@ -1987,8 +2015,7 @@ HandleInfo_v4 (ClientInfo *cinfo)
       {
         lprintf (1, "[%s] Received INFO CONNECTIONS request", cinfo->hostname);
 
-        json_string = info_json (cinfo, SLSERVER_ID, INFO_CONNECTIONS,
-                                 (station[0] != '\0') ? station : NULL);
+        json_string = info_json (cinfo, SLSERVER_ID, INFO_CONNECTIONS, station);
       }
     }
     /* Unrecognized INFO request */

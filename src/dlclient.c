@@ -35,6 +35,7 @@
 
 #include "auth.h"
 #include "clients.h"
+#include "cmdtoken.h"
 #include "dlclient.h"
 #include "generic.h"
 #include "http.h"
@@ -48,10 +49,10 @@
 /* Define the number of no-action loops that trigger the throttle */
 #define THROTTLE_TRIGGER 10
 
-static int HandleNegotiation (ClientInfo *cinfo);
-static int HandleWrite (ClientInfo *cinfo);
-static int HandleRead (ClientInfo *cinfo);
-static int HandleInfo (ClientInfo *cinfo);
+static int HandleNegotiation (ClientInfo *cinfo, CmdToken *cmd);
+static int HandleWrite (ClientInfo *cinfo, CmdToken *cmd);
+static int HandleRead (ClientInfo *cinfo, CmdToken *cmd);
+static int HandleInfo (ClientInfo *cinfo, CmdToken *cmd);
 static int SendPacket (ClientInfo *cinfo, char *header, char *data,
                        uint64_t value, int addvalue, int addsize);
 static int SendRingPacket (ClientInfo *cinfo);
@@ -97,8 +98,16 @@ DLHandleCmd (ClientInfo *cinfo)
 
   dlinfo = (DLInfo *)cinfo->extinfo;
 
-  /* Determine if this is a data submission and handle */
-  if (!strncmp (cinfo->dlcommand, "WRITE", 5))
+  /* Tokenize the command buffer once; all handlers receive the same CmdToken */
+  CmdToken cmd;
+  if (cmdtoken_parse (&cmd, cinfo->dlcommand) < 0 || cmd.argc == 0)
+  {
+    lprintf (1, "[%s] Error tokenizing command buffer", cinfo->hostname);
+    return 1;
+  }
+
+  /* Determine if this is a data submission and handle (case-sensitive dispatch) */
+  if (cmdtoken_eq_nocase (&cmd, 0, "WRITE"))
   {
     /* Check for write permission */
     if (!(cinfo->permissions & WRITE_PERMISSION))
@@ -109,36 +118,48 @@ DLHandleCmd (ClientInfo *cinfo)
       return -1;
     }
     /* Any errors from HandleWrite are fatal */
-    else if (HandleWrite (cinfo))
+    else if (HandleWrite (cinfo, &cmd))
     {
       return -1;
     }
   }
 
   /* Determine if this is an INFO request and handle */
-  else if (!strncmp (cinfo->dlcommand, "INFO", 4))
+  else if (cmdtoken_eq_nocase (&cmd, 0, "INFO"))
   {
     /* Any errors from HandleInfo are fatal */
-    if (HandleInfo (cinfo))
+    if (HandleInfo (cinfo, &cmd))
     {
       return -1;
     }
   }
 
   /* Determine if this is a specific read request and handle */
-  else if (!strncmp (cinfo->dlcommand, "READ", 4))
+  else if (cmdtoken_eq_nocase (&cmd, 0, "READ"))
   {
     cinfo->state = STATE_COMMAND;
 
     /* Any errors from HandleRead are fatal */
-    if (HandleRead (cinfo))
+    if (HandleRead (cinfo, &cmd))
     {
       return -1;
     }
   }
 
+  /* Determine if this is a request to end STREAMing and set state (must precede STREAM) */
+  else if (cmdtoken_eq_nocase (&cmd, 0, "ENDSTREAM"))
+  {
+    /* Send ENDSTREAM */
+    if (SendPacket (cinfo, "ENDSTREAM", NULL, 0, 0, 0))
+    {
+      return -1;
+    }
+
+    cinfo->state = STATE_COMMAND;
+  }
+
   /* Determine if this is a request to start STREAMing and set state */
-  else if (!strncmp (cinfo->dlcommand, "STREAM", 6))
+  else if (cmdtoken_eq_nocase (&cmd, 0, "STREAM"))
   {
     /* Check for authentication requirement */
     if (config.auth.required && !(cinfo->permissions & AUTHENTICATED))
@@ -160,26 +181,14 @@ DLHandleCmd (ClientInfo *cinfo)
     cinfo->state = STATE_STREAM;
   }
 
-  /* Determine if this is a request to end STREAMing and set state */
-  else if (!strncmp (cinfo->dlcommand, "ENDSTREAM", 9))
-  {
-    /* Send ENDSTREAM */
-    if (SendPacket (cinfo, "ENDSTREAM", NULL, 0, 0, 0))
-    {
-      return -1;
-    }
-
-    cinfo->state = STATE_COMMAND;
-  }
-
   /* Otherwise a negotiation command */
   else
   {
     /* If this is not an ID request, set to a non-streaming state */
-    if (strncmp (cinfo->dlcommand, "ID", 2))
+    if (!cmdtoken_eq_nocase (&cmd, 0, "ID"))
       cinfo->state = STATE_COMMAND;
 
-    int rv = HandleNegotiation (cinfo);
+    int rv = HandleNegotiation (cinfo, &cmd);
     if (rv < 0)
       return -1;
     if (rv > 0)
@@ -269,6 +278,18 @@ DLFree (ClientInfo *cinfo)
 } /* End of SLFree() */
 
 /***************************************************************************
+ * dl_arg_error:
+ *
+ * Send an ERROR reply to a DataLink client.  Returns the result of
+ * SendPacket (-1 on fatal socket error, 0 on success).
+ ***************************************************************************/
+static int
+dl_arg_error (ClientInfo *cinfo, const char *msg)
+{
+  return SendPacket (cinfo, "ERROR", (char *)msg, 0, 1, 1);
+}
+
+/***************************************************************************
  * HandleNegotiation:
  *
  * Handle negotiation commands implementing server-side DataLink
@@ -290,28 +311,27 @@ DLFree (ClientInfo *cinfo)
  * and -1 on fatal error which should disconnect.
  ***************************************************************************/
 static int
-HandleNegotiation (ClientInfo *cinfo)
+HandleNegotiation (ClientInfo *cinfo, CmdToken *cmd)
 {
   char sendbuffer[255];
   size_t size;
-  int fields;
+  uint64_t size_u64;
   int selected;
-
   char OKGO = 1;
-  char junk;
 
-  if (!cinfo)
+  if (!cinfo || !cmd)
     return -1;
 
   /* ID - Return server ID, version and capability flags */
-  if (!strncasecmp (cinfo->dlcommand, "ID", 2))
+  if (cmdtoken_eq_nocase (cmd, 0, "ID"))
   {
-    /* Parse client ID from command if included
-     * Everything after "ID " is the client ID */
-    if (strlen (cinfo->dlcommand) > 3)
+    /* Optional client ID is everything after "ID " */
+    const char *clientid = cmdtoken_rest_after (cmd, 1);
+
+    if (clientid)
     {
-      strncpy (cinfo->clientid, cinfo->dlcommand + 3, sizeof (cinfo->clientid) - 1);
-      *(cinfo->clientid + sizeof (cinfo->clientid) - 1) = '\0';
+      strncpy (cinfo->clientid, clientid, sizeof (cinfo->clientid) - 1);
+      cinfo->clientid[sizeof (cinfo->clientid) - 1] = '\0';
       lprintf (2, "[%s] Received ID (%s)", cinfo->hostname, cinfo->clientid);
     }
     else
@@ -331,37 +351,43 @@ HandleNegotiation (ClientInfo *cinfo)
       return -1;
   }
 
-  /* AUTH <USERPASS|JWT> size|value */
-  else if (!strncasecmp (cinfo->dlcommand, "AUTH", 4))
+  /* AUTH <USERPASS|JWT> size\r\n<credential-bytes> */
+  else if (cmdtoken_eq_nocase (cmd, 0, "AUTH"))
   {
     char credential[4096] = {0};
 
     char *username = NULL;
     char *password = NULL;
     char *jwtoken  = NULL;
-    char type[11]  = {0};
-
-    /* Parse size from request */
-    fields = sscanf (cinfo->dlcommand, "%*s %10s %zu %c", type, &size, &junk);
 
     OKGO = 1;
 
-    if (fields != 2)
+    /* AUTH requires exactly 2 arguments: sub-command and byte-size */
+    if (cmd->argc != 3 || cmd->overflow)
     {
-      if (SendPacket (cinfo, "ERROR", "AUTH requires 2 arguments", 0, 1, 1))
+      if (dl_arg_error (cinfo, "AUTH requires 2 arguments"))
         return -1;
 
       OKGO = 0;
     }
-    else if (size > (sizeof (credential) - 1))
+    else if (cmdtoken_u64 (cmd, 2, &size_u64, 10) < 0)
     {
-      if (SendPacket (cinfo, "ERROR", "AUTH credentials are too large", 0, 1, 1))
+      if (dl_arg_error (cinfo, "AUTH size argument is invalid"))
+        return -1;
+
+      OKGO = 0;
+    }
+    else if (size_u64 > (sizeof (credential) - 1))
+    {
+      if (dl_arg_error (cinfo, "AUTH credentials are too large"))
         return -1;
 
       OKGO = 0;
     }
     else
     {
+      size = (size_t)size_u64;
+
       /* Read credentials of size bytes */
       if (RecvData (cinfo, credential, size, 1) < 0)
       {
@@ -369,7 +395,8 @@ HandleNegotiation (ClientInfo *cinfo)
         return -1;
       }
 
-      if (!strcmp (type, "USERPASS"))
+      /* Sub-command comparison is case-sensitive (DataLink convention) */
+      if (cmdtoken_eq_nocase (cmd, 1, "USERPASS"))
       {
         /* Parse USERNAME and PASSWORD from credential payload */
         char *ptr = strchr (credential, '\r');
@@ -388,13 +415,13 @@ HandleNegotiation (ClientInfo *cinfo)
           password = ptr + 1;
         }
       }
-      else if (!strcmp (type, "JWT"))
+      else if (cmdtoken_eq_nocase (cmd, 1, "JWT"))
       {
         jwtoken = credential;
       }
       else
       {
-        lprintf (0, "[%s] Unsupported AUTH type: %s", cinfo->hostname, type);
+        lprintf (0, "[%s] Unsupported AUTH type: %s", cinfo->hostname, cmd->argv[1]);
         if (SendPacket (cinfo, "ERROR", "Unsupported AUTH type", 0, 1, 1))
           return -1;
       }
@@ -428,30 +455,18 @@ HandleNegotiation (ClientInfo *cinfo)
     }
   } /* End of AUTH */
 
-  /* POSITION <SET|AFTER> value [time]\r\n - Set ring reading position */
-  else if (!strncasecmp (cinfo->dlcommand, "POSITION", 8))
+  /* POSITION <SET|AFTER> value [time] - Set ring reading position */
+  else if (cmdtoken_eq_nocase (cmd, 0, "POSITION"))
   {
-    char subcmd[11];
-    char value[32];
-    char subvalue[32];
     uint64_t pktid = 0;
     nstime_t nstime;
 
     OKGO = 1;
 
-    /* Parse sub-command and value from request */
-    fields = sscanf (cinfo->dlcommand, "%*s %10s %31s %31s %c",
-                     subcmd, value, subvalue, &junk);
-
-    /* Make sure the subcommand, value and subvalue fields are terminated */
-    subcmd[sizeof (subcmd) - 1]     = '\0';
-    value[sizeof (value) - 1]       = '\0';
-    subvalue[sizeof (subvalue) - 1] = '\0';
-
-    /* Make sure we got a single pattern or no pattern */
-    if (fields < 2 || fields > 3)
+    /* POSITION requires 2 or 3 arguments after the command keyword */
+    if (cmd->argc < 3 || cmd->argc > 4 || cmd->overflow)
     {
-      if (SendPacket (cinfo, "ERROR", "POSITION requires 2 or 3 arguments", 0, 1, 1))
+      if (dl_arg_error (cinfo, "POSITION requires 2 or 3 arguments"))
         return -1;
 
       OKGO = 0;
@@ -459,38 +474,43 @@ HandleNegotiation (ClientInfo *cinfo)
     else
     {
       /* Process SET positioning */
-      if (!strncmp (subcmd, "SET", 3))
+      if (cmdtoken_eq_nocase (cmd, 1, "SET"))
       {
         nstime = NSTUNSET;
 
-        /* Process SET <pktid> [time] */
-        if (IsAllDigits (value))
-        {
-          pktid = (uint64_t)strtoull (value, NULL, 10);
-
-          if (fields == 3)
-          {
-            /* Wire protocol uses time in microseconds (hptime), convert to nanoseconds (nstime) */
-            nstime = strtoll (subvalue, NULL, 10);
-            nstime = MS_HPTIME2NSTIME (nstime);
-          }
-        }
-        /* Process SET EARLIEST */
-        else if (!strncmp (value, "EARLIEST", 8))
+        /* SET EARLIEST / SET LATEST do not accept a time argument */
+        if (cmdtoken_eq_nocase (cmd, 2, "EARLIEST"))
         {
           pktid = RINGID_EARLIEST;
         }
-        /* Process SET LATEST */
-        else if (!strncmp (value, "LATEST", 6))
+        else if (cmdtoken_eq_nocase (cmd, 2, "LATEST"))
         {
           pktid = RINGID_LATEST;
         }
-        else
+        /* Otherwise SET <pktid> [time] - cmdtoken_u64 fully validates the pktid */
+        else if (cmdtoken_u64 (cmd, 2, &pktid, 10) < 0)
         {
-          lprintf (0, "[%s] Error with POSITION SET value: %s", cinfo->hostname, value);
+          lprintf (0, "[%s] Error with POSITION SET value: %s", cinfo->hostname, cmd->argv[2]);
           if (SendPacket (cinfo, "ERROR", "Error with POSITION SET value", 0, 1, 1))
             return -1;
           OKGO = 0;
+        }
+        else if (cmd->argc == 4)
+        {
+          int64_t hptime = 0;
+
+          if (cmdtoken_i64 (cmd, 3, &hptime, 10) < 0)
+          {
+            lprintf (0, "[%s] Error with POSITION SET time: %s", cinfo->hostname, cmd->argv[3]);
+            if (SendPacket (cinfo, "ERROR", "Error with POSITION SET time", 0, 1, 1))
+              return -1;
+            OKGO = 0;
+          }
+          else
+          {
+            /* Wire protocol uses time in microseconds (hptime), convert to nanoseconds (nstime) */
+            nstime = MS_HPTIME2NSTIME (hptime);
+          }
         }
 
         /* If no errors with the set value, position the reader */
@@ -524,25 +544,23 @@ HandleNegotiation (ClientInfo *cinfo)
           }
         }
       }
-      /* Process AFTER <time> positioning */
-      else if (!strncmp (subcmd, "AFTER", 5))
+      /* Process AFTER <time> positioning (case-sensitive sub-command) */
+      else if (cmdtoken_eq_nocase (cmd, 1, "AFTER"))
       {
-        char *endptr;
+        int64_t hptime = 0;
 
-        /* Wire protocol uses time in microseconds ("hptime"), convert to nanoseconds ("nstime") */
-        errno  = 0;
-        nstime = strtoll (value, &endptr, 10);
-
-        if (endptr == value || *endptr != '\0' || errno == ERANGE)
+        if (cmdtoken_i64 (cmd, 2, &hptime, 10) < 0)
         {
-          lprintf (0, "[%s] Error parsing POSITION AFTER time: %s", cinfo->hostname, value);
+          lprintf (0, "[%s] Error parsing POSITION AFTER time: %s", cinfo->hostname, cmd->argv[2]);
           if (SendPacket (cinfo, "ERROR", "Error with POSITION AFTER time", 0, 1, 1))
             return -1;
         }
         else
         {
           char timestr[32];
-          nstime = MS_HPTIME2NSTIME (nstime);
+
+          /* Wire protocol uses time in microseconds ("hptime"), convert to nanoseconds ("nstime") */
+          nstime = MS_HPTIME2NSTIME (hptime);
           ms_nstime2timestr_n (nstime, timestr, sizeof (timestr), ISOMONTHDAY_Z, NANO_MICRO_NONE);
 
           /* Position ring according to start time, use reverse search if limited */
@@ -590,55 +608,52 @@ HandleNegotiation (ClientInfo *cinfo)
       }
       else
       {
-        lprintf (0, "[%s] Unsupported POSITION subcommand: %s", cinfo->hostname, subcmd);
+        lprintf (0, "[%s] Unsupported POSITION subcommand: %s", cinfo->hostname, cmd->argv[1]);
         if (SendPacket (cinfo, "ERROR", "Unsupported POSITION subcommand", 0, 1, 1))
           return -1;
       }
     }
   } /* End of POSITION */
 
-  /* MATCH size\r\n[pattern] - Provide regex to match streamids */
-  else if (!strncasecmp (cinfo->dlcommand, "MATCH", 5))
+  /* MATCH [size]\r\n[pattern] - Provide regex to match streamids */
+  else if (cmdtoken_eq_nocase (cmd, 0, "MATCH"))
   {
-    OKGO = 1;
-
-    /* Parse size from request */
-    fields = sscanf (cinfo->dlcommand, "%*s %zu %c", &size, &junk);
-
-    /* Make sure we got a single pattern or no pattern */
-    if (fields > 1)
-    {
-      if (SendPacket (cinfo, "ERROR", "MATCH requires a single argument", 0, 1, 1))
-        return -1;
-
-      OKGO = 0;
-    }
-    /* Remove current match if no pattern supplied */
-    else if (fields <= 0)
+    /* MATCH with no size argument removes current match */
+    if (cmd->argc == 1)
     {
       free (cinfo->matchstr);
       cinfo->matchstr = NULL;
       RingMatch (cinfo->reader, 0);
 
       selected = SelectedStreams (cinfo->reader);
-      snprintf (sendbuffer, sizeof (sendbuffer), "%d streams selected after match",
-                selected);
+      snprintf (sendbuffer, sizeof (sendbuffer), "%d streams selected after match", selected);
       if (SendPacket (cinfo, "OK", sendbuffer, (selected >= 0) ? (uint64_t)selected : 0, 1, 1))
         return -1;
     }
-    else if (size > DLMAXREGEXLEN)
+    else if (cmd->argc > 2 || cmd->overflow)
     {
-      lprintf (0, "[%s] match expression too large (%zu)", cinfo->hostname, size);
+      if (dl_arg_error (cinfo, "MATCH requires a single argument"))
+        return -1;
+    }
+    else if (cmdtoken_u64 (cmd, 1, &size_u64, 10) < 0)
+    {
+      if (dl_arg_error (cinfo, "MATCH size argument is invalid"))
+        return -1;
+    }
+    else if (size_u64 > DLMAXREGEXLEN)
+    {
+      lprintf (0, "[%s] match expression too large (%" PRIu64 ")",
+               cinfo->hostname, size_u64);
 
       snprintf (sendbuffer, sizeof (sendbuffer), "match expression too large, must be <= %d",
                 DLMAXREGEXLEN);
       if (SendPacket (cinfo, "ERROR", sendbuffer, 0, 1, 1))
         return -1;
-
-      OKGO = 0;
     }
     else
     {
+      size = (size_t)size_u64;
+
       free (cinfo->matchstr);
       cinfo->matchstr = NULL;
 
@@ -669,56 +684,52 @@ HandleNegotiation (ClientInfo *cinfo)
       else
       {
         selected = SelectedStreams (cinfo->reader);
-        snprintf (sendbuffer, sizeof (sendbuffer), "%d streams selected after match",
-                  selected);
+        snprintf (sendbuffer, sizeof (sendbuffer), "%d streams selected after match", selected);
         if (SendPacket (cinfo, "OK", sendbuffer, (selected >= 0) ? (uint64_t)selected : 0, 1, 1))
           return -1;
       }
     }
   } /* End of MATCH */
 
-  /* REJECT size\r\n[pattern] - Provide regex to reject streamids */
-  else if (OKGO && !strncasecmp (cinfo->dlcommand, "REJECT", 6))
+  /* REJECT [size]\r\n[pattern] - Provide regex to reject streamids */
+  else if (cmdtoken_eq_nocase (cmd, 0, "REJECT"))
   {
-    OKGO = 1;
-
-    /* Parse size from request */
-    fields = sscanf (cinfo->dlcommand, "%*s %zu %c", &size, &junk);
-
-    /* Make sure we got a single pattern or no pattern */
-    if (fields > 1)
-    {
-      if (SendPacket (cinfo, "ERROR", "REJECT requires a single argument", 0, 1, 1))
-        return -1;
-
-      OKGO = 0;
-    }
-    /* Remove current reject if no pattern supplied */
-    else if (fields <= 0)
+    /* REJECT with no size argument removes current reject */
+    if (cmd->argc == 1)
     {
       free (cinfo->rejectstr);
       cinfo->rejectstr = NULL;
       RingReject (cinfo->reader, 0);
 
       selected = SelectedStreams (cinfo->reader);
-      snprintf (sendbuffer, sizeof (sendbuffer), "%d streams selected after reject",
-                selected);
+      snprintf (sendbuffer, sizeof (sendbuffer), "%d streams selected after reject", selected);
       if (SendPacket (cinfo, "OK", sendbuffer, (selected >= 0) ? (uint64_t)selected : 0, 1, 1))
         return -1;
     }
-    else if (size > DLMAXREGEXLEN)
+    else if (cmd->argc > 2 || cmd->overflow)
     {
-      lprintf (0, "[%s] reject expression too large (%zu)", cinfo->hostname, size);
+      if (dl_arg_error (cinfo, "REJECT requires a single argument"))
+        return -1;
+    }
+    else if (cmdtoken_u64 (cmd, 1, &size_u64, 10) < 0)
+    {
+      if (dl_arg_error (cinfo, "REJECT size argument is invalid"))
+        return -1;
+    }
+    else if (size_u64 > DLMAXREGEXLEN)
+    {
+      lprintf (0, "[%s] reject expression too large (%" PRIu64 ")",
+               cinfo->hostname, size_u64);
 
       snprintf (sendbuffer, sizeof (sendbuffer), "reject expression too large, must be <= %d",
                 DLMAXREGEXLEN);
       if (SendPacket (cinfo, "ERROR", sendbuffer, 0, 1, 1))
         return -1;
-
-      OKGO = 0;
     }
     else
     {
+      size = (size_t)size_u64;
+
       free (cinfo->rejectstr);
       cinfo->rejectstr = NULL;
 
@@ -749,8 +760,7 @@ HandleNegotiation (ClientInfo *cinfo)
       else
       {
         selected = SelectedStreams (cinfo->reader);
-        snprintf (sendbuffer, sizeof (sendbuffer), "%d streams selected after reject",
-                  selected);
+        snprintf (sendbuffer, sizeof (sendbuffer), "%d streams selected after reject", selected);
         if (SendPacket (cinfo, "OK", sendbuffer, (selected >= 0) ? (uint64_t)selected : 0, 1, 1))
           return -1;
       }
@@ -758,7 +768,7 @@ HandleNegotiation (ClientInfo *cinfo)
   } /* End of REJECT */
 
   /* BYE - End connection */
-  else if (!strncasecmp (cinfo->dlcommand, "BYE", 3))
+  else if (cmdtoken_eq_nocase (cmd, 0, "BYE"))
   {
     return -1;
   }
@@ -800,7 +810,7 @@ HandleNegotiation (ClientInfo *cinfo)
  * Returns 0 on success and -1 on error which should disconnect.
  ***************************************************************************/
 static int
-HandleWrite (ClientInfo *cinfo)
+HandleWrite (ClientInfo *cinfo, CmdToken *cmd)
 {
   DLInfo *dlinfo;
   StreamNode *stream;
@@ -809,25 +819,22 @@ HandleWrite (ClientInfo *cinfo)
   char flags[101];
   int nread;
   int newstream = 0;
+
+  int64_t hpdatastart = 0;
+  int64_t hpdataend   = 0;
+  uint32_t datasize   = 0;
   int rv;
 
   MS3Record *msr = NULL;
 
-  if (!cinfo || !cinfo->extinfo)
+  if (!cinfo || !cinfo->extinfo || !cmd)
     return -1;
 
   dlinfo = (DLInfo *)cinfo->extinfo;
 
-  /* Parse command parameters: WRITE <streamid> <datastart> <dataend> <flags> <datasize> [pktid] */
-  rv = sscanf (cinfo->dlcommand, "%*s %100s %" SCNd64 " %" SCNd64 " %100s %" SCNu32 " %" SCNu64,
-               streamid,
-               &(cinfo->packet.datastart),
-               &(cinfo->packet.dataend),
-               flags,
-               &(cinfo->packet.datasize),
-               &(cinfo->packet.pktid));
-
-  if (rv < 5)
+  /* WRITE <streamid> <datastart> <dataend> <flags> <datasize> [pktid]
+   * argc is 6 (no pktid) or 7 (with pktid) */
+  if (cmd->argc < 6 || cmd->argc > 7 || cmd->overflow)
   {
     lprintf (1, "[%s] Error parsing WRITE parameters: %.100s",
              cinfo->hostname, cinfo->dlcommand);
@@ -837,21 +844,68 @@ HandleWrite (ClientInfo *cinfo)
     return -1;
   }
 
-  if (strlen (streamid) > (MAXSTREAMID - 1))
+  /* Stream ID */
+  if (strlen (cmd->argv[1]) > (MAXSTREAMID - 1))
   {
     lprintf (1, "[%s] Error, stream ID too long: %.100s",
-             cinfo->hostname, streamid);
+             cinfo->hostname, cmd->argv[1]);
 
     SendPacket (cinfo, "ERROR", "Error, stream ID too long", 0, 1, 1);
 
     return -1;
   }
+  strncpy (streamid, cmd->argv[1], sizeof (streamid) - 1);
+  streamid[sizeof (streamid) - 1] = '\0';
 
-  /* Set packet ID to RINGID_NONE if not provided */
-  if (rv == 5 || (rv == 6 && strchr (flags, 'I') == NULL))
+  /* Data start and end times (hptime, microseconds since epoch) */
+  if (cmdtoken_i64 (cmd, 2, &hpdatastart, 10) < 0 ||
+      cmdtoken_i64 (cmd, 3, &hpdataend, 10) < 0)
+  {
+    lprintf (1, "[%s] Error parsing WRITE data times: %.100s",
+             cinfo->hostname, cinfo->dlcommand);
+
+    SendPacket (cinfo, "ERROR", "Error parsing WRITE command parameters", 0, 1, 1);
+
+    return -1;
+  }
+
+  /* Flags */
+  strncpy (flags, cmd->argv[4], sizeof (flags) - 1);
+  flags[sizeof (flags) - 1] = '\0';
+
+  /* Data size */
+  if (cmdtoken_u32 (cmd, 5, &datasize, 10) < 0)
+  {
+    lprintf (1, "[%s] Error parsing WRITE data size: %.100s",
+             cinfo->hostname, cinfo->dlcommand);
+
+    SendPacket (cinfo, "ERROR", "Error parsing WRITE command parameters", 0, 1, 1);
+
+    return -1;
+  }
+  cinfo->packet.datasize = datasize;
+
+  /* Optional packet ID (only honored when flags contain 'I') */
+  if (cmd->argc == 7 && strchr (flags, 'I') != NULL)
+  {
+    if (cmdtoken_u64 (cmd, 6, &cinfo->packet.pktid, 10) < 0)
+    {
+      lprintf (1, "[%s] Error parsing WRITE packet ID: %.100s",
+               cinfo->hostname, cinfo->dlcommand);
+
+      SendPacket (cinfo, "ERROR", "Error parsing WRITE command parameters", 0, 1, 1);
+
+      return -1;
+    }
+  }
+  else
   {
     cinfo->packet.pktid = RINGID_NONE;
   }
+
+  /* Store parsed data start/end (convert hptime → nstime below) */
+  cinfo->packet.datastart = hpdatastart;
+  cinfo->packet.dataend   = hpdataend;
 
   /* Translate legacy stream ID: NN_SSSSS_LL_CCC/MSEED
    * to an FDSN Source ID: FDSN:NN_SSSSS_LL_C_C_C/MSEED */
@@ -1017,17 +1071,17 @@ HandleWrite (ClientInfo *cinfo)
  * Returns 0 on success and -1 on error which should disconnect.
  ***************************************************************************/
 static int
-HandleRead (ClientInfo *cinfo)
+HandleRead (ClientInfo *cinfo, CmdToken *cmd)
 {
   uint64_t reqid  = 0;
   uint64_t readid = 0;
   char replystr[100];
 
-  if (!cinfo)
+  if (!cinfo || !cmd)
     return -1;
 
   /* Parse command parameters: READ <pktid> */
-  if (sscanf (cinfo->dlcommand, "%*s %" PRIu64, &reqid) != 1)
+  if (cmd->argc != 2 || cmd->overflow || cmdtoken_u64 (cmd, 1, &reqid, 10) < 0)
   {
     lprintf (1, "[%s] Error parsing READ parameters: %.100s",
              cinfo->hostname, cinfo->dlcommand);
@@ -1077,49 +1131,62 @@ HandleRead (ClientInfo *cinfo)
  * Returns 0 on success and -1 on error which should disconnect.
  ***************************************************************************/
 static int
-HandleInfo (ClientInfo *cinfo)
+HandleInfo (ClientInfo *cinfo, CmdToken *cmd)
 {
   char string[200];
   char *xmlstr = NULL;
   int xmllength;
-  char *type      = NULL;
-  char *matchexpr = NULL;
-  char *matchstr  = NULL;
-  size_t size;
-  char junk;
-  int fields;
+  const char *item = NULL;
+  const char *type = NULL;
+  char *matchexpr  = NULL;
+  char *matchstr   = NULL;
+  size_t size      = 0;
 
-  if (!cinfo)
+  if (!cinfo || !cmd)
     return -1;
 
-  if (!strncasecmp (cinfo->dlcommand, "INFO", 4))
+  /* INFO requires at least a type argument */
+  if (cmd->argc < 2)
   {
-    /* Set level pointer to start of type identifier */
-    type = cinfo->dlcommand + 4;
+    lprintf (0, "[%s] HandleInfo: INFO requested without a type", cinfo->hostname);
+    SendPacket (cinfo, "ERROR", "INFO request has no type", 0, 1, 1);
+    return -1;
+  }
 
-    /* Skip any spaces between INFO and type identifier */
-    while (*type == ' ')
-      type++;
+  item = cmd->argv[1];
+  type = item;
 
-    /* Parse optional match expression size: INFO <type> <size> */
-    fields = sscanf (cinfo->dlcommand, "%*s %*s %zu %c", &size, &junk);
+  /* Optional match expression size: INFO <type> <size> */
+  if (cmd->argc > 3 || cmd->overflow)
+  {
+    lprintf (0, "[%s] INFO request has extra arguments", cinfo->hostname);
+    SendPacket (cinfo, "ERROR", "INFO request has extra arguments", 0, 1, 1);
+    return -1;
+  }
+  else if (cmd->argc == 3)
+  {
+    uint64_t size_u64 = 0;
 
-    if (fields > 1)
+    if (cmdtoken_u64 (cmd, 2, &size_u64, 10) < 0)
     {
-      lprintf (0, "[%s] INFO request has extra arguments", cinfo->hostname);
-      SendPacket (cinfo, "ERROR", "INFO request has extra arguments", 0, 1, 1);
+      lprintf (0, "[%s] INFO size argument is invalid", cinfo->hostname);
+      SendPacket (cinfo, "ERROR", "INFO size argument is invalid", 0, 1, 1);
       return -1;
     }
-    else if (fields == 1 && size > DLMAXREGEXLEN)
+    else if (size_u64 > DLMAXREGEXLEN)
     {
-      lprintf (0, "[%s] INFO match expression too large (%zu)", cinfo->hostname, size);
+      lprintf (0, "[%s] INFO match expression too large (%" PRIu64 ")",
+               cinfo->hostname, size_u64);
 
       snprintf (string, sizeof (string), "match expression too large, must be <= %d",
                 DLMAXREGEXLEN);
       SendPacket (cinfo, "ERROR", string, 0, 1, 1);
       return -1;
     }
-    else if (fields == 1 && size > 0)
+
+    size = (size_t)size_u64;
+
+    if (size > 0)
     {
       /* Read match expression of size bytes from socket */
       if (!(matchstr = (char *)malloc (size + 1)))
@@ -1140,30 +1207,25 @@ HandleInfo (ClientInfo *cinfo)
       matchexpr      = matchstr;
     }
   }
-  else
-  {
-    lprintf (0, "[%s] HandleInfo cannot detect INFO", cinfo->hostname);
-    return -1;
-  }
 
-  WriteAccessLog (cinfo, "command", "INFO", type, NULL, NULL);
+  WriteAccessLog (cinfo, "command", "INFO", item, NULL, NULL);
 
   /* Add contents to the XML structure depending on info request */
-  if (!strncasecmp (type, "STATUS", 6))
+  if (cmdtoken_eq_nocase (cmd, 1, "STATUS"))
   {
     lprintf (1, "[%s] Received INFO STATUS request", cinfo->hostname);
     type = "INFO STATUS";
 
     xmlstr = info_xml_dlv1 (cinfo, DLSERVER_ID, "STATUS", matchexpr, cinfo->permissions & TRUST_PERMISSION);
   } /* End of STATUS */
-  else if (!strncasecmp (type, "STREAMS", 7))
+  else if (cmdtoken_eq_nocase (cmd, 1, "STREAMS"))
   {
     lprintf (1, "[%s] Received INFO STREAMS request", cinfo->hostname);
     type = "INFO STREAMS";
 
     xmlstr = info_xml_dlv1 (cinfo, DLSERVER_ID, "STREAMS", matchexpr, cinfo->permissions & TRUST_PERMISSION);
   } /* End of STREAMS */
-  else if (!strncasecmp (type, "CONNECTIONS", 11))
+  else if (cmdtoken_eq_nocase (cmd, 1, "CONNECTIONS"))
   {
     /* Check for trusted flag, required to access this resource */
     if (!(cinfo->permissions & TRUST_PERMISSION))
@@ -1184,9 +1246,9 @@ HandleInfo (ClientInfo *cinfo)
   /* Unrecognized INFO request */
   else
   {
-    lprintf (0, "[%s] Unrecognized INFO request type: %s", cinfo->hostname, type);
+    lprintf (0, "[%s] Unrecognized INFO request type: %s", cinfo->hostname, item);
 
-    snprintf (string, sizeof (string), "Unrecognized INFO request type: %s", type);
+    snprintf (string, sizeof (string), "Unrecognized INFO request type: %s", item);
     SendPacket (cinfo, "ERROR", string, 0, 1, 1);
 
     free (matchstr);
@@ -1211,7 +1273,7 @@ HandleInfo (ClientInfo *cinfo)
   }
 
   /* Send XML to client */
-  if (SendPacket (cinfo, type, xmlstr, 0, 0, 1))
+  if (SendPacket (cinfo, (char *)type, xmlstr, 0, 0, 1))
   {
     if (cinfo->socketerr != -2)
       lprintf (0, "[%s] Error sending INFO XML", cinfo->hostname);
