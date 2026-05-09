@@ -100,7 +100,7 @@ RingInitialize (char *ringfilename, char *streamfilename, int *ringfd)
   uint32_t headersize;
   uint64_t maxpackets;
   int64_t maxoffset;
-  mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+  mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP;
 
   int corruptring = 0;
   int ringinit    = 0;
@@ -521,7 +521,7 @@ RingShutdown (int ringfd, char *streamfilename)
   RingStream *stream;
 
   RBNode *tnode;
-  mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+  mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP;
 
   if (!config.volatilering && (!ringfd || !streamfilename))
     return -1;

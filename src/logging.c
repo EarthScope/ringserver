@@ -220,7 +220,12 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
   ms_nstime2timestr_n (logstart, logstarttime, sizeof (logstarttime), ISOMONTHDAY_Z, NONE);
 
   /* Convert server port from string to integer */
-  server_port = atoi (cinfo->serverport);
+  char *endptr = NULL;
+  long parsed  = strtol (cinfo->serverport, &endptr, 10);
+  server_port  = (endptr != cinfo->serverport && *endptr == '\0' &&
+                  parsed >= 0 && parsed <= 65535)
+                     ? (int)parsed
+                     : 0;
 
   /* Lock usage log file writing mutex */
   pthread_mutex_lock (&config.usagelog.write_lock);
@@ -711,7 +716,13 @@ WriteAccessLog (ClientInfo *cinfo, const char *event,
   ms_nstime2timestr_n (clock, currtime, sizeof (currtime), ISOMONTHDAY_Z, NONE);
   ms_nstime2timestr_n (cinfo->conntime, conntime, sizeof (conntime), ISOMONTHDAY_Z, NONE);
 
-  server_port = atoi (cinfo->serverport);
+  /* Convert server port from string to integer with full validation */
+  char *endptr = NULL;
+  long parsed  = strtol (cinfo->serverport, &endptr, 10);
+  server_port  = (endptr != cinfo->serverport && *endptr == '\0' &&
+                  parsed >= 0 && parsed <= 65535)
+                     ? (int)parsed
+                     : 0;
 
   /* Determine protocol name and version strings */
   const char *modestr   = "Unknown";

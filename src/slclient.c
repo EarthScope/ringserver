@@ -963,8 +963,7 @@ HandleNegotiation (ClientInfo *cinfo, CmdToken *cmd)
 
         OKGO = 0;
       }
-      /* Reject oversize credentials: silent truncation would let an
-       * attacker authenticate as a credential's prefix. */
+      /* Reject oversize credentials */
       else if (strlen (cmd->argv[2]) >= sizeof (username) ||
                strlen (cmd->argv[3]) >= sizeof (password))
       {
