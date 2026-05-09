@@ -963,6 +963,18 @@ HandleNegotiation (ClientInfo *cinfo, CmdToken *cmd)
 
         OKGO = 0;
       }
+      /* Reject oversize credentials: silent truncation would let an
+       * attacker authenticate as a credential's prefix. */
+      else if (strlen (cmd->argv[2]) >= sizeof (username) ||
+               strlen (cmd->argv[3]) >= sizeof (password))
+      {
+        lprintf (0, "[%s] AUTH USERPASS credentials too large", cinfo->hostname);
+
+        if (SendReply (cinfo, "ERROR", ERROR_AUTH, "Credentials too large"))
+          return -1;
+
+        OKGO = 0;
+      }
       else
       {
         strncpy (username, cmd->argv[2], sizeof (username) - 1);

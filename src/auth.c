@@ -22,6 +22,8 @@
  **************************************************************************/
 
 #include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stdint.h>
@@ -85,12 +87,13 @@ PerformAuth (ClientInfo *cinfo,
     return -1;
   }
 
-  /* Set environment variables for auth program, checking for truncation */
+  /* Set environment variables for auth program.  Truncation is fatal */
   if (username && username[0])
   {
     if (snprintf (username_env, sizeof (username_env), "AUTH_USERNAME=%s", username) >= (int)sizeof (username_env))
     {
-      lprintf (0, "[%s] AUTH_USERNAME too large, truncated (%zu bytes)", cinfo->hostname, strlen (username));
+      lprintf (0, "[%s] AUTH_USERNAME too large (%zu bytes), cannot authenticate", cinfo->hostname, strlen (username));
+      return -1;
     }
     envp[envidx++] = username_env;
   }
@@ -99,7 +102,8 @@ PerformAuth (ClientInfo *cinfo,
   {
     if (snprintf (password_env, sizeof (password_env), "AUTH_PASSWORD=%s", password) >= (int)sizeof (password_env))
     {
-      lprintf (0, "[%s] AUTH_PASSWORD too large, truncated (%zu bytes)", cinfo->hostname, strlen (password));
+      lprintf (0, "[%s] AUTH_PASSWORD too large (%zu bytes), cannot authenticate", cinfo->hostname, strlen (password));
+      return -1;
     }
     envp[envidx++] = password_env;
   }
@@ -419,7 +423,10 @@ ExecuteAuthProgram (char *envp[], uint32_t timeout_seconds,
   int exit_status         = -1;
   pid_t pid               = -1;
   int status;
-  ssize_t nread;
+  size_t out_written  = 0;
+  size_t err_written  = 0;
+  size_t out_overflow = 0;
+  size_t err_overflow = 0;
 
   if (!envp || !output || !error)
   {
@@ -486,46 +493,148 @@ ExecuteAuthProgram (char *envp[], uint32_t timeout_seconds,
   close (stderr_pipe[1]);
   stderr_pipe[1] = -1;
 
-  /* Set up timeout loop using time-based approach */
-  struct timespec start_time, current_time;
-  clock_gettime (CLOCK_MONOTONIC, &start_time);
+  /* Set read ends non-blocking so drain reads never block between polls */
+  fcntl (stdout_pipe[0], F_SETFL, O_NONBLOCK);
+  fcntl (stderr_pipe[0], F_SETFL, O_NONBLOCK);
 
-  while (waitpid (pid, &status, WNOHANG) == 0)
+  /* Drain both pipes concurrently with poll() while the child runs, then
+   * waitpid once both are at EOF.  This prevents the classic deadlock where
+   * the child blocks on a full pipe and waitpid() never returns. */
   {
-    clock_gettime (CLOCK_MONOTONIC, &current_time);
+    struct timespec deadline;
+    clock_gettime (CLOCK_MONOTONIC, &deadline);
+    deadline.tv_sec += timeout_seconds;
 
-    double elapsed_time = (current_time.tv_sec - start_time.tv_sec) +
-                          (current_time.tv_nsec - start_time.tv_nsec) / 1e9;
+    int out_open = 1;
+    int err_open = 1;
+    int timed_out = 0;
 
-    if (elapsed_time >= timeout_seconds)
+    while (out_open || err_open)
     {
-      lprintf (1, "%s() Process (%s) did not exit after %u seconds, killing",
-               __func__, config.auth.program, timeout_seconds);
+      struct timespec now;
+      clock_gettime (CLOCK_MONOTONIC, &now);
 
-      kill (pid, SIGKILL);
-      waitpid (pid, &status, 0);
-      break;
+      int64_t remaining_ms = (int64_t)(deadline.tv_sec - now.tv_sec) * 1000 +
+                             (int64_t)(deadline.tv_nsec - now.tv_nsec) / 1000000;
+
+      if (remaining_ms <= 0)
+      {
+        lprintf (1, "%s() Process (%s) did not exit after %u seconds, killing",
+                 __func__, config.auth.program, timeout_seconds);
+        kill (pid, SIGKILL);
+        timed_out = 1;
+        break;
+      }
+
+      struct pollfd fds[2];
+      int nfds = 0;
+      int out_idx = -1;
+
+      if (out_open)
+      {
+        out_idx          = nfds;
+        fds[nfds].fd     = stdout_pipe[0];
+        fds[nfds].events = POLLIN;
+        nfds++;
+      }
+      if (err_open)
+      {
+        fds[nfds].fd     = stderr_pipe[0];
+        fds[nfds].events = POLLIN;
+        nfds++;
+      }
+
+      int ready = poll (fds, (nfds_t)nfds, (int)remaining_ms);
+
+      if (ready < 0)
+      {
+        if (errno == EINTR)
+          continue;
+        lprintf (0, "%s() poll() error: %s", __func__, strerror (errno));
+        kill (pid, SIGKILL);
+        timed_out = 1;
+        break;
+      }
+
+      /* Drain each ready pipe; read in a tight loop until EAGAIN or EOF */
+      for (int pi = 0; pi < nfds; pi++)
+      {
+        if (!(fds[pi].revents & (POLLIN | POLLHUP | POLLERR)))
+          continue;
+
+        int is_out      = (pi == out_idx);
+        char *buf       = is_out ? output : error;
+        size_t bufsz    = is_out ? output_size : error_size;
+        size_t *written = is_out ? &out_written : &err_written;
+        size_t *overflow = is_out ? &out_overflow : &err_overflow;
+
+        for (;;)
+        {
+          char tmp[4096];
+          ssize_t nr = read (fds[pi].fd, tmp, sizeof (tmp));
+
+          if (nr < 0)
+          {
+            if (errno == EINTR)
+              continue;
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+              break; /* no more data right now */
+            lprintf (0, "%s() Error reading %s from auth program: %s",
+                     __func__, is_out ? "stdout" : "stderr", strerror (errno));
+            break;
+          }
+
+          if (nr == 0)
+          {
+            /* EOF — pipe closed by child */
+            close (fds[pi].fd);
+            if (is_out)
+            {
+              stdout_pipe[0] = -1;
+              out_open       = 0;
+            }
+            else
+            {
+              stderr_pipe[0] = -1;
+              err_open       = 0;
+            }
+            break;
+          }
+
+          /* Append to buffer up to cap, count overflow past cap */
+          size_t space   = (*written < bufsz - 1) ? (bufsz - 1 - *written) : 0;
+          size_t to_copy = (nr < (ssize_t)space) ? (size_t)nr : space;
+
+          if (to_copy > 0)
+          {
+            memcpy (buf + *written, tmp, to_copy);
+            *written += to_copy;
+          }
+
+          if ((size_t)nr > to_copy)
+            *overflow += (size_t)nr - to_copy;
+        }
+      }
     }
 
-    usleep (100000);
+    /* Both pipes are at EOF (or we timed out); safe to reap the child */
+    waitpid (pid, &status, 0);
+    pid = -1;
+
+    if (out_overflow > 0)
+      lprintf (1, "%s() Auth program stdout truncated (%zu bytes past %zu-byte buffer)",
+               __func__, out_overflow, output_size - 1);
+    if (err_overflow > 0)
+      lprintf (1, "%s() Auth program stderr truncated (%zu bytes past %zu-byte buffer)",
+               __func__, err_overflow, error_size - 1);
+
+    if (timed_out)
+      goto cleanup;
   }
 
-  /* Read output and error from pipes */
-  nread = read (stdout_pipe[0], output, output_size - 1);
-  if (nread < 0)
-  {
-    lprintf (0, "%s() Error reading stdout from auth program: %s", __func__, strerror (errno));
-    goto cleanup;
-  }
-  output[nread] = '\0';
-
-  nread = read (stderr_pipe[0], error, error_size - 1);
-  if (nread < 0)
-  {
-    lprintf (0, "%s() Error reading stderr from auth program: %s", __func__, strerror (errno));
-    goto cleanup;
-  }
-  error[nread] = '\0';
+  /* NUL-terminate captured output */
+  output[out_written] = '\0';
+  error[err_written]  = '\0';
 
   /* Determine exit status */
   if (WIFEXITED (status))
