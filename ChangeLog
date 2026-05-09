@@ -13,6 +13,7 @@ Unreleased
 	- Fix end_seq to be last sequence + 1 per the SeedLink v4 spec.
 	- Fix SeedLink v4 AUTH to reply ERROR UNSUPPORTED instead of ERROR ARGUMENTS
 	  for an unrecognized auth type, matching the spec.
+	- Harden authentication handling.
 
 2026.110: v4.5.0
 	- Fix SeedLink v3 matching of empty location codes when selectors are used.

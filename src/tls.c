@@ -25,7 +25,7 @@
 #include "logging.h"
 #include "ringserver.h"
 
-#define TLS_HANDSHAKE_TIMEOUT 30  /* Maximum seconds for TLS handshake */
+#define TLS_HANDSHAKE_TIMEOUT_MAX 30  /* Upper bound when netiotimeout is disabled */
 
 /* Debug output for TLS */
 void
@@ -188,7 +188,14 @@ TLSConfigure (ClientInfo *cinfo)
 
   lprintf (2, "[%s] Starting TLS handshake", cinfo->hostname);
 
-  time_t handshake_start = time (NULL);
+  /* Cap the handshake duration to the configured network I/O timeout so
+   * a slow-handshake DoS cannot pin a thread for longer than any other
+   * idle client. Fall back to TLS_HANDSHAKE_TIMEOUT_MAX when the
+   * operator has disabled netiotimeout. */
+  time_t handshake_start   = time (NULL);
+  time_t handshake_timeout = (config.netiotimeout > 0)
+                                 ? (time_t)config.netiotimeout
+                                 : TLS_HANDSHAKE_TIMEOUT_MAX;
 
   while ((ret = mbedtls_ssl_handshake (&tlsctx->ssl)) != 0)
   {
@@ -206,9 +213,10 @@ TLSConfigure (ClientInfo *cinfo)
       return -1;
     }
 
-    if (time (NULL) - handshake_start > TLS_HANDSHAKE_TIMEOUT)
+    if (time (NULL) - handshake_start > handshake_timeout)
     {
-      lprintf (0, "[%s] TLS handshake timed out after %d seconds", cinfo->hostname, TLS_HANDSHAKE_TIMEOUT);
+      lprintf (0, "[%s] TLS handshake timed out after %ld seconds",
+               cinfo->hostname, (long)handshake_timeout);
       return -1;
     }
 
