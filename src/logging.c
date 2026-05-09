@@ -55,7 +55,7 @@ int
 lprintf (int level, char *fmt, ...)
 {
   int rv = 0;
-  char message[200];
+  char message[1024];
   va_list argptr;
   struct tm tp;
   time_t curtime;
@@ -75,11 +75,14 @@ lprintf (int level, char *fmt, ...)
     rv = vsnprintf (message, sizeof (message), fmt, argptr);
     va_end (argptr);
 
+    /* Determine if the message was truncated, minding signed/unsigned differences */
+    int truncated = (rv < 0) || ((size_t)rv >= sizeof (message));
+
     pthread_mutex_lock (&log_mutex);
     printf ("%3.3s %3.3s %2.2d %2.2d:%2.2d:%2.2d %4.4d - %s%s\n",
             day[tp.tm_wday], month[tp.tm_mon], tp.tm_mday,
             tp.tm_hour, tp.tm_min, tp.tm_sec, tp.tm_year + 1900,
-            message, (rv >= sizeof (message)) ? " ..." : "");
+            message, truncated ? " ..." : "");
 
     fflush (stdout);
     pthread_mutex_unlock (&log_mutex);

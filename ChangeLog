@@ -14,6 +14,7 @@ Unreleased
 	- Fix SeedLink v4 AUTH to reply ERROR UNSUPPORTED instead of ERROR ARGUMENTS
 	  for an unrecognized auth type, matching the spec.
 	- Harden authentication handling.
+	- Increase log line length from 200 to 1024 bytes.
 
 2026.110: v4.5.0
 	- Fix SeedLink v3 matching of empty location codes when selectors are used.
