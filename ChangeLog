@@ -1,4 +1,4 @@
-Unreleased
+2026.128: 4.5.1
 	- Fix SeedLink per-station DATA/FETCH/TIME ignoring requested start time,
 	  causing streams to begin at the next new packet instead of the requested time.
 	- Fix SeedLink v4 DATA command silently dropping the start time when an end
@@ -15,8 +15,8 @@ Unreleased
 	  for an unrecognized auth type, matching the spec.
 	- Harden authentication handling.
 	- Increase log line length from 200 to 1024 bytes.
-	- Reduce streamlock hold time in GetStreamsStack by snapshotting the stream
-	  index under the lock and running PCRE2 match/reject filters after release.
+  - Avoid a lock of cinfo->streams_lock by using atomics to update counters.
+	- Reduce streamlock hold time in GetStreamsStack.
 
 2026.110: v4.5.0
 	- Fix SeedLink v3 matching of empty location codes when selectors are used.
