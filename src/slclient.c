@@ -662,11 +662,11 @@ SLStreamPackets (ClientInfo *cinfo)
         return -1;
       }
 
-      /* Update StreamNode packet and byte count */
-      pthread_mutex_lock (&(cinfo->streams_lock));
+      /* Update StreamNode packet and byte counts.  StreamNode counters
+       * are atomic; no streams_lock needed for the increment itself.
+       * The lock still serializes tree mutation inside GetStreamNode(). */
       stream->txpackets++;
       stream->txbytes += cinfo->packet.datasize;
-      pthread_mutex_unlock (&(cinfo->streams_lock));
 
       /* Update client transmit and counts */
       cinfo->txpackets0++;

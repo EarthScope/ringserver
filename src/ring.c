@@ -1689,37 +1689,81 @@ StreamStackNodeCmp (StackNode *a, StackNode *b)
 Stack *
 GetStreamsStack (RingReader *reader)
 {
-  RingStream *stream;
+  RingStream *snapshot = NULL;
+  size_t snapshot_count = 0;
   RingStream *newstream;
   RBNode *tnode;
   Stack *streams;
   Stack *newstreams;
 
-  /* Lock the streams index */
+  /* Snapshot the stream index under streamlock as quickly as possible:
+   * walk the tree into a local Stack, then memcpy each RingStream into a
+   * contiguous array.  PCRE2 matching and result-stack construction are
+   * deferred until after the lock is released so a slow regex can no
+   * longer block packet writers waiting on streamlock. */
   pthread_mutex_lock (&param.streamlock);
 
-  streams    = StackCreate ();
-  newstreams = StackCreate ();
-
-  if (streams == NULL || newstreams == NULL)
+  streams = StackCreate ();
+  if (streams == NULL)
   {
     lprintf (0, "%s(): error allocating Stack", __func__);
-    if (streams)
-      StackDestroy (streams, 0);
-    if (newstreams)
-      StackDestroy (newstreams, free);
     pthread_mutex_unlock (&param.streamlock);
     return 0;
   }
 
   RBBuildStack (param.streamidx, streams);
 
-  /* Loop through streams copying content to new Stack */
+  /* Pre-size the snapshot buffer using the (atomic) streamcount as a hint;
+   * fall back to dynamic growth if the tree turned out to hold more. */
+  size_t capacity = param.streamcount ? param.streamcount : 16;
+  snapshot = (RingStream *)malloc (capacity * sizeof (RingStream));
+  if (snapshot == NULL)
+  {
+    lprintf (0, "%s(): Error allocating snapshot", __func__);
+    StackDestroy (streams, 0);
+    pthread_mutex_unlock (&param.streamlock);
+    return 0;
+  }
+
   while ((tnode = (RBNode *)StackPop (streams)))
   {
-    stream = (RingStream *)tnode->data;
+    if (snapshot_count == capacity)
+    {
+      size_t new_capacity = capacity * 2;
+      RingStream *grown = (RingStream *)realloc (snapshot,
+                                                 new_capacity * sizeof (RingStream));
+      if (grown == NULL)
+      {
+        lprintf (0, "%s(): Error growing snapshot", __func__);
+        free (snapshot);
+        StackDestroy (streams, 0);
+        pthread_mutex_unlock (&param.streamlock);
+        return 0;
+      }
+      snapshot = grown;
+      capacity = new_capacity;
+    }
 
-    /* If a RingReader is specified apply the match & reject expressions */
+    memcpy (&snapshot[snapshot_count++], tnode->data, sizeof (RingStream));
+  }
+
+  StackDestroy (streams, 0);
+  pthread_mutex_unlock (&param.streamlock);
+
+  /* Lock released.  Now run the (potentially expensive) PCRE2 filters and
+   * build the result Stack against the snapshot. */
+  newstreams = StackCreate ();
+  if (newstreams == NULL)
+  {
+    lprintf (0, "%s(): error allocating result Stack", __func__);
+    free (snapshot);
+    return 0;
+  }
+
+  for (size_t i = 0; i < snapshot_count; i++)
+  {
+    RingStream *stream = &snapshot[i];
+
     if (reader)
     {
       /* Test allowed expression if available, skip if NOT matched */
@@ -1747,28 +1791,21 @@ GetStreamsStack (RingReader *reader)
           continue;
     }
 
-    /* Allocate memory for new stream entry */
     if (!(newstream = (RingStream *)malloc (sizeof (RingStream))))
     {
       lprintf (0, "%s(): Error allocating memory", __func__);
-      StackDestroy (streams, 0);
       StackDestroy (newstreams, free);
-      pthread_mutex_unlock (&param.streamlock);
+      free (snapshot);
       return 0;
     }
 
-    /* Copy stream entry and add to new streams Stack */
     memcpy (newstream, stream, sizeof (RingStream));
 
     /* Use unshift operation so copied Stack is in the same order */
     StackUnshift (newstreams, newstream);
   }
 
-  /* Cleanup streams Stack structures but not data */
-  StackDestroy (streams, 0);
-
-  /* Unlock the streams index */
-  pthread_mutex_unlock (&param.streamlock);
+  free (snapshot);
 
   /* Sort Stack on the stream IDs if more than one entry */
   if (newstreams->top && newstreams->top != newstreams->tail)

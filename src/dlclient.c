@@ -1047,10 +1047,8 @@ HandleWrite (ClientInfo *cinfo, CmdToken *cmd)
   }
 
   /* Update StreamNode packet and byte counts */
-  pthread_mutex_lock (&(cinfo->streams_lock));
   stream->rxpackets++;
   stream->rxbytes += cinfo->packet.datasize;
-  pthread_mutex_unlock (&(cinfo->streams_lock));
 
   /* Update client receive counts */
   cinfo->rxpackets0++;
@@ -1467,10 +1465,8 @@ SendRingPacket (ClientInfo *cinfo)
   }
 
   /* Update StreamNode packet and byte counts */
-  pthread_mutex_lock (&(cinfo->streams_lock));
   stream->txpackets++;
   stream->txbytes += cinfo->packet.datasize;
-  pthread_mutex_unlock (&(cinfo->streams_lock));
 
   /* Update client transmit and counts */
   cinfo->txpackets0++;

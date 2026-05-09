@@ -146,16 +146,21 @@ typedef struct ClientInfo
   void *extinfo;                /* Extended client info, protocol specific */
 } ClientInfo;
 
-/* Structure used as the data for B-tree of stream tracking */
+/* Structure used as the data for B-tree of stream tracking.
+ * Counter are atomic so per-packet updates by the client thread can
+ * proceed without taking streams_lock, which is otherwise needed only
+ * for tree mutation (GetStreamNode) and the periodic
+ * read-and-reset in the usage log (which uses atomic_exchange).
+ */
 typedef struct StreamNode
 {
-  char       streamid[MAXSTREAMID]; /* Stream ID */
-  uint64_t   txpackets;      /* Total packets transmitted */
-  uint64_t   txbytes;        /* Total bytes transmitted */
-  uint64_t   rxpackets;      /* Total packets received */
-  uint64_t   rxbytes;        /* Total bytes received */
-  uint8_t    endtimereached; /* End time reached, for window requests */
-  Conversion convert;        /* Conversion type */
+  char streamid[MAXSTREAMID]; /* Stream ID */
+  _Atomic uint64_t txpackets; /* Total packets transmitted */
+  _Atomic uint64_t txbytes;   /* Total bytes transmitted */
+  _Atomic uint64_t rxpackets; /* Total packets received */
+  _Atomic uint64_t rxbytes;   /* Total bytes received */
+  uint8_t endtimereached;     /* End time reached, for window requests */
+  Conversion convert;         /* Conversion type */
 } StreamNode;
 
 extern void *ClientThread (void *arg);

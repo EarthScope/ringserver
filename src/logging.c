@@ -418,35 +418,42 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
       {
         streamnode = (StreamNode *)rbnode->data;
 
-        if (txfp && txdoc && txstreams && streamnode->txbytes > 0)
+        /* Snapshot counters atomically.  Only exchange-with-zero (i.e. consume
+         * the values) on the writer paths that actually consumed them; an
+         * unconfigured log path must not silently drop counts. */
+        if (txfp && txdoc && txstreams)
         {
-          yyjson_mut_val *item = yyjson_mut_arr_add_obj (txdoc, txstreams);
-          yyjson_mut_obj_add_strcpy (txdoc, item, "stream_id", streamnode->streamid);
-          yyjson_mut_obj_add_uint (txdoc, item, "bytes", streamnode->txbytes);
-          yyjson_mut_obj_add_uint (txdoc, item, "packets", streamnode->txpackets);
+          uint64_t txbytes   = reset ? atomic_exchange (&streamnode->txbytes, 0)
+                                     : atomic_load (&streamnode->txbytes);
+          uint64_t txpackets = reset ? atomic_exchange (&streamnode->txpackets, 0)
+                                     : atomic_load (&streamnode->txpackets);
 
-          txtotalbytes += streamnode->txbytes;
-
-          if (reset)
+          if (txbytes > 0)
           {
-            streamnode->txbytes   = 0;
-            streamnode->txpackets = 0;
+            yyjson_mut_val *item = yyjson_mut_arr_add_obj (txdoc, txstreams);
+            yyjson_mut_obj_add_strcpy (txdoc, item, "stream_id", streamnode->streamid);
+            yyjson_mut_obj_add_uint (txdoc, item, "bytes", txbytes);
+            yyjson_mut_obj_add_uint (txdoc, item, "packets", txpackets);
+
+            txtotalbytes += txbytes;
           }
         }
 
-        if (rxfp && rxdoc && rxstreams && streamnode->rxbytes > 0)
+        if (rxfp && rxdoc && rxstreams)
         {
-          yyjson_mut_val *item = yyjson_mut_arr_add_obj (rxdoc, rxstreams);
-          yyjson_mut_obj_add_strcpy (rxdoc, item, "stream_id", streamnode->streamid);
-          yyjson_mut_obj_add_uint (rxdoc, item, "bytes", streamnode->rxbytes);
-          yyjson_mut_obj_add_uint (rxdoc, item, "packets", streamnode->rxpackets);
+          uint64_t rxbytes   = reset ? atomic_exchange (&streamnode->rxbytes, 0)
+                                     : atomic_load (&streamnode->rxbytes);
+          uint64_t rxpackets = reset ? atomic_exchange (&streamnode->rxpackets, 0)
+                                     : atomic_load (&streamnode->rxpackets);
 
-          rxtotalbytes += streamnode->rxbytes;
-
-          if (reset)
+          if (rxbytes > 0)
           {
-            streamnode->rxbytes   = 0;
-            streamnode->rxpackets = 0;
+            yyjson_mut_val *item = yyjson_mut_arr_add_obj (rxdoc, rxstreams);
+            yyjson_mut_obj_add_strcpy (rxdoc, item, "stream_id", streamnode->streamid);
+            yyjson_mut_obj_add_uint (rxdoc, item, "bytes", rxbytes);
+            yyjson_mut_obj_add_uint (rxdoc, item, "packets", rxpackets);
+
+            rxtotalbytes += rxbytes;
           }
         }
       }
@@ -530,33 +537,37 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
       {
         streamnode = (StreamNode *)rbnode->data;
 
-        if (txmem && streamnode->txbytes > 0)
+        /* Snapshot counters atomically; consume (exchange-with-zero) only on
+         * the writer paths that actually report them. */
+        if (txmem)
         {
-          fprintf (txmem, "%s %" PRIu64 " %" PRIu64 "\n", streamnode->streamid,
-                   streamnode->txbytes, streamnode->txpackets);
+          uint64_t txbytes   = reset ? atomic_exchange (&streamnode->txbytes, 0)
+                                     : atomic_load (&streamnode->txbytes);
+          uint64_t txpackets = reset ? atomic_exchange (&streamnode->txpackets, 0)
+                                     : atomic_load (&streamnode->txpackets);
 
-          txtotalbytes += streamnode->txbytes;
-
-          /* Reset counts if requested */
-          if (reset)
+          if (txbytes > 0)
           {
-            streamnode->txbytes   = 0;
-            streamnode->txpackets = 0;
+            fprintf (txmem, "%s %" PRIu64 " %" PRIu64 "\n", streamnode->streamid,
+                     txbytes, txpackets);
+
+            txtotalbytes += txbytes;
           }
         }
 
-        if (rxmem && streamnode->rxbytes > 0)
+        if (rxmem)
         {
-          fprintf (rxmem, "%s %" PRIu64 " %" PRIu64 "\n", streamnode->streamid,
-                   streamnode->rxbytes, streamnode->rxpackets);
+          uint64_t rxbytes   = reset ? atomic_exchange (&streamnode->rxbytes, 0)
+                                     : atomic_load (&streamnode->rxbytes);
+          uint64_t rxpackets = reset ? atomic_exchange (&streamnode->rxpackets, 0)
+                                     : atomic_load (&streamnode->rxpackets);
 
-          rxtotalbytes += streamnode->rxbytes;
-
-          /* Reset counts if requested */
-          if (reset)
+          if (rxbytes > 0)
           {
-            streamnode->rxbytes   = 0;
-            streamnode->rxpackets = 0;
+            fprintf (rxmem, "%s %" PRIu64 " %" PRIu64 "\n", streamnode->streamid,
+                     rxbytes, rxpackets);
+
+            rxtotalbytes += rxbytes;
           }
         }
       }
