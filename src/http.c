@@ -647,7 +647,7 @@ HandleHTTP (char *recvbuffer, ClientInfo *cinfo)
                   "DataLink1.1");
       else if (http_header_has_token (secWebSocketProtocolHeader, "DataLink1.0"))
         snprintf (secWebSocketProtocolHeader, sizeof (secWebSocketProtocolHeader),
-                  "DataLink1.1");
+                  "DataLink1.0");
       else
       {
         lprintf (2, "[%s] Error, no recognized DataLink subprotocol for web socket upgrade: %s",
