@@ -231,6 +231,11 @@ SLHandleCmd (ClientInfo *cinfo)
       RBNode *rbnode;
       nstime_t newesttime = NSTUNSET;
 
+      /* Save reader position values to restore after any errors */
+      int64_t saved_pktoffset = cinfo->reader->pktoffset;
+      uint64_t saved_pktid    = cinfo->reader->pktid;
+      nstime_t saved_pkttime  = cinfo->reader->pkttime;
+
       stack = StackCreate ();
       RBBuildStack (slinfo->stations, stack);
 
@@ -289,6 +294,11 @@ SLHandleCmd (ClientInfo *cinfo)
       }
 
       StackDestroy (stack, 0);
+
+      /* Restore reader position */
+      cinfo->reader->pktoffset = saved_pktoffset;
+      cinfo->reader->pktid     = saved_pktid;
+      cinfo->reader->pkttime   = saved_pkttime;
     }
 
     lprintf (2, "[%s] Requesting match: '%s', reject: '%s'", cinfo->hostname,

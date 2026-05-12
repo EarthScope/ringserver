@@ -476,7 +476,7 @@ HandleNegotiation (ClientInfo *cinfo, CmdToken *cmd)
       /* Process SET positioning */
       if (cmdtoken_eq_nocase (cmd, 1, "SET"))
       {
-        nstime = NSTUNSET;
+        int64_t hptime = INT64_MIN;
 
         /* SET EARLIEST / SET LATEST do not accept a time argument */
         if (cmdtoken_eq_nocase (cmd, 2, "EARLIEST"))
@@ -497,8 +497,6 @@ HandleNegotiation (ClientInfo *cinfo, CmdToken *cmd)
         }
         else if (cmd->argc == 4)
         {
-          int64_t hptime = 0;
-
           if (cmdtoken_i64 (cmd, 3, &hptime, 10) < 0)
           {
             lprintf (0, "[%s] Error with POSITION SET time: %s", cinfo->hostname, cmd->argv[3]);
@@ -506,22 +504,32 @@ HandleNegotiation (ClientInfo *cinfo, CmdToken *cmd)
               return -1;
             OKGO = 0;
           }
-          else
-          {
-            /* Wire protocol uses time in microseconds (hptime), convert to nanoseconds (nstime) */
-            nstime = MS_HPTIME2NSTIME (hptime);
-          }
         }
 
-        /* If no errors with the set value, position the reader */
+        /* Position the reader. Limit packet time matching to integer seconds to allow
+         * for client-supplied packet times of unknown precision. */
         if (OKGO)
         {
-          uint64_t position = RingPosition (cinfo->reader, pktid, nstime);
+          int64_t saved_pktoffset = cinfo->reader->pktoffset;
+          uint64_t saved_pktid    = cinfo->reader->pktid;
+          nstime_t saved_pkttime  = cinfo->reader->pkttime;
+
+          uint64_t position = RingPosition (cinfo->reader, pktid, NSTUNSET);
+
+          if (hptime != INT64_MIN && position <= RINGID_MAXIMUM &&
+              (int64_t)(MS_NSTIME2EPOCH (cinfo->reader->pkttime)) != hptime / 1000000)
+          {
+            cinfo->reader->pktoffset = saved_pktoffset;
+            cinfo->reader->pktid     = saved_pktid;
+            cinfo->reader->pkttime   = saved_pkttime;
+
+            position = RINGID_NONE;
+          }
 
           if (position == RINGID_ERROR)
           {
-            lprintf (0, "[%s] Error with RingPosition (pktid: %" PRIu64 ", nstime: %" PRId64 ")",
-                     cinfo->hostname, pktid, nstime);
+            lprintf (0, "[%s] Error with RingPosition (pktid: %" PRIu64 ", hptime: %" PRId64 ")",
+                     cinfo->hostname, pktid, hptime);
             if (SendPacket (cinfo, "ERROR", "Error positioning reader", 0, 1, 1))
               return -1;
           }

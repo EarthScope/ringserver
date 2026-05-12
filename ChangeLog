@@ -1,3 +1,8 @@
+unreleased
+	- Fix DataLink stream resuming by limiting time resolution comparison.
+	- DataLink over Websocket: correctly echo DataLink1.0 when requested.
+	- Do not change reader position on SeedLink resuming failures.
+
 2026.128: 4.5.1
 	- Fix SeedLink per-station DATA/FETCH/TIME ignoring requested start time,
 	  causing streams to begin at the next new packet instead of the requested time.
