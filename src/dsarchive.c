@@ -595,6 +595,13 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
       if (writebytes == msr->reclen)
         break;
 
+      if (rv == 0)
+      {
+        lprintf (0, "[%s] ds_streamproc: write returned 0 for %s, aborting record write",
+                 hostname, foundgroup->filename);
+        return -1;
+      }
+
       if (rv < 0)
       {
         if (errno != EINTR)
