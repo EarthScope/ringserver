@@ -104,6 +104,7 @@ RingInitialize (char *ringfilename, char *streamfilename, int *ringfd)
 
   int corruptring = 0;
   int ringinit    = 0;
+  int replacing   = 0;
   ssize_t rv;
   RingPacket *packetptr;
   RingStream *streamptr;
@@ -214,7 +215,10 @@ RingInitialize (char *ringfilename, char *streamfilename, int *ringfd)
       if (ringfilestat.st_size <= 0)
         lprintf (1, "Creating new ring packet buffer file");
       else
+      {
         lprintf (1, "Re-creating ring packet buffer file");
+        replacing = 1;
+      }
 
       /* Truncate file if larger than ringsize */
       if (ringfilestat.st_size > config.ringsize)
@@ -336,6 +340,8 @@ RingInitialize (char *ringfilename, char *streamfilename, int *ringfd)
     /* Report what triggered the parameter reset if not just initialized */
     if (!ringinit)
     {
+      replacing = 1;
+
       if (memcmp (pRBV3_SIGNATURE (param.ringbuffer), RING_SIGNATURE, RING_SIGNATURE_LENGTH))
         lprintf (0, "** Packet buffer signature mismatch: %.4s <-> %.4s", pRBV3_SIGNATURE (param.ringbuffer), RING_SIGNATURE);
       if (param.version != RING_VERSION)
@@ -352,7 +358,8 @@ RingInitialize (char *ringfilename, char *streamfilename, int *ringfd)
         lprintf (0, "** Header size change: %u -> %u", param.headersize, headersize);
     }
 
-    lprintf (0, "Resetting ring packet buffer, contents is discarded");
+    if (replacing)
+      lprintf (0, "Resetting ring packet buffer, contents are discarded");
 
     param.version        = RING_VERSION;
     param.ringsize       = config.ringsize;
