@@ -508,7 +508,7 @@ ClientThread (void *arg)
   /* Shutdown and release miniSEED write data stream */
   if (cinfo->mswrite)
   {
-    ds_streamproc (cinfo->mswrite, NULL, NULL, cinfo->hostname);
+    ds_streamproc (cinfo->mswrite, NULL, cinfo->hostname);
     free (cinfo->mswrite);
     cinfo->mswrite = NULL;
   }

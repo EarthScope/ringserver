@@ -992,22 +992,11 @@ HandleWrite (ClientInfo *cinfo, CmdToken *cmd)
       (MS2_ISVALIDHEADER (cinfo->recvbuf) ||
        MS3_ISVALIDHEADER (cinfo->recvbuf)))
   {
-    char filename[100] = {0};
-    char *fn;
-
     /* Parse the miniSEED record header */
     if (msr3_parse (cinfo->recvbuf, cinfo->packet.datasize, &msr, 0, 0) == MS_NOERROR)
     {
-      /* Check for file name in streamid: e.g. "filename::streamid/MSEED" */
-      if ((fn = strstr (cinfo->packet.streamid, "::")))
-      {
-        strncpy (filename, cinfo->packet.streamid, (fn - cinfo->packet.streamid));
-        filename[(fn - cinfo->packet.streamid)] = '\0';
-        fn                                      = filename;
-      }
-
       /* Write miniSEED record to disk */
-      if (ds_streamproc (cinfo->mswrite, msr, fn, cinfo->hostname))
+      if (ds_streamproc (cinfo->mswrite, msr, cinfo->hostname))
       {
         lprintf (1, "[%s] Error writing miniSEED to disk", cinfo->hostname);
 

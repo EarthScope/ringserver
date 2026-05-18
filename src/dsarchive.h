@@ -47,7 +47,6 @@ typedef struct DataStreamGroup
   int     filed;
   time_t  modtime;
   char    filename[MAX_FILENAME_LEN];
-  char    postpath[MAX_FILENAME_LEN];
   struct  DataStreamGroup *next;
 }
 DataStreamGroup;
@@ -62,8 +61,7 @@ typedef struct DataStream
 }
 DataStream;
 
-extern int ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
-                          char *hostname);
+extern int ds_streamproc (DataStream *datastream, MS3Record *msr, char *hostname);
 extern int ds_closeidle (DataStream *datastream, int idletimeout, char *ident);
 
 #endif

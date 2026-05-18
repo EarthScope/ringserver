@@ -2,6 +2,8 @@ unreleased
 	- Fix DataLink stream resuming by limiting time resolution comparison.
 	- DataLink over Websocket: correctly echo DataLink1.0 when requested.
 	- Do not change reader position on SeedLink resuming failures.
+	- Remove support for embedding an archive filename in stream IDs.
+	- Only log that the ring buffer is reset when true, i.e. not volatile.
 
 2026.128: 4.5.1
 	- Fix SeedLink per-station DATA/FETCH/TIME ignoring requested start time,

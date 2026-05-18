@@ -45,7 +45,7 @@
 
 /* Functions internal to this source file */
 static DataStreamGroup *ds_getstream (DataStream *datastream, const char *defkey,
-                                      char *filename, char *postpath, int nondefflags,
+                                      char *filename, int nondefflags,
                                       const char *globmatch, char *hostname);
 static int ds_openfile (DataStream *datastream, const char *filename, char *ident);
 static void ds_shutdown (DataStream *datastream, char *ident);
@@ -68,16 +68,10 @@ static int ds_strparse (const char *string, const char *delim, DSstrlist **list)
  * ds_shutdown() will be called to close all open files and free all
  * associated memory.
  *
- * If the postpath argument is not NULL it will be appended to the end
- * of path as constructed from the datastream archive definition.  For
- * example, the datastream archive could specify a base directory and
- * the postpath could specify a file name.
- *
  * Returns 0 on success, -1 on error.
  ***************************************************************************/
 extern int
-ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
-               char *hostname)
+ds_streamproc (DataStream *datastream, MS3Record *msr, char *hostname)
 {
   DataStreamGroup *foundgroup = NULL;
   DSstrlist *fnlist = NULL;
@@ -123,10 +117,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
   definition[0] = '\0';
   globmatch[0]  = '\0';
 
-  if (postpath)
-    snprintf (pathformat, sizeof (pathformat), "%s/%s", datastream->path, postpath);
-  else
-    snprintf (pathformat, sizeof (pathformat), "%s", datastream->path);
+  snprintf (pathformat, sizeof (pathformat), "%s", datastream->path);
 
   pathformat[sizeof (pathformat) - 1] = '\0';
 
@@ -572,7 +563,7 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *postpath,
   *(definition + sizeof (definition) - 1) = '\0';
 
   /* Check for previously used stream entry, otherwise create it */
-  foundgroup = ds_getstream (datastream, definition, filename, postpath,
+  foundgroup = ds_getstream (datastream, definition, filename,
                              nondefflags, globmatch, hostname);
 
   if (foundgroup != NULL)
@@ -714,7 +705,7 @@ ds_closeidle (DataStream *datastream, int idletimeout, char *ident)
  ***************************************************************************/
 static DataStreamGroup *
 ds_getstream (DataStream *datastream, const char *defkey, char *filename,
-              char *postpath, int nondefflags, const char *globmatch, char *ident)
+              int nondefflags, const char *globmatch, char *ident)
 {
   DataStreamGroup *foundgroup  = NULL;
   DataStreamGroup *searchgroup = NULL;
@@ -732,15 +723,10 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
   {
     DataStreamGroup *nextgroup = (DataStreamGroup *)searchgroup->next;
 
-    if (!strcmp (searchgroup->defkey, defkey) &&
-        (!postpath || !strcmp (searchgroup->postpath, postpath)))
+    if (!strcmp (searchgroup->defkey, defkey))
     {
-      if (postpath)
-        lprintf (3, "[%s] Found data stream entry for key %s (%s)",
-                 ident, defkey, postpath);
-      else
-        lprintf (3, "[%s] Found data stream entry for key %s",
-                 ident, defkey);
+      lprintf (3, "[%s] Found data stream entry for key %s",
+               ident, defkey);
 
       foundgroup   = searchgroup;
       group_linked = 1;
@@ -827,13 +813,6 @@ ds_getstream (DataStream *datastream, const char *defkey, char *filename,
     foundgroup->modtime = curtime;
     strncpy (foundgroup->filename, filename, sizeof (foundgroup->filename) - 1);
     foundgroup->filename[sizeof (foundgroup->filename) - 1] = '\0';
-    if (postpath)
-    {
-      strncpy (foundgroup->postpath, postpath, sizeof (foundgroup->postpath) - 1);
-      foundgroup->postpath[sizeof (foundgroup->postpath) - 1] = '\0';
-    }
-    else
-      foundgroup->postpath[0] = '\0';
     foundgroup->next = NULL;
 
     /* Set the stream root if this is the first entry */
@@ -1035,8 +1014,8 @@ ds_shutdown (DataStream *datastream, char *ident)
     prevgroup = curgroup;
     curgroup  = curgroup->next;
 
-    lprintf (3, "[%s] Shutting down stream with key: %s (%s)",
-             ident, prevgroup->defkey, prevgroup->postpath);
+    lprintf (3, "[%s] Shutting down stream with key: %s",
+             ident, prevgroup->defkey);
 
     if (prevgroup->filed >= 0)
       if (close (prevgroup->filed))
