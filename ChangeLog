@@ -3,11 +3,12 @@ unreleased
 	- DataLink over Websocket: correctly echo DataLink1.0 when requested.
 	- Do not change reader position on SeedLink resuming failures.
 	- Remove support for embedding an archive filename in stream IDs.
-	- Defensively terminate RingPacket.streamid after copying from ring
+	- Defensively terminate RingPacket.streamid string after copying from ring
 	  in RingReadPacket() and RingReadNext() and bound pcre2_match() usage.
 	- Only log that the ring buffer is reset when true, i.e. not volatile.
 	- Cache per-interval usage log filenames (txlog, rxlog, accesslog).
 	- Fix silent (dynamic) filename collisions in miniSEED archiving.
+	- Close a use-after-free race on shutdown: SignalThread + SIGUSR1.
 	- Reject legacy NN_SSSSS_LL_CCC/MSEED to FDSN stream ID translations
 	  that do not fit MAXSTREAMID (64); very unlikely but for completeness.
 

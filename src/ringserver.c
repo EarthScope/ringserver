@@ -803,17 +803,6 @@ main (int argc, char *argv[])
     chktime = curtime;
   } /* End of main watchdog loop */
 
-  /* Shutdown ring buffer */
-  if (config.ringdir || config.volatilering)
-  {
-    if (RingShutdown (ringfd, streamfilename))
-    {
-      lprintf (0, "Error shutting down ring buffer");
-      return 1;
-    }
-  }
-
-  /* Cancel and re-joining the signal handling thread */
   if ((errno = pthread_cancel (sigtid)))
   {
     lprintf (0, "Error cancelling signal handling thread: %s", strerror (errno));
@@ -824,6 +813,16 @@ main (int argc, char *argv[])
   {
     lprintf (0, "Error joining signal handling thread: %s", strerror (errno));
     return 1;
+  }
+
+  /* Shutdown ring buffer */
+  if (config.ringdir || config.volatilering)
+  {
+    if (RingShutdown (ringfd, streamfilename))
+    {
+      lprintf (0, "Error shutting down ring buffer");
+      return 1;
+    }
   }
 
   /* A final sync() */
