@@ -263,7 +263,7 @@ main (int argc, char *argv[])
         return 1;
       }
 
-      if (ringfd > 0)
+      if (ringfd >= 0)
       {
         if (close (ringfd))
         {

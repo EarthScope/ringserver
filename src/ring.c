@@ -530,7 +530,7 @@ RingShutdown (int ringfd, char *streamfilename)
   RBNode *tnode;
   mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP;
 
-  if (!config.volatilering && (!ringfd || !streamfilename))
+  if (!config.volatilering && (ringfd < 0 || !streamfilename))
     return -1;
 
   /* Free memory and return if ring is volatile */
