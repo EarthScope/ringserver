@@ -807,6 +807,7 @@ RenderUsageLogFilenames (void)
   int jsonlmode;
   time_t startint;
   time_t endint;
+  int rv;
 
   if (!config.usagelog.basedir)
   {
@@ -825,16 +826,22 @@ RenderUsageLogFilenames (void)
 
   if (config.usagelog.mode & USAGELOG_TX)
   {
-    snprintf (config.usagelog.txlog_filename, sizeof (config.usagelog.txlog_filename),
-              "%s/%s%stxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d%s",
-              config.usagelog.basedir,
-              (config.usagelog.prefix) ? config.usagelog.prefix : "",
-              (config.usagelog.prefix) ? "-" : "",
-              starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
-              starttm.tm_hour, starttm.tm_min,
-              endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
-              endtm.tm_hour, endtm.tm_min,
-              jsonlmode ? ".jsonl" : "");
+    rv = snprintf (config.usagelog.txlog_filename, sizeof (config.usagelog.txlog_filename),
+                   "%s/%s%stxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d%s",
+                   config.usagelog.basedir,
+                   (config.usagelog.prefix) ? config.usagelog.prefix : "",
+                   (config.usagelog.prefix) ? "-" : "",
+                   starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
+                   starttm.tm_hour, starttm.tm_min,
+                   endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
+                   endtm.tm_hour, endtm.tm_min,
+                   jsonlmode ? ".jsonl" : "");
+    if (rv < 0 || (size_t)rv >= sizeof (config.usagelog.txlog_filename))
+    {
+      lprintf (0, "%s(): txlog filename truncated (basedir/prefix too long), disabling for this interval",
+               __func__);
+      config.usagelog.txlog_filename[0] = '\0';
+    }
   }
   else
   {
@@ -843,16 +850,22 @@ RenderUsageLogFilenames (void)
 
   if (config.usagelog.mode & USAGELOG_RX)
   {
-    snprintf (config.usagelog.rxlog_filename, sizeof (config.usagelog.rxlog_filename),
-              "%s/%s%srxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d%s",
-              config.usagelog.basedir,
-              (config.usagelog.prefix) ? config.usagelog.prefix : "",
-              (config.usagelog.prefix) ? "-" : "",
-              starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
-              starttm.tm_hour, starttm.tm_min,
-              endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
-              endtm.tm_hour, endtm.tm_min,
-              jsonlmode ? ".jsonl" : "");
+    rv = snprintf (config.usagelog.rxlog_filename, sizeof (config.usagelog.rxlog_filename),
+                   "%s/%s%srxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d%s",
+                   config.usagelog.basedir,
+                   (config.usagelog.prefix) ? config.usagelog.prefix : "",
+                   (config.usagelog.prefix) ? "-" : "",
+                   starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
+                   starttm.tm_hour, starttm.tm_min,
+                   endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
+                   endtm.tm_hour, endtm.tm_min,
+                   jsonlmode ? ".jsonl" : "");
+    if (rv < 0 || (size_t)rv >= sizeof (config.usagelog.rxlog_filename))
+    {
+      lprintf (0, "%s(): rxlog filename truncated (basedir/prefix too long), disabling for this interval",
+               __func__);
+      config.usagelog.rxlog_filename[0] = '\0';
+    }
   }
   else
   {
@@ -861,15 +874,21 @@ RenderUsageLogFilenames (void)
 
   if (config.usagelog.mode & USAGELOG_ACCESS)
   {
-    snprintf (config.usagelog.accesslog_filename, sizeof (config.usagelog.accesslog_filename),
-              "%s/%s%saccesslog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d.jsonl",
-              config.usagelog.basedir,
-              (config.usagelog.prefix) ? config.usagelog.prefix : "",
-              (config.usagelog.prefix) ? "-" : "",
-              starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
-              starttm.tm_hour, starttm.tm_min,
-              endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
-              endtm.tm_hour, endtm.tm_min);
+    rv = snprintf (config.usagelog.accesslog_filename, sizeof (config.usagelog.accesslog_filename),
+                   "%s/%s%saccesslog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d.jsonl",
+                   config.usagelog.basedir,
+                   (config.usagelog.prefix) ? config.usagelog.prefix : "",
+                   (config.usagelog.prefix) ? "-" : "",
+                   starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
+                   starttm.tm_hour, starttm.tm_min,
+                   endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
+                   endtm.tm_hour, endtm.tm_min);
+    if (rv < 0 || (size_t)rv >= sizeof (config.usagelog.accesslog_filename))
+    {
+      lprintf (0, "%s(): accesslog filename truncated (basedir/prefix too long), disabling for this interval",
+               __func__);
+      config.usagelog.accesslog_filename[0] = '\0';
+    }
   }
   else
   {

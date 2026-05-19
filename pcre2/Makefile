@@ -25,8 +25,12 @@ PCRE2_SRCS = src/pcre2_auto_possess.c src/pcre2_chkdint.c \
 PCRE2_OBJS = $(PCRE2_SRCS:.c=.o)
 
 # PCRE2 build options
+# LINK_SIZE=3 raises the max compiled-pattern size to 16 MiB (default 2 -> 64 KiB),
+# needed for SeedLink/DataLink requests that build very large alternation regexes
+# from many station/selector combinations (see SLMAXREGEXLEN/DLMAXREGEXLEN).
 CFLAGS += -Isrc -DHAVE_CONFIG_H -DSUPPORT_PCRE2_8 -DPCRE2_CODE_UNIT_WIDTH=8 \
-	-DSUPPORT_JIT -DPCRE2_STATIC -DMATCH_LIMIT=1000 -DMATCH_LIMIT_DEPTH=1000
+	-DSUPPORT_JIT -DPCRE2_STATIC -DLINK_SIZE=3 \
+	-DMATCH_LIMIT=1000 -DMATCH_LIMIT_DEPTH=1000
 
 LIBA = libpcre2.a
 
