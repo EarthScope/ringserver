@@ -50,6 +50,23 @@ static DataStreamGroup *ds_getstream (DataStream *datastream, const char *defkey
 static int ds_openfile (DataStream *datastream, const char *filename, char *ident);
 static void ds_shutdown (DataStream *datastream, char *ident);
 
+/***************************************************************************
+ * ds_append:
+ *
+ * Append src to dst, respecting dstsize as the total buffer size.
+ * Computes remaining room from strlen(dst) so callers do not need to
+ * track a parallel length variable.  Silently truncates on overflow.
+ * Caller must ensure dst is NUL-terminated on entry.
+ ***************************************************************************/
+static void
+ds_append (char *dst, size_t dstsize, const char *src)
+{
+  size_t cur = strlen (dst);
+  if (cur + 1 >= dstsize)
+    return;
+  strncat (dst, src, dstsize - cur - 1);
+}
+
 /* For a linked list of strings, as filled by ds_strparse() */
 typedef struct DSstrlist_s
 {
@@ -84,7 +101,6 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *hostname)
   char definition[MAX_FILENAME_LEN];
   char pathformat[MAX_FILENAME_LEN];
   char globmatch[MAX_FILENAME_LEN];
-  size_t fnlen    = 0;
   int nondefflags = 0;
   size_t writebytes;
   int writeloops;
@@ -144,8 +160,8 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *hostname)
   {
     if (fnptr->next)
     {
-      strcat (filename, "/");
-      strcat (globmatch, "/");
+      ds_append (filename, sizeof (filename), "/");
+      ds_append (globmatch, sizeof (globmatch), "/");
       fnptr = fnptr->next;
     }
     else
@@ -168,7 +184,6 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *hostname)
 
   while (fnptr)
   {
-    size_t globlen = 0;
     int tdy;
     char *w, *p, def;
 
@@ -188,208 +203,180 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *hostname)
       def = (*w == '%');
       *w  = '\0';
 
-      strncat (filename, p, (sizeof (filename) - fnlen - 1));
-      fnlen = strlen (filename);
+      ds_append (filename, sizeof (filename), p);
 
       if (nondefflags > 0)
-      {
-        strncat (globmatch, p, (sizeof (globmatch) - globlen - 1));
-        globlen = strlen (globmatch);
-      }
+        ds_append (globmatch, sizeof (globmatch), p);
 
       w += 1;
 
       switch (*w)
       {
       case 'n':
-        strncat (filename, network, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), network);
         if (def)
-          strncat (definition, network, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), network);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, network, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), network);
           else
-            strncat (globmatch, "*", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "*");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case 's':
-        strncat (filename, station, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), station);
         if (def)
-          strncat (definition, station, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), station);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, station, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), station);
           else
-            strncat (globmatch, "*", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "*");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case 'l':
-        strncat (filename, location, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), location);
         if (def)
-          strncat (definition, location, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), location);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, location, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), location);
           else
-            strncat (globmatch, "*", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "*");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case 'c':
-        strncat (filename, channel, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), channel);
         if (def)
-          strncat (definition, channel, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), channel);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, channel, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), channel);
           else
-            strncat (globmatch, "*", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "*");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case 'q':
         memset (tstr, 0, sizeof (tstr));
         mseh_get_string (msr, "FDSN.DataQuality", tstr, 1);
-        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), tstr);
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), tstr);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), tstr);
           else
-            strncat (globmatch, "?", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "?");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case 'Y':
         snprintf (tstr, sizeof (tstr), "%04d", year);
-        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), tstr);
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), tstr);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), tstr);
           else
-            strncat (globmatch, "[0-9][0-9][0-9][0-9]", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "[0-9][0-9][0-9][0-9]");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case 'y':
         tdy = year % 100;
         snprintf (tstr, sizeof (tstr), "%02d", tdy);
-        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), tstr);
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), tstr);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), tstr);
           else
-            strncat (globmatch, "[0-9][0-9]", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "[0-9][0-9]");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case 'j':
         snprintf (tstr, sizeof (tstr), "%03d", yday);
-        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), tstr);
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), tstr);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), tstr);
           else
-            strncat (globmatch, "[0-9][0-9][0-9]", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "[0-9][0-9][0-9]");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case 'H':
         snprintf (tstr, sizeof (tstr), "%02d", hour);
-        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), tstr);
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), tstr);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), tstr);
           else
-            strncat (globmatch, "[0-9][0-9]", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "[0-9][0-9]");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case 'M':
         snprintf (tstr, sizeof (tstr), "%02d", min);
-        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), tstr);
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), tstr);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), tstr);
           else
-            strncat (globmatch, "[0-9][0-9]", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "[0-9][0-9]");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case 'S':
         snprintf (tstr, sizeof (tstr), "%02d", sec);
-        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), tstr);
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), tstr);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), tstr);
           else
-            strncat (globmatch, "[0-9][0-9]", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "[0-9][0-9]");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case 'F':
         snprintf (tstr, sizeof (tstr), "%09d", nsec);
-        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), tstr);
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), tstr);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), tstr);
           else
-            strncat (globmatch, "[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case 'D':
         curtime = time (NULL);
@@ -401,67 +388,59 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *hostname)
           break;
         }
         snprintf (tstr, sizeof (tstr), "%04d%03d", ctm.tm_year + 1900, ctm.tm_yday + 1);
-        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), tstr);
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), tstr);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), tstr);
           else
-            strncat (globmatch, "[0-9][0-9][0-9][0-9][0-9][0-9][0-9]", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "[0-9][0-9][0-9][0-9][0-9][0-9][0-9]");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case 'L':
         snprintf (tstr, sizeof (tstr), "%d", msr->reclen);
-        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), tstr);
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), tstr);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), tstr);
           else
-            strncat (globmatch, "*", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "*");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case 'r':
         snprintf (tstr, sizeof (tstr), "%ld", (long int)(msr->samprate + 0.5));
-        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), tstr);
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), tstr);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), tstr);
           else
-            strncat (globmatch, "*", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "*");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case 'R':
         snprintf (tstr, sizeof (tstr), "%.6f", msr->samprate);
-        strncat (filename, tstr, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), tstr);
         if (def)
-          strncat (definition, tstr, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), tstr);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, tstr, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), tstr);
           else
-            strncat (globmatch, "*", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "*");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case 'h':
         if (!hostname)
@@ -469,37 +448,29 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *hostname)
           p = w + 1;
           break;
         }
-        strncat (filename, hostname, (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), hostname);
         if (def)
-          strncat (definition, hostname, (sizeof (definition) - fnlen - 1));
+          ds_append (definition, sizeof (definition), hostname);
         if (nondefflags > 0)
         {
           if (def)
-            strncat (globmatch, hostname, (sizeof (globmatch) - globlen - 1));
+            ds_append (globmatch, sizeof (globmatch), hostname);
           else
-            strncat (globmatch, "*", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
+            ds_append (globmatch, sizeof (globmatch), "*");
         }
-        fnlen = strlen (filename);
-        p     = w + 1;
+        p = w + 1;
         break;
       case '%':
-        strncat (filename, "%", (sizeof (filename) - fnlen - 1));
-        strncat (globmatch, "%", (sizeof (globmatch) - globlen - 1));
-        fnlen   = strlen (filename);
-        globlen = strlen (globmatch);
-        p       = w + 1;
+        ds_append (filename, sizeof (filename), "%");
+        ds_append (globmatch, sizeof (globmatch), "%");
+        p = w + 1;
         break;
       case '#':
-        strncat (filename, "#", (sizeof (filename) - fnlen - 1));
+        ds_append (filename, sizeof (filename), "#");
         nondefflags--;
         if (nondefflags > 0)
-        {
-          strncat (globmatch, "#", (sizeof (globmatch) - globlen - 1));
-          globlen = strlen (globmatch);
-        }
-        fnlen = strlen (filename);
-        p     = w + 1;
+          ds_append (globmatch, sizeof (globmatch), "#");
+        p = w + 1;
         break;
       default:
         lprintf (0, "[%s] unknown file name format code: %c",
@@ -509,14 +480,10 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *hostname)
       }
     }
 
-    strncat (filename, p, (sizeof (filename) - fnlen - 1));
-    fnlen = strlen (filename);
+    ds_append (filename, sizeof (filename), p);
 
     if (nondefflags > 0)
-    {
-      strncat (globmatch, p, (sizeof (globmatch) - globlen - 1));
-      globlen = strlen (globmatch);
-    }
+      ds_append (globmatch, sizeof (globmatch), p);
 
     /* If not the last entry then it should be a directory */
     if (fnptr->next)
@@ -543,14 +510,10 @@ ds_streamproc (DataStream *datastream, MS3Record *msr, char *hostname)
         }
       }
 
-      strncat (filename, "/", (sizeof (filename) - fnlen - 1));
-      fnlen++;
+      ds_append (filename, sizeof (filename), "/");
 
       if (nondefflags > 0)
-      {
-        strncat (globmatch, "/", (sizeof (globmatch) - globlen - 1));
-        globlen++;
-      }
+        ds_append (globmatch, sizeof (globmatch), "/");
     }
 
     fnptr = fnptr->next;
