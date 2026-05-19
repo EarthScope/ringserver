@@ -36,11 +36,32 @@ __attribute__((__format__ (__printf__, 2, 3)))
 extern int lprintf (int level, char *fmt, ...);
 extern void lprint (const char *message);
 
+/* Write per-client transfer counters to the TX and RX usage log files for the
+ * current interval window.  Reads the pre-rendered filenames from
+ * config.usagelog.{txlog,rxlog}_filename under config.usagelog.write_lock;
+ * does not take config_rwlock.  Pass reset=1 to zero stream counters after
+ * writing (client disconnect path), reset=0 to leave them intact (periodic
+ * watchdog writes). */
 extern int WriteTransferLog (ClientInfo *cinfo, int reset);
+
+/* Append a single JSON Lines access log entry to the access log file for the
+ * current interval window.  Reads the pre-rendered filename from
+ * config.usagelog.accesslog_filename under config.usagelog.write_lock;
+ * does not take config_rwlock.  Returns 0 if access logging is not enabled. */
 extern int WriteAccessLog (ClientInfo *cinfo, const char *event,
                            const char *command, const char *detail,
                            const char *match, const char *reject);
+
+/* Calculate a normalized interval time window and render the three cached log
+ * filenames (txlog, rxlog, accesslog) into config.usagelog.  Takes
+ * config_rwlock(wr) then usagelog.write_lock internally. */
 extern int CalcUsageLogInterval (time_t reftime);
+
+/* Same as CalcUsageLogInterval() but the caller must already hold
+ * config.config_rwlock as a writer.  Intended for use inside an existing
+ * wrlock window (e.g., immediately after a config reload) so that the cached
+ * log filenames are updated atomically with the underlying config values. */
+extern int CalcUsageLogInterval_locked (time_t reftime);
 
 #ifdef __cplusplus
 }

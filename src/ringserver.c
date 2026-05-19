@@ -93,49 +93,49 @@ struct param_s param = {
 
 /* Configuration parameter declaration and defaults */
 struct config_s config = {
-    .config_rwlock       = PTHREAD_RWLOCK_INITIALIZER,
-    .verbose             = 0,
-    .configfile          = NULL,
-    .serverid            = NULL,
-    .ringdir             = NULL,
-    .ringsize            = GIBIBYTE,
-    .pktsize             = sizeof (RingPacket) + 512,
-    .maxclients          = 600,
-    .maxclientsperip     = 0,
-    .clienttimeout          = 3600,
-    .netiotimeout           = 10,
-    .tcpkeepalive_idle      = 60,
-    .tcpkeepalive_interval  = 30,
-    .tcpkeepalive_count     = 4,
-    .timewinlimit           = 1.0,
-    .resolvehosts        = 1,
-    .memorymapring       = 1,
-    .volatilering        = 0,
-    .autorecovery        = 1,
-    .webroot             = NULL,
-    .httpheaders         = NULL,
-    .mseedarchive        = NULL,
-    .mseedidleto         = 300,
-    .allowedips          = NULL,
-    .forbiddenips        = NULL,
-    .acceptips           = NULL,
-    .denyips             = NULL,
-    .writeips            = NULL,
-    .trustedips          = NULL,
-    .tlscertfile         = NULL,
-    .tlskeyfile          = NULL,
-    .tlsverifyclientcert = 0,
-    .auth.program        = NULL,
-    .auth.argv           = NULL,
-    .auth.required       = 0,
-    .auth.timeout_sec    = 5,
-    .usagelog.write_lock = PTHREAD_MUTEX_INITIALIZER,
-    .usagelog.mode       = USAGELOG_NONE,
-    .usagelog.basedir    = NULL,
-    .usagelog.prefix     = NULL,
-    .usagelog.interval   = 86400,
-    .usagelog.startint   = 0,
-    .usagelog.endint     = 0,
+    .config_rwlock         = PTHREAD_RWLOCK_INITIALIZER,
+    .verbose               = 0,
+    .configfile            = NULL,
+    .serverid              = NULL,
+    .ringdir               = NULL,
+    .ringsize              = GIBIBYTE,
+    .pktsize               = sizeof (RingPacket) + 512,
+    .maxclients            = 600,
+    .maxclientsperip       = 0,
+    .clienttimeout         = 3600,
+    .netiotimeout          = 10,
+    .tcpkeepalive_idle     = 60,
+    .tcpkeepalive_interval = 30,
+    .tcpkeepalive_count    = 4,
+    .timewinlimit          = 1.0,
+    .resolvehosts          = 1,
+    .memorymapring         = 1,
+    .volatilering          = 0,
+    .autorecovery          = 1,
+    .webroot               = NULL,
+    .httpheaders           = NULL,
+    .mseedarchive          = NULL,
+    .mseedidleto           = 300,
+    .allowedips            = NULL,
+    .forbiddenips          = NULL,
+    .acceptips             = NULL,
+    .denyips               = NULL,
+    .writeips              = NULL,
+    .trustedips            = NULL,
+    .tlscertfile           = NULL,
+    .tlskeyfile            = NULL,
+    .tlsverifyclientcert   = 0,
+    .auth.program          = NULL,
+    .auth.argv             = NULL,
+    .auth.required         = 0,
+    .auth.timeout_sec      = 5,
+    .usagelog.write_lock   = PTHREAD_MUTEX_INITIALIZER,
+    .usagelog.mode         = USAGELOG_NONE,
+    .usagelog.basedir      = NULL,
+    .usagelog.prefix       = NULL,
+    .usagelog.interval     = 86400,
+    .usagelog.startint     = 0,
+    .usagelog.endint       = 0,
 };
 
 /* Local functions and variables */
@@ -171,8 +171,8 @@ main (int argc, char *argv[])
   struct sthread *loopstp;
   struct cthread *ctp;
   struct cthread *loopctp;
-  int tlogwrite   = 0;
-  int servercount = 0;
+  int usage_interval_ended = 0;
+  int server_thread_count  = 0;
 
   double txpacketrate;
   double txbyterate;
@@ -180,7 +180,6 @@ main (int argc, char *argv[])
   double rxbyterate;
 
   struct stat cfstat;
-  int configreset = 0;
   int ringinit;
 
   uint16_t convert_version = 0;
@@ -501,15 +500,15 @@ main (int argc, char *argv[])
     if (config.usagelog.mode && !param.shutdownsig)
     {
       if (curtime >= config.usagelog.endint)
-        tlogwrite = 1;
+        usage_interval_ended = 1;
       else
-        tlogwrite = 0;
+        usage_interval_ended = 0;
     }
 
     /* Loop through server thread list to monitor threads, print status and perform cleanup */
     pthread_mutex_lock (&param.sthreads_lock);
-    loopstp     = param.sthreads;
-    servercount = 0;
+    loopstp             = param.sthreads;
+    server_thread_count = 0;
     while (loopstp)
     {
       char *threadtype             = "";
@@ -549,7 +548,7 @@ main (int argc, char *argv[])
         lprintf (3, "Server thread (%s) %lu state: %s",
                  threadtype, (unsigned long int)stp->td->td_id, state);
 
-        servercount++;
+        server_thread_count++;
       }
       else
       {
@@ -731,7 +730,7 @@ main (int argc, char *argv[])
         rxbyterate += ((ClientInfo *)ctp->td->td_prvtptr)->rxbyterate;
 
         /* Write transfer logs and reset byte counts */
-        if (tlogwrite)
+        if (usage_interval_ended)
           WriteTransferLog ((ClientInfo *)ctp->td->td_prvtptr, 1);
 
         /* Close idle clients if limit is set and exceeded */
@@ -762,16 +761,21 @@ main (int argc, char *argv[])
 
         pthread_rwlock_wrlock (&config.config_rwlock);
         ReadConfigFile (config.configfile, 1, cfstat.st_mtime);
-        pthread_rwlock_unlock (&config.config_rwlock);
 
-        configreset = 1;
+        /* Refresh cached usage-log filenames inside the same wrlock window
+         * so any new basedir/prefix/mode settings take effect atomically with
+         * the config change, avoiding a brief cache-inconsistency window. */
+        if (config.usagelog.mode && !param.shutdownsig)
+          CalcUsageLogInterval_locked (time (NULL));
+
+        pthread_rwlock_unlock (&config.config_rwlock);
       }
     }
 
-    /* Reset usage log writing time windows using the current time as the reference */
-    if (config.usagelog.mode && !param.shutdownsig && (tlogwrite || configreset))
+    /* Reset usage log writing time windows on interval rollover */
+    if (config.usagelog.mode && !param.shutdownsig && usage_interval_ended)
     {
-      tlogwrite = 0;
+      usage_interval_ended = 0;
 
       if (CalcUsageLogInterval (time (NULL)))
       {
@@ -781,7 +785,7 @@ main (int argc, char *argv[])
     }
 
     /* All done if shutting down and no threads left */
-    if (param.shutdownsig >= 2 && param.clientcount == 0 && servercount == 0)
+    if (param.shutdownsig >= 2 && param.clientcount == 0 && server_thread_count == 0)
       break;
 
     /* Throttle the loop during shutdown */
@@ -796,8 +800,7 @@ main (int argc, char *argv[])
         nanosleep (&timereq, NULL);
     }
 
-    configreset = 0;
-    chktime     = curtime;
+    chktime = curtime;
   } /* End of main watchdog loop */
 
   /* Shutdown ring buffer */

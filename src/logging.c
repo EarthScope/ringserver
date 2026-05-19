@@ -143,81 +143,25 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
   int server_port;
 
   nstime_t clock = NSnow ();
-  struct tm starttm;
-  struct tm endtm;
 
   time_t tlog_startint = 0;
 
-  char txfilename[512]  = {0};
-  char rxfilename[512]  = {0};
-  char conntime[32]     = {0};
-  char currtime[32]     = {0};
-  char logstarttime[32] = {0};
-  char *modestr         = "";
-  FILE *txfp            = NULL;
-  FILE *rxfp            = NULL;
+  const char *txfilename = NULL;
+  const char *rxfilename = NULL;
+  char conntime[32]      = {0};
+  char currtime[32]      = {0};
+  char logstarttime[32]  = {0};
+  char *modestr          = "";
+  FILE *txfp             = NULL;
+  FILE *rxfp             = NULL;
 
-  /* Take a config reader lock */
-  pthread_rwlock_rdlock (&config.config_rwlock);
-
-  /* Transfer logging not enabled */
-  if (!(config.usagelog.mode & (USAGELOG_TX | USAGELOG_RX)) || config.usagelog.basedir == NULL)
-  {
-    pthread_rwlock_unlock (&config.config_rwlock);
+  /* Quick atomic check: skip all work if transfer logging is not enabled */
+  if (!(config.usagelog.mode & (USAGELOG_TX | USAGELOG_RX)))
     return 0;
-  }
-
-  jsonlmode = (config.usagelog.mode & USAGELOG_JSONL) ? 1 : 0;
-
-  tlog_startint = config.usagelog.startint;
-
-  if (config.usagelog.mode & USAGELOG_TX)
-  {
-    /* Generate file path & name for log time interval file */
-    localtime_r (&config.usagelog.startint, &starttm);
-    time_t endint = config.usagelog.endint;
-    localtime_r (&endint, &endtm);
-    snprintf (txfilename, sizeof (txfilename),
-              "%s/%s%stxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d%s",
-              config.usagelog.basedir,
-              (config.usagelog.prefix) ? config.usagelog.prefix : "",
-              (config.usagelog.prefix) ? "-" : "",
-              starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
-              starttm.tm_hour, starttm.tm_min,
-              endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
-              endtm.tm_hour, endtm.tm_min,
-              jsonlmode ? ".jsonl" : "");
-  }
-
-  if (config.usagelog.mode & USAGELOG_RX)
-  {
-    /* Generate file path & name for log time interval file */
-    localtime_r (&config.usagelog.startint, &starttm);
-    time_t endint = config.usagelog.endint;
-    localtime_r (&endint, &endtm);
-    snprintf (rxfilename, sizeof (rxfilename),
-              "%s/%s%srxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d%s",
-              config.usagelog.basedir,
-              (config.usagelog.prefix) ? config.usagelog.prefix : "",
-              (config.usagelog.prefix) ? "-" : "",
-              starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
-              starttm.tm_hour, starttm.tm_min,
-              endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
-              endtm.tm_hour, endtm.tm_min,
-              jsonlmode ? ".jsonl" : "");
-  }
-
-  /* Release config reader lock */
-  pthread_rwlock_unlock (&config.config_rwlock);
 
   /* Generate pretty strings for current & connection time */
   ms_nstime2timestr_n (clock, currtime, sizeof (currtime), ISOMONTHDAY_Z, NONE);
   ms_nstime2timestr_n (cinfo->conntime, conntime, sizeof (conntime), ISOMONTHDAY_Z, NONE);
-
-  /* Compute log start time: later of interval start or client connect time */
-  nstime_t intervalstart_ns = (nstime_t)tlog_startint * NSTMODULUS;
-  nstime_t logstart         = (cinfo->conntime > intervalstart_ns) ? cinfo->conntime : intervalstart_ns;
-  ms_nstime2timestr_n (logstart, logstarttime, sizeof (logstarttime), ISOMONTHDAY_Z, NONE);
 
   /* Convert server port from string to integer */
   char *endptr = NULL;
@@ -229,6 +173,24 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
 
   /* Lock usage log file writing mutex */
   pthread_mutex_lock (&config.usagelog.write_lock);
+
+  /* Reference cached filenames directly; they are stable while we hold the lock */
+  txfilename    = config.usagelog.txlog_filename;
+  rxfilename    = config.usagelog.rxlog_filename;
+  tlog_startint = config.usagelog.startint;
+  jsonlmode     = (config.usagelog.mode & USAGELOG_JSONL) ? 1 : 0;
+
+  /* Nothing to log if both filenames are empty (logging not configured) */
+  if (!txfilename[0] && !rxfilename[0])
+  {
+    pthread_mutex_unlock (&config.usagelog.write_lock);
+    return 0;
+  }
+
+  /* Compute log start time: later of interval start or client connect time */
+  nstime_t intervalstart_ns = (nstime_t)tlog_startint * NSTMODULUS;
+  nstime_t logstart         = (cinfo->conntime > intervalstart_ns) ? cinfo->conntime : intervalstart_ns;
+  ms_nstime2timestr_n (logstart, logstarttime, sizeof (logstarttime), ISOMONTHDAY_Z, NONE);
 
   /* Open TX log file and seek to end */
   if (txfilename[0])
@@ -636,16 +598,6 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
     }
   }
 
-  /* Flush log files */
-  if (txfp)
-    fflush (txfp);
-  if (rxfp)
-    fflush (rxfp);
-
-  /* Unlock usage log file writing mutex */
-  pthread_mutex_unlock (&config.usagelog.write_lock);
-
-  /* Close log files */
   if (txfp && fclose (txfp))
   {
     lprintf (0, "Error closing TX transfer log file %s: %s",
@@ -658,6 +610,8 @@ WriteTransferLog (ClientInfo *cinfo, int reset)
              rxfilename, strerror (errno));
     rv = -1;
   }
+
+  pthread_mutex_unlock (&config.usagelog.write_lock);
 
   return rv;
 } /* End of WriteTransferLog() */
@@ -682,9 +636,9 @@ WriteAccessLog (ClientInfo *cinfo, const char *event,
                 const char *command, const char *detail,
                 const char *match, const char *reject)
 {
-  char filename[512] = {0};
-  char currtime[32]  = {0};
-  char conntime[32]  = {0};
+  const char *filename = NULL;
+  char currtime[32]    = {0};
+  char conntime[32]    = {0};
   int server_port;
   FILE *fp = NULL;
   int rv   = 0;
@@ -692,35 +646,9 @@ WriteAccessLog (ClientInfo *cinfo, const char *event,
   if (!cinfo || !event)
     return -1;
 
-  /* Take a config reader lock */
-  pthread_rwlock_rdlock (&config.config_rwlock);
-
-  /* Access logging not enabled */
-  if (!(config.usagelog.mode & USAGELOG_ACCESS) || config.usagelog.basedir == NULL)
-  {
-    pthread_rwlock_unlock (&config.config_rwlock);
+  /* Quick atomic check: skip JSON building if access logging is not enabled */
+  if (!(config.usagelog.mode & USAGELOG_ACCESS))
     return 0;
-  }
-
-  {
-    struct tm starttm;
-    struct tm endtm;
-    localtime_r (&config.usagelog.startint, &starttm);
-    time_t endint = config.usagelog.endint;
-    localtime_r (&endint, &endtm);
-    snprintf (filename, sizeof (filename),
-              "%s/%s%saccesslog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d.jsonl",
-              config.usagelog.basedir,
-              (config.usagelog.prefix) ? config.usagelog.prefix : "",
-              (config.usagelog.prefix) ? "-" : "",
-              starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
-              starttm.tm_hour, starttm.tm_min,
-              endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
-              endtm.tm_hour, endtm.tm_min);
-  }
-
-  /* Release config reader lock */
-  pthread_rwlock_unlock (&config.config_rwlock);
 
   /* Generate ISO timestamp strings */
   nstime_t clock = NSnow ();
@@ -818,6 +746,16 @@ WriteAccessLog (ClientInfo *cinfo, const char *event,
   /* Lock usage log file writing mutex */
   pthread_mutex_lock (&config.usagelog.write_lock);
 
+  /* Reference cached filename directly; stable while we hold the lock.
+   * Empty means access logging not currently configured (unexpected). */
+  filename = config.usagelog.accesslog_filename;
+  if (!filename[0])
+  {
+    pthread_mutex_unlock (&config.usagelog.write_lock);
+    yyjson_mut_doc_free (doc);
+    return 0;
+  }
+
   if ((fp = fopen (filename, "a")) == NULL)
   {
     lprintf (0, "Error opening access log file %s: %s", filename, strerror (errno));
@@ -836,7 +774,6 @@ WriteAccessLog (ClientInfo *cinfo, const char *event,
       fprintf (fp, "%s\n", json);
       free (json);
     }
-    fflush (fp);
 
     if (fclose (fp))
     {
@@ -853,10 +790,158 @@ WriteAccessLog (ClientInfo *cinfo, const char *event,
 } /* End of WriteAccessLog() */
 
 /***************************************************************************
+ * RenderUsageLogFilenames:
+ *
+ * Render the three usage log filenames into config.usagelog based on the
+ * current config values.  Sets an empty string for any log type whose mode
+ * bit is not set or when basedir is NULL.
+ *
+ * Caller must hold both config.config_rwlock (writer) and
+ * config.usagelog.write_lock.
+ ***************************************************************************/
+static void
+RenderUsageLogFilenames (void)
+{
+  struct tm starttm;
+  struct tm endtm;
+  int jsonlmode;
+  time_t startint;
+  time_t endint;
+
+  if (!config.usagelog.basedir)
+  {
+    config.usagelog.txlog_filename[0]     = '\0';
+    config.usagelog.rxlog_filename[0]     = '\0';
+    config.usagelog.accesslog_filename[0] = '\0';
+    return;
+  }
+
+  jsonlmode = (config.usagelog.mode & USAGELOG_JSONL) ? 1 : 0;
+  startint  = config.usagelog.startint;
+  endint    = config.usagelog.endint;
+
+  localtime_r (&startint, &starttm);
+  localtime_r (&endint, &endtm);
+
+  if (config.usagelog.mode & USAGELOG_TX)
+  {
+    snprintf (config.usagelog.txlog_filename, sizeof (config.usagelog.txlog_filename),
+              "%s/%s%stxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d%s",
+              config.usagelog.basedir,
+              (config.usagelog.prefix) ? config.usagelog.prefix : "",
+              (config.usagelog.prefix) ? "-" : "",
+              starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
+              starttm.tm_hour, starttm.tm_min,
+              endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
+              endtm.tm_hour, endtm.tm_min,
+              jsonlmode ? ".jsonl" : "");
+  }
+  else
+  {
+    config.usagelog.txlog_filename[0] = '\0';
+  }
+
+  if (config.usagelog.mode & USAGELOG_RX)
+  {
+    snprintf (config.usagelog.rxlog_filename, sizeof (config.usagelog.rxlog_filename),
+              "%s/%s%srxlog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d%s",
+              config.usagelog.basedir,
+              (config.usagelog.prefix) ? config.usagelog.prefix : "",
+              (config.usagelog.prefix) ? "-" : "",
+              starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
+              starttm.tm_hour, starttm.tm_min,
+              endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
+              endtm.tm_hour, endtm.tm_min,
+              jsonlmode ? ".jsonl" : "");
+  }
+  else
+  {
+    config.usagelog.rxlog_filename[0] = '\0';
+  }
+
+  if (config.usagelog.mode & USAGELOG_ACCESS)
+  {
+    snprintf (config.usagelog.accesslog_filename, sizeof (config.usagelog.accesslog_filename),
+              "%s/%s%saccesslog-%04d%02d%02dT%02d%02d-%04d%02d%02dT%02d%02d.jsonl",
+              config.usagelog.basedir,
+              (config.usagelog.prefix) ? config.usagelog.prefix : "",
+              (config.usagelog.prefix) ? "-" : "",
+              starttm.tm_year + 1900, starttm.tm_mon + 1, starttm.tm_mday,
+              starttm.tm_hour, starttm.tm_min,
+              endtm.tm_year + 1900, endtm.tm_mon + 1, endtm.tm_mday,
+              endtm.tm_hour, endtm.tm_min);
+  }
+  else
+  {
+    config.usagelog.accesslog_filename[0] = '\0';
+  }
+} /* End of RenderUsageLogFilenames() */
+
+/***************************************************************************
+ * CalcUsageLogInterval_locked:
+ *
+ * Internal helper.  Same as CalcUsageLogInterval() but the caller must
+ * already hold config.config_rwlock as a writer.  Useful when called from
+ * within an existing wrlock window (e.g., immediately after ReadConfigFile
+ * on a config reload) so that the cached log filenames are updated atomically
+ * with the underlying basedir/prefix/mode values, eliminating the brief
+ * cache-inconsistency window that would otherwise exist between the config
+ * change and the next watchdog tick.
+ *
+ * Returns 0 on success, and -1 on failure.
+ ***************************************************************************/
+int
+CalcUsageLogInterval_locked (time_t reftime)
+{
+  struct tm reftm;
+  time_t startint;
+  time_t endint;
+
+  if (!localtime_r (&reftime, &reftm))
+    return -1;
+
+  /* Round down to current day */
+  reftm.tm_sec  = 0;
+  reftm.tm_min  = 0;
+  reftm.tm_hour = 0;
+
+  /* Defensive guard, protect against <= 0 values */
+  if (config.usagelog.interval <= 0)
+  {
+    lprintf (0, "%s(): invalid usage log interval: %d", __func__, config.usagelog.interval);
+    return -1;
+  }
+
+  /* Calculate the new, rounded epoch time */
+  startint = mktime (&reftm);
+
+  /* Add intervals until within the current interval */
+  while ((startint + config.usagelog.interval) <= reftime)
+    startint += config.usagelog.interval;
+
+  endint = startint + config.usagelog.interval;
+
+  config.usagelog.startint = startint;
+  config.usagelog.endint   = endint;
+
+  /* Render the cached log filenames under write_lock so readers in
+   * WriteTransferLog() and WriteAccessLog() see a consistent snapshot
+   * without ever needing to take config_rwlock. */
+  pthread_mutex_lock (&config.usagelog.write_lock);
+  RenderUsageLogFilenames ();
+  pthread_mutex_unlock (&config.usagelog.write_lock);
+
+  return 0;
+} /* End of CalcUsageLogInterval_locked() */
+
+/***************************************************************************
  * CalcUsageLogInterval:
  *
  * Calculate a normalized interval usage log file time window for a
  * given reference time (usually the current time) and interval in seconds.
+ * After updating the interval bounds, renders the three cached log filenames
+ * (txlog, rxlog, accesslog) into config.usagelog so that WriteTransferLog()
+ * and WriteAccessLog() can consume them without taking config_rwlock.
  *
  * The window is always normalized relative to the current day. Intervals
  * which evenly divide days will work cleanly, other intervals will
@@ -867,38 +952,11 @@ WriteAccessLog (ClientInfo *cinfo, const char *event,
 int
 CalcUsageLogInterval (time_t reftime)
 {
-  struct tm reftm;
+  int rv;
 
-  if (!localtime_r (&reftime, &reftm))
-    return -1;
-
-  /* Round down to current day */
-  reftm.tm_sec  = 0;
-  reftm.tm_min  = 0;
-  reftm.tm_hour = 0;
-
-  /* Take config writer lock */
   pthread_rwlock_wrlock (&config.config_rwlock);
-
-  /* Defensive guard, protect against <= 0 values */
-  if (config.usagelog.interval <= 0)
-  {
-    pthread_rwlock_unlock (&config.config_rwlock);
-    lprintf (0, "%s(): invalid usage log interval: %d", __func__, config.usagelog.interval);
-    return -1;
-  }
-
-  /* Calculate the new, rounded epoch time */
-  config.usagelog.startint = mktime (&reftm);
-
-  /* Add intervals until within the current interval */
-  while ((config.usagelog.startint + config.usagelog.interval) <= reftime)
-    config.usagelog.startint += config.usagelog.interval;
-
-  /* Set end of interval window */
-  config.usagelog.endint = config.usagelog.startint + config.usagelog.interval;
-
+  rv = CalcUsageLogInterval_locked (reftime);
   pthread_rwlock_unlock (&config.config_rwlock);
 
-  return 0;
+  return rv;
 } /* End of CalcUsageLogInterval() */

@@ -224,13 +224,16 @@ struct config_s
   } auth;
   struct usagelog
   {
-    pthread_mutex_t write_lock; /* Lock for writing usage log files */
-    _Atomic UsageLogMode mode;  /* Usage log mode flags */
-    char *basedir;              /* Usage log base directory */
-    char *prefix;               /* Usage log file prefix */
-    int interval;               /* Usage log writing interval in seconds */
-    time_t startint;            /* Normalized start time */
-    _Atomic time_t endint;      /* Usage log interval end time */
+    pthread_mutex_t write_lock;     /* Lock for writing usage log files */
+    _Atomic UsageLogMode mode;      /* Usage log mode flags */
+    char *basedir;                  /* Usage log base directory */
+    char *prefix;                   /* Usage log file prefix */
+    int interval;                   /* Usage log writing interval in seconds */
+    _Atomic time_t startint;        /* Normalized start time */
+    _Atomic time_t endint;          /* Usage log interval end time */
+    char txlog_filename[512];       /* Rendered TX log path for current interval */
+    char rxlog_filename[512];       /* Rendered RX log path for current interval */
+    char accesslog_filename[512];   /* Rendered access log path for current interval */
   } usagelog;
 };
 
