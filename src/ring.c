@@ -1317,27 +1317,30 @@ RingAfter (RingReader *reader, nstime_t reftime, int whence)
     if (pkt1->dataend < reftime)
       skip = 1;
 
+    /* Bound streamid length to slot size, in-ring streamid may not be NUL-terminated */
+    PCRE2_SIZE sidlen = strnlen (pkt1->streamid, MAXSTREAMID);
+
     /* Test allowed expression if available, skip if NOT matched */
     if (reader->allowed && !skip)
-      if (pcre2_match (reader->allowed, (PCRE2_SPTR8)pkt1->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+      if (pcre2_match (reader->allowed, (PCRE2_SPTR8)pkt1->streamid, sidlen, 0, 0,
                        reader->allowed_data, GetMatchContext ()) < 0)
         skip = 1;
 
     /* Test forbidden expression if available, skip if matched */
     if (reader->forbidden && !skip)
-      if (pcre2_match (reader->forbidden, (PCRE2_SPTR8)pkt1->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+      if (pcre2_match (reader->forbidden, (PCRE2_SPTR8)pkt1->streamid, sidlen, 0, 0,
                        reader->forbidden_data, GetMatchContext ()) >= 0)
         skip = 1;
 
     /* Test match expression if available, skip if NOT matched */
     if (reader->match && !skip)
-      if (pcre2_match (reader->match, (PCRE2_SPTR8)pkt1->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+      if (pcre2_match (reader->match, (PCRE2_SPTR8)pkt1->streamid, sidlen, 0, 0,
                        reader->match_data, GetMatchContext ()) < 0)
         skip = 1;
 
     /* Test reject expression if available, skip if matched */
     if (reader->reject && !skip)
-      if (pcre2_match (reader->reject, (PCRE2_SPTR8)pkt1->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+      if (pcre2_match (reader->reject, (PCRE2_SPTR8)pkt1->streamid, sidlen, 0, 0,
                        reader->reject_data, GetMatchContext ()) >= 0)
         skip = 1;
 
@@ -1450,27 +1453,30 @@ RingAfterRev (RingReader *reader, nstime_t reftime, uint64_t pktlimit,
     /* Get pointer to RingPacket */
     spkt = PACKETPTR (soffset);
 
+    /* Bound streamid length to slot size, in-ring streamid may not be NUL-terminated */
+    PCRE2_SIZE sidlen = strnlen (spkt->streamid, MAXSTREAMID);
+
     /* Test allowed expression if available, skip if NOT matched */
     if (reader->allowed)
-      if (pcre2_match (reader->allowed, (PCRE2_SPTR8)spkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+      if (pcre2_match (reader->allowed, (PCRE2_SPTR8)spkt->streamid, sidlen, 0, 0,
                        reader->allowed_data, GetMatchContext ()) < 0)
         skip = 1;
 
     /* Test forbidden expression if available, skip if matched */
     if (reader->forbidden && !skip)
-      if (pcre2_match (reader->forbidden, (PCRE2_SPTR8)spkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+      if (pcre2_match (reader->forbidden, (PCRE2_SPTR8)spkt->streamid, sidlen, 0, 0,
                        reader->forbidden_data, GetMatchContext ()) >= 0)
         skip = 1;
 
     /* Test match expression if available, skip if NOT matched */
     if (reader->match && !skip)
-      if (pcre2_match (reader->match, (PCRE2_SPTR8)spkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+      if (pcre2_match (reader->match, (PCRE2_SPTR8)spkt->streamid, sidlen, 0, 0,
                        reader->match_data, GetMatchContext ()) < 0)
         skip = 1;
 
     /* Test reject expression if available, skip if matched */
     if (reader->reject && !skip)
-      if (pcre2_match (reader->reject, (PCRE2_SPTR8)spkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+      if (pcre2_match (reader->reject, (PCRE2_SPTR8)spkt->streamid, sidlen, 0, 0,
                        reader->reject_data, GetMatchContext ()) >= 0)
         skip = 1;
 
