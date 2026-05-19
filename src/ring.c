@@ -905,6 +905,7 @@ RingReadPacket (int64_t offset, RingPacket *packet, char *packetdata)
 
   /* Copy packet header */
   memcpy (packet, pkt, sizeof (RingPacket));
+  packet->streamid[MAXSTREAMID - 1] = '\0';
 
   /* Clamp datasize to per-slot payload capacity to guard against a
    * corrupt or truncated ring file. */
@@ -1108,27 +1109,30 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
     reader->pktid     = pkt->pktid;
     reader->pkttime   = pkt->pkttime;
 
+    /* Bound streamid length to slot size */
+    PCRE2_SIZE sidlen = strnlen (pkt->streamid, MAXSTREAMID);
+
     /* Test allowed expression if available, skip if NOT matched */
     if (reader->allowed)
-      if (pcre2_match (reader->allowed, (PCRE2_SPTR8)pkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+      if (pcre2_match (reader->allowed, (PCRE2_SPTR8)pkt->streamid, sidlen, 0, 0,
                        reader->allowed_data, GetMatchContext ()) < 0)
         skip = 1;
 
     /* Test forbidden expression if available, skip if matched */
     if (reader->forbidden && skip == 0)
-      if (pcre2_match (reader->forbidden, (PCRE2_SPTR8)pkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+      if (pcre2_match (reader->forbidden, (PCRE2_SPTR8)pkt->streamid, sidlen, 0, 0,
                        reader->forbidden_data, GetMatchContext ()) >= 0)
         skip = 1;
 
     /* Test match expression if available, skip if NOT matched */
     if (reader->match && skip == 0)
-      if (pcre2_match (reader->match, (PCRE2_SPTR8)pkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+      if (pcre2_match (reader->match, (PCRE2_SPTR8)pkt->streamid, sidlen, 0, 0,
                        reader->match_data, GetMatchContext ()) < 0)
         skip = 1;
 
     /* Test reject expression if available, skip if matched */
     if (reader->reject && skip == 0)
-      if (pcre2_match (reader->reject, (PCRE2_SPTR8)pkt->streamid, PCRE2_ZERO_TERMINATED, 0, 0,
+      if (pcre2_match (reader->reject, (PCRE2_SPTR8)pkt->streamid, sidlen, 0, 0,
                        reader->reject_data, GetMatchContext ()) >= 0)
         skip = 1;
 
@@ -1146,6 +1150,7 @@ RingReadNext (RingReader *reader, RingPacket *packet, char *packetdata)
 
   /* Copy packet header */
   memcpy (packet, pkt, sizeof (RingPacket));
+  packet->streamid[MAXSTREAMID - 1] = '\0';
 
   /* Clamp datasize to per-slot payload capacity to guard against a
    * corrupt or truncated ring file. */
