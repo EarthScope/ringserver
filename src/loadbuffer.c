@@ -221,6 +221,14 @@ LoadBufferV1 (char *ringfile_v1)
     packet.dataend   = MS_HPTIME2NSTIME (packet_v1->dataend);
     packet.datasize  = packet_v1->datasize;
 
+    const uint32_t slot_payload = ringparams_v1.pktsize - (uint32_t)sizeof (RingPacketV1);
+    if (packet.datasize > slot_payload)
+    {
+      lprintf (0, "%s(): packet datasize %" PRIu32 " exceeds v1 slot payload %" PRIu32 ", skipping packet at offset %" PRId64,
+               __func__, packet.datasize, slot_payload, offset);
+      goto next_packet;
+    }
+
     /* Translate legacy stream ID: NN_SSSSS_LL_CCC/MSEED
      * to an FDSN Source ID: FDSN:NN_SSSSS_LL_C_C_C/MSEED */
     if (pcre_code != NULL &&
@@ -457,6 +465,14 @@ LoadBufferV2 (char *ringfile_v2)
     packet.dataend   = packet_v2->dataend;
     packet.datasize  = packet_v2->datasize;
 
+    const uint32_t slot_payload = ringparams_v2.pktsize - (uint32_t)sizeof (RingPacketV2);
+    if (packet.datasize > slot_payload)
+    {
+      lprintf (0, "%s(): packet datasize %" PRIu32 " exceeds v2 slot payload %" PRIu32 ", skipping packet at offset %" PRId64,
+               __func__, packet.datasize, slot_payload, offset);
+      goto next_packet;
+    }
+
     /* Copy the stream ID verbatim, zero-filling any extra bytes */
     memcpy (packet.streamid, packet_v2->streamid, sizeof (packet_v2->streamid));
     memset (packet.streamid + sizeof (packet_v2->streamid), 0,
@@ -475,6 +491,7 @@ LoadBufferV2 (char *ringfile_v2)
 
     count++;
 
+  next_packet:
     if (offset == ringparams_v2.latestoffset)
     {
       break;
@@ -599,6 +616,14 @@ LoadBufferV3 (char *ringfile_v3)
 
     packetptr = (RingPacket *)packetbuffer;
 
+    const uint32_t slot_payload = old_pktsize - (uint32_t)sizeof (RingPacket);
+    if (packetptr->datasize > slot_payload)
+    {
+      lprintf (0, "%s(): packet datasize %" PRIu32 " exceeds v3 slot payload %" PRIu32 ", skipping packet at offset %" PRId64,
+               __func__, packetptr->datasize, slot_payload, offset);
+      goto next_packet;
+    }
+
     if (verbose_save >= 3)
       lprintf (0, "Loading packet ID %" PRIu64 " from stream %s at offset %" PRId64,
                packetptr->pktid, packetptr->streamid, offset);
@@ -612,6 +637,7 @@ LoadBufferV3 (char *ringfile_v3)
 
     count++;
 
+  next_packet:
     if (offset == old_latestoffset)
     {
       break;
