@@ -232,11 +232,18 @@ LoadBufferV1 (char *ringfile_v1)
 
       if (prechannel && strlen (prechannel) >= 4)
       {
-        snprintf (packet.streamid, sizeof (packet.streamid),
-                  "FDSN:%.*s_%c_%c_%c%s",
-                  (int)(prechannel - packet_v1->streamid), packet_v1->streamid,
-                  prechannel[1], prechannel[2], prechannel[3],
-                  &prechannel[4]);
+        int sidlen = snprintf (packet.streamid, sizeof (packet.streamid),
+                               "FDSN:%.*s_%c_%c_%c%s",
+                               (int)(prechannel - packet_v1->streamid), packet_v1->streamid,
+                               prechannel[1], prechannel[2], prechannel[3],
+                               &prechannel[4]);
+
+        if (sidlen < 0 || (size_t)sidlen >= sizeof (packet.streamid))
+        {
+          lprintf (0, "%s(): translated legacy stream ID does not fit (%s), skipping packet at offset %" PRId64,
+                   __func__, packet_v1->streamid, offset);
+          goto next_packet;
+        }
       }
       else
       {
@@ -272,6 +279,7 @@ LoadBufferV1 (char *ringfile_v1)
 
     count++;
 
+  next_packet:
     if (offset == ringparams_v1.latestoffset)
     {
       break;

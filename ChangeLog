@@ -8,6 +8,8 @@ unreleased
 	- Only log that the ring buffer is reset when true, i.e. not volatile.
 	- Cache per-interval usage log filenames (txlog, rxlog, accesslog).
 	- Fix silent (dynamic) filename collisions in miniSEED archiving.
+	- Reject legacy NN_SSSSS_LL_CCC/MSEED to FDSN stream ID translations
+	  that do not fit MAXSTREAMID (64); very unlikely but for completeness.
 
 2026.128: 4.5.1
 	- Fix SeedLink per-station DATA/FETCH/TIME ignoring requested start time,

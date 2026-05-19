@@ -929,11 +929,19 @@ HandleWrite (ClientInfo *cinfo, CmdToken *cmd)
   {
     char *prechannel = strrchr (streamid, '_');
 
-    snprintf (cinfo->packet.streamid, sizeof (cinfo->packet.streamid),
-              "FDSN:%.*s_%c_%c_%c%s",
-              (int)(prechannel - streamid), streamid,
-              prechannel[1], prechannel[2], prechannel[3],
-              &prechannel[4]);
+    int sidlen = snprintf (cinfo->packet.streamid, sizeof (cinfo->packet.streamid),
+                           "FDSN:%.*s_%c_%c_%c%s",
+                           (int)(prechannel - streamid), streamid,
+                           prechannel[1], prechannel[2], prechannel[3],
+                           &prechannel[4]);
+
+    if (sidlen < 0 || (size_t)sidlen >= sizeof (cinfo->packet.streamid))
+    {
+      lprintf (1, "[%s] Translated legacy stream ID does not fit: %s",
+               cinfo->hostname, streamid);
+      SendPacket (cinfo, "ERROR", "Translated legacy stream ID too long", 0, 1, 1);
+      return -1;
+    }
 
     lprintf (3, "Translating legacy stream ID: %s -> %s",
              streamid, cinfo->packet.streamid);
