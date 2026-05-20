@@ -1415,6 +1415,7 @@ mxml_load_data(
 
   // Free the string buffer - we don't need it anymore...
   free(buffer);
+  buffer = NULL;
 
   // Find the top element and return it...
   if (parent)
@@ -1704,19 +1705,20 @@ mxml_parse_element(
       break;
   }
 
+  goto done;
+
+  // Common error return point...
+  error:
+
+  ch = EOF;
+
+  done:
+
   // Free the name and value buffers and return...
   free(name);
   free(value);
 
   return (ch);
-
-  // Common error return point...
-  error:
-
-  free(name);
-  free(value);
-
-  return (EOF);
 }
 
 
@@ -1782,6 +1784,8 @@ mxml_read_cb_string(
   size_t	remaining;		// Remaining bytes in buffer
 
 
+  if (sb->bufptr < sb->buffer || sb->bufptr >= (sb->buffer + sb->bufsize))
+    return (0);
   if ((remaining = sb->bufsize - (size_t)(sb->bufptr - sb->buffer)) < bytes)
     bytes = remaining;
 
