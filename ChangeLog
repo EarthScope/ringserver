@@ -2,6 +2,7 @@
 	- Use network I/O timeout (when configured) for PROXYv2 header timeout instead of
 	of a hard coded 3 seconds.  Fallback to 10 seconds when timeout is disabled.
 	- Add the server port value to the log message about unexpected PROXY header.
+	- Improve reporting of listen versus proxy port values.
 
 2026.138: 4.5.2
 	- Fix DataLink stream resuming by limiting time resolution comparison.

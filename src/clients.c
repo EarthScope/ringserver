@@ -145,8 +145,16 @@ ClientThread (void *arg)
     cinfo->hostname[sizeof (cinfo->hostname) - 1] = '\0';
   }
 
-  lprintf (1, "Client connected [%s]: %s [%s] port %s",
-           cinfo->serverport, cinfo->hostname, cinfo->ipstr, cinfo->portstr);
+  if (cinfo->proxyv2)
+  {
+    lprintf (1, "Client connected [%s PROXY destination %s]: %s [%s] port %s",
+             cinfo->listenerport, cinfo->serverport, cinfo->hostname, cinfo->ipstr, cinfo->portstr);
+  }
+  else
+  {
+    lprintf (1, "Client connected [%s]: %s [%s] port %s",
+             cinfo->listenerport, cinfo->hostname, cinfo->ipstr, cinfo->portstr);
+  }
 
   WriteAccessLog (cinfo, "connect", NULL, NULL, NULL, NULL);
 
@@ -594,13 +602,18 @@ ClientRecv (ClientInfo *cinfo)
     }
     /* PROXY protocol v2 signature starts with \r\n\r, which cannot be the
      * start of any legitimate DataLink, SeedLink, or HTTP command.
-     * If seen on a port not configured for PROXYv2, log and disconnect. */
+     * On a PROXYv2 port the header is consumed at accept time; seeing it
+     * here means an unexpected additional header.  On other ports, reject it. */
     else if ((uint8_t)cinfo->recvbuf[0] == 0x0D &&
              (uint8_t)cinfo->recvbuf[1] == 0x0A &&
              (uint8_t)cinfo->recvbuf[2] == 0x0D)
     {
-      lprintf (0, "[%s] Received PROXY protocol v2 header on port %s not configured for PROXYv2, disconnecting",
-               cinfo->hostname, cinfo->serverport);
+      if (cinfo->proxyv2)
+        lprintf (0, "[%s] Unexpected additional PROXY protocol v2 header on port %s, disconnecting",
+                 cinfo->hostname, cinfo->listenerport);
+      else
+        lprintf (0, "[%s] Received PROXY protocol v2 header on port %s not configured for PROXYv2, disconnecting",
+                 cinfo->hostname, cinfo->listenerport);
       return -1;
     }
     /* Everything else is SeedLink if allowed on this listener */

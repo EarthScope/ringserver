@@ -103,7 +103,8 @@ typedef struct ClientInfo
   char        portstr[NI_MAXSERV]; /* Client port */
   char        hostname[200];/* Client hostname, or IP is unresolvable */
   char        clientid[256];/* Client identifier string */
-  char        serverport[NI_MAXSERV]; /* Server port */
+  char        serverport[NI_MAXSERV];  /* Server port (PROXY dest port when set) */
+  char        listenerport[NI_MAXSERV]; /* Listener port (never overwritten) */
   ClientState state;        /* Client state flag */
   ClientType  type;         /* Client type flag */
   ListenProtocols protocols;/* Protocol flags for this client */
