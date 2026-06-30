@@ -59,6 +59,10 @@
 
 #define GIBIBYTE (1024ULL * 1024ULL * 1024ULL)
 
+/* Fallback timeout (in milliseconds) for reading a PROXY protocol v2 header
+ * when the network I/O timeout is disabled (netiotimeout == 0). */
+#define PROXY_HEADER_TIMEOUT_MAX_MS 100000
+
 /* Global parameter declaration and defaults */
 struct param_s param = {
     .ringlock       = PTHREAD_MUTEX_INITIALIZER,
@@ -999,7 +1003,13 @@ ListenThread (void *arg)
     /* Read PROXY protocol v2 header when the listener is configured for it */
     if (lpp->options & PROXY_PROTOCOL_V2)
     {
-      int ppresult = ProxyProtocolV2Read (clientsocket, 3000, &addr_storage, &addrlen,
+      /* Use the configured network I/O timeout for the PROXY header read.
+       * Fall back to a fixed maximum when netiotimeout is disabled. */
+      int proxy_timeout_ms = (config.netiotimeout > 0)
+                                 ? (int)config.netiotimeout * 1000
+                                 : PROXY_HEADER_TIMEOUT_MAX_MS;
+
+      int ppresult = ProxyProtocolV2Read (clientsocket, proxy_timeout_ms, &addr_storage, &addrlen,
                                           &proxy_dest_port);
       if (ppresult < 0)
       {
