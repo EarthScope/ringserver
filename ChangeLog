@@ -1,10 +1,10 @@
-2026.181:
+2026.181: v4.5.3
 	- Use network I/O timeout (when configured) for PROXYv2 header timeout instead of
 	of a hard coded 3 seconds.  Fallback to 10 seconds when timeout is disabled.
 	- Add the server port value to the log message about unexpected PROXY header.
 	- Improve reporting of listen versus proxy port values.
 
-2026.138: 4.5.2
+2026.138: v4.5.2
 	- Fix DataLink stream resuming by limiting time resolution comparison.
 	- Increase matching pattern limit for PCRE2 build (LINK_SIZE=3), a regression.
 	- DataLink over Websocket: correctly echo DataLink1.0 when requested.
@@ -19,7 +19,7 @@
 	- Reject legacy NN_SSSSS_LL_CCC/MSEED to FDSN stream ID translations
 	  that do not fit MAXSTREAMID (64); very unlikely but for completeness.
 
-2026.128: 4.5.1
+2026.128: v4.5.1
 	- Fix SeedLink per-station DATA/FETCH/TIME ignoring requested start time,
 	  causing streams to begin at the next new packet instead of the requested time.
 	- Fix SeedLink v4 DATA command silently dropping the start time when an end
