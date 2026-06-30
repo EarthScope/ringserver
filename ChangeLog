@@ -1,3 +1,6 @@
+2026.181:
+	- Add the server port value to the log message about unexpected PROXY header.
+
 2026.138: 4.5.2
 	- Fix DataLink stream resuming by limiting time resolution comparison.
 	- Increase matching pattern limit for PCRE2 build (LINK_SIZE=3), a regression.

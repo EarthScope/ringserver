@@ -599,8 +599,8 @@ ClientRecv (ClientInfo *cinfo)
              (uint8_t)cinfo->recvbuf[1] == 0x0A &&
              (uint8_t)cinfo->recvbuf[2] == 0x0D)
     {
-      lprintf (0, "[%s] Received PROXY protocol v2 header on a port not configured for PROXYv2, disconnecting",
-               cinfo->hostname);
+      lprintf (0, "[%s] Received PROXY protocol v2 header on port %s not configured for PROXYv2, disconnecting",
+               cinfo->hostname, cinfo->serverport);
       return -1;
     }
     /* Everything else is SeedLink if allowed on this listener */
